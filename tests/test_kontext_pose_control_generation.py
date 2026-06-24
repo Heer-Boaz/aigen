@@ -39,6 +39,22 @@ class FakePipelineOutput:
     images = [FakeImage()]
 
 
+class FakeParameter:
+    device = "cuda:0"
+    dtype = "torch.float16"
+    shape = (2, 3)
+
+
+class FakeTransformer:
+    class Config:
+        quantization_config = "fake-quantization-config"
+
+    config = Config()
+
+    def named_parameters(self) -> list[tuple[str, FakeParameter]]:
+        return [("transformer.block.weight", FakeParameter())]
+
+
 class FakeVae:
     def __init__(self) -> None:
         self.slicing_enabled = False
@@ -65,6 +81,7 @@ class FakePipeline:
         self.call_args: dict[str, object] = {}
         self.cpu_offload_enabled = False
         self.vae = FakeVae()
+        self.transformer = FakeTransformer()
         self.device: str | None = None
         self.last_token_metadata = {
             "reference_width": 384,
@@ -83,6 +100,9 @@ class FakePipeline:
             "vae_decode_ms": 6.0,
             "pipeline_ms": 21.0,
         }
+        self.last_controlnet_step_ms = [0.0, 4.0]
+        self.last_transformer_step_ms = [2.0, 3.0]
+        self.last_controlnet_active_steps = 1
 
     @classmethod
     def from_pretrained(cls, model: str, **kwargs: object) -> FakePipeline:
@@ -138,10 +158,16 @@ def fake_loader() -> tuple[types.ModuleType, type[FakePipeline], type[FakeContro
     torch_module.float16 = "fake-float16"
     torch_module.float32 = "fake-float32"
     torch_module.Generator = FakeGenerator
+    torch_module.__version__ = "fake-torch"
+    torch_module.version = types.SimpleNamespace(cuda="fake-cuda")
     torch_module.cuda = types.SimpleNamespace(
         is_available=lambda: False,
         reset_peak_memory_stats=lambda _device: None,
         max_memory_allocated=lambda _device: 0,
+        max_memory_reserved=lambda _device: 0,
+        mem_get_info=lambda _device: (0, 0),
+        get_device_name=lambda _device: "fake-gpu",
+        get_device_capability=lambda _device: (0, 0),
         synchronize=lambda: None,
     )
     return torch_module, FakePipeline, FakeControlNetModel, FakeTransformerModel, fake_load_image
@@ -226,6 +252,12 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(result.total_tokens, 2144)
         self.assertEqual(result.timings_ms["transformer_ms"], 5.0)
         self.assertIn("model_load_ms", result.timings_ms)
+        self.assertEqual(result.transformer_step_ms, [2.0, 3.0])
+        self.assertEqual(result.controlnet_step_ms, [0.0, 4.0])
+        self.assertEqual(result.controlnet_active_steps, 1)
+        self.assertEqual(result.memory["max_allocated_mb"], 0)
+        self.assertEqual(result.environment["torch_version"], "fake-torch")
+        self.assertEqual(result.parameter_locations[0]["name"], "transformer.block.weight")
 
     def test_cli_character_kontext_pose_uses_local_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -269,7 +301,32 @@ class KontextPoseControlTests(unittest.TestCase):
                         "pipeline_ms": 21.0,
                         "total_ms": 21.0,
                     },
-                    peak_vram_mb=0,
+                    transformer_step_ms=[2.0, 3.0],
+                    controlnet_step_ms=[0.0, 4.0],
+                    controlnet_active_steps=1,
+                    memory={
+                        "max_allocated_mb": 0,
+                        "max_reserved_mb": 0,
+                        "free_after_run_mb": 0,
+                        "device_total_mb": 0,
+                    },
+                    environment={
+                        "torch_version": "fake-torch",
+                        "torch_cuda_version": "fake-cuda",
+                        "bitsandbytes_version": "fake-bnb",
+                        "transformer_class": "FakeTransformer",
+                        "transformer_device_map": None,
+                        "transformer_quantization_config": "fake-quantization-config",
+                    },
+                    parameter_locations=[
+                        {
+                            "name": "transformer.block.weight",
+                            "class": "FakeParameter",
+                            "device": "cuda:0",
+                            "dtype": "torch.float16",
+                            "shape": [2, 3],
+                        }
+                    ],
                     steps=profile.steps,
                     guidance_scale=profile.guidance_scale,
                     true_cfg_scale=profile.true_cfg_scale,

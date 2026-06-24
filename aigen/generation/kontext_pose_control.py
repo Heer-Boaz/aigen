@@ -35,7 +35,12 @@ class CharacterKontextPoseResult:
     total_tokens: int
     max_sequence_length: int
     timings_ms: dict[str, float]
-    peak_vram_mb: int
+    transformer_step_ms: list[float]
+    controlnet_step_ms: list[float]
+    controlnet_active_steps: int
+    memory: dict[str, int]
+    environment: dict[str, Any]
+    parameter_locations: list[dict[str, Any]]
     steps: int
     guidance_scale: float
     true_cfg_scale: float
@@ -70,7 +75,12 @@ class CharacterKontextPoseResult:
             "total_tokens": self.total_tokens,
             "max_sequence_length": self.max_sequence_length,
             "timings_ms": self.timings_ms,
-            "peak_vram_mb": self.peak_vram_mb,
+            "transformer_step_ms": self.transformer_step_ms,
+            "controlnet_step_ms": self.controlnet_step_ms,
+            "controlnet_active_steps": self.controlnet_active_steps,
+            "memory": self.memory,
+            "environment": self.environment,
+            "parameter_locations": self.parameter_locations,
             "steps": self.steps,
             "guidance_scale": self.guidance_scale,
             "true_cfg_scale": self.true_cfg_scale,
@@ -168,6 +178,7 @@ def run_character_kontext_pose_control(
     timings_ms = dict(pipeline.last_timings_ms)
     timings_ms["model_load_ms"] = model_load_ms
     timings_ms["total_ms"] = total_ms
+    memory = _cuda_memory_stats(torch, device)
     return CharacterKontextPoseResult(
         output_path=output_path.resolve().as_posix(),
         model=model,
@@ -188,7 +199,12 @@ def run_character_kontext_pose_control(
         total_tokens=token_metadata["total_tokens"],
         max_sequence_length=max_sequence_length,
         timings_ms=timings_ms,
-        peak_vram_mb=round(torch.cuda.max_memory_allocated(device) / (1024 * 1024)) if torch.cuda.is_available() else 0,
+        transformer_step_ms=pipeline.last_transformer_step_ms,
+        controlnet_step_ms=pipeline.last_controlnet_step_ms,
+        controlnet_active_steps=pipeline.last_controlnet_active_steps,
+        memory=memory,
+        environment=_generation_environment(torch, pipeline),
+        parameter_locations=_parameter_locations(pipeline.transformer),
         steps=steps,
         guidance_scale=guidance_scale,
         true_cfg_scale=true_cfg_scale,
@@ -212,6 +228,58 @@ def synchronized_time(torch_module: Any) -> float:
 
 def _elapsed_ms(start: float, end: float) -> float:
     return round((end - start) * 1000, 3)
+
+
+def _cuda_memory_stats(torch_module: Any, device: str) -> dict[str, int]:
+    if not torch_module.cuda.is_available():
+        return {
+            "max_allocated_mb": 0,
+            "max_reserved_mb": 0,
+            "free_after_run_mb": 0,
+            "device_total_mb": 0,
+        }
+
+    free_bytes, total_bytes = torch_module.cuda.mem_get_info(device)
+    return {
+        "max_allocated_mb": round(torch_module.cuda.max_memory_allocated(device) / 2**20),
+        "max_reserved_mb": round(torch_module.cuda.max_memory_reserved(device) / 2**20),
+        "free_after_run_mb": round(free_bytes / 2**20),
+        "device_total_mb": round(total_bytes / 2**20),
+    }
+
+
+def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
+    import bitsandbytes as bnb
+
+    environment = {
+        "torch_version": torch_module.__version__,
+        "torch_cuda_version": torch_module.version.cuda,
+        "bitsandbytes_version": bnb.__version__,
+        "transformer_class": type(pipeline.transformer).__qualname__,
+        "transformer_device_map": getattr(pipeline.transformer, "hf_device_map", None),
+        "transformer_quantization_config": str(getattr(pipeline.transformer.config, "quantization_config", None)),
+    }
+    if torch_module.cuda.is_available():
+        environment["gpu_name"] = torch_module.cuda.get_device_name(0)
+        environment["compute_capability"] = list(torch_module.cuda.get_device_capability(0))
+    return environment
+
+
+def _parameter_locations(transformer: Any) -> list[dict[str, Any]]:
+    parameter_locations = []
+    for name, parameter in transformer.named_parameters():
+        parameter_locations.append(
+            {
+                "name": name,
+                "class": type(parameter).__name__,
+                "device": str(parameter.device),
+                "dtype": str(parameter.dtype),
+                "shape": list(parameter.shape),
+            }
+        )
+        if len(parameter_locations) == 10:
+            break
+    return parameter_locations
 
 
 def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) -> list[Any]:
@@ -424,6 +492,19 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     f"Prompt requires {prompt_token_count} T5 tokens, "
                     f"but max_sequence_length={max_sequence_length}"
                 )
+            if true_cfg_scale > 1:
+                negative_prompt_token_count = len(
+                    self.tokenizer_2(
+                        negative_prompt,
+                        padding=False,
+                        truncation=False,
+                    ).input_ids
+                )
+                if negative_prompt_token_count > max_sequence_length:
+                    raise ValueError(
+                        f"Negative prompt requires {negative_prompt_token_count} T5 tokens, "
+                        f"but max_sequence_length={max_sequence_length}"
+                    )
 
             prompt_embeds, pooled_prompt_embeds, text_ids = self.encode_prompt(
                 prompt=prompt,
@@ -540,6 +621,9 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             self.scheduler.set_begin_index(0)
             controlnet_ms = 0.0
             transformer_ms = 0.0
+            self.last_controlnet_step_ms = []
+            self.last_transformer_step_ms = []
+            self.last_controlnet_active_steps = 0
             with self.progress_bar(total=num_inference_steps) as progress_bar:
                 for i, t in enumerate(timesteps):
                     if self.interrupt:
@@ -552,6 +636,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
                     controlnet_block_samples = None
                     controlnet_single_block_samples = None
+                    controlnet_step_ms = 0.0
                     if cond_scale:
                         controlnet_start = synchronized_time(torch)
                         controlnet_block_samples, controlnet_single_block_samples = self.controlnet(
@@ -568,7 +653,9 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             joint_attention_kwargs=self.joint_attention_kwargs,
                             return_dict=False,
                         )
-                        controlnet_ms += _elapsed_ms(controlnet_start, synchronized_time(torch))
+                        controlnet_step_ms = _elapsed_ms(controlnet_start, synchronized_time(torch))
+                        controlnet_ms += controlnet_step_ms
+                        self.last_controlnet_active_steps += 1
                         total_image_tokens = latent_model_input.shape[1]
                         controlnet_block_samples = extend_control_residuals(
                             controlnet_block_samples,
@@ -579,6 +666,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                 controlnet_single_block_samples,
                                 total_image_tokens,
                             )
+                    self.last_controlnet_step_ms.append(controlnet_step_ms)
 
                     transformer_start = synchronized_time(torch)
                     noise_pred = self.transformer(
@@ -595,7 +683,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         return_dict=False,
                         controlnet_blocks_repeat=controlnet_blocks_repeat,
                     )[0]
-                    transformer_ms += _elapsed_ms(transformer_start, synchronized_time(torch))
+                    transformer_step_ms = _elapsed_ms(transformer_start, synchronized_time(torch))
+                    transformer_ms += transformer_step_ms
                     noise_pred = noise_pred[:, : latents.size(1)]
 
                     if do_true_cfg:
@@ -614,9 +703,12 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             return_dict=False,
                             controlnet_blocks_repeat=controlnet_blocks_repeat,
                         )[0]
-                        transformer_ms += _elapsed_ms(negative_transformer_start, synchronized_time(torch))
+                        negative_transformer_step_ms = _elapsed_ms(negative_transformer_start, synchronized_time(torch))
+                        transformer_step_ms += negative_transformer_step_ms
+                        transformer_ms += negative_transformer_step_ms
                         neg_noise_pred = neg_noise_pred[:, : latents.size(1)]
                         noise_pred = neg_noise_pred + true_cfg_scale * (noise_pred - neg_noise_pred)
+                    self.last_transformer_step_ms.append(round(transformer_step_ms, 3))
 
                     latents_dtype = latents.dtype
                     latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
