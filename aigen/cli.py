@@ -74,8 +74,11 @@ class CharacterKontextPoseCliProfile:
     true_cfg_scale: float
     width: int
     height: int
+    reference_max_area: int
+    max_sequence_length: int
     framing: str
     cpu_offload: bool
+    vae_tiling: bool
     controlnet_conditioning_scale: float
     control_guidance_start: float
     control_guidance_end: float
@@ -162,13 +165,16 @@ CHARACTER_KONTEXT_POSE_PROFILES = {
         steps=28,
         guidance_scale=3.5,
         true_cfg_scale=1.0,
-        width=768,
-        height=1152,
+        width=384,
+        height=576,
+        reference_max_area=384 * 768,
+        max_sequence_length=128,
         framing="full-body",
         cpu_offload=False,
-        controlnet_conditioning_scale=0.65,
+        vae_tiling=False,
+        controlnet_conditioning_scale=0.50,
         control_guidance_start=0.0,
-        control_guidance_end=0.65,
+        control_guidance_end=0.50,
         seed=1,
     ),
     "production": CharacterKontextPoseCliProfile(
@@ -184,8 +190,11 @@ CHARACTER_KONTEXT_POSE_PROFILES = {
         true_cfg_scale=1.0,
         width=768,
         height=1152,
+        reference_max_area=512 * 1024,
+        max_sequence_length=128,
         framing="full-body",
         cpu_offload=True,
+        vae_tiling=True,
         controlnet_conditioning_scale=0.65,
         control_guidance_start=0.0,
         control_guidance_end=0.65,
@@ -505,6 +514,18 @@ def _add_character_kontext_pose_command(generate_subparsers: Any) -> None:
     pose.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Generated image width")
     pose.add_argument("--height", type=int, default=argparse.SUPPRESS, help="Generated image height")
     pose.add_argument(
+        "--reference-max-area",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Maximum pixel area for the Kontext reference image before VAE encoding",
+    )
+    pose.add_argument(
+        "--max-sequence-length",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="T5 text token budget for the prompt",
+    )
+    pose.add_argument(
         "--framing",
         choices=("full-body", "portrait"),
         default=argparse.SUPPRESS,
@@ -548,6 +569,21 @@ def _add_character_kontext_pose_command(generate_subparsers: Any) -> None:
         action="store_false",
         default=argparse.SUPPRESS,
         help="Keep the pipeline on the selected device instead of using CPU offload",
+    )
+    tiling = pose.add_mutually_exclusive_group()
+    tiling.add_argument(
+        "--vae-tiling",
+        dest="vae_tiling",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable VAE tiling to reduce peak memory during encode/decode",
+    )
+    tiling.add_argument(
+        "--no-vae-tiling",
+        dest="vae_tiling",
+        action="store_false",
+        default=argparse.SUPPRESS,
+        help="Disable VAE tiling for smaller preview runs",
     )
     pose.add_argument(
         "--compact",
@@ -686,10 +722,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 true_cfg_scale=values.get("true_cfg_scale", profile.true_cfg_scale),
                 width=values.get("width", profile.width),
                 height=values.get("height", profile.height),
+                reference_max_area=values.get("reference_max_area", profile.reference_max_area),
+                max_sequence_length=values.get("max_sequence_length", profile.max_sequence_length),
                 framing=values.get("framing", profile.framing),
                 negative_prompt=args.negative_prompt,
                 seed=values.get("seed", profile.seed),
                 cpu_offload=values.get("cpu_offload", profile.cpu_offload),
+                vae_tiling=values.get("vae_tiling", profile.vae_tiling),
                 controlnet_conditioning_scale=values.get(
                     "controlnet_conditioning_scale",
                     profile.controlnet_conditioning_scale,

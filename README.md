@@ -117,7 +117,10 @@ image polish.
 For same-character pose work, use the Kontext pose route. Kontext owns character
 identity from the reference image; ControlNet owns only the generated-token pose
 prefix. With `--controlnet-conditioning-scale 0`, this route becomes the plain
-Kontext baseline for the same seed.
+Kontext baseline for the same seed. The local profile is tuned for iteration on
+the RTX 5070 Ti: it generates `384x576`, caps the reference canvas to
+`384x768`, uses `max_sequence_length=128`, disables VAE tiling, and stops pose
+ControlNet at half the denoising schedule.
 
 ```bash
 .venv/bin/python -m aigen.cli models download \
@@ -136,23 +139,27 @@ Kontext baseline for the same seed.
   --seed 1
 ```
 
-Initial pose-strength sweep:
+Initial pose sweep with fixed noise:
 
 ```bash
-for scale in 0.0 0.45 0.65 0.85; do
+for scale in 0.40 0.50 0.60; do
+  for end in 0.40 0.50 0.60; do
   .venv/bin/python -m aigen.cli generate character-kontext-pose \
     --profile local \
     --reference-image ../ai-art/references/characters/ai51.png \
     --pose-image ../ai-art/references/poses/running_openpose.png \
     --prompt "Anime game character concept art of the same girl: blue eyes, short reddish-brown bob haircut, white shirt, blue tie, burgundy leather jacket, skirt, gloves, long blue socks, burgundy boots." \
     --controlnet-conditioning-scale "$scale" \
-    --output "runs/characters/pose_control/ai51_kontext_pose_scale_${scale}.png" \
+    --control-guidance-end "$end" \
+    --output "runs/characters/pose_control/ai51_kontext_pose_scale_${scale}_end_${end}.png" \
     --seed 1
+  done
 done
 ```
 
-The `flux-pose` profile is the BF16/offload comparison path. It is much slower
-on 16 GB VRAM and should not be used for normal iteration.
+The `production` Kontext pose profile is the BF16/offload comparison path. It
+uses a larger `512x1024` reference budget and VAE tiling. It is much slower on
+16 GB VRAM and should not be used for normal iteration.
 
 For generation dependencies:
 

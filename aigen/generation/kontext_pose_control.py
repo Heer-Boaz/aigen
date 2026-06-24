@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from aigen.generation.character_concept import (
@@ -24,6 +26,16 @@ class CharacterKontextPoseResult:
     negative_prompt: str
     width: int
     height: int
+    reference_width: int
+    reference_height: int
+    reference_max_area: int
+    reference_tokens: int
+    generated_tokens: int
+    text_tokens: int
+    total_tokens: int
+    max_sequence_length: int
+    timings_ms: dict[str, float]
+    peak_vram_mb: int
     steps: int
     guidance_scale: float
     true_cfg_scale: float
@@ -33,6 +45,7 @@ class CharacterKontextPoseResult:
     dtype: str
     device: str
     cpu_offload: bool
+    vae_tiling: bool
     transformer_single_file: str | None
     seed: int
 
@@ -48,6 +61,16 @@ class CharacterKontextPoseResult:
             "negative_prompt": self.negative_prompt,
             "width": self.width,
             "height": self.height,
+            "reference_width": self.reference_width,
+            "reference_height": self.reference_height,
+            "reference_max_area": self.reference_max_area,
+            "reference_tokens": self.reference_tokens,
+            "generated_tokens": self.generated_tokens,
+            "text_tokens": self.text_tokens,
+            "total_tokens": self.total_tokens,
+            "max_sequence_length": self.max_sequence_length,
+            "timings_ms": self.timings_ms,
+            "peak_vram_mb": self.peak_vram_mb,
             "steps": self.steps,
             "guidance_scale": self.guidance_scale,
             "true_cfg_scale": self.true_cfg_scale,
@@ -57,6 +80,7 @@ class CharacterKontextPoseResult:
             "dtype": self.dtype,
             "device": self.device,
             "cpu_offload": self.cpu_offload,
+            "vae_tiling": self.vae_tiling,
             "transformer_single_file": self.transformer_single_file,
             "seed": self.seed,
         }
@@ -83,8 +107,10 @@ def run_character_kontext_pose_control(
     steps: int = 28,
     guidance_scale: float = 3.5,
     true_cfg_scale: float = 1.0,
-    width: int = 768,
-    height: int = 1152,
+    width: int = 384,
+    height: int = 576,
+    reference_max_area: int = 384 * 768,
+    max_sequence_length: int = 128,
     framing: str = "full-body",
     negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
     seed: int = 1,
@@ -93,8 +119,14 @@ def run_character_kontext_pose_control(
     control_guidance_start: float = 0.0,
     control_guidance_end: float = 0.65,
     transformer_single_file: Path | None = None,
+    vae_tiling: bool = False,
 ) -> CharacterKontextPoseResult:
     torch, pipeline_class, controlnet_class, transformer_class, load_image = _load_flux_kontext_controlnet()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(device)
+
+    total_start = synchronized_time(torch)
+    model_load_start = synchronized_time(torch)
     pipeline = _build_kontext_pose_pipeline(
         pipeline_class,
         controlnet_class,
@@ -105,7 +137,9 @@ def run_character_kontext_pose_control(
         _torch_dtype(torch, dtype),
         device,
         cpu_offload,
+        vae_tiling,
     )
+    model_load_ms = _elapsed_ms(model_load_start, synchronized_time(torch))
 
     pipeline_prompt = compose_character_prompt(prompt, framing)
     image = pipeline(
@@ -117,6 +151,8 @@ def run_character_kontext_pose_control(
         width=width,
         height=height,
         max_area=width * height,
+        reference_max_area=reference_max_area,
+        max_sequence_length=max_sequence_length,
         num_inference_steps=steps,
         guidance_scale=guidance_scale,
         controlnet_conditioning_scale=controlnet_conditioning_scale,
@@ -124,9 +160,14 @@ def run_character_kontext_pose_control(
         control_guidance_end=control_guidance_end,
         generator=torch.Generator(device=device).manual_seed(seed),
     ).images[0]
+    total_ms = _elapsed_ms(total_start, synchronized_time(torch))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path)
+    token_metadata = pipeline.last_token_metadata
+    timings_ms = dict(pipeline.last_timings_ms)
+    timings_ms["model_load_ms"] = model_load_ms
+    timings_ms["total_ms"] = total_ms
     return CharacterKontextPoseResult(
         output_path=output_path.resolve().as_posix(),
         model=model,
@@ -138,6 +179,16 @@ def run_character_kontext_pose_control(
         negative_prompt=negative_prompt,
         width=width,
         height=height,
+        reference_width=token_metadata["reference_width"],
+        reference_height=token_metadata["reference_height"],
+        reference_max_area=reference_max_area,
+        reference_tokens=token_metadata["reference_tokens"],
+        generated_tokens=token_metadata["generated_tokens"],
+        text_tokens=token_metadata["text_tokens"],
+        total_tokens=token_metadata["total_tokens"],
+        max_sequence_length=max_sequence_length,
+        timings_ms=timings_ms,
+        peak_vram_mb=round(torch.cuda.max_memory_allocated(device) / (1024 * 1024)) if torch.cuda.is_available() else 0,
         steps=steps,
         guidance_scale=guidance_scale,
         true_cfg_scale=true_cfg_scale,
@@ -147,9 +198,20 @@ def run_character_kontext_pose_control(
         dtype=dtype,
         device=device,
         cpu_offload=cpu_offload,
+        vae_tiling=vae_tiling,
         transformer_single_file=transformer_single_file.resolve().as_posix() if transformer_single_file else None,
         seed=seed,
     )
+
+
+def synchronized_time(torch_module: Any) -> float:
+    if torch_module.cuda.is_available():
+        torch_module.cuda.synchronize()
+    return perf_counter()
+
+
+def _elapsed_ms(start: float, end: float) -> float:
+    return round((end - start) * 1000, 3)
 
 
 def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) -> list[Any]:
@@ -177,6 +239,19 @@ def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) ->
     return extended
 
 
+def fit_size_to_area(width: int, height: int, *, max_area: int, multiple_of: int) -> tuple[int, int]:
+    if width <= 0 or height <= 0:
+        raise ValueError("Reference dimensions must be positive")
+    if max_area <= 0:
+        raise ValueError("reference_max_area must be positive")
+
+    scale = min(1.0, math.sqrt(max_area / (width * height)))
+    return (
+        max(multiple_of, int(width * scale) // multiple_of * multiple_of),
+        max(multiple_of, int(height * scale) // multiple_of * multiple_of),
+    )
+
+
 def _build_kontext_pose_pipeline(
     pipeline_class: Any,
     controlnet_class: Any,
@@ -187,6 +262,7 @@ def _build_kontext_pose_pipeline(
     torch_dtype: Any,
     device: str,
     cpu_offload: bool,
+    vae_tiling: bool,
 ) -> Any:
     controlnet = controlnet_class.from_pretrained(
         controlnet_model,
@@ -208,8 +284,11 @@ def _build_kontext_pose_pipeline(
         )
 
     pipeline = pipeline_class.from_pretrained(model, **pipeline_kwargs)
-    pipeline.vae.enable_tiling()
-    pipeline.vae.enable_slicing()
+    if vae_tiling:
+        pipeline.vae.enable_tiling()
+    else:
+        pipeline.vae.disable_tiling()
+    pipeline.vae.disable_slicing()
     if cpu_offload:
         pipeline.enable_model_cpu_offload()
     else:
@@ -224,7 +303,6 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
         from diffusers import FluxControlNetModel, FluxTransformer2DModel
         from diffusers.pipelines.flux.pipeline_flux_controlnet import retrieve_latents
         from diffusers.pipelines.flux.pipeline_flux_kontext import (
-            PREFERRED_KONTEXT_RESOLUTIONS,
             FluxKontextPipeline,
             FluxPipelineOutput,
             calculate_shift,
@@ -304,7 +382,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             return_dict: bool = True,
             max_sequence_length: int = 512,
             max_area: int = 1024**2,
-            _auto_resize: bool = True,
+            reference_max_area: int = 384 * 768,
         ) -> Any:
             aspect_ratio = width / height
             width = round((max_area * aspect_ratio) ** 0.5)
@@ -327,10 +405,25 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             self._joint_attention_kwargs = {}
             self._current_timestep = None
             self._interrupt = False
+            pipeline_start = synchronized_time(torch)
 
             batch_size = 1
             num_images_per_prompt = 1
             device = self._execution_device
+
+            prompt_encode_start = synchronized_time(torch)
+            prompt_token_count = len(
+                self.tokenizer_2(
+                    prompt,
+                    padding=False,
+                    truncation=False,
+                ).input_ids
+            )
+            if prompt_token_count > max_sequence_length:
+                raise ValueError(
+                    f"Prompt requires {prompt_token_count} T5 tokens, "
+                    f"but max_sequence_length={max_sequence_length}"
+                )
 
             prompt_embeds, pooled_prompt_embeds, text_ids = self.encode_prompt(
                 prompt=prompt,
@@ -338,6 +431,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 num_images_per_prompt=num_images_per_prompt,
                 max_sequence_length=max_sequence_length,
             )
+            prompt_encode_ms = _elapsed_ms(prompt_encode_start, synchronized_time(torch))
 
             do_true_cfg = true_cfg_scale > 1
             if do_true_cfg:
@@ -350,17 +444,17 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
             img = image[0] if isinstance(image, list) else image
             image_height, image_width = self.image_processor.get_default_height_width(img)
-            image_aspect_ratio = image_width / image_height
-            if _auto_resize:
-                _, image_width, image_height = min(
-                    (abs(image_aspect_ratio - w / h), w, h) for w, h in PREFERRED_KONTEXT_RESOLUTIONS
-                )
-            image_width = image_width // multiple_of * multiple_of
-            image_height = image_height // multiple_of * multiple_of
+            image_width, image_height = fit_size_to_area(
+                image_width,
+                image_height,
+                max_area=reference_max_area,
+                multiple_of=multiple_of,
+            )
             image = self.image_processor.resize(image, image_height, image_width)
             image = self.image_processor.preprocess(image, image_height, image_width)
 
             num_channels_latents = self.transformer.config.in_channels // 4
+            reference_vae_start = synchronized_time(torch)
             latents, image_latents, generated_img_ids, reference_img_ids = self.prepare_latents(
                 image,
                 batch_size * num_images_per_prompt,
@@ -372,8 +466,18 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 generator,
                 latents,
             )
+            reference_vae_ms = _elapsed_ms(reference_vae_start, synchronized_time(torch))
             combined_img_ids = torch.cat([generated_img_ids, reference_img_ids], dim=0)
+            self.last_token_metadata = {
+                "reference_width": image_width,
+                "reference_height": image_height,
+                "reference_tokens": image_latents.shape[1],
+                "generated_tokens": latents.shape[1],
+                "text_tokens": prompt_embeds.shape[1],
+                "total_tokens": image_latents.shape[1] + latents.shape[1] + prompt_embeds.shape[1],
+            }
 
+            control_vae_start = synchronized_time(torch)
             control_image = self.prepare_image(
                 image=control_image,
                 width=width,
@@ -396,6 +500,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     height_control_image,
                     width_control_image,
                 )
+            control_vae_ms = _elapsed_ms(control_vae_start, synchronized_time(torch))
 
             sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
             image_seq_len = latents.shape[1]
@@ -433,6 +538,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 controlnet_guidance = controlnet_guidance.expand(latents.shape[0])
 
             self.scheduler.set_begin_index(0)
+            controlnet_ms = 0.0
+            transformer_ms = 0.0
             with self.progress_bar(total=num_inference_steps) as progress_bar:
                 for i, t in enumerate(timesteps):
                     if self.interrupt:
@@ -446,6 +553,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     controlnet_block_samples = None
                     controlnet_single_block_samples = None
                     if cond_scale:
+                        controlnet_start = synchronized_time(torch)
                         controlnet_block_samples, controlnet_single_block_samples = self.controlnet(
                             hidden_states=latents,
                             controlnet_cond=control_image,
@@ -460,6 +568,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             joint_attention_kwargs=self.joint_attention_kwargs,
                             return_dict=False,
                         )
+                        controlnet_ms += _elapsed_ms(controlnet_start, synchronized_time(torch))
                         total_image_tokens = latent_model_input.shape[1]
                         controlnet_block_samples = extend_control_residuals(
                             controlnet_block_samples,
@@ -471,6 +580,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                 total_image_tokens,
                             )
 
+                    transformer_start = synchronized_time(torch)
                     noise_pred = self.transformer(
                         hidden_states=latent_model_input,
                         timestep=timestep / 1000,
@@ -485,9 +595,11 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         return_dict=False,
                         controlnet_blocks_repeat=controlnet_blocks_repeat,
                     )[0]
+                    transformer_ms += _elapsed_ms(transformer_start, synchronized_time(torch))
                     noise_pred = noise_pred[:, : latents.size(1)]
 
                     if do_true_cfg:
+                        negative_transformer_start = synchronized_time(torch)
                         neg_noise_pred = self.transformer(
                             hidden_states=latent_model_input,
                             timestep=timestep / 1000,
@@ -502,6 +614,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             return_dict=False,
                             controlnet_blocks_repeat=controlnet_blocks_repeat,
                         )[0]
+                        transformer_ms += _elapsed_ms(negative_transformer_start, synchronized_time(torch))
                         neg_noise_pred = neg_noise_pred[:, : latents.size(1)]
                         noise_pred = neg_noise_pred + true_cfg_scale * (noise_pred - neg_noise_pred)
 
@@ -518,13 +631,25 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
             if output_type == "latent":
                 output = latents
+                vae_decode_ms = 0.0
             else:
+                vae_decode_start = synchronized_time(torch)
                 latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
                 latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 output = self.vae.decode(latents, return_dict=False)[0]
                 output = self.image_processor.postprocess(output, output_type=output_type)
+                vae_decode_ms = _elapsed_ms(vae_decode_start, synchronized_time(torch))
 
             self.maybe_free_model_hooks()
+            self.last_timings_ms = {
+                "prompt_encode_ms": prompt_encode_ms,
+                "reference_vae_ms": reference_vae_ms,
+                "control_vae_ms": control_vae_ms,
+                "controlnet_ms": round(controlnet_ms, 3),
+                "transformer_ms": round(transformer_ms, 3),
+                "vae_decode_ms": vae_decode_ms,
+                "pipeline_ms": _elapsed_ms(pipeline_start, synchronized_time(torch)),
+            }
 
             if not return_dict:
                 return (output,)
