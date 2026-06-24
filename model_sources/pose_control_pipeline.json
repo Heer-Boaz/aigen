@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "strategy": "FLUX.1-dev with pose ControlNet through CPU offload; use DWPose/OpenPose control images for strict pose direction"
+  },
+  "downloads": [
+    {
+      "name": "flux1-dev-bf16-diffusers",
+      "repo_id": "black-forest-labs/FLUX.1-dev",
+      "revision": "3de623fc3c33e44ffbe2bad470d0f45bccf2eb21",
+      "local_path": "diffusers/black-forest-labs/FLUX.1-dev-bf16",
+      "include": [
+        "model_index.json",
+        "scheduler/*",
+        "text_encoder/*",
+        "text_encoder_2/*",
+        "tokenizer/*",
+        "tokenizer_2/*",
+        "transformer/*",
+        "vae/*"
+      ]
+    },
+    {
+      "name": "flux1-dev-controlnet-union-pro-2.0",
+      "repo_id": "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
+      "revision": "5d700aaad96c5ddcdf8a38ef9b22a82aac2c38e5",
+      "local_path": "diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
+      "include": [
+        "config.json",
+        "diffusion_pytorch_model.safetensors"
+      ]
+    }
+  ]
+}

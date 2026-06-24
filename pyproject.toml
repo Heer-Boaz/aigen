@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aigen"
+version = "0.1.0"
+description = "Private AI character concept generation pipeline."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Boaz" }]
+dependencies = [
+  "huggingface_hub>=0.26",
+]
+
+[project.optional-dependencies]
+generation = [
+  "accelerate>=1",
+  "bitsandbytes>=0.46.1",
+  "diffusers[torch]>=0.38",
+  "Pillow>=10",
+  "safetensors>=0.4",
+  "transformers>=4.44",
+  "torchvision==0.27.1",
+]
+
+[project.scripts]
+aigen = "aigen.cli:main"
+
+[tool.setuptools]
+packages = ["aigen", "aigen.generation", "aigen.models"]
