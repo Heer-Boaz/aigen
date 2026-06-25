@@ -12,6 +12,10 @@ from aigen.generation.character_concept import (
     CharacterConceptError,
     run_character_concept,
 )
+from aigen.generation.pixel_art import (
+    PixelArtError,
+    run_pixel_art,
+)
 from aigen.generation.kontext_pose_control import (
     BACKGROUND_ABLATION_SWEEP,
     CharacterKontextPoseError,
@@ -130,6 +134,26 @@ class NunchakuKontextPoseCliProfile:
     control_guidance_start: float
     control_guidance_end: float
     seed: int
+
+
+@dataclass(frozen=True)
+class PixelArtCliProfile:
+    backend: str
+    model: str
+    dtype: str
+    norm: str
+    n_blocks: int
+
+
+PIXEL_ART_PROFILES = {
+    "local": PixelArtCliProfile(
+        backend="cyclegan",
+        model=(MODELS_ROOT / "pixel-art/cyclegan").as_posix(),
+        dtype="float32",
+        norm="instance",
+        n_blocks=9,
+    ),
+}
 
 
 CHARACTER_CONCEPT_PROFILES = {
@@ -418,6 +442,7 @@ def _add_generate_commands(subparsers: Any) -> None:
     _add_character_nunchaku_kontext_pose_command(generate_subparsers)
     _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers)
     _add_character_pose_command(generate_subparsers)
+    _add_pixel_art_command(generate_subparsers)
 
 
 def _add_character_concept_command(generate_subparsers: Any) -> None:
@@ -495,6 +520,60 @@ def _add_character_concept_command(generate_subparsers: Any) -> None:
         help="Keep the pipeline on the selected device instead of using CPU offload",
     )
     concept.add_argument(
+        "--compact",
+        action="store_true",
+        help="Write compact JSON instead of pretty printed JSON",
+    )
+
+
+def _add_pixel_art_command(generate_subparsers: Any) -> None:
+    pixel = generate_subparsers.add_parser(
+        "pixel-art",
+        help="Pixelize an input image into native low-res pixel art (img2img GAN, no Stable Diffusion / FLUX)",
+    )
+    pixel.add_argument(
+        "--profile",
+        choices=tuple(PIXEL_ART_PROFILES),
+        default="local",
+        help="Generation profile; local targets the RTX 5070 Ti pure-PyTorch CycleGAN backend",
+    )
+    pixel.add_argument(
+        "--backend",
+        default=argparse.SUPPRESS,
+        help="Pixel-art backend id (e.g. cyclegan)",
+    )
+    pixel.add_argument(
+        "--model",
+        default=argparse.SUPPRESS,
+        help="CycleGAN generator checkpoint, or a directory containing latest_net_G.pth",
+    )
+    pixel.add_argument(
+        "--input-image",
+        type=Path,
+        required=True,
+        help="Source image to pixelize; feed a low-res image to get genuine low-res output",
+    )
+    pixel.add_argument("--output", type=Path, required=True, help="Image path to write")
+    pixel.add_argument("--device", default="cuda", help="Torch device")
+    pixel.add_argument(
+        "--dtype",
+        choices=("auto", "bfloat16", "float16", "float32"),
+        default=argparse.SUPPRESS,
+        help="Torch dtype for the generator weights",
+    )
+    pixel.add_argument(
+        "--norm",
+        choices=("instance", "batch"),
+        default=argparse.SUPPRESS,
+        help="Normalization layer the checkpoint was trained with (CycleGAN default: instance)",
+    )
+    pixel.add_argument(
+        "--n-blocks",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Number of ResNet blocks in the generator (CycleGAN default: 9)",
+    )
+    pixel.add_argument(
         "--compact",
         action="store_true",
         help="Write compact JSON instead of pretty printed JSON",
@@ -1144,6 +1223,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 transformer_single_file=values.get("transformer_single_file", profile.transformer_single_file),
             )
         except CharacterConceptError as error:
+            _dump_json(
+                sys.stderr,
+                {
+                    "schema_version": 1,
+                    "status": "error",
+                    "error": error.__class__.__name__,
+                    "message": str(error),
+                },
+                pretty=not args.compact,
+            )
+            return 1
+        _dump_json(sys.stdout, result.to_json(), pretty=not args.compact)
+        return 0
+
+    if args.command == "generate" and args.generate_command == "pixel-art":
+        values = vars(args)
+        profile = PIXEL_ART_PROFILES[args.profile]
+        try:
+            result = run_pixel_art(
+                values.get("model", profile.model),
+                args.input_image,
+                args.output,
+                backend=values.get("backend", profile.backend),
+                device=args.device,
+                dtype=values.get("dtype", profile.dtype),
+                norm=values.get("norm", profile.norm),
+                n_blocks=values.get("n_blocks", profile.n_blocks),
+            )
+        except PixelArtError as error:
             _dump_json(
                 sys.stderr,
                 {
