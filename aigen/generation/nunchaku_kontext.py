@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from PIL import Image
@@ -42,6 +43,7 @@ class NunchakuKontextResult:
     max_sequence_length: int
     steps: int
     step_ms: list[float]
+    cold_to_first_step_end_ms: float
     warm_step_median_ms: float
     timings_ms: dict[str, float]
     memory: dict[str, int]
@@ -74,6 +76,7 @@ class NunchakuKontextResult:
             "max_sequence_length": self.max_sequence_length,
             "steps": self.steps,
             "step_ms": self.step_ms,
+            "cold_to_first_step_end_ms": self.cold_to_first_step_end_ms,
             "warm_step_median_ms": self.warm_step_median_ms,
             "timings_ms": self.timings_ms,
             "memory": self.memory,
@@ -197,6 +200,7 @@ def run_nunchaku_kontext(
         max_sequence_length=max_sequence_length,
         steps=steps,
         step_ms=step_ms,
+        cold_to_first_step_end_ms=step_ms[0] if step_ms else 0.0,
         warm_step_median_ms=_warm_step_median(step_ms),
         timings_ms={
             "model_load_ms": model_load_ms,
@@ -253,8 +257,7 @@ def _flux_tokens(width: int, height: int) -> int:
 def _warm_step_median(step_ms: list[float]) -> float:
     if len(step_ms) < 2:
         return step_ms[0] if step_ms else 0.0
-    warm = sorted(step_ms[1:])
-    return warm[len(warm) // 2]
+    return float(median(step_ms[1:]))
 
 
 def _nunchaku_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:

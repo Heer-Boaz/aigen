@@ -196,6 +196,7 @@ class NunchakuKontextTests(unittest.TestCase):
         self.assertEqual(result.text_tokens, 128)
         self.assertEqual(result.total_tokens, 2144)
         self.assertEqual(len(result.step_ms), 3)
+        self.assertEqual(result.cold_to_first_step_end_ms, result.step_ms[0])
         self.assertEqual(result.environment["nunchaku_version"], "fake-nunchaku")
         self.assertEqual(result.parameter_locations[0]["name"], "transformer.block.weight")
 
@@ -229,6 +230,7 @@ class NunchakuKontextTests(unittest.TestCase):
                     max_sequence_length=profile.max_sequence_length,
                     steps=profile.steps,
                     step_ms=[10.0, 5.0, 5.5],
+                    cold_to_first_step_end_ms=10.0,
                     warm_step_median_ms=5.5,
                     timings_ms={"model_load_ms": 1.0, "generation_ms": 20.0, "total_ms": 21.0},
                     memory={

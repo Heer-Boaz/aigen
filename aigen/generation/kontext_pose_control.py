@@ -43,6 +43,7 @@ class CharacterKontextPoseResult:
     transformer_step_ms: list[float]
     controlnet_step_ms: list[float]
     controlnet_active_steps: int
+    controlnet_metadata: dict[str, Any]
     memory: dict[str, int]
     environment: dict[str, Any]
     parameter_locations: list[dict[str, Any]]
@@ -57,6 +58,8 @@ class CharacterKontextPoseResult:
     cpu_offload: bool
     vae_tiling: bool
     transformer_single_file: str | None
+    nunchaku_transformer_model: str | None
+    attention_impl: str | None
     seed: int
 
     def to_json(self) -> dict[str, Any]:
@@ -83,6 +86,7 @@ class CharacterKontextPoseResult:
             "transformer_step_ms": self.transformer_step_ms,
             "controlnet_step_ms": self.controlnet_step_ms,
             "controlnet_active_steps": self.controlnet_active_steps,
+            "controlnet_metadata": self.controlnet_metadata,
             "memory": self.memory,
             "environment": self.environment,
             "parameter_locations": self.parameter_locations,
@@ -97,6 +101,8 @@ class CharacterKontextPoseResult:
             "cpu_offload": self.cpu_offload,
             "vae_tiling": self.vae_tiling,
             "transformer_single_file": self.transformer_single_file,
+            "nunchaku_transformer_model": self.nunchaku_transformer_model,
+            "attention_impl": self.attention_impl,
             "seed": self.seed,
         }
 
@@ -134,6 +140,8 @@ def run_character_kontext_pose_control(
     control_guidance_start: float = 0.0,
     control_guidance_end: float = 0.65,
     transformer_single_file: Path | None = None,
+    nunchaku_transformer_model: Path | None = None,
+    attention_impl: str | None = None,
     vae_tiling: bool = False,
 ) -> CharacterKontextPoseResult:
     torch, pipeline_class, controlnet_class, transformer_class, load_image = _load_flux_kontext_controlnet()
@@ -149,6 +157,8 @@ def run_character_kontext_pose_control(
         model,
         controlnet_model,
         transformer_single_file,
+        nunchaku_transformer_model,
+        attention_impl,
         _torch_dtype(torch, dtype),
         device,
         cpu_offload,
@@ -207,6 +217,7 @@ def run_character_kontext_pose_control(
         transformer_step_ms=pipeline.last_transformer_step_ms,
         controlnet_step_ms=pipeline.last_controlnet_step_ms,
         controlnet_active_steps=pipeline.last_controlnet_active_steps,
+        controlnet_metadata=pipeline.last_controlnet_metadata,
         memory=memory,
         environment=_generation_environment(torch, pipeline),
         parameter_locations=parameter_locations(pipeline.transformer),
@@ -221,6 +232,8 @@ def run_character_kontext_pose_control(
         cpu_offload=cpu_offload,
         vae_tiling=vae_tiling,
         transformer_single_file=transformer_single_file.resolve().as_posix() if transformer_single_file else None,
+        nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix() if nunchaku_transformer_model else None,
+        attention_impl=attention_impl,
         seed=seed,
     )
 
@@ -267,6 +280,10 @@ def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) ->
     return extended
 
 
+def residual_suffix_is_zero(samples: Sequence[Any], generated_tokens: int) -> bool:
+    return all(sample[:, generated_tokens:].count_nonzero().item() == 0 for sample in samples)
+
+
 def fit_size_to_area(width: int, height: int, *, max_area: int, multiple_of: int) -> tuple[int, int]:
     if width <= 0 or height <= 0:
         raise ValueError("Reference dimensions must be positive")
@@ -287,6 +304,8 @@ def _build_kontext_pose_pipeline(
     model: str,
     controlnet_model: str,
     transformer_single_file: Path | None,
+    nunchaku_transformer_model: Path | None,
+    attention_impl: str | None,
     torch_dtype: Any,
     device: str,
     cpu_offload: bool,
@@ -310,6 +329,16 @@ def _build_kontext_pose_pipeline(
             torch_dtype=torch_dtype,
             local_files_only=True,
         )
+    if nunchaku_transformer_model:
+        from nunchaku import NunchakuFluxTransformer2dModel
+
+        pipeline_kwargs["transformer"] = NunchakuFluxTransformer2dModel.from_pretrained(
+            nunchaku_transformer_model.resolve().as_posix(),
+            torch_dtype=torch_dtype,
+            offload=cpu_offload,
+        )
+        if attention_impl:
+            pipeline_kwargs["transformer"].set_attention_impl(attention_impl)
 
     pipeline = pipeline_class.from_pretrained(model, **pipeline_kwargs)
     if vae_tiling:
@@ -517,6 +546,17 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 "text_tokens": prompt_embeds.shape[1],
                 "total_tokens": image_latents.shape[1] + latents.shape[1] + prompt_embeds.shape[1],
             }
+            self.last_controlnet_metadata = {
+                "generated_tokens": latents.shape[1],
+                "reference_tokens": image_latents.shape[1],
+                "combined_image_tokens": latents.shape[1] + image_latents.shape[1],
+                "double_residual_count": 0,
+                "single_residual_count": 0,
+                "double_residual_shapes": [],
+                "single_residual_shapes": [],
+                "reference_suffix_zero": True,
+                "controlnet_blocks_repeat": False,
+            }
 
             control_vae_start = synchronized_time(torch)
             control_image = self.prepare_image(
@@ -621,11 +661,37 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             controlnet_block_samples,
                             total_image_tokens,
                         )
+                        if not self.last_controlnet_metadata["double_residual_count"]:
+                            self.last_controlnet_metadata = {
+                                "generated_tokens": latents.shape[1],
+                                "reference_tokens": image_latents.shape[1],
+                                "combined_image_tokens": total_image_tokens,
+                                "double_residual_count": len(controlnet_block_samples),
+                                "single_residual_count": 0,
+                                "double_residual_shapes": [list(sample.shape) for sample in controlnet_block_samples],
+                                "single_residual_shapes": [],
+                                "reference_suffix_zero": residual_suffix_is_zero(
+                                    controlnet_block_samples,
+                                    latents.shape[1],
+                                ),
+                                "controlnet_blocks_repeat": controlnet_blocks_repeat,
+                            }
                         if controlnet_single_block_samples:
                             controlnet_single_block_samples = extend_control_residuals(
                                 controlnet_single_block_samples,
                                 total_image_tokens,
                             )
+                            if not self.last_controlnet_metadata["single_residual_count"]:
+                                self.last_controlnet_metadata["single_residual_count"] = len(
+                                    controlnet_single_block_samples
+                                )
+                                self.last_controlnet_metadata["single_residual_shapes"] = [
+                                    list(sample.shape) for sample in controlnet_single_block_samples
+                                ]
+                                self.last_controlnet_metadata["reference_suffix_zero"] = (
+                                    self.last_controlnet_metadata["reference_suffix_zero"]
+                                    and residual_suffix_is_zero(controlnet_single_block_samples, latents.shape[1])
+                                )
                     self.last_controlnet_step_ms.append(controlnet_step_ms)
 
                     transformer_start = synchronized_time(torch)

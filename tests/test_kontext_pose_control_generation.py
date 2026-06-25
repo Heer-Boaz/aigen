@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import sys
 import tempfile
 import types
 import unittest
@@ -16,6 +17,7 @@ from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseResult,
     extend_control_residuals,
     fit_size_to_area,
+    residual_suffix_is_zero,
     run_character_kontext_pose_control,
 )
 
@@ -103,6 +105,17 @@ class FakePipeline:
         self.last_controlnet_step_ms = [0.0, 4.0]
         self.last_transformer_step_ms = [2.0, 3.0]
         self.last_controlnet_active_steps = 1
+        self.last_controlnet_metadata = {
+            "generated_tokens": 864,
+            "reference_tokens": 1152,
+            "combined_image_tokens": 2016,
+            "double_residual_count": 6,
+            "single_residual_count": 0,
+            "double_residual_shapes": [[1, 2016, 3072]],
+            "single_residual_shapes": [],
+            "reference_suffix_zero": True,
+            "controlnet_blocks_repeat": False,
+        }
 
     @classmethod
     def from_pretrained(cls, model: str, **kwargs: object) -> FakePipeline:
@@ -141,11 +154,29 @@ class FakeTransformerModel:
         return f"transformer:{path}"
 
 
+class FakeNunchakuTransformer:
+    calls: list[dict[str, object]] = []
+
+    def __init__(self, model: str) -> None:
+        self.model = model
+        self.attention_impl: str | None = None
+
+    @classmethod
+    def from_pretrained(cls, model: str, **kwargs: object) -> FakeNunchakuTransformer:
+        transformer = FakeNunchakuTransformer(model)
+        cls.calls.append({"model": model, "transformer": transformer, **kwargs})
+        return transformer
+
+    def set_attention_impl(self, attention_impl: str) -> None:
+        self.attention_impl = attention_impl
+
+
 def reset_fakes() -> None:
     FakePipeline.calls.clear()
     FakePipeline.pipelines.clear()
     FakeControlNetModel.calls.clear()
     FakeTransformerModel.calls.clear()
+    FakeNunchakuTransformer.calls.clear()
 
 
 def fake_load_image(path: str) -> str:
@@ -184,6 +215,7 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(extended[0].shape, (2, 5, 4))
         self.assertTrue(torch.equal(extended[0][:, :3], sample))
         self.assertTrue(torch.equal(extended[0][:, 3:], torch.zeros((2, 2, 4))))
+        self.assertTrue(residual_suffix_is_zero(extended, generated_tokens=3))
 
     def test_fits_reference_size_to_area_and_multiple(self) -> None:
         self.assertEqual(
@@ -259,6 +291,49 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(result.environment["torch_version"], "fake-torch")
         self.assertEqual(result.parameter_locations[0]["name"], "transformer.block.weight")
 
+    def test_runs_kontext_pose_generation_with_nunchaku_transformer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_image = root / "reference.png"
+            pose_image = root / "pose.png"
+            nunchaku_model = root / "nunchaku.safetensors"
+            output = root / "out" / "pose_result.png"
+            reference_image.write_bytes(b"reference")
+            pose_image.write_bytes(b"pose")
+            nunchaku_model.write_bytes(b"nunchaku")
+            nunchaku = types.ModuleType("nunchaku")
+            nunchaku.NunchakuFluxTransformer2dModel = FakeNunchakuTransformer
+
+            with patch.dict(sys.modules, {"nunchaku": nunchaku}):
+                with patch(
+                    "aigen.generation.kontext_pose_control._load_flux_kontext_controlnet",
+                    side_effect=fake_loader,
+                ):
+                    result = run_character_kontext_pose_control(
+                        "/models/flux-kontext",
+                        "/models/controlnet",
+                        reference_image,
+                        pose_image,
+                        output,
+                        "same character running",
+                        device="cuda:0",
+                        dtype="bfloat16",
+                        steps=3,
+                        width=384,
+                        height=576,
+                        nunchaku_transformer_model=nunchaku_model,
+                        attention_impl="nunchaku-fp16",
+                    )
+
+        self.assertEqual(FakeNunchakuTransformer.calls[0]["model"], nunchaku_model.resolve().as_posix())
+        self.assertEqual(FakeNunchakuTransformer.calls[0]["torch_dtype"], "fake-bfloat16")
+        self.assertEqual(FakeNunchakuTransformer.calls[0]["offload"], False)
+        transformer = FakeNunchakuTransformer.calls[0]["transformer"]
+        self.assertEqual(transformer.attention_impl, "nunchaku-fp16")
+        self.assertEqual(FakePipeline.calls[0]["transformer"], transformer)
+        self.assertEqual(result.nunchaku_transformer_model, nunchaku_model.resolve().as_posix())
+        self.assertEqual(result.attention_impl, "nunchaku-fp16")
+
     def test_cli_character_kontext_pose_uses_local_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -304,6 +379,17 @@ class KontextPoseControlTests(unittest.TestCase):
                     transformer_step_ms=[2.0, 3.0],
                     controlnet_step_ms=[0.0, 4.0],
                     controlnet_active_steps=1,
+                    controlnet_metadata={
+                        "generated_tokens": 864,
+                        "reference_tokens": 1152,
+                        "combined_image_tokens": 2016,
+                        "double_residual_count": 6,
+                        "single_residual_count": 0,
+                        "double_residual_shapes": [[1, 2016, 3072]],
+                        "single_residual_shapes": [],
+                        "reference_suffix_zero": True,
+                        "controlnet_blocks_repeat": False,
+                    },
                     memory={
                         "max_allocated_mb": 0,
                         "max_reserved_mb": 0,
@@ -338,6 +424,8 @@ class KontextPoseControlTests(unittest.TestCase):
                     cpu_offload=profile.cpu_offload,
                     vae_tiling=profile.vae_tiling,
                     transformer_single_file=None,
+                    nunchaku_transformer_model=None,
+                    attention_impl=None,
                     seed=9,
                 ),
             ) as run_pose_mock:
@@ -378,6 +466,135 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(run_pose_mock.call_args.kwargs["vae_tiling"], False)
         self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.50)
         self.assertEqual(run_pose_mock.call_args.kwargs["control_guidance_end"], 0.50)
+
+    def test_cli_character_nunchaku_kontext_pose_uses_local_profile(self) -> None:
+        from aigen.cli import NUNCHAKU_KONTEXT_POSE_PROFILES
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_image = root / "reference.png"
+            pose_image = root / "pose.png"
+            output = root / "pose_result.png"
+            reference_image.write_bytes(b"reference")
+            pose_image.write_bytes(b"pose")
+            profile = NUNCHAKU_KONTEXT_POSE_PROFILES["local"]
+
+            with patch(
+                "aigen.cli.run_character_kontext_pose_control",
+                return_value=CharacterKontextPoseResult(
+                    output_path=output.as_posix(),
+                    model=profile.model,
+                    controlnet_model=profile.controlnet_model,
+                    reference_image=reference_image.as_posix(),
+                    pose_image=pose_image.as_posix(),
+                    prompt="same character in exact pose",
+                    pipeline_prompt="full body\n\nsame character in exact pose",
+                    negative_prompt="bad anatomy",
+                    width=profile.width,
+                    height=profile.height,
+                    reference_width=384,
+                    reference_height=768,
+                    reference_max_area=profile.reference_max_area,
+                    reference_tokens=1152,
+                    generated_tokens=864,
+                    text_tokens=128,
+                    total_tokens=2144,
+                    max_sequence_length=profile.max_sequence_length,
+                    timings_ms={
+                        "model_load_ms": 0.0,
+                        "prompt_encode_ms": 1.0,
+                        "reference_vae_ms": 2.0,
+                        "control_vae_ms": 3.0,
+                        "controlnet_ms": 0.0,
+                        "transformer_ms": 5.0,
+                        "vae_decode_ms": 6.0,
+                        "pipeline_ms": 21.0,
+                        "total_ms": 21.0,
+                    },
+                    transformer_step_ms=[2.0, 3.0],
+                    controlnet_step_ms=[0.0, 0.0],
+                    controlnet_active_steps=0,
+                    controlnet_metadata={
+                        "generated_tokens": 864,
+                        "reference_tokens": 1152,
+                        "combined_image_tokens": 2016,
+                        "double_residual_count": 0,
+                        "single_residual_count": 0,
+                        "double_residual_shapes": [],
+                        "single_residual_shapes": [],
+                        "reference_suffix_zero": True,
+                        "controlnet_blocks_repeat": False,
+                    },
+                    memory={
+                        "max_allocated_mb": 0,
+                        "max_reserved_mb": 0,
+                        "free_after_run_mb": 0,
+                        "device_total_mb": 0,
+                    },
+                    environment={
+                        "torch_version": "fake-torch",
+                        "torch_cuda_version": "fake-cuda",
+                        "bitsandbytes_version": "fake-bnb",
+                        "transformer_class": "FakeTransformer",
+                        "transformer_device_map": None,
+                        "transformer_quantization_config": "fake-quantization-config",
+                    },
+                    parameter_locations=[],
+                    steps=profile.steps,
+                    guidance_scale=profile.guidance_scale,
+                    true_cfg_scale=profile.true_cfg_scale,
+                    controlnet_conditioning_scale=profile.controlnet_conditioning_scale,
+                    control_guidance_start=profile.control_guidance_start,
+                    control_guidance_end=profile.control_guidance_end,
+                    dtype=profile.dtype,
+                    device="cuda",
+                    cpu_offload=profile.cpu_offload,
+                    vae_tiling=profile.vae_tiling,
+                    transformer_single_file=None,
+                    nunchaku_transformer_model=profile.nunchaku_transformer_model.as_posix(),
+                    attention_impl=profile.attention_impl,
+                    seed=9,
+                ),
+            ) as run_pose_mock:
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "generate",
+                            "character-nunchaku-kontext-pose",
+                            "--reference-image",
+                            str(reference_image),
+                            "--pose-image",
+                            str(pose_image),
+                            "--prompt",
+                            "same character in exact pose",
+                            "--output",
+                            str(output),
+                            "--seed",
+                            "9",
+                            "--compact",
+                        ]
+                    )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["nunchaku_transformer_model"], profile.nunchaku_transformer_model.as_posix())
+        self.assertEqual(payload["attention_impl"], "nunchaku-fp16")
+        self.assertEqual(run_pose_mock.call_args.args[:6], (
+            profile.model,
+            profile.controlnet_model,
+            reference_image,
+            pose_image,
+            output,
+            "same character in exact pose",
+        ))
+        self.assertEqual(
+            run_pose_mock.call_args.kwargs["nunchaku_transformer_model"],
+            profile.nunchaku_transformer_model,
+        )
+        self.assertEqual(run_pose_mock.call_args.kwargs["attention_impl"], "nunchaku-fp16")
+        self.assertEqual(run_pose_mock.call_args.kwargs["cpu_offload"], True)
+        self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.0)
 
 
 if __name__ == "__main__":

@@ -194,6 +194,25 @@ for the current pose experiments:
   --compact
 ```
 
+For pose-controlled same-character work, use the fused Nunchaku Kontext pose
+route. It keeps the existing prefix-only ControlNet residual logic and swaps only
+the Kontext transformer backend. The local profile enables Nunchaku layer
+offload and `nunchaku-fp16` attention because the 16 GB RTX 5070 Ti cannot keep
+Kontext, VAE, text encoders, and the BF16 Union-Pro ControlNet resident at once.
+
+```bash
+.venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose \
+  --profile local \
+  --reference-image ../ai-art/references/characters/ai51.png \
+  --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
+  --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots." \
+  --output runs/characters/pose_control/ai51_nunchaku_kontext_pose.png \
+  --steps 20 \
+  --controlnet-conditioning-scale 0.50 \
+  --control-guidance-end 0.50 \
+  --seed 1
+```
+
 For generation dependencies:
 
 ```bash
