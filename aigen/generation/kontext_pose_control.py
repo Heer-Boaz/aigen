@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -329,6 +329,24 @@ class CharacterKontextPoseSession:
             seed=seed,
         )
 
+    def prepare_control_condition(
+        self,
+        prepared: KontextPosePrepared,
+        *,
+        pose_image: Any,
+        seed: int,
+    ) -> tuple[Any, bool, float]:
+        return self.pipeline.prepare_control_condition(
+            control_image=pose_image,
+            width=prepared.width,
+            height=prepared.height,
+            batch_size=prepared.batch_size,
+            num_images_per_prompt=prepared.num_images_per_prompt,
+            num_channels_latents=prepared.num_channels_latents,
+            generator=self.torch.Generator(device=self.device).manual_seed(seed),
+            device=prepared.device,
+        )
+
     def denoise_many(
         self,
         prepared: KontextPosePrepared,
@@ -353,8 +371,10 @@ class CharacterKontextPoseSession:
         self,
         prepared: KontextPosePrepared,
         denoised: Sequence[KontextPoseDenoised],
+        *,
+        chunk_size: int = 1,
     ) -> tuple[Any, float]:
-        return self.pipeline.decode_latents(prepared, denoised)
+        return self.pipeline.decode_latents(prepared, denoised, chunk_size=chunk_size)
 
     def close(self) -> None:
         self.pipeline.maybe_free_model_hooks()
@@ -515,7 +535,7 @@ def run_character_kontext_pose_sweep(
 ) -> CharacterKontextPoseSweepResult:
     from PIL import Image
 
-    torch, _, _, _, load_image = _load_flux_kontext_controlnet()
+    torch, _, _, _, _ = _load_flux_kontext_controlnet()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats(device)
 
@@ -533,54 +553,52 @@ def run_character_kontext_pose_sweep(
         nunchaku_layer_offload=nunchaku_layer_offload,
         vae_tiling=vae_tiling,
     )
-    current_prepare_start = synchronized_time(torch)
-    current_prepared = session.prepare(
-        reference_image=reference_image,
-        pose_image=pose_image,
-        prompt=pipeline_prompt,
-        negative_prompt=negative_prompt,
-        true_cfg_scale=true_cfg_scale,
-        width=width,
-        height=height,
-        reference_max_area=reference_max_area,
-        max_sequence_length=max_sequence_length,
-        steps=steps,
-        guidance_scale=guidance_scale,
-        seed=seed,
-    )
-    current_prepare_ms = elapsed_ms(current_prepare_start, synchronized_time(torch))
+    try:
+        current_prepare_start = synchronized_time(torch)
+        current_prepared = session.prepare(
+            reference_image=reference_image,
+            pose_image=pose_image,
+            prompt=pipeline_prompt,
+            negative_prompt=negative_prompt,
+            true_cfg_scale=true_cfg_scale,
+            width=width,
+            height=height,
+            reference_max_area=reference_max_area,
+            max_sequence_length=max_sequence_length,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+        )
+        current_prepare_ms = elapsed_ms(current_prepare_start, synchronized_time(torch))
 
-    nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-    nearest_prepare_start = synchronized_time(torch)
-    nearest_prepared = session.prepare_images(
-        reference_image=load_image(reference_image.resolve().as_posix()),
-        pose_image=nearest_pose,
-        prompt=pipeline_prompt,
-        negative_prompt=negative_prompt,
-        true_cfg_scale=true_cfg_scale,
-        width=width,
-        height=height,
-        reference_max_area=reference_max_area,
-        max_sequence_length=max_sequence_length,
-        steps=steps,
-        guidance_scale=guidance_scale,
-        seed=seed,
-    )
-    nearest_prepare_ms = elapsed_ms(nearest_prepare_start, synchronized_time(torch))
+        nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
+        nearest_control_image, nearest_blocks_repeat, nearest_prepare_ms = session.prepare_control_condition(
+            current_prepared,
+            pose_image=nearest_pose,
+            seed=seed,
+        )
+        nearest_prepared = replace(
+            current_prepared,
+            control_image=nearest_control_image,
+            controlnet_blocks_repeat=nearest_blocks_repeat,
+        )
+        if not torch.equal(current_prepared.base_latents, nearest_prepared.base_latents):
+            raise RuntimeError("Sweep variants do not share identical initial noise")
 
-    current_variants = [
-        KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
-        KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
-    ]
-    nearest_variants = [
-        KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
-        KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
-    ]
-    current_denoised = session.denoise_many(current_prepared, current_variants)
-    nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants)
-    all_denoised = [*current_denoised, *nearest_denoised]
-    images, decode_ms = session.decode_many(current_prepared, all_denoised)
-    session.close()
+        current_variants = [
+            KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
+            KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
+        ]
+        nearest_variants = [
+            KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
+            KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
+        ]
+        current_denoised = session.denoise_many(current_prepared, current_variants)
+        nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants)
+        all_denoised = [*current_denoised, *nearest_denoised]
+        images, decode_ms = session.decode_many(current_prepared, all_denoised, chunk_size=1)
+    finally:
+        session.close()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs = []
@@ -816,6 +834,43 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             repeat_by = batch_size if image.shape[0] == 1 else num_images_per_prompt
             return image.repeat_interleave(repeat_by, dim=0).to(device=device, dtype=dtype)
 
+        def prepare_control_condition(
+            self,
+            *,
+            control_image: Any,
+            width: int,
+            height: int,
+            batch_size: int,
+            num_images_per_prompt: int,
+            num_channels_latents: int,
+            generator: Any,
+            device: str,
+        ) -> tuple[Any, bool, float]:
+            control_vae_start = synchronized_time(torch)
+            image_batch_size = batch_size * num_images_per_prompt
+            control_image = self.prepare_image(
+                image=control_image,
+                width=width,
+                height=height,
+                batch_size=image_batch_size,
+                num_images_per_prompt=num_images_per_prompt,
+                device=device,
+                dtype=self.vae.dtype,
+            )
+            controlnet_blocks_repeat = bool(self.controlnet.input_hint_block)
+            if not self.controlnet.input_hint_block:
+                control_image = retrieve_latents(self.vae.encode(control_image), generator=generator)
+                control_image = (control_image - self.vae.config.shift_factor) * self.vae.config.scaling_factor
+                height_control_image, width_control_image = control_image.shape[2:]
+                control_image = self._pack_latents(
+                    control_image,
+                    image_batch_size,
+                    num_channels_latents,
+                    height_control_image,
+                    width_control_image,
+                )
+            return control_image, controlnet_blocks_repeat, elapsed_ms(control_vae_start, synchronized_time(torch))
+
         @torch.no_grad()
         def prepare_conditioning(
             self,
@@ -944,30 +999,16 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 "total_tokens": image_latents.shape[1] + base_latents.shape[1] + prompt_embeds.shape[1],
             }
 
-            control_vae_start = synchronized_time(torch)
-            control_image = self.prepare_image(
-                image=control_image,
+            control_image, controlnet_blocks_repeat, control_vae_ms = self.prepare_control_condition(
+                control_image=control_image,
                 width=width,
                 height=height,
-                batch_size=batch_size * num_images_per_prompt,
+                batch_size=batch_size,
                 num_images_per_prompt=num_images_per_prompt,
+                num_channels_latents=num_channels_latents,
+                generator=generator,
                 device=device,
-                dtype=self.vae.dtype,
             )
-            height, width = control_image.shape[-2:]
-            controlnet_blocks_repeat = bool(self.controlnet.input_hint_block)
-            if not self.controlnet.input_hint_block:
-                control_image = retrieve_latents(self.vae.encode(control_image), generator=generator)
-                control_image = (control_image - self.vae.config.shift_factor) * self.vae.config.scaling_factor
-                height_control_image, width_control_image = control_image.shape[2:]
-                control_image = self._pack_latents(
-                    control_image,
-                    batch_size * num_images_per_prompt,
-                    num_channels_latents,
-                    height_control_image,
-                    width_control_image,
-                )
-            control_vae_ms = elapsed_ms(control_vae_start, synchronized_time(torch))
 
             transformer_guidance = None
             if self.transformer.config.guidance_embeds:
@@ -1237,14 +1278,17 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             denoised: Sequence[KontextPoseDenoised],
             *,
             output_type: str = "pil",
+            chunk_size: int = 1,
         ) -> tuple[Any, float]:
             vae_decode_start = synchronized_time(torch)
-            latents = torch.cat([result.latents for result in denoised], dim=0)
-            latents = self._unpack_latents(latents, prepared.height, prepared.width, self.vae_scale_factor)
-            latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
-            output = self.vae.decode(latents, return_dict=False)[0]
-            output = self.image_processor.postprocess(output, output_type=output_type)
-            return output, elapsed_ms(vae_decode_start, synchronized_time(torch))
+            outputs = []
+            for start in range(0, len(denoised), chunk_size):
+                latents = torch.cat([result.latents for result in denoised[start : start + chunk_size]], dim=0)
+                latents = self._unpack_latents(latents, prepared.height, prepared.width, self.vae_scale_factor)
+                latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
+                output = self.vae.decode(latents, return_dict=False)[0]
+                outputs.extend(self.image_processor.postprocess(output, output_type=output_type))
+            return outputs, elapsed_ms(vae_decode_start, synchronized_time(torch))
 
         @torch.no_grad()
         def __call__(

@@ -16,10 +16,13 @@ from aigen.cli import CHARACTER_KONTEXT_POSE_PROFILES, main
 from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseResult,
     CharacterKontextPoseSweepResult,
+    KontextPoseDenoised,
+    KontextPosePrepared,
     extend_control_residuals,
     fit_size_to_area,
     residual_suffix_is_zero,
     run_character_kontext_pose_control,
+    run_character_kontext_pose_sweep,
 )
 
 
@@ -190,6 +193,7 @@ def fake_loader() -> tuple[types.ModuleType, type[FakePipeline], type[FakeContro
     torch_module.float16 = "fake-float16"
     torch_module.float32 = "fake-float32"
     torch_module.Generator = FakeGenerator
+    torch_module.equal = torch.equal
     torch_module.__version__ = "fake-torch"
     torch_module.version = types.SimpleNamespace(cuda="fake-cuda")
     torch_module.cuda = types.SimpleNamespace(
@@ -203,6 +207,38 @@ def fake_loader() -> tuple[types.ModuleType, type[FakePipeline], type[FakeContro
         synchronize=lambda: None,
     )
     return torch_module, FakePipeline, FakeControlNetModel, FakeTransformerModel, fake_load_image
+
+
+def fake_prepared(seed: int, *, control_image: object = "current-control") -> KontextPosePrepared:
+    return KontextPosePrepared(
+        prompt_embeds=torch.ones((1, 4, 3)),
+        pooled_prompt_embeds=torch.ones((1, 3)),
+        text_ids=torch.ones((4, 3)),
+        negative_prompt_embeds=None,
+        negative_pooled_prompt_embeds=None,
+        negative_text_ids=None,
+        do_true_cfg=False,
+        base_latents=torch.ones((1, 2, 3)),
+        image_latents=torch.ones((1, 5, 3)),
+        generated_img_ids=torch.ones((2, 3)),
+        combined_img_ids=torch.ones((7, 3)),
+        control_image=control_image,
+        controlnet_blocks_repeat=False,
+        transformer_guidance=None,
+        controlnet_guidance=None,
+        true_cfg_scale=1.0,
+        width=384,
+        height=576,
+        batch_size=1,
+        num_images_per_prompt=1,
+        num_channels_latents=16,
+        dtype=torch.float32,
+        device="cpu",
+        seed=seed,
+        steps=20,
+        token_metadata={},
+        timings_ms={},
+    )
 
 
 class KontextPoseControlTests(unittest.TestCase):
@@ -334,6 +370,171 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(FakePipeline.calls[0]["transformer"], transformer)
         self.assertEqual(result.nunchaku_transformer_model, nunchaku_model.resolve().as_posix())
         self.assertEqual(result.attention_impl, "nunchaku-fp16")
+
+    def test_sweep_reuses_conditioning_and_closes_session(self) -> None:
+        from PIL import Image
+
+        class FakeSweepSession:
+            instance: FakeSweepSession
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.model_load_ms = 7.0
+                self.pipeline = FakePipeline()
+                self.prepare_calls = 0
+                self.control_prepare_calls = 0
+                self.denoise_prepared: list[KontextPosePrepared] = []
+                self.decode_chunk_size = 0
+                self.closed = False
+                FakeSweepSession.instance = self
+
+            def prepare(self, **kwargs: object) -> KontextPosePrepared:
+                self.prepare_calls += 1
+                return fake_prepared(kwargs["seed"])
+
+            def prepare_control_condition(
+                self,
+                prepared: KontextPosePrepared,
+                *,
+                pose_image: object,
+                seed: int,
+            ) -> tuple[str, bool, float]:
+                self.control_prepare_calls += 1
+                return "nearest-control", False, 3.0
+
+            def denoise_many(
+                self,
+                prepared: KontextPosePrepared,
+                variants: Sequence[object],
+            ) -> list[KontextPoseDenoised]:
+                self.denoise_prepared.append(prepared)
+                return [
+                    KontextPoseDenoised(
+                        name=variant.name,
+                        latents=torch.ones((1, 2, 3)),
+                        controlnet_conditioning_scale=variant.controlnet_conditioning_scale,
+                        control_guidance_start=variant.control_guidance_start,
+                        control_guidance_end=variant.control_guidance_end,
+                        seed=variant.seed,
+                        transformer_step_ms=[1.0],
+                        controlnet_step_ms=[0.0],
+                        controlnet_active_steps=0,
+                        controlnet_metadata={},
+                        timings_ms={"denoise_ms": 1.0},
+                    )
+                    for variant in variants
+                ]
+
+            def decode_many(
+                self,
+                prepared: KontextPosePrepared,
+                denoised: Sequence[KontextPoseDenoised],
+                *,
+                chunk_size: int = 1,
+            ) -> tuple[list[FakeImage], float]:
+                self.decode_chunk_size = chunk_size
+                return [FakeImage() for _result in denoised], 4.0
+
+            def close(self) -> None:
+                self.closed = True
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_image = root / "reference.png"
+            pose_image = root / "pose.png"
+            output_dir = root / "sweep"
+            reference_image.write_bytes(b"reference")
+            Image.new("RGB", (16, 16), "black").save(pose_image)
+
+            with patch(
+                "aigen.generation.kontext_pose_control.CharacterKontextPoseSession",
+                FakeSweepSession,
+            ):
+                with patch(
+                    "aigen.generation.kontext_pose_control._load_flux_kontext_controlnet",
+                    side_effect=fake_loader,
+                ):
+                    result = run_character_kontext_pose_sweep(
+                        "/models/flux-kontext",
+                        "/models/controlnet",
+                        reference_image,
+                        pose_image,
+                        output_dir,
+                        "same character running",
+                        device="cpu",
+                        seed=123,
+                    )
+
+        session = FakeSweepSession.instance
+        self.assertEqual(session.prepare_calls, 1)
+        self.assertEqual(session.control_prepare_calls, 1)
+        self.assertEqual(session.denoise_prepared[0].control_image, "current-control")
+        self.assertEqual(session.denoise_prepared[1].control_image, "nearest-control")
+        self.assertEqual(session.decode_chunk_size, 1)
+        self.assertTrue(session.closed)
+        self.assertEqual(len(result.outputs), 4)
+        self.assertEqual(result.outputs[0]["name"], "A_scale000_current")
+
+    def test_sweep_closes_session_after_failure(self) -> None:
+        from PIL import Image
+
+        class FailingSweepSession:
+            instance: FailingSweepSession
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.model_load_ms = 7.0
+                self.pipeline = FakePipeline()
+                self.closed = False
+                FailingSweepSession.instance = self
+
+            def prepare(self, **kwargs: object) -> KontextPosePrepared:
+                return fake_prepared(kwargs["seed"])
+
+            def prepare_control_condition(
+                self,
+                prepared: KontextPosePrepared,
+                *,
+                pose_image: object,
+                seed: int,
+            ) -> tuple[str, bool, float]:
+                return "nearest-control", False, 3.0
+
+            def denoise_many(
+                self,
+                prepared: KontextPosePrepared,
+                variants: Sequence[object],
+            ) -> list[KontextPoseDenoised]:
+                raise RuntimeError("denoise failed")
+
+            def close(self) -> None:
+                self.closed = True
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_image = root / "reference.png"
+            pose_image = root / "pose.png"
+            reference_image.write_bytes(b"reference")
+            Image.new("RGB", (16, 16), "black").save(pose_image)
+
+            with patch(
+                "aigen.generation.kontext_pose_control.CharacterKontextPoseSession",
+                FailingSweepSession,
+            ):
+                with patch(
+                    "aigen.generation.kontext_pose_control._load_flux_kontext_controlnet",
+                    side_effect=fake_loader,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "denoise failed"):
+                        run_character_kontext_pose_sweep(
+                            "/models/flux-kontext",
+                            "/models/controlnet",
+                            reference_image,
+                            pose_image,
+                            root / "sweep",
+                            "same character running",
+                            device="cpu",
+                        )
+
+        self.assertTrue(FailingSweepSession.instance.closed)
 
     def test_cli_character_kontext_pose_uses_local_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
