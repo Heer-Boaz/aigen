@@ -16,6 +16,10 @@ from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseError,
     run_character_kontext_pose_control,
 )
+from aigen.generation.nunchaku_kontext import (
+    NunchakuKontextError,
+    run_nunchaku_kontext,
+)
 from aigen.generation.pose_control import (
     CharacterPoseError,
     run_character_pose_control,
@@ -82,6 +86,22 @@ class CharacterKontextPoseCliProfile:
     controlnet_conditioning_scale: float
     control_guidance_start: float
     control_guidance_end: float
+    seed: int
+
+
+@dataclass(frozen=True)
+class NunchakuKontextCliProfile:
+    base_model: str
+    transformer_model: str
+    dtype: str
+    steps: int
+    guidance_scale: float
+    true_cfg_scale: float
+    width: int
+    height: int
+    reference_max_area: int
+    max_sequence_length: int
+    framing: str
     seed: int
 
 
@@ -202,6 +222,26 @@ CHARACTER_KONTEXT_POSE_PROFILES = {
     ),
 }
 
+NUNCHAKU_KONTEXT_PROFILES = {
+    "local": NunchakuKontextCliProfile(
+        base_model=(MODELS_ROOT / "diffusers/eramth/flux-kontext-4bit-fp4").as_posix(),
+        transformer_model=(
+            MODELS_ROOT
+            / "nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev/svdq-fp4_r32-flux.1-kontext-dev.safetensors"
+        ).as_posix(),
+        dtype="bfloat16",
+        steps=3,
+        guidance_scale=2.5,
+        true_cfg_scale=1.0,
+        width=384,
+        height=576,
+        reference_max_area=384 * 768,
+        max_sequence_length=128,
+        framing="full-body",
+        seed=1,
+    ),
+}
+
 
 def _dump_json(handle: TextIO, payload: object, pretty: bool) -> None:
     json.dump(
@@ -263,6 +303,7 @@ def _add_generate_commands(subparsers: Any) -> None:
 
     _add_character_concept_command(generate_subparsers)
     _add_character_kontext_pose_command(generate_subparsers)
+    _add_character_nunchaku_kontext_command(generate_subparsers)
     _add_character_pose_command(generate_subparsers)
 
 
@@ -592,6 +633,83 @@ def _add_character_kontext_pose_command(generate_subparsers: Any) -> None:
     )
 
 
+def _add_character_nunchaku_kontext_command(generate_subparsers: Any) -> None:
+    concept = generate_subparsers.add_parser(
+        "character-nunchaku-kontext",
+        help="Benchmark same-character Kontext generation with a Nunchaku transformer",
+    )
+    concept.add_argument(
+        "--profile",
+        choices=tuple(NUNCHAKU_KONTEXT_PROFILES),
+        default="local",
+        help="Nunchaku Kontext generation profile",
+    )
+    concept.add_argument(
+        "--base-model",
+        default=argparse.SUPPRESS,
+        help="Local Diffusers FLUX Kontext component folder",
+    )
+    concept.add_argument(
+        "--transformer-model",
+        default=argparse.SUPPRESS,
+        help="Local Nunchaku FLUX Kontext transformer safetensors file",
+    )
+    concept.add_argument("--reference-image", type=Path, required=True, help="Reference character image")
+    concept.add_argument("--prompt", required=True, help="Generation instruction")
+    concept.add_argument("--output", type=Path, required=True, help="Image path to write")
+    concept.add_argument("--device", default="cuda", help="Torch device")
+    concept.add_argument(
+        "--dtype",
+        choices=("auto", "bfloat16", "float16", "float32"),
+        default=argparse.SUPPRESS,
+        help="Torch dtype for non-transformer pipeline components",
+    )
+    concept.add_argument("--steps", type=int, default=argparse.SUPPRESS, help="Denoising steps")
+    concept.add_argument(
+        "--guidance-scale",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Prompt guidance scale",
+    )
+    concept.add_argument(
+        "--true-cfg-scale",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Kontext true CFG scale used with the negative prompt",
+    )
+    concept.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Generated image width")
+    concept.add_argument("--height", type=int, default=argparse.SUPPRESS, help="Generated image height")
+    concept.add_argument(
+        "--reference-max-area",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Maximum pixel area for the Kontext reference image before VAE encoding",
+    )
+    concept.add_argument(
+        "--max-sequence-length",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="T5 text token budget for the prompt",
+    )
+    concept.add_argument(
+        "--framing",
+        choices=("full-body", "portrait"),
+        default=argparse.SUPPRESS,
+        help="Character composition contract",
+    )
+    concept.add_argument(
+        "--negative-prompt",
+        default=DEFAULT_NEGATIVE_PROMPT,
+        help="Prompt content to avoid; defaults to the built-in character-art negative prompt",
+    )
+    concept.add_argument("--seed", type=int, default=argparse.SUPPRESS, help="Deterministic seed")
+    concept.add_argument(
+        "--compact",
+        action="store_true",
+        help="Write compact JSON instead of pretty printed JSON",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="aigen",
@@ -738,6 +856,44 @@ def main(argv: Sequence[str] | None = None) -> int:
                 transformer_single_file=values.get("transformer_single_file", profile.transformer_single_file),
             )
         except CharacterKontextPoseError as error:
+            _dump_json(
+                sys.stderr,
+                {
+                    "schema_version": 1,
+                    "status": "error",
+                    "error": error.__class__.__name__,
+                    "message": str(error),
+                },
+                pretty=not args.compact,
+            )
+            return 1
+        _dump_json(sys.stdout, result.to_json(), pretty=not args.compact)
+        return 0
+
+    if args.command == "generate" and args.generate_command == "character-nunchaku-kontext":
+        values = vars(args)
+        profile = NUNCHAKU_KONTEXT_PROFILES[args.profile]
+        try:
+            result = run_nunchaku_kontext(
+                values.get("base_model", profile.base_model),
+                values.get("transformer_model", profile.transformer_model),
+                args.reference_image,
+                args.output,
+                args.prompt,
+                device=args.device,
+                dtype=values.get("dtype", profile.dtype),
+                steps=values.get("steps", profile.steps),
+                guidance_scale=values.get("guidance_scale", profile.guidance_scale),
+                true_cfg_scale=values.get("true_cfg_scale", profile.true_cfg_scale),
+                width=values.get("width", profile.width),
+                height=values.get("height", profile.height),
+                reference_max_area=values.get("reference_max_area", profile.reference_max_area),
+                max_sequence_length=values.get("max_sequence_length", profile.max_sequence_length),
+                framing=values.get("framing", profile.framing),
+                negative_prompt=args.negative_prompt,
+                seed=values.get("seed", profile.seed),
+            )
+        except NunchakuKontextError as error:
             _dump_json(
                 sys.stderr,
                 {

@@ -4,13 +4,18 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
 from typing import Any
 
 from aigen.generation.character_concept import (
     DEFAULT_NEGATIVE_PROMPT,
     DTYPES,
     compose_character_prompt,
+)
+from aigen.generation.runtime_diagnostics import (
+    cuda_memory_stats,
+    elapsed_ms,
+    parameter_locations,
+    synchronized_time,
 )
 
 
@@ -149,7 +154,7 @@ def run_character_kontext_pose_control(
         cpu_offload,
         vae_tiling,
     )
-    model_load_ms = _elapsed_ms(model_load_start, synchronized_time(torch))
+    model_load_ms = elapsed_ms(model_load_start, synchronized_time(torch))
 
     pipeline_prompt = compose_character_prompt(prompt, framing)
     image = pipeline(
@@ -170,7 +175,7 @@ def run_character_kontext_pose_control(
         control_guidance_end=control_guidance_end,
         generator=torch.Generator(device=device).manual_seed(seed),
     ).images[0]
-    total_ms = _elapsed_ms(total_start, synchronized_time(torch))
+    total_ms = elapsed_ms(total_start, synchronized_time(torch))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path)
@@ -178,7 +183,7 @@ def run_character_kontext_pose_control(
     timings_ms = dict(pipeline.last_timings_ms)
     timings_ms["model_load_ms"] = model_load_ms
     timings_ms["total_ms"] = total_ms
-    memory = _cuda_memory_stats(torch, device)
+    memory = cuda_memory_stats(torch, device)
     return CharacterKontextPoseResult(
         output_path=output_path.resolve().as_posix(),
         model=model,
@@ -204,7 +209,7 @@ def run_character_kontext_pose_control(
         controlnet_active_steps=pipeline.last_controlnet_active_steps,
         memory=memory,
         environment=_generation_environment(torch, pipeline),
-        parameter_locations=_parameter_locations(pipeline.transformer),
+        parameter_locations=parameter_locations(pipeline.transformer),
         steps=steps,
         guidance_scale=guidance_scale,
         true_cfg_scale=true_cfg_scale,
@@ -218,34 +223,6 @@ def run_character_kontext_pose_control(
         transformer_single_file=transformer_single_file.resolve().as_posix() if transformer_single_file else None,
         seed=seed,
     )
-
-
-def synchronized_time(torch_module: Any) -> float:
-    if torch_module.cuda.is_available():
-        torch_module.cuda.synchronize()
-    return perf_counter()
-
-
-def _elapsed_ms(start: float, end: float) -> float:
-    return round((end - start) * 1000, 3)
-
-
-def _cuda_memory_stats(torch_module: Any, device: str) -> dict[str, int]:
-    if not torch_module.cuda.is_available():
-        return {
-            "max_allocated_mb": 0,
-            "max_reserved_mb": 0,
-            "free_after_run_mb": 0,
-            "device_total_mb": 0,
-        }
-
-    free_bytes, total_bytes = torch_module.cuda.mem_get_info(device)
-    return {
-        "max_allocated_mb": round(torch_module.cuda.max_memory_allocated(device) / 2**20),
-        "max_reserved_mb": round(torch_module.cuda.max_memory_reserved(device) / 2**20),
-        "free_after_run_mb": round(free_bytes / 2**20),
-        "device_total_mb": round(total_bytes / 2**20),
-    }
 
 
 def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
@@ -263,23 +240,6 @@ def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
         environment["gpu_name"] = torch_module.cuda.get_device_name(0)
         environment["compute_capability"] = list(torch_module.cuda.get_device_capability(0))
     return environment
-
-
-def _parameter_locations(transformer: Any) -> list[dict[str, Any]]:
-    parameter_locations = []
-    for name, parameter in transformer.named_parameters():
-        parameter_locations.append(
-            {
-                "name": name,
-                "class": type(parameter).__name__,
-                "device": str(parameter.device),
-                "dtype": str(parameter.dtype),
-                "shape": list(parameter.shape),
-            }
-        )
-        if len(parameter_locations) == 10:
-            break
-    return parameter_locations
 
 
 def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) -> list[Any]:
@@ -512,7 +472,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 num_images_per_prompt=num_images_per_prompt,
                 max_sequence_length=max_sequence_length,
             )
-            prompt_encode_ms = _elapsed_ms(prompt_encode_start, synchronized_time(torch))
+            prompt_encode_ms = elapsed_ms(prompt_encode_start, synchronized_time(torch))
 
             do_true_cfg = true_cfg_scale > 1
             if do_true_cfg:
@@ -547,7 +507,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 generator,
                 latents,
             )
-            reference_vae_ms = _elapsed_ms(reference_vae_start, synchronized_time(torch))
+            reference_vae_ms = elapsed_ms(reference_vae_start, synchronized_time(torch))
             combined_img_ids = torch.cat([generated_img_ids, reference_img_ids], dim=0)
             self.last_token_metadata = {
                 "reference_width": image_width,
@@ -581,7 +541,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     height_control_image,
                     width_control_image,
                 )
-            control_vae_ms = _elapsed_ms(control_vae_start, synchronized_time(torch))
+            control_vae_ms = elapsed_ms(control_vae_start, synchronized_time(torch))
 
             sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
             image_seq_len = latents.shape[1]
@@ -653,7 +613,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             joint_attention_kwargs=self.joint_attention_kwargs,
                             return_dict=False,
                         )
-                        controlnet_step_ms = _elapsed_ms(controlnet_start, synchronized_time(torch))
+                        controlnet_step_ms = elapsed_ms(controlnet_start, synchronized_time(torch))
                         controlnet_ms += controlnet_step_ms
                         self.last_controlnet_active_steps += 1
                         total_image_tokens = latent_model_input.shape[1]
@@ -683,7 +643,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         return_dict=False,
                         controlnet_blocks_repeat=controlnet_blocks_repeat,
                     )[0]
-                    transformer_step_ms = _elapsed_ms(transformer_start, synchronized_time(torch))
+                    transformer_step_ms = elapsed_ms(transformer_start, synchronized_time(torch))
                     transformer_ms += transformer_step_ms
                     noise_pred = noise_pred[:, : latents.size(1)]
 
@@ -703,7 +663,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             return_dict=False,
                             controlnet_blocks_repeat=controlnet_blocks_repeat,
                         )[0]
-                        negative_transformer_step_ms = _elapsed_ms(negative_transformer_start, synchronized_time(torch))
+                        negative_transformer_step_ms = elapsed_ms(negative_transformer_start, synchronized_time(torch))
                         transformer_step_ms += negative_transformer_step_ms
                         transformer_ms += negative_transformer_step_ms
                         neg_noise_pred = neg_noise_pred[:, : latents.size(1)]
@@ -730,7 +690,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 output = self.vae.decode(latents, return_dict=False)[0]
                 output = self.image_processor.postprocess(output, output_type=output_type)
-                vae_decode_ms = _elapsed_ms(vae_decode_start, synchronized_time(torch))
+                vae_decode_ms = elapsed_ms(vae_decode_start, synchronized_time(torch))
 
             self.maybe_free_model_hooks()
             self.last_timings_ms = {
@@ -740,7 +700,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 "controlnet_ms": round(controlnet_ms, 3),
                 "transformer_ms": round(transformer_ms, 3),
                 "vae_decode_ms": vae_decode_ms,
-                "pipeline_ms": _elapsed_ms(pipeline_start, synchronized_time(torch)),
+                "pipeline_ms": elapsed_ms(pipeline_start, synchronized_time(torch)),
             }
 
             if not return_dict:

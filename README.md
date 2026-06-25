@@ -161,6 +161,39 @@ The `production` Kontext pose profile is the BF16/offload comparison path. It
 uses a larger `512x1024` reference budget and VAE tiling. It is much slower on
 16 GB VRAM and should not be used for normal iteration.
 
+## Nunchaku Kontext Benchmark
+
+The bitsandbytes FP4 Kontext transformer is too slow for interactive sweeps on
+this RTX 5070 Ti setup, so the next backend benchmark uses Nunchaku's Blackwell
+FP4 FLUX Kontext transformer. Install the wheel that matches this Python,
+PyTorch, and CUDA build:
+
+```bash
+.venv/bin/python -m pip install --no-deps \
+  https://github.com/nunchaku-tech/nunchaku/releases/download/v1.3.0dev20260306/nunchaku-1.3.0.dev20260306%2Bcu12.8torch2.12-cp312-cp312-linux_x86_64.whl
+```
+
+Download the Nunchaku transformer into `aigen/models`:
+
+```bash
+.venv/bin/python -m aigen.cli models download \
+  --manifest model_sources/nunchaku_kontext_pipeline_fp4.json \
+  --models-root aigen/models
+```
+
+Run a plain Kontext three-step timing pass at the same preview token budget used
+for the current pose experiments:
+
+```bash
+.venv/bin/python -m aigen.cli generate character-nunchaku-kontext \
+  --profile local \
+  --reference-image ../ai-art/references/characters/ai51.png \
+  --prompt "Anime game character concept art of the same girl: blue eyes, short reddish-brown bob haircut, white shirt, blue tie, burgundy leather jacket, skirt, gloves, long blue socks, burgundy boots." \
+  --output runs/characters/benchmarks/ai51_nunchaku_kontext_3step.png \
+  --seed 1 \
+  --compact
+```
+
 For generation dependencies:
 
 ```bash

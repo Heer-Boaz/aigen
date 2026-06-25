@@ -97,6 +97,19 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertIn("text_encoder_2/*", download.include)
         self.assertNotIn("flux1-kontext-dev.safetensors", download.include)
 
+    def test_nunchaku_kontext_manifest_downloads_blackwell_fp4_transformer(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/nunchaku_kontext_pipeline_fp4.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "nunchaku-flux1-kontext-dev-fp4-blackwell")
+        self.assertEqual(download.repo_id, "nunchaku-tech/nunchaku-flux.1-kontext-dev")
+        self.assertEqual(
+            download.local_path,
+            "nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev",
+        )
+        self.assertEqual(download.revision, "70dff7728491f3016e256137e8f7d87812af0b4f")
+        self.assertIn("svdq-fp4_r32-flux.1-kontext-dev.safetensors", download.include)
+
     def test_dry_run_plans_hub_download_without_network_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
