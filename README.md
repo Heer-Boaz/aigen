@@ -225,7 +225,7 @@ The Nunchaku pose profiles are split by intent:
 
 For controlled background-leakage checks, run the phase-batched sweep. It loads
 the pipeline once, prepares the current and nearest-resized pose conditions,
-denoises all variants first, and decodes the images in one batch:
+denoises all variants first, and decodes the images in small VAE chunks:
 
 ```bash
 .venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose-sweep \
@@ -234,6 +234,21 @@ denoises all variants first, and decodes the images in one batch:
   --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
   --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots. clean plain neutral studio background, uniform soft gray backdrop, no graphic lines or colored streaks." \
   --output-dir runs/characters/pose_control/ai51_background_ablation \
+  --seed 1 \
+  --compact
+```
+
+For the next quality pass, keep the normal control-map path and compare pose
+strength against guidance duration at the quality profile size:
+
+```bash
+.venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose-sweep \
+  --profile quality \
+  --sweep-variant-set quality-strength \
+  --reference-image ../ai-art/references/characters/ai51.png \
+  --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
+  --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots. clean plain neutral studio background, uniform soft gray backdrop, no graphic lines or colored streaks." \
+  --output-dir runs/characters/pose_control/ai51_quality_strength \
   --seed 1 \
   --compact
 ```

@@ -819,6 +819,7 @@ class KontextPoseControlTests(unittest.TestCase):
                 "aigen.cli.run_character_kontext_pose_sweep",
                 return_value=CharacterKontextPoseSweepResult(
                     output_dir=output_dir.as_posix(),
+                    sweep_variant_set="background-ablation",
                     outputs=[],
                     model=profile.model,
                     controlnet_model=profile.controlnet_model,
@@ -854,6 +855,8 @@ class KontextPoseControlTests(unittest.TestCase):
                             "same character in exact pose",
                             "--output-dir",
                             str(output_dir),
+                            "--sweep-variant-set",
+                            "quality-strength",
                             "--compact",
                         ]
                     )
@@ -871,6 +874,7 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(run_sweep_mock.call_args.kwargs["steps"], 20)
         self.assertEqual(run_sweep_mock.call_args.kwargs["pipeline_cpu_offload"], True)
         self.assertEqual(run_sweep_mock.call_args.kwargs["nunchaku_layer_offload"], False)
+        self.assertEqual(run_sweep_mock.call_args.kwargs["sweep_variant_set"], "quality-strength")
 
 
 if __name__ == "__main__":

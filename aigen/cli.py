@@ -13,7 +13,9 @@ from aigen.generation.character_concept import (
     run_character_concept,
 )
 from aigen.generation.kontext_pose_control import (
+    BACKGROUND_ABLATION_SWEEP,
     CharacterKontextPoseError,
+    QUALITY_STRENGTH_SWEEP,
     run_character_kontext_pose_control,
     run_character_kontext_pose_sweep,
 )
@@ -988,6 +990,12 @@ def _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers: Any)
     sweep.add_argument("--pose-image", type=Path, required=True, help="Pose control image")
     sweep.add_argument("--prompt", required=True, help="Generation instruction")
     sweep.add_argument("--output-dir", type=Path, required=True, help="Directory where sweep images are written")
+    sweep.add_argument(
+        "--sweep-variant-set",
+        choices=(BACKGROUND_ABLATION_SWEEP, QUALITY_STRENGTH_SWEEP),
+        default=BACKGROUND_ABLATION_SWEEP,
+        help="Fixed sweep variant set to run",
+    )
     sweep.add_argument("--device", default="cuda", help="Torch device")
     sweep.add_argument(
         "--dtype",
@@ -1363,6 +1371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     profile.nunchaku_transformer_model,
                 ),
                 attention_impl=values.get("attention_impl", profile.attention_impl),
+                sweep_variant_set=args.sweep_variant_set,
             )
         except CharacterKontextPoseError as error:
             _dump_json(

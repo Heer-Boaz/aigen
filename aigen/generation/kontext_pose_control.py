@@ -18,6 +18,9 @@ from aigen.generation.runtime_diagnostics import (
     synchronized_time,
 )
 
+BACKGROUND_ABLATION_SWEEP = "background-ablation"
+QUALITY_STRENGTH_SWEEP = "quality-strength"
+
 
 @dataclass(frozen=True)
 class CharacterKontextPoseResult:
@@ -167,6 +170,7 @@ class KontextPoseVariant:
 @dataclass(frozen=True)
 class CharacterKontextPoseSweepResult:
     output_dir: str
+    sweep_variant_set: str
     outputs: list[dict[str, Any]]
     model: str
     controlnet_model: str
@@ -190,6 +194,7 @@ class CharacterKontextPoseSweepResult:
     def to_json(self) -> dict[str, Any]:
         return {
             "output_dir": self.output_dir,
+            "sweep_variant_set": self.sweep_variant_set,
             "outputs": self.outputs,
             "model": self.model,
             "controlnet_model": self.controlnet_model,
@@ -532,6 +537,7 @@ def run_character_kontext_pose_sweep(
     nunchaku_transformer_model: Path | None = None,
     attention_impl: str | None = None,
     vae_tiling: bool = False,
+    sweep_variant_set: str = BACKGROUND_ABLATION_SWEEP,
 ) -> CharacterKontextPoseSweepResult:
     from PIL import Image
 
@@ -571,30 +577,44 @@ def run_character_kontext_pose_sweep(
         )
         current_prepare_ms = elapsed_ms(current_prepare_start, synchronized_time(torch))
 
-        nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-        nearest_control_image, nearest_blocks_repeat, nearest_prepare_ms = session.prepare_control_condition(
-            current_prepared,
-            pose_image=nearest_pose,
-            seed=seed,
-        )
-        nearest_prepared = replace(
-            current_prepared,
-            control_image=nearest_control_image,
-            controlnet_blocks_repeat=nearest_blocks_repeat,
-        )
+        nearest_prepared = current_prepared
+        nearest_prepare_ms = 0.0
+        nearest_variants: list[KontextPoseVariant] = []
+
+        if sweep_variant_set == BACKGROUND_ABLATION_SWEEP:
+            nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
+            nearest_control_image, nearest_blocks_repeat, nearest_prepare_ms = session.prepare_control_condition(
+                current_prepared,
+                pose_image=nearest_pose,
+                seed=seed,
+            )
+            nearest_prepared = replace(
+                current_prepared,
+                control_image=nearest_control_image,
+                controlnet_blocks_repeat=nearest_blocks_repeat,
+            )
+            current_variants = [
+                KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
+                KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
+            ]
+            nearest_variants = [
+                KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
+                KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
+            ]
+        elif sweep_variant_set == QUALITY_STRENGTH_SWEEP:
+            current_variants = [
+                KontextPoseVariant("Q1_scale050_end050", seed, 0.50, 0.0, 0.50),
+                KontextPoseVariant("Q2_scale060_end050", seed, 0.60, 0.0, 0.50),
+                KontextPoseVariant("Q3_scale050_end060", seed, 0.50, 0.0, 0.60),
+            ]
+        else:
+            raise ValueError(f"Unknown sweep variant set: {sweep_variant_set}")
+
         if not torch.equal(current_prepared.base_latents, nearest_prepared.base_latents):
             raise RuntimeError("Sweep variants do not share identical initial noise")
 
-        current_variants = [
-            KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
-            KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
-        ]
-        nearest_variants = [
-            KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
-            KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
-        ]
         current_denoised = session.denoise_many(current_prepared, current_variants)
-        nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants)
+        nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants) if nearest_variants else []
         all_denoised = [*current_denoised, *nearest_denoised]
         images, decode_ms = session.decode_many(current_prepared, all_denoised, chunk_size=1)
     finally:
@@ -624,6 +644,7 @@ def run_character_kontext_pose_sweep(
     total_ms = elapsed_ms(total_start, synchronized_time(torch))
     return CharacterKontextPoseSweepResult(
         output_dir=output_dir.resolve().as_posix(),
+        sweep_variant_set=sweep_variant_set,
         outputs=outputs,
         model=model,
         controlnet_model=controlnet_model,
