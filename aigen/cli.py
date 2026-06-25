@@ -81,7 +81,7 @@ class CharacterKontextPoseCliProfile:
     reference_max_area: int
     max_sequence_length: int
     framing: str
-    cpu_offload: bool
+    pipeline_cpu_offload: bool
     vae_tiling: bool
     controlnet_conditioning_scale: float
     control_guidance_start: float
@@ -120,7 +120,8 @@ class NunchakuKontextPoseCliProfile:
     reference_max_area: int
     max_sequence_length: int
     framing: str
-    cpu_offload: bool
+    pipeline_cpu_offload: bool
+    nunchaku_layer_offload: bool
     vae_tiling: bool
     controlnet_conditioning_scale: float
     control_guidance_start: float
@@ -213,7 +214,7 @@ CHARACTER_KONTEXT_POSE_PROFILES = {
         reference_max_area=384 * 768,
         max_sequence_length=128,
         framing="full-body",
-        cpu_offload=False,
+        pipeline_cpu_offload=False,
         vae_tiling=False,
         controlnet_conditioning_scale=0.50,
         control_guidance_start=0.0,
@@ -236,7 +237,7 @@ CHARACTER_KONTEXT_POSE_PROFILES = {
         reference_max_area=512 * 1024,
         max_sequence_length=128,
         framing="full-body",
-        cpu_offload=True,
+        pipeline_cpu_offload=True,
         vae_tiling=True,
         controlnet_conditioning_scale=0.65,
         control_guidance_start=0.0,
@@ -285,7 +286,8 @@ NUNCHAKU_KONTEXT_POSE_PROFILES = {
         reference_max_area=384 * 768,
         max_sequence_length=128,
         framing="full-body",
-        cpu_offload=True,
+        pipeline_cpu_offload=True,
+        nunchaku_layer_offload=False,
         vae_tiling=False,
         controlnet_conditioning_scale=0.0,
         control_guidance_start=0.0,
@@ -652,17 +654,17 @@ def _add_character_kontext_pose_command(generate_subparsers: Any) -> None:
     offload = pose.add_mutually_exclusive_group()
     offload.add_argument(
         "--cpu-offload",
-        dest="cpu_offload",
+        dest="pipeline_cpu_offload",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Use Diffusers model CPU offload",
+        help="Enable Diffusers pipeline CPU offload",
     )
     offload.add_argument(
         "--no-cpu-offload",
-        dest="cpu_offload",
+        dest="pipeline_cpu_offload",
         action="store_false",
         default=argparse.SUPPRESS,
-        help="Keep the pipeline on the selected device instead of using CPU offload",
+        help="Keep Diffusers pipeline components on the target device",
     )
     tiling = pose.add_mutually_exclusive_group()
     tiling.add_argument(
@@ -868,17 +870,32 @@ def _add_character_nunchaku_kontext_pose_command(generate_subparsers: Any) -> No
     offload = pose.add_mutually_exclusive_group()
     offload.add_argument(
         "--cpu-offload",
-        dest="cpu_offload",
+        dest="pipeline_cpu_offload",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Enable model CPU offload",
+        help="Enable Diffusers pipeline CPU offload",
     )
     offload.add_argument(
         "--no-cpu-offload",
-        dest="cpu_offload",
+        dest="pipeline_cpu_offload",
         action="store_false",
         default=argparse.SUPPRESS,
-        help="Keep all model components on the target device",
+        help="Keep Diffusers pipeline components on the target device",
+    )
+    nunchaku_offload = pose.add_mutually_exclusive_group()
+    nunchaku_offload.add_argument(
+        "--nunchaku-layer-offload",
+        dest="nunchaku_layer_offload",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable Nunchaku internal transformer layer offload",
+    )
+    nunchaku_offload.add_argument(
+        "--no-nunchaku-layer-offload",
+        dest="nunchaku_layer_offload",
+        action="store_false",
+        default=argparse.SUPPRESS,
+        help="Keep Nunchaku transformer layers resident",
     )
     pose.add_argument(
         "--compact",
@@ -1022,7 +1039,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 framing=values.get("framing", profile.framing),
                 negative_prompt=args.negative_prompt,
                 seed=values.get("seed", profile.seed),
-                cpu_offload=values.get("cpu_offload", profile.cpu_offload),
+                pipeline_cpu_offload=values.get("pipeline_cpu_offload", profile.pipeline_cpu_offload),
                 vae_tiling=values.get("vae_tiling", profile.vae_tiling),
                 controlnet_conditioning_scale=values.get(
                     "controlnet_conditioning_scale",
@@ -1108,7 +1125,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 framing=values.get("framing", profile.framing),
                 negative_prompt=args.negative_prompt,
                 seed=values.get("seed", profile.seed),
-                cpu_offload=values.get("cpu_offload", profile.cpu_offload),
+                pipeline_cpu_offload=values.get("pipeline_cpu_offload", profile.pipeline_cpu_offload),
+                nunchaku_layer_offload=values.get("nunchaku_layer_offload", profile.nunchaku_layer_offload),
                 vae_tiling=values.get("vae_tiling", profile.vae_tiling),
                 controlnet_conditioning_scale=values.get(
                     "controlnet_conditioning_scale",

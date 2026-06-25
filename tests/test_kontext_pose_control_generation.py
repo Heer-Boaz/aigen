@@ -421,7 +421,8 @@ class KontextPoseControlTests(unittest.TestCase):
                     control_guidance_end=profile.control_guidance_end,
                     dtype=profile.dtype,
                     device="cuda",
-                    cpu_offload=profile.cpu_offload,
+                    pipeline_cpu_offload=profile.pipeline_cpu_offload,
+                    nunchaku_layer_offload=False,
                     vae_tiling=profile.vae_tiling,
                     transformer_single_file=None,
                     nunchaku_transformer_model=None,
@@ -548,7 +549,8 @@ class KontextPoseControlTests(unittest.TestCase):
                     control_guidance_end=profile.control_guidance_end,
                     dtype=profile.dtype,
                     device="cuda",
-                    cpu_offload=profile.cpu_offload,
+                    pipeline_cpu_offload=profile.pipeline_cpu_offload,
+                    nunchaku_layer_offload=profile.nunchaku_layer_offload,
                     vae_tiling=profile.vae_tiling,
                     transformer_single_file=None,
                     nunchaku_transformer_model=profile.nunchaku_transformer_model.as_posix(),
@@ -593,7 +595,8 @@ class KontextPoseControlTests(unittest.TestCase):
             profile.nunchaku_transformer_model,
         )
         self.assertEqual(run_pose_mock.call_args.kwargs["attention_impl"], "nunchaku-fp16")
-        self.assertEqual(run_pose_mock.call_args.kwargs["cpu_offload"], True)
+        self.assertEqual(run_pose_mock.call_args.kwargs["pipeline_cpu_offload"], True)
+        self.assertEqual(run_pose_mock.call_args.kwargs["nunchaku_layer_offload"], False)
         self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.0)
 
 

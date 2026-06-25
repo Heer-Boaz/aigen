@@ -196,9 +196,11 @@ for the current pose experiments:
 
 For pose-controlled same-character work, use the fused Nunchaku Kontext pose
 route. It keeps the existing prefix-only ControlNet residual logic and swaps only
-the Kontext transformer backend. The local profile enables Nunchaku layer
-offload and `nunchaku-fp16` attention because the 16 GB RTX 5070 Ti cannot keep
-Kontext, VAE, text encoders, and the BF16 Union-Pro ControlNet resident at once.
+the Kontext transformer backend. The local profile uses Diffusers pipeline
+offload with `controlnet` excluded from the offload sequence, keeps Nunchaku
+layer offload disabled, and enables `nunchaku-fp16` attention. Fully resident
+ControlNet plus Nunchaku fits in 16 GB, but it pushes the Nunchaku transformer
+onto a much slower path on this RTX 5070 Ti.
 
 ```bash
 .venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose \
@@ -210,6 +212,8 @@ Kontext, VAE, text encoders, and the BF16 Union-Pro ControlNet resident at once.
   --steps 20 \
   --controlnet-conditioning-scale 0.50 \
   --control-guidance-end 0.50 \
+  --cpu-offload \
+  --no-nunchaku-layer-offload \
   --seed 1
 ```
 

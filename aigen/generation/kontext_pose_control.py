@@ -55,7 +55,8 @@ class CharacterKontextPoseResult:
     control_guidance_end: float
     dtype: str
     device: str
-    cpu_offload: bool
+    pipeline_cpu_offload: bool
+    nunchaku_layer_offload: bool
     vae_tiling: bool
     transformer_single_file: str | None
     nunchaku_transformer_model: str | None
@@ -98,7 +99,8 @@ class CharacterKontextPoseResult:
             "control_guidance_end": self.control_guidance_end,
             "dtype": self.dtype,
             "device": self.device,
-            "cpu_offload": self.cpu_offload,
+            "pipeline_cpu_offload": self.pipeline_cpu_offload,
+            "nunchaku_layer_offload": self.nunchaku_layer_offload,
             "vae_tiling": self.vae_tiling,
             "transformer_single_file": self.transformer_single_file,
             "nunchaku_transformer_model": self.nunchaku_transformer_model,
@@ -135,7 +137,8 @@ def run_character_kontext_pose_control(
     framing: str = "full-body",
     negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
     seed: int = 1,
-    cpu_offload: bool = False,
+    pipeline_cpu_offload: bool = False,
+    nunchaku_layer_offload: bool = False,
     controlnet_conditioning_scale: float = 0.65,
     control_guidance_start: float = 0.0,
     control_guidance_end: float = 0.65,
@@ -161,7 +164,8 @@ def run_character_kontext_pose_control(
         attention_impl,
         _torch_dtype(torch, dtype),
         device,
-        cpu_offload,
+        pipeline_cpu_offload,
+        nunchaku_layer_offload,
         vae_tiling,
     )
     model_load_ms = elapsed_ms(model_load_start, synchronized_time(torch))
@@ -229,7 +233,8 @@ def run_character_kontext_pose_control(
         control_guidance_end=control_guidance_end,
         dtype=dtype,
         device=device,
-        cpu_offload=cpu_offload,
+        pipeline_cpu_offload=pipeline_cpu_offload,
+        nunchaku_layer_offload=nunchaku_layer_offload,
         vae_tiling=vae_tiling,
         transformer_single_file=transformer_single_file.resolve().as_posix() if transformer_single_file else None,
         nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix() if nunchaku_transformer_model else None,
@@ -308,7 +313,8 @@ def _build_kontext_pose_pipeline(
     attention_impl: str | None,
     torch_dtype: Any,
     device: str,
-    cpu_offload: bool,
+    pipeline_cpu_offload: bool,
+    nunchaku_layer_offload: bool,
     vae_tiling: bool,
 ) -> Any:
     controlnet = controlnet_class.from_pretrained(
@@ -335,7 +341,7 @@ def _build_kontext_pose_pipeline(
         pipeline_kwargs["transformer"] = NunchakuFluxTransformer2dModel.from_pretrained(
             nunchaku_transformer_model.resolve().as_posix(),
             torch_dtype=torch_dtype,
-            offload=cpu_offload,
+            offload=nunchaku_layer_offload,
         )
         if attention_impl:
             pipeline_kwargs["transformer"].set_attention_impl(attention_impl)
@@ -346,7 +352,7 @@ def _build_kontext_pose_pipeline(
     else:
         pipeline.vae.disable_tiling()
     pipeline.vae.disable_slicing()
-    if cpu_offload:
+    if pipeline_cpu_offload:
         pipeline.enable_model_cpu_offload()
     else:
         pipeline.to(device)
@@ -372,7 +378,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
         ) from exc
 
     class FluxKontextControlNetPipeline(FluxKontextPipeline):
-        model_cpu_offload_seq = "text_encoder->text_encoder_2->image_encoder->controlnet->transformer->vae"
+        model_cpu_offload_seq = "text_encoder->text_encoder_2->image_encoder->transformer->vae"
         _callback_tensor_inputs = ["latents", "prompt_embeds", "control_image"]
 
         def __init__(
