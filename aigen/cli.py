@@ -15,6 +15,7 @@ from aigen.generation.character_concept import (
 from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseError,
     run_character_kontext_pose_control,
+    run_character_kontext_pose_sweep,
 )
 from aigen.generation.nunchaku_kontext import (
     NunchakuKontextError,
@@ -267,7 +268,7 @@ NUNCHAKU_KONTEXT_PROFILES = {
 }
 
 NUNCHAKU_KONTEXT_POSE_PROFILES = {
-    "local": NunchakuKontextPoseCliProfile(
+    "benchmark": NunchakuKontextPoseCliProfile(
         model=(MODELS_ROOT / "diffusers/eramth/flux-kontext-4bit-fp4").as_posix(),
         controlnet_model=(
             MODELS_ROOT / "diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0"
@@ -292,6 +293,60 @@ NUNCHAKU_KONTEXT_POSE_PROFILES = {
         controlnet_conditioning_scale=0.0,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
+        seed=1,
+    ),
+    "local": NunchakuKontextPoseCliProfile(
+        model=(MODELS_ROOT / "diffusers/eramth/flux-kontext-4bit-fp4").as_posix(),
+        controlnet_model=(
+            MODELS_ROOT / "diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0"
+        ).as_posix(),
+        nunchaku_transformer_model=(
+            MODELS_ROOT
+            / "nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev/svdq-fp4_r32-flux.1-kontext-dev.safetensors"
+        ),
+        attention_impl="nunchaku-fp16",
+        dtype="bfloat16",
+        steps=20,
+        guidance_scale=2.5,
+        true_cfg_scale=1.0,
+        width=384,
+        height=576,
+        reference_max_area=384 * 768,
+        max_sequence_length=128,
+        framing="full-body",
+        pipeline_cpu_offload=True,
+        nunchaku_layer_offload=False,
+        vae_tiling=False,
+        controlnet_conditioning_scale=0.50,
+        control_guidance_start=0.0,
+        control_guidance_end=0.50,
+        seed=1,
+    ),
+    "quality": NunchakuKontextPoseCliProfile(
+        model=(MODELS_ROOT / "diffusers/eramth/flux-kontext-4bit-fp4").as_posix(),
+        controlnet_model=(
+            MODELS_ROOT / "diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0"
+        ).as_posix(),
+        nunchaku_transformer_model=(
+            MODELS_ROOT
+            / "nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev/svdq-fp4_r32-flux.1-kontext-dev.safetensors"
+        ),
+        attention_impl="nunchaku-fp16",
+        dtype="bfloat16",
+        steps=28,
+        guidance_scale=2.5,
+        true_cfg_scale=1.0,
+        width=512,
+        height=768,
+        reference_max_area=512 * 1024,
+        max_sequence_length=128,
+        framing="full-body",
+        pipeline_cpu_offload=True,
+        nunchaku_layer_offload=False,
+        vae_tiling=False,
+        controlnet_conditioning_scale=0.50,
+        control_guidance_start=0.0,
+        control_guidance_end=0.50,
         seed=1,
     ),
 }
@@ -359,6 +414,7 @@ def _add_generate_commands(subparsers: Any) -> None:
     _add_character_kontext_pose_command(generate_subparsers)
     _add_character_nunchaku_kontext_command(generate_subparsers)
     _add_character_nunchaku_kontext_pose_command(generate_subparsers)
+    _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers)
     _add_character_pose_command(generate_subparsers)
 
 
@@ -904,6 +960,127 @@ def _add_character_nunchaku_kontext_pose_command(generate_subparsers: Any) -> No
     )
 
 
+def _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers: Any) -> None:
+    sweep = generate_subparsers.add_parser(
+        "character-nunchaku-kontext-pose-sweep",
+        help="Run the fixed-seed Nunchaku Kontext pose background ablation sweep",
+    )
+    sweep.add_argument(
+        "--profile",
+        choices=tuple(NUNCHAKU_KONTEXT_POSE_PROFILES),
+        default="local",
+        help="Nunchaku Kontext pose generation profile",
+    )
+    sweep.add_argument("--model", default=argparse.SUPPRESS, help="Local Diffusers FLUX Kontext component folder")
+    sweep.add_argument("--controlnet-model", default=argparse.SUPPRESS, help="Local FLUX pose ControlNet folder")
+    sweep.add_argument(
+        "--nunchaku-transformer-model",
+        type=Path,
+        default=argparse.SUPPRESS,
+        help="Local Nunchaku FLUX Kontext transformer safetensors file",
+    )
+    sweep.add_argument(
+        "--attention-impl",
+        default=argparse.SUPPRESS,
+        help="Nunchaku attention implementation, for example nunchaku-fp16",
+    )
+    sweep.add_argument("--reference-image", type=Path, required=True, help="Reference character image")
+    sweep.add_argument("--pose-image", type=Path, required=True, help="Pose control image")
+    sweep.add_argument("--prompt", required=True, help="Generation instruction")
+    sweep.add_argument("--output-dir", type=Path, required=True, help="Directory where sweep images are written")
+    sweep.add_argument("--device", default="cuda", help="Torch device")
+    sweep.add_argument(
+        "--dtype",
+        choices=("auto", "bfloat16", "float16", "float32"),
+        default=argparse.SUPPRESS,
+        help="Torch dtype for non-transformer pipeline components",
+    )
+    sweep.add_argument("--steps", type=int, default=argparse.SUPPRESS, help="Denoising steps")
+    sweep.add_argument("--guidance-scale", type=float, default=argparse.SUPPRESS, help="Prompt guidance scale")
+    sweep.add_argument(
+        "--true-cfg-scale",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Kontext true CFG scale used with the negative prompt",
+    )
+    sweep.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Generated image width")
+    sweep.add_argument("--height", type=int, default=argparse.SUPPRESS, help="Generated image height")
+    sweep.add_argument(
+        "--reference-max-area",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Maximum pixel area for the Kontext reference image before VAE encoding",
+    )
+    sweep.add_argument(
+        "--max-sequence-length",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="T5 text token budget for the prompt",
+    )
+    sweep.add_argument(
+        "--framing",
+        choices=("full-body", "portrait"),
+        default=argparse.SUPPRESS,
+        help="Character composition contract",
+    )
+    sweep.add_argument(
+        "--negative-prompt",
+        default=DEFAULT_NEGATIVE_PROMPT,
+        help="Prompt content to avoid; defaults to the built-in character-art negative prompt",
+    )
+    sweep.add_argument("--seed", type=int, default=argparse.SUPPRESS, help="Deterministic seed")
+    tiling = sweep.add_mutually_exclusive_group()
+    tiling.add_argument(
+        "--vae-tiling",
+        dest="vae_tiling",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable VAE tiling to reduce peak memory during encode/decode",
+    )
+    tiling.add_argument(
+        "--no-vae-tiling",
+        dest="vae_tiling",
+        action="store_false",
+        default=argparse.SUPPRESS,
+        help="Disable VAE tiling for smaller preview runs",
+    )
+    offload = sweep.add_mutually_exclusive_group()
+    offload.add_argument(
+        "--cpu-offload",
+        dest="pipeline_cpu_offload",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable Diffusers pipeline CPU offload",
+    )
+    offload.add_argument(
+        "--no-cpu-offload",
+        dest="pipeline_cpu_offload",
+        action="store_false",
+        default=argparse.SUPPRESS,
+        help="Keep Diffusers pipeline components on the target device",
+    )
+    nunchaku_offload = sweep.add_mutually_exclusive_group()
+    nunchaku_offload.add_argument(
+        "--nunchaku-layer-offload",
+        dest="nunchaku_layer_offload",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Enable Nunchaku internal transformer layer offload",
+    )
+    nunchaku_offload.add_argument(
+        "--no-nunchaku-layer-offload",
+        dest="nunchaku_layer_offload",
+        action="store_false",
+        default=argparse.SUPPRESS,
+        help="Keep Nunchaku transformer layers resident",
+    )
+    sweep.add_argument(
+        "--compact",
+        action="store_true",
+        help="Write compact JSON instead of pretty printed JSON",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="aigen",
@@ -1134,6 +1311,53 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
                 control_guidance_start=values.get("control_guidance_start", profile.control_guidance_start),
                 control_guidance_end=values.get("control_guidance_end", profile.control_guidance_end),
+                nunchaku_transformer_model=values.get(
+                    "nunchaku_transformer_model",
+                    profile.nunchaku_transformer_model,
+                ),
+                attention_impl=values.get("attention_impl", profile.attention_impl),
+            )
+        except CharacterKontextPoseError as error:
+            _dump_json(
+                sys.stderr,
+                {
+                    "schema_version": 1,
+                    "status": "error",
+                    "error": error.__class__.__name__,
+                    "message": str(error),
+                },
+                pretty=not args.compact,
+            )
+            return 1
+        _dump_json(sys.stdout, result.to_json(), pretty=not args.compact)
+        return 0
+
+    if args.command == "generate" and args.generate_command == "character-nunchaku-kontext-pose-sweep":
+        values = vars(args)
+        profile = NUNCHAKU_KONTEXT_POSE_PROFILES[args.profile]
+        try:
+            result = run_character_kontext_pose_sweep(
+                values.get("model", profile.model),
+                values.get("controlnet_model", profile.controlnet_model),
+                args.reference_image,
+                args.pose_image,
+                args.output_dir,
+                args.prompt,
+                device=args.device,
+                dtype=values.get("dtype", profile.dtype),
+                steps=values.get("steps", profile.steps),
+                guidance_scale=values.get("guidance_scale", profile.guidance_scale),
+                true_cfg_scale=values.get("true_cfg_scale", profile.true_cfg_scale),
+                width=values.get("width", profile.width),
+                height=values.get("height", profile.height),
+                reference_max_area=values.get("reference_max_area", profile.reference_max_area),
+                max_sequence_length=values.get("max_sequence_length", profile.max_sequence_length),
+                framing=values.get("framing", profile.framing),
+                negative_prompt=args.negative_prompt,
+                seed=values.get("seed", profile.seed),
+                pipeline_cpu_offload=values.get("pipeline_cpu_offload", profile.pipeline_cpu_offload),
+                nunchaku_layer_offload=values.get("nunchaku_layer_offload", profile.nunchaku_layer_offload),
+                vae_tiling=values.get("vae_tiling", profile.vae_tiling),
                 nunchaku_transformer_model=values.get(
                     "nunchaku_transformer_model",
                     profile.nunchaku_transformer_model,

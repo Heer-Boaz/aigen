@@ -109,12 +109,255 @@ class CharacterKontextPoseResult:
         }
 
 
+@dataclass(frozen=True)
+class KontextPosePrepared:
+    prompt_embeds: Any
+    pooled_prompt_embeds: Any
+    text_ids: Any
+    negative_prompt_embeds: Any
+    negative_pooled_prompt_embeds: Any
+    negative_text_ids: Any
+    do_true_cfg: bool
+    base_latents: Any
+    image_latents: Any
+    generated_img_ids: Any
+    combined_img_ids: Any
+    control_image: Any
+    controlnet_blocks_repeat: bool
+    transformer_guidance: Any
+    controlnet_guidance: Any
+    true_cfg_scale: float
+    width: int
+    height: int
+    batch_size: int
+    num_images_per_prompt: int
+    num_channels_latents: int
+    dtype: Any
+    device: str
+    seed: int
+    steps: int
+    token_metadata: dict[str, int]
+    timings_ms: dict[str, float]
+
+
+@dataclass(frozen=True)
+class KontextPoseDenoised:
+    name: str
+    latents: Any
+    controlnet_conditioning_scale: float
+    control_guidance_start: float
+    control_guidance_end: float
+    seed: int
+    transformer_step_ms: list[float]
+    controlnet_step_ms: list[float]
+    controlnet_active_steps: int
+    controlnet_metadata: dict[str, Any]
+    timings_ms: dict[str, float]
+
+
+@dataclass(frozen=True)
+class KontextPoseVariant:
+    name: str
+    seed: int
+    controlnet_conditioning_scale: float
+    control_guidance_start: float
+    control_guidance_end: float
+
+
+@dataclass(frozen=True)
+class CharacterKontextPoseSweepResult:
+    output_dir: str
+    outputs: list[dict[str, Any]]
+    model: str
+    controlnet_model: str
+    reference_image: str
+    pose_image: str
+    prompt: str
+    pipeline_prompt: str
+    negative_prompt: str
+    width: int
+    height: int
+    reference_max_area: int
+    max_sequence_length: int
+    timings_ms: dict[str, float]
+    memory: dict[str, int]
+    environment: dict[str, Any]
+    pipeline_cpu_offload: bool
+    nunchaku_layer_offload: bool
+    nunchaku_transformer_model: str | None
+    attention_impl: str | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "output_dir": self.output_dir,
+            "outputs": self.outputs,
+            "model": self.model,
+            "controlnet_model": self.controlnet_model,
+            "reference_image": self.reference_image,
+            "pose_image": self.pose_image,
+            "prompt": self.prompt,
+            "pipeline_prompt": self.pipeline_prompt,
+            "negative_prompt": self.negative_prompt,
+            "width": self.width,
+            "height": self.height,
+            "reference_max_area": self.reference_max_area,
+            "max_sequence_length": self.max_sequence_length,
+            "timings_ms": self.timings_ms,
+            "memory": self.memory,
+            "environment": self.environment,
+            "pipeline_cpu_offload": self.pipeline_cpu_offload,
+            "nunchaku_layer_offload": self.nunchaku_layer_offload,
+            "nunchaku_transformer_model": self.nunchaku_transformer_model,
+            "attention_impl": self.attention_impl,
+        }
+
+
 class CharacterKontextPoseError(RuntimeError):
     pass
 
 
 class CharacterKontextPoseDependencyError(CharacterKontextPoseError):
     pass
+
+
+class CharacterKontextPoseSession:
+    def __init__(
+        self,
+        model: str,
+        controlnet_model: str,
+        *,
+        device: str = "cuda",
+        dtype: str = "bfloat16",
+        transformer_single_file: Path | None = None,
+        nunchaku_transformer_model: Path | None = None,
+        attention_impl: str | None = None,
+        pipeline_cpu_offload: bool = False,
+        nunchaku_layer_offload: bool = False,
+        vae_tiling: bool = False,
+    ) -> None:
+        torch, pipeline_class, controlnet_class, transformer_class, load_image = _load_flux_kontext_controlnet()
+        self.torch = torch
+        self.load_image = load_image
+        self.device = device
+        self.model = model
+        self.controlnet_model = controlnet_model
+        self.pipeline_cpu_offload = pipeline_cpu_offload
+        self.nunchaku_layer_offload = nunchaku_layer_offload
+        self.nunchaku_transformer_model = nunchaku_transformer_model
+        self.attention_impl = attention_impl
+
+        model_load_start = synchronized_time(torch)
+        self.pipeline = _build_kontext_pose_pipeline(
+            pipeline_class,
+            controlnet_class,
+            transformer_class,
+            model,
+            controlnet_model,
+            transformer_single_file,
+            nunchaku_transformer_model,
+            attention_impl,
+            _torch_dtype(torch, dtype),
+            device,
+            pipeline_cpu_offload,
+            nunchaku_layer_offload,
+            vae_tiling,
+        )
+        self.model_load_ms = elapsed_ms(model_load_start, synchronized_time(torch))
+
+    def prepare(
+        self,
+        *,
+        reference_image: Path,
+        pose_image: Path,
+        prompt: str,
+        negative_prompt: str,
+        true_cfg_scale: float,
+        width: int,
+        height: int,
+        reference_max_area: int,
+        max_sequence_length: int,
+        steps: int,
+        guidance_scale: float,
+        seed: int,
+    ) -> KontextPosePrepared:
+        return self.prepare_images(
+            reference_image=self.load_image(reference_image.resolve().as_posix()),
+            pose_image=self.load_image(pose_image.resolve().as_posix()),
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            true_cfg_scale=true_cfg_scale,
+            width=width,
+            height=height,
+            reference_max_area=reference_max_area,
+            max_sequence_length=max_sequence_length,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+        )
+
+    def prepare_images(
+        self,
+        *,
+        reference_image: Any,
+        pose_image: Any,
+        prompt: str,
+        negative_prompt: str,
+        true_cfg_scale: float,
+        width: int,
+        height: int,
+        reference_max_area: int,
+        max_sequence_length: int,
+        steps: int,
+        guidance_scale: float,
+        seed: int,
+    ) -> KontextPosePrepared:
+        return self.pipeline.prepare_conditioning(
+            image=reference_image,
+            control_image=pose_image,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            true_cfg_scale=true_cfg_scale,
+            height=height,
+            width=width,
+            num_inference_steps=steps,
+            guidance_scale=guidance_scale,
+            generator=self.torch.Generator(device=self.device).manual_seed(seed),
+            latents=None,
+            max_sequence_length=max_sequence_length,
+            max_area=width * height,
+            reference_max_area=reference_max_area,
+            seed=seed,
+        )
+
+    def denoise_many(
+        self,
+        prepared: KontextPosePrepared,
+        variants: Sequence[KontextPoseVariant],
+        *,
+        show_progress: bool = True,
+    ) -> list[KontextPoseDenoised]:
+        return [
+            self.pipeline.denoise_prepared(
+                prepared,
+                name=variant.name,
+                seed=variant.seed,
+                controlnet_conditioning_scale=variant.controlnet_conditioning_scale,
+                control_guidance_start=variant.control_guidance_start,
+                control_guidance_end=variant.control_guidance_end,
+                show_progress=show_progress,
+            )
+            for variant in variants
+        ]
+
+    def decode_many(
+        self,
+        prepared: KontextPosePrepared,
+        denoised: Sequence[KontextPoseDenoised],
+    ) -> tuple[Any, float]:
+        return self.pipeline.decode_latents(prepared, denoised)
+
+    def close(self) -> None:
+        self.pipeline.maybe_free_model_hooks()
 
 
 def run_character_kontext_pose_control(
@@ -240,6 +483,156 @@ def run_character_kontext_pose_control(
         nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix() if nunchaku_transformer_model else None,
         attention_impl=attention_impl,
         seed=seed,
+    )
+
+
+def run_character_kontext_pose_sweep(
+    model: str,
+    controlnet_model: str,
+    reference_image: Path,
+    pose_image: Path,
+    output_dir: Path,
+    prompt: str,
+    *,
+    device: str = "cuda",
+    dtype: str = "bfloat16",
+    steps: int = 20,
+    guidance_scale: float = 2.5,
+    true_cfg_scale: float = 1.0,
+    width: int = 384,
+    height: int = 576,
+    reference_max_area: int = 384 * 768,
+    max_sequence_length: int = 128,
+    framing: str = "full-body",
+    negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
+    seed: int = 1,
+    pipeline_cpu_offload: bool = True,
+    nunchaku_layer_offload: bool = False,
+    transformer_single_file: Path | None = None,
+    nunchaku_transformer_model: Path | None = None,
+    attention_impl: str | None = None,
+    vae_tiling: bool = False,
+) -> CharacterKontextPoseSweepResult:
+    from PIL import Image
+
+    torch, _, _, _, load_image = _load_flux_kontext_controlnet()
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(device)
+
+    total_start = synchronized_time(torch)
+    pipeline_prompt = compose_character_prompt(prompt, framing)
+    session = CharacterKontextPoseSession(
+        model,
+        controlnet_model,
+        device=device,
+        dtype=dtype,
+        transformer_single_file=transformer_single_file,
+        nunchaku_transformer_model=nunchaku_transformer_model,
+        attention_impl=attention_impl,
+        pipeline_cpu_offload=pipeline_cpu_offload,
+        nunchaku_layer_offload=nunchaku_layer_offload,
+        vae_tiling=vae_tiling,
+    )
+    current_prepare_start = synchronized_time(torch)
+    current_prepared = session.prepare(
+        reference_image=reference_image,
+        pose_image=pose_image,
+        prompt=pipeline_prompt,
+        negative_prompt=negative_prompt,
+        true_cfg_scale=true_cfg_scale,
+        width=width,
+        height=height,
+        reference_max_area=reference_max_area,
+        max_sequence_length=max_sequence_length,
+        steps=steps,
+        guidance_scale=guidance_scale,
+        seed=seed,
+    )
+    current_prepare_ms = elapsed_ms(current_prepare_start, synchronized_time(torch))
+
+    nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
+    nearest_prepare_start = synchronized_time(torch)
+    nearest_prepared = session.prepare_images(
+        reference_image=load_image(reference_image.resolve().as_posix()),
+        pose_image=nearest_pose,
+        prompt=pipeline_prompt,
+        negative_prompt=negative_prompt,
+        true_cfg_scale=true_cfg_scale,
+        width=width,
+        height=height,
+        reference_max_area=reference_max_area,
+        max_sequence_length=max_sequence_length,
+        steps=steps,
+        guidance_scale=guidance_scale,
+        seed=seed,
+    )
+    nearest_prepare_ms = elapsed_ms(nearest_prepare_start, synchronized_time(torch))
+
+    current_variants = [
+        KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
+        KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
+    ]
+    nearest_variants = [
+        KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
+        KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
+    ]
+    current_denoised = session.denoise_many(current_prepared, current_variants)
+    nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants)
+    all_denoised = [*current_denoised, *nearest_denoised]
+    images, decode_ms = session.decode_many(current_prepared, all_denoised)
+    session.close()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    for image, denoised in zip(images, all_denoised, strict=True):
+        output_path = output_dir / f"{denoised.name}.png"
+        image.save(output_path)
+        outputs.append(
+            {
+                "name": denoised.name,
+                "output_path": output_path.resolve().as_posix(),
+                "seed": denoised.seed,
+                "controlnet_conditioning_scale": denoised.controlnet_conditioning_scale,
+                "control_guidance_start": denoised.control_guidance_start,
+                "control_guidance_end": denoised.control_guidance_end,
+                "controlnet_active_steps": denoised.controlnet_active_steps,
+                "controlnet_step_ms": denoised.controlnet_step_ms,
+                "transformer_step_ms": denoised.transformer_step_ms,
+                "controlnet_metadata": denoised.controlnet_metadata,
+                "timings_ms": denoised.timings_ms,
+            }
+        )
+
+    total_ms = elapsed_ms(total_start, synchronized_time(torch))
+    return CharacterKontextPoseSweepResult(
+        output_dir=output_dir.resolve().as_posix(),
+        outputs=outputs,
+        model=model,
+        controlnet_model=controlnet_model,
+        reference_image=reference_image.resolve().as_posix(),
+        pose_image=pose_image.resolve().as_posix(),
+        prompt=prompt,
+        pipeline_prompt=pipeline_prompt,
+        negative_prompt=negative_prompt,
+        width=width,
+        height=height,
+        reference_max_area=reference_max_area,
+        max_sequence_length=max_sequence_length,
+        timings_ms={
+            "model_load_ms": session.model_load_ms,
+            "current_prepare_ms": current_prepare_ms,
+            "nearest_prepare_ms": nearest_prepare_ms,
+            "decode_ms": decode_ms,
+            "total_ms": total_ms,
+        },
+        memory=cuda_memory_stats(torch, device),
+        environment=_generation_environment(torch, session.pipeline),
+        pipeline_cpu_offload=pipeline_cpu_offload,
+        nunchaku_layer_offload=nunchaku_layer_offload,
+        nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix()
+        if nunchaku_transformer_model
+        else None,
+        attention_impl=attention_impl,
     )
 
 
@@ -424,29 +817,25 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             return image.repeat_interleave(repeat_by, dim=0).to(device=device, dtype=dtype)
 
         @torch.no_grad()
-        def __call__(
+        def prepare_conditioning(
             self,
             *,
             image: Any,
             control_image: Any,
             prompt: str,
             negative_prompt: str,
-            true_cfg_scale: float = 1.0,
+            true_cfg_scale: float,
             height: int,
             width: int,
-            num_inference_steps: int = 28,
-            guidance_scale: float = 3.5,
-            control_guidance_start: float = 0.0,
-            control_guidance_end: float = 1.0,
-            controlnet_conditioning_scale: float = 1.0,
-            generator: Any = None,
-            latents: Any = None,
-            output_type: str = "pil",
-            return_dict: bool = True,
-            max_sequence_length: int = 512,
-            max_area: int = 1024**2,
-            reference_max_area: int = 384 * 768,
-        ) -> Any:
+            num_inference_steps: int,
+            guidance_scale: float,
+            generator: Any,
+            latents: Any,
+            max_sequence_length: int,
+            max_area: int,
+            reference_max_area: int,
+            seed: int,
+        ) -> KontextPosePrepared:
             aspect_ratio = width / height
             width = round((max_area * aspect_ratio) ** 0.5)
             height = round((max_area / aspect_ratio) ** 0.5)
@@ -468,7 +857,6 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             self._joint_attention_kwargs = {}
             self._current_timestep = None
             self._interrupt = False
-            pipeline_start = synchronized_time(torch)
 
             batch_size = 1
             num_images_per_prompt = 1
@@ -510,6 +898,9 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             prompt_encode_ms = elapsed_ms(prompt_encode_start, synchronized_time(torch))
 
             do_true_cfg = true_cfg_scale > 1
+            negative_prompt_embeds = None
+            negative_pooled_prompt_embeds = None
+            negative_text_ids = None
             if do_true_cfg:
                 negative_prompt_embeds, negative_pooled_prompt_embeds, negative_text_ids = self.encode_prompt(
                     prompt=negative_prompt,
@@ -531,7 +922,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
             num_channels_latents = self.transformer.config.in_channels // 4
             reference_vae_start = synchronized_time(torch)
-            latents, image_latents, generated_img_ids, reference_img_ids = self.prepare_latents(
+            base_latents, image_latents, generated_img_ids, reference_img_ids = self.prepare_latents(
                 image,
                 batch_size * num_images_per_prompt,
                 num_channels_latents,
@@ -544,24 +935,13 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             )
             reference_vae_ms = elapsed_ms(reference_vae_start, synchronized_time(torch))
             combined_img_ids = torch.cat([generated_img_ids, reference_img_ids], dim=0)
-            self.last_token_metadata = {
+            token_metadata = {
                 "reference_width": image_width,
                 "reference_height": image_height,
                 "reference_tokens": image_latents.shape[1],
-                "generated_tokens": latents.shape[1],
+                "generated_tokens": base_latents.shape[1],
                 "text_tokens": prompt_embeds.shape[1],
-                "total_tokens": image_latents.shape[1] + latents.shape[1] + prompt_embeds.shape[1],
-            }
-            self.last_controlnet_metadata = {
-                "generated_tokens": latents.shape[1],
-                "reference_tokens": image_latents.shape[1],
-                "combined_image_tokens": latents.shape[1] + image_latents.shape[1],
-                "double_residual_count": 0,
-                "single_residual_count": 0,
-                "double_residual_shapes": [],
-                "single_residual_shapes": [],
-                "reference_suffix_zero": True,
-                "controlnet_blocks_repeat": False,
+                "total_tokens": image_latents.shape[1] + base_latents.shape[1] + prompt_embeds.shape[1],
             }
 
             control_vae_start = synchronized_time(torch)
@@ -589,7 +969,83 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 )
             control_vae_ms = elapsed_ms(control_vae_start, synchronized_time(torch))
 
-            sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
+            transformer_guidance = None
+            if self.transformer.config.guidance_embeds:
+                transformer_guidance = torch.full([1], guidance_scale, device=device, dtype=torch.float32)
+                transformer_guidance = transformer_guidance.expand(base_latents.shape[0])
+
+            controlnet_guidance = None
+            if self.controlnet.config.guidance_embeds:
+                controlnet_guidance = torch.tensor([guidance_scale], device=device)
+                controlnet_guidance = controlnet_guidance.expand(base_latents.shape[0])
+
+            return KontextPosePrepared(
+                prompt_embeds=prompt_embeds,
+                pooled_prompt_embeds=pooled_prompt_embeds,
+                text_ids=text_ids,
+                negative_prompt_embeds=negative_prompt_embeds,
+                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                negative_text_ids=negative_text_ids,
+                do_true_cfg=do_true_cfg,
+                base_latents=base_latents,
+                image_latents=image_latents,
+                generated_img_ids=generated_img_ids,
+                combined_img_ids=combined_img_ids,
+                control_image=control_image,
+                controlnet_blocks_repeat=controlnet_blocks_repeat,
+                transformer_guidance=transformer_guidance,
+                controlnet_guidance=controlnet_guidance,
+                true_cfg_scale=true_cfg_scale,
+                width=width,
+                height=height,
+                batch_size=batch_size,
+                num_images_per_prompt=num_images_per_prompt,
+                num_channels_latents=num_channels_latents,
+                dtype=prompt_embeds.dtype,
+                device=device,
+                seed=seed,
+                steps=num_inference_steps,
+                token_metadata=token_metadata,
+                timings_ms={
+                    "prompt_encode_ms": prompt_encode_ms,
+                    "reference_vae_ms": reference_vae_ms,
+                    "control_vae_ms": control_vae_ms,
+                },
+            )
+
+        def prepare_noise(self, prepared: KontextPosePrepared, seed: int) -> Any:
+            if seed == prepared.seed:
+                return prepared.base_latents.clone()
+
+            generator = torch.Generator(device=prepared.device).manual_seed(seed)
+            latents, _, _, _ = self.prepare_latents(
+                None,
+                prepared.batch_size * prepared.num_images_per_prompt,
+                prepared.num_channels_latents,
+                prepared.height,
+                prepared.width,
+                prepared.dtype,
+                prepared.device,
+                generator,
+                None,
+            )
+            return latents
+
+        @torch.no_grad()
+        def denoise_prepared(
+            self,
+            prepared: KontextPosePrepared,
+            *,
+            name: str,
+            seed: int,
+            controlnet_conditioning_scale: float,
+            control_guidance_start: float,
+            control_guidance_end: float,
+            show_progress: bool = True,
+        ) -> KontextPoseDenoised:
+            denoise_start = synchronized_time(torch)
+            latents = self.prepare_noise(prepared, seed)
+            sigmas = np.linspace(1.0, 1 / prepared.steps, prepared.steps)
             image_seq_len = latents.shape[1]
             mu = calculate_shift(
                 image_seq_len,
@@ -600,8 +1056,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             )
             timesteps, num_inference_steps = retrieve_timesteps(
                 self.scheduler,
-                num_inference_steps,
-                device,
+                prepared.steps,
+                prepared.device,
                 sigmas=sigmas,
                 mu=mu,
             )
@@ -614,63 +1070,66 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 for i in range(len(timesteps))
             ]
 
-            transformer_guidance = None
-            if self.transformer.config.guidance_embeds:
-                transformer_guidance = torch.full([1], guidance_scale, device=device, dtype=torch.float32)
-                transformer_guidance = transformer_guidance.expand(latents.shape[0])
-
-            controlnet_guidance = None
-            if self.controlnet.config.guidance_embeds:
-                controlnet_guidance = torch.tensor([guidance_scale], device=device)
-                controlnet_guidance = controlnet_guidance.expand(latents.shape[0])
-
-            self.scheduler.set_begin_index(0)
             controlnet_ms = 0.0
             transformer_ms = 0.0
-            self.last_controlnet_step_ms = []
-            self.last_transformer_step_ms = []
-            self.last_controlnet_active_steps = 0
-            with self.progress_bar(total=num_inference_steps) as progress_bar:
+            controlnet_step_ms: list[float] = []
+            transformer_step_ms: list[float] = []
+            controlnet_active_steps = 0
+            controlnet_metadata = {
+                "generated_tokens": latents.shape[1],
+                "reference_tokens": prepared.image_latents.shape[1],
+                "combined_image_tokens": latents.shape[1] + prepared.image_latents.shape[1],
+                "double_residual_count": 0,
+                "single_residual_count": 0,
+                "double_residual_shapes": [],
+                "single_residual_shapes": [],
+                "reference_suffix_zero": True,
+                "controlnet_blocks_repeat": prepared.controlnet_blocks_repeat,
+            }
+
+            self.scheduler.set_begin_index(0)
+            progress_bar_context = self.progress_bar(total=num_inference_steps)
+            with progress_bar_context as progress_bar:
                 for i, t in enumerate(timesteps):
                     if self.interrupt:
                         continue
 
                     self._current_timestep = t
-                    latent_model_input = torch.cat([latents, image_latents], dim=1)
+                    latent_model_input = torch.cat([latents, prepared.image_latents], dim=1)
                     timestep = t.expand(latents.shape[0]).to(latents.dtype)
                     cond_scale = controlnet_conditioning_scale * controlnet_keep[i]
 
                     controlnet_block_samples = None
                     controlnet_single_block_samples = None
-                    controlnet_step_ms = 0.0
+                    step_controlnet_ms = 0.0
                     if cond_scale:
                         controlnet_start = synchronized_time(torch)
                         controlnet_block_samples, controlnet_single_block_samples = self.controlnet(
                             hidden_states=latents,
-                            controlnet_cond=control_image,
+                            controlnet_cond=prepared.control_image,
                             controlnet_mode=None,
                             conditioning_scale=cond_scale,
                             timestep=timestep / 1000,
-                            guidance=controlnet_guidance,
-                            pooled_projections=pooled_prompt_embeds,
-                            encoder_hidden_states=prompt_embeds,
-                            txt_ids=text_ids,
-                            img_ids=generated_img_ids,
+                            guidance=prepared.controlnet_guidance,
+                            pooled_projections=prepared.pooled_prompt_embeds,
+                            encoder_hidden_states=prepared.prompt_embeds,
+                            txt_ids=prepared.text_ids,
+                            img_ids=prepared.generated_img_ids,
                             joint_attention_kwargs=self.joint_attention_kwargs,
                             return_dict=False,
                         )
-                        controlnet_step_ms = elapsed_ms(controlnet_start, synchronized_time(torch))
-                        controlnet_ms += controlnet_step_ms
-                        self.last_controlnet_active_steps += 1
+                        step_controlnet_ms = elapsed_ms(controlnet_start, synchronized_time(torch))
+                        controlnet_ms += step_controlnet_ms
+                        controlnet_active_steps += 1
                         total_image_tokens = latent_model_input.shape[1]
                         controlnet_block_samples = extend_control_residuals(
                             controlnet_block_samples,
                             total_image_tokens,
                         )
-                        if not self.last_controlnet_metadata["double_residual_count"]:
-                            self.last_controlnet_metadata = {
+                        if not controlnet_metadata["double_residual_count"]:
+                            controlnet_metadata = {
                                 "generated_tokens": latents.shape[1],
-                                "reference_tokens": image_latents.shape[1],
+                                "reference_tokens": prepared.image_latents.shape[1],
                                 "combined_image_tokens": total_image_tokens,
                                 "double_residual_count": len(controlnet_block_samples),
                                 "single_residual_count": 0,
@@ -680,67 +1139,65 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                     controlnet_block_samples,
                                     latents.shape[1],
                                 ),
-                                "controlnet_blocks_repeat": controlnet_blocks_repeat,
+                                "controlnet_blocks_repeat": prepared.controlnet_blocks_repeat,
                             }
                         if controlnet_single_block_samples:
                             controlnet_single_block_samples = extend_control_residuals(
                                 controlnet_single_block_samples,
                                 total_image_tokens,
                             )
-                            if not self.last_controlnet_metadata["single_residual_count"]:
-                                self.last_controlnet_metadata["single_residual_count"] = len(
-                                    controlnet_single_block_samples
-                                )
-                                self.last_controlnet_metadata["single_residual_shapes"] = [
+                            if not controlnet_metadata["single_residual_count"]:
+                                controlnet_metadata["single_residual_count"] = len(controlnet_single_block_samples)
+                                controlnet_metadata["single_residual_shapes"] = [
                                     list(sample.shape) for sample in controlnet_single_block_samples
                                 ]
-                                self.last_controlnet_metadata["reference_suffix_zero"] = (
-                                    self.last_controlnet_metadata["reference_suffix_zero"]
+                                controlnet_metadata["reference_suffix_zero"] = (
+                                    controlnet_metadata["reference_suffix_zero"]
                                     and residual_suffix_is_zero(controlnet_single_block_samples, latents.shape[1])
                                 )
-                    self.last_controlnet_step_ms.append(controlnet_step_ms)
+                    controlnet_step_ms.append(round(step_controlnet_ms, 3))
 
                     transformer_start = synchronized_time(torch)
                     noise_pred = self.transformer(
                         hidden_states=latent_model_input,
                         timestep=timestep / 1000,
-                        guidance=transformer_guidance,
-                        pooled_projections=pooled_prompt_embeds,
-                        encoder_hidden_states=prompt_embeds,
+                        guidance=prepared.transformer_guidance,
+                        pooled_projections=prepared.pooled_prompt_embeds,
+                        encoder_hidden_states=prepared.prompt_embeds,
                         controlnet_block_samples=controlnet_block_samples,
                         controlnet_single_block_samples=controlnet_single_block_samples,
-                        txt_ids=text_ids,
-                        img_ids=combined_img_ids,
+                        txt_ids=prepared.text_ids,
+                        img_ids=prepared.combined_img_ids,
                         joint_attention_kwargs=self.joint_attention_kwargs,
                         return_dict=False,
-                        controlnet_blocks_repeat=controlnet_blocks_repeat,
+                        controlnet_blocks_repeat=prepared.controlnet_blocks_repeat,
                     )[0]
-                    transformer_step_ms = elapsed_ms(transformer_start, synchronized_time(torch))
-                    transformer_ms += transformer_step_ms
+                    step_transformer_ms = elapsed_ms(transformer_start, synchronized_time(torch))
+                    transformer_ms += step_transformer_ms
                     noise_pred = noise_pred[:, : latents.size(1)]
 
-                    if do_true_cfg:
+                    if prepared.do_true_cfg:
                         negative_transformer_start = synchronized_time(torch)
                         neg_noise_pred = self.transformer(
                             hidden_states=latent_model_input,
                             timestep=timestep / 1000,
-                            guidance=transformer_guidance,
-                            pooled_projections=negative_pooled_prompt_embeds,
-                            encoder_hidden_states=negative_prompt_embeds,
+                            guidance=prepared.transformer_guidance,
+                            pooled_projections=prepared.negative_pooled_prompt_embeds,
+                            encoder_hidden_states=prepared.negative_prompt_embeds,
                             controlnet_block_samples=controlnet_block_samples,
                             controlnet_single_block_samples=controlnet_single_block_samples,
-                            txt_ids=negative_text_ids,
-                            img_ids=combined_img_ids,
+                            txt_ids=prepared.negative_text_ids,
+                            img_ids=prepared.combined_img_ids,
                             joint_attention_kwargs=self.joint_attention_kwargs,
                             return_dict=False,
-                            controlnet_blocks_repeat=controlnet_blocks_repeat,
+                            controlnet_blocks_repeat=prepared.controlnet_blocks_repeat,
                         )[0]
-                        negative_transformer_step_ms = elapsed_ms(negative_transformer_start, synchronized_time(torch))
-                        transformer_step_ms += negative_transformer_step_ms
-                        transformer_ms += negative_transformer_step_ms
+                        negative_transformer_ms = elapsed_ms(negative_transformer_start, synchronized_time(torch))
+                        step_transformer_ms += negative_transformer_ms
+                        transformer_ms += negative_transformer_ms
                         neg_noise_pred = neg_noise_pred[:, : latents.size(1)]
-                        noise_pred = neg_noise_pred + true_cfg_scale * (noise_pred - neg_noise_pred)
-                    self.last_transformer_step_ms.append(round(transformer_step_ms, 3))
+                        noise_pred = neg_noise_pred + prepared.true_cfg_scale * (noise_pred - neg_noise_pred)
+                    transformer_step_ms.append(round(step_transformer_ms, 3))
 
                     latents_dtype = latents.dtype
                     latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
@@ -748,29 +1205,114 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     if latents.dtype != latents_dtype and torch.backends.mps.is_available():
                         latents = latents.to(latents_dtype)
 
-                    if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                    if show_progress and (
+                        i == len(timesteps) - 1
+                        or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0)
+                    ):
                         progress_bar.update()
 
             self._current_timestep = None
+            return KontextPoseDenoised(
+                name=name,
+                latents=latents,
+                controlnet_conditioning_scale=controlnet_conditioning_scale,
+                control_guidance_start=control_guidance_start,
+                control_guidance_end=control_guidance_end,
+                seed=seed,
+                transformer_step_ms=transformer_step_ms,
+                controlnet_step_ms=controlnet_step_ms,
+                controlnet_active_steps=controlnet_active_steps,
+                controlnet_metadata=controlnet_metadata,
+                timings_ms={
+                    "controlnet_ms": round(controlnet_ms, 3),
+                    "transformer_ms": round(transformer_ms, 3),
+                    "denoise_ms": elapsed_ms(denoise_start, synchronized_time(torch)),
+                },
+            )
+
+        @torch.no_grad()
+        def decode_latents(
+            self,
+            prepared: KontextPosePrepared,
+            denoised: Sequence[KontextPoseDenoised],
+            *,
+            output_type: str = "pil",
+        ) -> tuple[Any, float]:
+            vae_decode_start = synchronized_time(torch)
+            latents = torch.cat([result.latents for result in denoised], dim=0)
+            latents = self._unpack_latents(latents, prepared.height, prepared.width, self.vae_scale_factor)
+            latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
+            output = self.vae.decode(latents, return_dict=False)[0]
+            output = self.image_processor.postprocess(output, output_type=output_type)
+            return output, elapsed_ms(vae_decode_start, synchronized_time(torch))
+
+        @torch.no_grad()
+        def __call__(
+            self,
+            *,
+            image: Any,
+            control_image: Any,
+            prompt: str,
+            negative_prompt: str,
+            true_cfg_scale: float = 1.0,
+            height: int,
+            width: int,
+            num_inference_steps: int = 28,
+            guidance_scale: float = 3.5,
+            control_guidance_start: float = 0.0,
+            control_guidance_end: float = 1.0,
+            controlnet_conditioning_scale: float = 1.0,
+            generator: Any = None,
+            latents: Any = None,
+            output_type: str = "pil",
+            return_dict: bool = True,
+            max_sequence_length: int = 512,
+            max_area: int = 1024**2,
+            reference_max_area: int = 384 * 768,
+        ) -> Any:
+            pipeline_start = synchronized_time(torch)
+            prepared = self.prepare_conditioning(
+                image=image,
+                control_image=control_image,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                true_cfg_scale=true_cfg_scale,
+                height=height,
+                width=width,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                generator=generator,
+                latents=latents,
+                max_sequence_length=max_sequence_length,
+                max_area=max_area,
+                reference_max_area=reference_max_area,
+                seed=0,
+            )
+            denoised = self.denoise_prepared(
+                prepared,
+                name="image",
+                seed=prepared.seed,
+                controlnet_conditioning_scale=controlnet_conditioning_scale,
+                control_guidance_start=control_guidance_start,
+                control_guidance_end=control_guidance_end,
+            )
 
             if output_type == "latent":
-                output = latents
+                output = denoised.latents
                 vae_decode_ms = 0.0
             else:
-                vae_decode_start = synchronized_time(torch)
-                latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
-                latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
-                output = self.vae.decode(latents, return_dict=False)[0]
-                output = self.image_processor.postprocess(output, output_type=output_type)
-                vae_decode_ms = elapsed_ms(vae_decode_start, synchronized_time(torch))
+                output, vae_decode_ms = self.decode_latents(prepared, [denoised], output_type=output_type)
 
             self.maybe_free_model_hooks()
+            self.last_token_metadata = prepared.token_metadata
+            self.last_controlnet_metadata = denoised.controlnet_metadata
+            self.last_controlnet_step_ms = denoised.controlnet_step_ms
+            self.last_transformer_step_ms = denoised.transformer_step_ms
+            self.last_controlnet_active_steps = denoised.controlnet_active_steps
             self.last_timings_ms = {
-                "prompt_encode_ms": prompt_encode_ms,
-                "reference_vae_ms": reference_vae_ms,
-                "control_vae_ms": control_vae_ms,
-                "controlnet_ms": round(controlnet_ms, 3),
-                "transformer_ms": round(transformer_ms, 3),
+                **prepared.timings_ms,
+                "controlnet_ms": denoised.timings_ms["controlnet_ms"],
+                "transformer_ms": denoised.timings_ms["transformer_ms"],
                 "vae_decode_ms": vae_decode_ms,
                 "pipeline_ms": elapsed_ms(pipeline_start, synchronized_time(torch)),
             }

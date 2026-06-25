@@ -202,6 +202,12 @@ layer offload disabled, and enables `nunchaku-fp16` attention. Fully resident
 ControlNet plus Nunchaku fits in 16 GB, but it pushes the Nunchaku transformer
 onto a much slower path on this RTX 5070 Ti.
 
+The Nunchaku pose profiles are split by intent:
+
+- `benchmark`: three-step scale-zero timing.
+- `local`: 20-step pose iteration at `384x576`, scale `0.50`, end `0.50`.
+- `quality`: 28-step higher-token pass at `512x768`.
+
 ```bash
 .venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose \
   --profile local \
@@ -215,6 +221,21 @@ onto a much slower path on this RTX 5070 Ti.
   --cpu-offload \
   --no-nunchaku-layer-offload \
   --seed 1
+```
+
+For controlled background-leakage checks, run the phase-batched sweep. It loads
+the pipeline once, prepares the current and nearest-resized pose conditions,
+denoises all variants first, and decodes the images in one batch:
+
+```bash
+.venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose-sweep \
+  --profile local \
+  --reference-image ../ai-art/references/characters/ai51.png \
+  --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
+  --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots. clean plain neutral studio background, uniform soft gray backdrop, no graphic lines or colored streaks." \
+  --output-dir runs/characters/pose_control/ai51_background_ablation \
+  --seed 1 \
+  --compact
 ```
 
 For generation dependencies:

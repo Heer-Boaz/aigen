@@ -15,6 +15,7 @@ import torch
 from aigen.cli import CHARACTER_KONTEXT_POSE_PROFILES, main
 from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseResult,
+    CharacterKontextPoseSweepResult,
     extend_control_residuals,
     fit_size_to_area,
     residual_suffix_is_zero,
@@ -597,7 +598,78 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(run_pose_mock.call_args.kwargs["attention_impl"], "nunchaku-fp16")
         self.assertEqual(run_pose_mock.call_args.kwargs["pipeline_cpu_offload"], True)
         self.assertEqual(run_pose_mock.call_args.kwargs["nunchaku_layer_offload"], False)
-        self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.0)
+        self.assertEqual(run_pose_mock.call_args.kwargs["steps"], 20)
+        self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.50)
+        self.assertEqual(run_pose_mock.call_args.kwargs["control_guidance_end"], 0.50)
+
+    def test_cli_character_nunchaku_kontext_pose_sweep_uses_local_profile(self) -> None:
+        from aigen.cli import NUNCHAKU_KONTEXT_POSE_PROFILES
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_image = root / "reference.png"
+            pose_image = root / "pose.png"
+            output_dir = root / "sweep"
+            reference_image.write_bytes(b"reference")
+            pose_image.write_bytes(b"pose")
+            profile = NUNCHAKU_KONTEXT_POSE_PROFILES["local"]
+
+            with patch(
+                "aigen.cli.run_character_kontext_pose_sweep",
+                return_value=CharacterKontextPoseSweepResult(
+                    output_dir=output_dir.as_posix(),
+                    outputs=[],
+                    model=profile.model,
+                    controlnet_model=profile.controlnet_model,
+                    reference_image=reference_image.as_posix(),
+                    pose_image=pose_image.as_posix(),
+                    prompt="same character in exact pose",
+                    pipeline_prompt="full body\n\nsame character in exact pose",
+                    negative_prompt="bad anatomy",
+                    width=profile.width,
+                    height=profile.height,
+                    reference_max_area=profile.reference_max_area,
+                    max_sequence_length=profile.max_sequence_length,
+                    timings_ms={"total_ms": 1.0},
+                    memory={},
+                    environment={},
+                    pipeline_cpu_offload=profile.pipeline_cpu_offload,
+                    nunchaku_layer_offload=profile.nunchaku_layer_offload,
+                    nunchaku_transformer_model=profile.nunchaku_transformer_model.as_posix(),
+                    attention_impl=profile.attention_impl,
+                ),
+            ) as run_sweep_mock:
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "generate",
+                            "character-nunchaku-kontext-pose-sweep",
+                            "--reference-image",
+                            str(reference_image),
+                            "--pose-image",
+                            str(pose_image),
+                            "--prompt",
+                            "same character in exact pose",
+                            "--output-dir",
+                            str(output_dir),
+                            "--compact",
+                        ]
+                    )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["output_dir"], output_dir.as_posix())
+        self.assertEqual(run_sweep_mock.call_args.args[:5], (
+            profile.model,
+            profile.controlnet_model,
+            reference_image,
+            pose_image,
+            output_dir,
+        ))
+        self.assertEqual(run_sweep_mock.call_args.kwargs["steps"], 20)
+        self.assertEqual(run_sweep_mock.call_args.kwargs["pipeline_cpu_offload"], True)
+        self.assertEqual(run_sweep_mock.call_args.kwargs["nunchaku_layer_offload"], False)
 
 
 if __name__ == "__main__":
