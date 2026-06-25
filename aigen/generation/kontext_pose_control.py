@@ -159,6 +159,16 @@ class KontextPoseDenoised:
 
 
 @dataclass(frozen=True)
+class KontextControlCondition:
+    name: str
+    control_image: Any
+    conditioning_scale: float
+    guidance_start: float
+    guidance_end: float
+    controlnet_blocks_repeat: bool
+
+
+@dataclass(frozen=True)
 class KontextPoseVariant:
     name: str
     seed: int
@@ -717,6 +727,14 @@ def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) ->
     return extended
 
 
+def add_control_residuals(total: Sequence[Any] | None, samples: Sequence[Any] | None) -> list[Any] | None:
+    if samples is None:
+        return list(total) if total is not None else None
+    if total is None:
+        return list(samples)
+    return [current + sample for current, sample in zip(total, samples, strict=True)]
+
+
 def residual_suffix_is_zero(samples: Sequence[Any], generated_tokens: int) -> bool:
     return all(sample[:, generated_tokens:].count_nonzero().item() == 0 for sample in samples)
 
@@ -1104,6 +1122,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             control_guidance_start: float,
             control_guidance_end: float,
             show_progress: bool = True,
+            control_conditions: Sequence[KontextControlCondition] | None = None,
         ) -> KontextPoseDenoised:
             denoise_start = synchronized_time(torch)
             latents = self.prepare_noise(prepared, seed)
@@ -1126,9 +1145,26 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
             self._num_timesteps = len(timesteps)
 
+            if control_conditions is None:
+                control_conditions = [
+                    KontextControlCondition(
+                        "pose",
+                        prepared.control_image,
+                        controlnet_conditioning_scale,
+                        control_guidance_start,
+                        control_guidance_end,
+                        prepared.controlnet_blocks_repeat,
+                    )
+                ]
             controlnet_keep = [
-                1.0
-                - float(i / len(timesteps) < control_guidance_start or (i + 1) / len(timesteps) > control_guidance_end)
+                [
+                    1.0
+                    - float(
+                        i / len(timesteps) < condition.guidance_start
+                        or (i + 1) / len(timesteps) > condition.guidance_end
+                    )
+                    for condition in control_conditions
+                ]
                 for i in range(len(timesteps))
             ]
 
@@ -1137,6 +1173,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             controlnet_step_ms: list[float] = []
             transformer_step_ms: list[float] = []
             controlnet_active_steps = 0
+            controlnet_condition_calls = 0
             controlnet_metadata = {
                 "generated_tokens": latents.shape[1],
                 "reference_tokens": prepared.image_latents.shape[1],
@@ -1146,7 +1183,17 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 "double_residual_shapes": [],
                 "single_residual_shapes": [],
                 "reference_suffix_zero": True,
-                "controlnet_blocks_repeat": prepared.controlnet_blocks_repeat,
+                "controlnet_blocks_repeat": any(condition.controlnet_blocks_repeat for condition in control_conditions),
+                "conditions": [
+                    {
+                        "name": condition.name,
+                        "scale": condition.conditioning_scale,
+                        "guidance_start": condition.guidance_start,
+                        "guidance_end": condition.guidance_end,
+                    }
+                    for condition in control_conditions
+                ],
+                "controlnet_condition_calls": 0,
             }
 
             self.scheduler.set_begin_index(0)
@@ -1159,29 +1206,43 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     self._current_timestep = t
                     latent_model_input = torch.cat([latents, prepared.image_latents], dim=1)
                     timestep = t.expand(latents.shape[0]).to(latents.dtype)
-                    cond_scale = controlnet_conditioning_scale * controlnet_keep[i]
-
                     controlnet_block_samples = None
                     controlnet_single_block_samples = None
                     step_controlnet_ms = 0.0
-                    if cond_scale:
-                        controlnet_start = synchronized_time(torch)
-                        controlnet_block_samples, controlnet_single_block_samples = self.controlnet(
-                            hidden_states=latents,
-                            controlnet_cond=prepared.control_image,
-                            controlnet_mode=None,
-                            conditioning_scale=cond_scale,
-                            timestep=timestep / 1000,
-                            guidance=prepared.controlnet_guidance,
-                            pooled_projections=prepared.pooled_prompt_embeds,
-                            encoder_hidden_states=prepared.prompt_embeds,
-                            txt_ids=prepared.text_ids,
-                            img_ids=prepared.generated_img_ids,
-                            joint_attention_kwargs=self.joint_attention_kwargs,
-                            return_dict=False,
-                        )
-                        step_controlnet_ms = elapsed_ms(controlnet_start, synchronized_time(torch))
-                        controlnet_ms += step_controlnet_ms
+                    active_conditions = 0
+                    for condition, keep in zip(control_conditions, controlnet_keep[i], strict=True):
+                        cond_scale = condition.conditioning_scale * keep
+                        if cond_scale:
+                            controlnet_start = synchronized_time(torch)
+                            block_samples, single_block_samples = self.controlnet(
+                                hidden_states=latents,
+                                controlnet_cond=condition.control_image,
+                                controlnet_mode=None,
+                                conditioning_scale=cond_scale,
+                                timestep=timestep / 1000,
+                                guidance=prepared.controlnet_guidance,
+                                pooled_projections=prepared.pooled_prompt_embeds,
+                                encoder_hidden_states=prepared.prompt_embeds,
+                                txt_ids=prepared.text_ids,
+                                img_ids=prepared.generated_img_ids,
+                                joint_attention_kwargs=self.joint_attention_kwargs,
+                                return_dict=False,
+                            )
+                            call_ms = elapsed_ms(controlnet_start, synchronized_time(torch))
+                            step_controlnet_ms += call_ms
+                            controlnet_ms += call_ms
+                            active_conditions += 1
+                            controlnet_condition_calls += 1
+                            controlnet_block_samples = add_control_residuals(
+                                controlnet_block_samples,
+                                block_samples,
+                            )
+                            controlnet_single_block_samples = add_control_residuals(
+                                controlnet_single_block_samples,
+                                single_block_samples,
+                            )
+
+                    if active_conditions:
                         controlnet_active_steps += 1
                         total_image_tokens = latent_model_input.shape[1]
                         controlnet_block_samples = extend_control_residuals(
@@ -1201,7 +1262,11 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                     controlnet_block_samples,
                                     latents.shape[1],
                                 ),
-                                "controlnet_blocks_repeat": prepared.controlnet_blocks_repeat,
+                                "controlnet_blocks_repeat": any(
+                                    condition.controlnet_blocks_repeat for condition in control_conditions
+                                ),
+                                "conditions": controlnet_metadata["conditions"],
+                                "controlnet_condition_calls": controlnet_condition_calls,
                             }
                         if controlnet_single_block_samples:
                             controlnet_single_block_samples = extend_control_residuals(
@@ -1217,6 +1282,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                     controlnet_metadata["reference_suffix_zero"]
                                     and residual_suffix_is_zero(controlnet_single_block_samples, latents.shape[1])
                                 )
+                        controlnet_metadata["controlnet_condition_calls"] = controlnet_condition_calls
                     controlnet_step_ms.append(round(step_controlnet_ms, 3))
 
                     transformer_start = synchronized_time(torch)

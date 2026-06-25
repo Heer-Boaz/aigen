@@ -18,6 +18,7 @@ from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseSweepResult,
     KontextPoseDenoised,
     KontextPosePrepared,
+    add_control_residuals,
     extend_control_residuals,
     fit_size_to_area,
     residual_suffix_is_zero,
@@ -252,6 +253,18 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(extended[0].shape, (2, 5, 4))
         self.assertTrue(torch.equal(extended[0][:, :3], sample))
         self.assertTrue(torch.equal(extended[0][:, 3:], torch.zeros((2, 2, 4))))
+        self.assertTrue(residual_suffix_is_zero(extended, generated_tokens=3))
+
+    def test_sums_control_residuals_before_reference_extension(self) -> None:
+        first = [torch.ones((1, 3, 2)), torch.full((1, 3, 2), 2.0)]
+        second = [torch.full((1, 3, 2), 3.0), torch.full((1, 3, 2), 4.0)]
+
+        summed = add_control_residuals(None, first)
+        summed = add_control_residuals(summed, second)
+        extended = extend_control_residuals(summed, total_image_tokens=5)
+
+        self.assertTrue(torch.equal(extended[0][:, :3], torch.full((1, 3, 2), 4.0)))
+        self.assertTrue(torch.equal(extended[1][:, :3], torch.full((1, 3, 2), 6.0)))
         self.assertTrue(residual_suffix_is_zero(extended, generated_tokens=3))
 
     def test_fits_reference_size_to_area_and_multiple(self) -> None:
