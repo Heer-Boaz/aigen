@@ -19,6 +19,7 @@ from aigen.generation.kontext_pose_control import (
     KontextPoseDenoised,
     KontextPosePrepared,
     add_control_residuals,
+    apply_control_residual_mask,
     extend_control_residuals,
     fit_size_to_area,
     residual_suffix_is_zero,
@@ -266,6 +267,19 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertTrue(torch.equal(extended[0][:, :3], torch.full((1, 3, 2), 4.0)))
         self.assertTrue(torch.equal(extended[1][:, :3], torch.full((1, 3, 2), 6.0)))
         self.assertTrue(residual_suffix_is_zero(extended, generated_tokens=3))
+
+    def test_applies_control_residual_mask_per_generated_token(self) -> None:
+        samples = [torch.ones((1, 3, 2))]
+        mask = torch.tensor([[[1.0], [0.5], [0.0]]])
+
+        masked = apply_control_residual_mask(samples, mask)
+
+        self.assertTrue(
+            torch.equal(
+                masked[0],
+                torch.tensor([[[1.0, 1.0], [0.5, 0.5], [0.0, 0.0]]]),
+            )
+        )
 
     def test_fits_reference_size_to_area_and_multiple(self) -> None:
         self.assertEqual(

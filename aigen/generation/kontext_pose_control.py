@@ -166,6 +166,7 @@ class KontextControlCondition:
     guidance_start: float
     guidance_end: float
     controlnet_blocks_repeat: bool
+    residual_mask: Any = None
 
 
 @dataclass(frozen=True)
@@ -360,6 +361,17 @@ class CharacterKontextPoseSession:
             num_channels_latents=prepared.num_channels_latents,
             generator=self.torch.Generator(device=self.device).manual_seed(seed),
             device=prepared.device,
+        )
+
+    def prepare_residual_mask(self, prepared: KontextPosePrepared, mask_image: Any) -> Any:
+        return self.pipeline.prepare_residual_mask(
+            mask_image=mask_image,
+            width=prepared.width,
+            height=prepared.height,
+            batch_size=prepared.batch_size,
+            num_images_per_prompt=prepared.num_images_per_prompt,
+            device=prepared.device,
+            dtype=prepared.dtype,
         )
 
     def denoise_many(
@@ -735,6 +747,14 @@ def add_control_residuals(total: Sequence[Any] | None, samples: Sequence[Any] | 
     return [current + sample for current, sample in zip(total, samples, strict=True)]
 
 
+def apply_control_residual_mask(samples: Sequence[Any] | None, residual_mask: Any) -> list[Any] | None:
+    if samples is None:
+        return None
+    if residual_mask is None:
+        return list(samples)
+    return [sample * residual_mask.to(device=sample.device, dtype=sample.dtype) for sample in samples]
+
+
 def residual_suffix_is_zero(samples: Sequence[Any], generated_tokens: int) -> bool:
     return all(sample[:, generated_tokens:].count_nonzero().item() == 0 for sample in samples)
 
@@ -909,6 +929,32 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     width_control_image,
                 )
             return control_image, controlnet_blocks_repeat, elapsed_ms(control_vae_start, synchronized_time(torch))
+
+        def prepare_residual_mask(
+            self,
+            *,
+            mask_image: Any,
+            width: int,
+            height: int,
+            batch_size: int,
+            num_images_per_prompt: int,
+            device: str,
+            dtype: Any,
+        ) -> Any:
+            if not isinstance(mask_image, torch.Tensor):
+                mask_image = self.image_processor.preprocess(mask_image, height=height, width=width)
+                mask_image = (mask_image + 1) * 0.5
+
+            mask = mask_image.mean(dim=1, keepdim=True).clamp(0, 1)
+            mask = torch.nn.functional.interpolate(
+                mask,
+                size=(height // (self.vae_scale_factor * 2), width // (self.vae_scale_factor * 2)),
+                mode="bilinear",
+                align_corners=False,
+            )
+            repeat_by = batch_size if mask.shape[0] == 1 else num_images_per_prompt
+            mask = mask.repeat_interleave(repeat_by, dim=0)
+            return mask.flatten(2).transpose(1, 2).to(device=device, dtype=dtype)
 
         @torch.no_grad()
         def prepare_conditioning(
@@ -1190,6 +1236,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         "scale": condition.conditioning_scale,
                         "guidance_start": condition.guidance_start,
                         "guidance_end": condition.guidance_end,
+                        "masked": condition.residual_mask is not None,
                     }
                     for condition in control_conditions
                 ],
@@ -1233,6 +1280,14 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             controlnet_ms += call_ms
                             active_conditions += 1
                             controlnet_condition_calls += 1
+                            block_samples = apply_control_residual_mask(
+                                block_samples,
+                                condition.residual_mask,
+                            )
+                            single_block_samples = apply_control_residual_mask(
+                                single_block_samples,
+                                condition.residual_mask,
+                            )
                             controlnet_block_samples = add_control_residuals(
                                 controlnet_block_samples,
                                 block_samples,
