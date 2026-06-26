@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
+from threading import Event, Thread
 from typing import Any, Literal
 
 from PIL import Image, ImageDraw
@@ -23,6 +24,8 @@ from aigen.generation.kontext_pose_control import (
 KEYFRAME_JOB_SCHEMA = "schemas/keyframe-job.schema.json"
 KEYFRAME_KIND = "character-keyframe"
 KEYFRAME_SCHEMA_VERSION = 1
+NVIDIA_SMI_PREFLIGHT_LIMIT_MB = 1800
+NVIDIA_SMI_SAMPLE_SECONDS = 0.25
 
 
 class StrictModel(BaseModel):
@@ -138,6 +141,33 @@ class KeyframeProfile:
 
 class KeyframeJobError(RuntimeError):
     pass
+
+
+class NvidiaSmiMemorySampler:
+    def __init__(self, preflight: dict[str, int]) -> None:
+        self.preflight = preflight
+        self.peak_used_mb = preflight["nvidia_smi_preflight_used_mb"]
+        self.device_total_mb = preflight["nvidia_smi_device_total_mb"]
+        self._stop = Event()
+        self._thread = Thread(target=self._sample_loop, daemon=True)
+
+    def start(self) -> None:
+        if self.device_total_mb:
+            self._thread.start()
+
+    def stop(self) -> dict[str, int]:
+        if self._thread.is_alive():
+            self._stop.set()
+            self._thread.join()
+        return {
+            **self.preflight,
+            "nvidia_smi_peak_used_mb": self.peak_used_mb,
+        }
+
+    def _sample_loop(self) -> None:
+        while not self._stop.wait(NVIDIA_SMI_SAMPLE_SECONDS):
+            snapshot = _nvidia_smi_memory_snapshot()
+            self.peak_used_mb = max(self.peak_used_mb, snapshot["nvidia_smi_used_mb"])
 
 
 def keyframe_job_schema() -> dict[str, Any]:
@@ -344,109 +374,114 @@ def plan_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root:
 def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
     resolved = resolve_keyframe_job(job_path, profile, project_root=project_root, check_outputs=True)
+    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_preflight())
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_conditions:
         _save_conditions(resolved, output_dir)
 
-    session = CharacterKontextPoseSession(
-        profile.model,
-        profile.controlnet_model,
-        dtype=profile.dtype,
-        nunchaku_transformer_model=profile.nunchaku_transformer_model,
-        attention_impl=profile.attention_impl,
-        pipeline_cpu_offload=profile.pipeline_cpu_offload,
-        nunchaku_layer_offload=profile.nunchaku_layer_offload,
-        vae_tiling=profile.vae_tiling,
-    )
+    memory_sampler.start()
     try:
-        torch = session.torch
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats("cuda")
-        total_start = synchronized_time(torch)
-        prepared = session.prepare(
-            reference_image=Path(resolved["character"]["reference"]["path"]),
-            pose_image=Path(resolved["assets"]["pose"]["path"]),
-            prompt=spec.prompt.clip,
-            t5_prompt=spec.prompt.t5,
-            negative_prompt=spec.prompt.negative,
-            true_cfg_scale=spec.prompt.true_cfg_scale,
-            width=spec.canvas.width,
-            height=spec.canvas.height,
-            reference_max_area=spec.canvas.reference_max_area,
-            max_sequence_length=spec.canvas.max_sequence_length,
-            steps=spec.sampling.steps,
-            guidance_scale=spec.sampling.guidance_scale,
-            seed=spec.variants[0].seed,
+        session = CharacterKontextPoseSession(
+            profile.model,
+            profile.controlnet_model,
+            dtype=profile.dtype,
+            nunchaku_transformer_model=profile.nunchaku_transformer_model,
+            attention_impl=profile.attention_impl,
+            pipeline_cpu_offload=profile.pipeline_cpu_offload,
+            nunchaku_layer_offload=profile.nunchaku_layer_offload,
+            vae_tiling=profile.vae_tiling,
         )
-        control_images, control_repeats = _prepare_control_images(session, prepared, spec, resolved)
-        masks = _prepare_masks(session, prepared, spec, resolved)
-        session.pipeline.maybe_free_model_hooks()
-        denoised = []
-        for variant in spec.variants:
-            result = session.pipeline.denoise_prepared(
-                prepared,
-                name=variant.name,
-                seed=variant.seed,
-                controlnet_conditioning_scale=spec.conditions[0].scale,
-                control_guidance_start=spec.conditions[0].start,
-                control_guidance_end=spec.conditions[0].end,
-                control_conditions=[
-                    KontextControlCondition(
-                        condition.name,
-                        control_images[condition.image],
-                        condition.scale,
-                        condition.start,
-                        condition.end,
-                        control_repeats[condition.image],
-                        masks[condition.residual_mask] if condition.residual_mask else None,
-                    )
-                    for condition in spec.conditions
-                ],
+        try:
+            torch = session.torch
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats("cuda")
+            total_start = synchronized_time(torch)
+            prepared = session.prepare(
+                reference_image=Path(resolved["character"]["reference"]["path"]),
+                pose_image=Path(resolved["assets"]["pose"]["path"]),
+                prompt=spec.prompt.clip,
+                t5_prompt=spec.prompt.t5,
+                negative_prompt=spec.prompt.negative,
+                true_cfg_scale=spec.prompt.true_cfg_scale,
+                width=spec.canvas.width,
+                height=spec.canvas.height,
+                reference_max_area=spec.canvas.reference_max_area,
+                max_sequence_length=spec.canvas.max_sequence_length,
+                steps=spec.sampling.steps,
+                guidance_scale=spec.sampling.guidance_scale,
+                seed=spec.variants[0].seed,
             )
-            denoised.append(replace(result, latents=result.latents.detach().cpu()))
-            del result
-        images, decode_ms = session.decode_many(prepared, denoised, chunk_size=1)
-        outputs = []
-        for image, result, planned in zip(images, denoised, resolved["output"]["files"], strict=True):
-            output_path = Path(planned["path"])
-            image.save(output_path)
-            outputs.append(
-                {
-                    **planned,
-                    "seed": result.seed,
-                    "controlnet_active_steps": result.controlnet_active_steps,
-                    "controlnet_step_ms": result.controlnet_step_ms,
-                    "transformer_step_ms": result.transformer_step_ms,
-                    "controlnet_metadata": result.controlnet_metadata,
-                    "timings_ms": result.timings_ms,
-                }
-            )
-        if spec.output.save_contact_sheet:
-            _save_contact_sheet(outputs, output_dir / "contact_sheet.png")
-        result_json = {
-            "status": "completed",
-            "job_id": spec.id,
-            "spec_sha256": resolved["spec_sha256"],
-            "git_commit": resolved["git_commit"],
-            "models": resolved["profile"]["models"],
-            "assets": resolved["assets"] | {"reference": resolved["character"]["reference"]},
-            "outputs": outputs,
-            "effective_config": resolved,
-            "token_metadata": prepared.token_metadata,
-            "timings_ms": {
-                "model_load_ms": session.model_load_ms,
-                "decode_ms": decode_ms,
-                "total_ms": (synchronized_time(torch) - total_start) * 1000,
-            },
-            "memory": cuda_memory_stats(torch, "cuda"),
-            "environment": _generation_environment(torch, session.pipeline),
-        }
-        _write_json(output_dir / "result.json", result_json)
-        return result_json
+            control_images, control_repeats = _prepare_control_images(session, prepared, spec, resolved)
+            masks = _prepare_masks(session, prepared, spec, resolved)
+            session.pipeline.maybe_free_model_hooks()
+            denoised = []
+            for variant in spec.variants:
+                result = session.pipeline.denoise_prepared(
+                    prepared,
+                    name=variant.name,
+                    seed=variant.seed,
+                    controlnet_conditioning_scale=spec.conditions[0].scale,
+                    control_guidance_start=spec.conditions[0].start,
+                    control_guidance_end=spec.conditions[0].end,
+                    control_conditions=[
+                        KontextControlCondition(
+                            condition.name,
+                            control_images[condition.image],
+                            condition.scale,
+                            condition.start,
+                            condition.end,
+                            control_repeats[condition.image],
+                            masks[condition.residual_mask] if condition.residual_mask else None,
+                        )
+                        for condition in spec.conditions
+                    ],
+                )
+                denoised.append(replace(result, latents=result.latents.detach().cpu()))
+                del result
+            images, decode_ms = session.decode_many(prepared, denoised, chunk_size=1)
+            outputs = []
+            for image, result, planned in zip(images, denoised, resolved["output"]["files"], strict=True):
+                output_path = Path(planned["path"])
+                image.save(output_path)
+                outputs.append(
+                    {
+                        **planned,
+                        "seed": result.seed,
+                        "controlnet_active_steps": result.controlnet_active_steps,
+                        "controlnet_step_ms": result.controlnet_step_ms,
+                        "transformer_step_ms": result.transformer_step_ms,
+                        "controlnet_metadata": result.controlnet_metadata,
+                        "timings_ms": result.timings_ms,
+                    }
+                )
+            if spec.output.save_contact_sheet:
+                _save_contact_sheet(outputs, output_dir / "contact_sheet.png")
+            result_json = {
+                "status": "completed",
+                "job_id": spec.id,
+                "spec_sha256": resolved["spec_sha256"],
+                "git_commit": resolved["git_commit"],
+                "models": resolved["profile"]["models"],
+                "assets": resolved["assets"] | {"reference": resolved["character"]["reference"]},
+                "outputs": outputs,
+                "effective_config": resolved,
+                "token_metadata": prepared.token_metadata,
+                "timings_ms": {
+                    "model_load_ms": session.model_load_ms,
+                    "decode_ms": decode_ms,
+                    "total_ms": (synchronized_time(torch) - total_start) * 1000,
+                },
+                "memory": cuda_memory_stats(torch, "cuda") | memory_sampler.stop(),
+                "environment": _generation_environment(torch, session.pipeline),
+            }
+            _write_json(output_dir / "result.json", result_json)
+            return result_json
+        finally:
+            session.close()
     finally:
-        session.close()
+        memory_sampler.stop()
 
 
 def _profile_json(profile: KeyframeProfile) -> dict[str, Any]:
@@ -657,6 +692,48 @@ def _git_commit(project_root: Path) -> str:
         cwd=project_root,
         text=True,
     ).strip()
+
+
+def _nvidia_smi_preflight() -> dict[str, int]:
+    if not _cuda_available():
+        return {
+            "nvidia_smi_preflight_used_mb": 0,
+            "nvidia_smi_device_total_mb": 0,
+        }
+
+    snapshot = _nvidia_smi_memory_snapshot()
+    if snapshot["nvidia_smi_used_mb"] > NVIDIA_SMI_PREFLIGHT_LIMIT_MB:
+        raise KeyframeJobError(
+            "GPU framebuffer is not clean enough for a high-resolution keyframe run: "
+            f"{snapshot['nvidia_smi_used_mb']} MB used before model load; "
+            f"limit is {NVIDIA_SMI_PREFLIGHT_LIMIT_MB} MB"
+        )
+    return {
+        "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],
+        "nvidia_smi_device_total_mb": snapshot["nvidia_smi_device_total_mb"],
+    }
+
+
+def _cuda_available() -> bool:
+    import torch
+
+    return torch.cuda.is_available()
+
+
+def _nvidia_smi_memory_snapshot() -> dict[str, int]:
+    output = subprocess.check_output(
+        [
+            "nvidia-smi",
+            "--query-gpu=memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ],
+        text=True,
+    )
+    values = output.splitlines()[0].split(",")
+    return {
+        "nvidia_smi_used_mb": int(values[0].strip()),
+        "nvidia_smi_device_total_mb": int(values[1].strip()),
+    }
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:

@@ -17,6 +17,7 @@ from aigen.generation.kontext_pose_control import KontextPoseDenoised
 from aigen.keyframes import (
     KeyframeJobError,
     KeyframeProfile,
+    _nvidia_smi_preflight,
     c2_profile_template,
     load_keyframe_job,
     plan_keyframe_job,
@@ -273,6 +274,13 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.CharacterKontextPoseSession", FakeSession),
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
+                patch(
+                    "aigen.keyframes._nvidia_smi_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                    },
+                ),
             ):
                 result = run_keyframe_job(job_path, profile(), project_root=Path.cwd())
 
@@ -289,6 +297,21 @@ class KeyframeTests(unittest.TestCase):
                 FakeSession.instances[0].prepare_kwargs["t5_prompt"],
                 "Full-body orthographic side-view gameplay keyframe.",
             )
+            self.assertEqual(result["memory"]["nvidia_smi_peak_used_mb"], 0)
+
+    def test_preflight_rejects_dirty_framebuffer(self) -> None:
+        with (
+            patch("aigen.keyframes._cuda_available", return_value=True),
+            patch(
+                "aigen.keyframes._nvidia_smi_memory_snapshot",
+                return_value={
+                    "nvidia_smi_used_mb": 1801,
+                    "nvidia_smi_device_total_mb": 16303,
+                },
+            ),
+        ):
+            with self.assertRaisesRegex(KeyframeJobError, "1801 MB used before model load"):
+                _nvidia_smi_preflight()
 
 
 if __name__ == "__main__":
