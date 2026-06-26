@@ -52,6 +52,11 @@ from aigen.keyframe_judge import (
     judge_keyframe_run,
     select_keyframe_run,
 )
+from aigen.keyframe_score import (
+    DEFAULT_SCORER_ID,
+    KeyframeScoreConfig,
+    score_keyframe_run,
+)
 from aigen.models.downloads import (
     ModelDownloadError,
     download_models,
@@ -523,6 +528,29 @@ def _add_keyframe_commands(subparsers: Any) -> None:
         help="Judge calibration fixture JSON",
     )
     calibrate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    score = keyframe_subparsers.add_parser("score", help="Score a completed keyframe run against its conditions")
+    score.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    score.add_argument("--scorer", default=DEFAULT_SCORER_ID, help="Scorer id used for output directory naming")
+    score.add_argument(
+        "--foreground-threshold",
+        type=float,
+        default=28.0,
+        help="RGB distance from border-estimated background for foreground extraction",
+    )
+    score.add_argument(
+        "--contour-radius",
+        type=int,
+        default=8,
+        help="Pixel radius used when matching candidate boundaries to target contours",
+    )
+    score.add_argument(
+        "--distance-scale-px",
+        type=float,
+        default=48.0,
+        help="Pixel distance that maps target-contour drift to zero distance score",
+    )
+    score.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     select = keyframe_subparsers.add_parser("select", help="Select/reject outputs from a keyframe judge result")
     select.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
@@ -1253,6 +1281,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.run_dir,
                         judge_id=args.from_judge,
                         fixture_path=args.fixture,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command == "score":
+                _dump_json(
+                    sys.stdout,
+                    score_keyframe_run(
+                        args.run_dir,
+                        KeyframeScoreConfig(
+                            scorer_id=args.scorer,
+                            foreground_threshold=args.foreground_threshold,
+                            contour_radius=args.contour_radius,
+                            distance_scale_px=args.distance_scale_px,
+                        ),
+                        project_root=PROJECT_ROOT,
                     ),
                     pretty=not args.compact,
                 )

@@ -12,17 +12,25 @@ license = { text = "Proprietary" }
 authors = [{ name = "Boaz" }]
 dependencies = [
   "huggingface_hub>=0.26",
+  "numpy>=2",
   "Pillow>=10",
   "pydantic>=2",
+  "scipy>=1.18",
 ]
 
 [project.optional-dependencies]
 generation = [
   "accelerate>=1",
   "bitsandbytes>=0.46.1",
+  "controlnet-aux==0.0.10",
   "diffusers[torch]>=0.38",
+  "peft>=0.17",
+  "protobuf",
   "qwen-vl-utils==0.0.8",
   "safetensors>=0.4",
+  "segment-anything==1.0",
+  "sentencepiece",
+  "torch==2.12.1",
   "transformers>=4.44",
   "torchvision==0.27.1",
 ]

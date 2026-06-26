@@ -5,11 +5,41 @@ chosen model, run a direct character generator, inspect the output, iterate.
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -e .
+.venv/bin/python -m pip install -e ".[generation]"
 ```
 
 Models are declared in source manifests and downloaded into `aigen/models`. Hub
 repo IDs and revisions are pinned for reproducible runs.
+
+## One-Shot Install
+
+For a fresh workstation, use the modular installer. It checks Python/GPU basics,
+creates `.venv`, installs the generation dependencies, installs the pinned
+Nunchaku wheel, downloads the keyframe generation models, downloads the Qwen
+judge model, and validates the keyframe CLI.
+
+```bash
+scripts/install.sh
+```
+
+The installer is intentionally split into direct substeps:
+
+```bash
+scripts/check_system.sh
+scripts/setup_venv.sh
+scripts/install_nunchaku.sh
+scripts/download_models.sh
+scripts/check_install.sh
+```
+
+The model set is the current keyframe production path plus the local semantic QA
+judge:
+
+- `model_sources/kontext_pose_control_pipeline_4bit.json`
+- `model_sources/nunchaku_kontext_pipeline_fp4.json`
+- `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
+
+The placeholder pixel-art manifest is deliberately not part of the installer.
 
 ```bash
 .venv/bin/python -m aigen.cli models download \

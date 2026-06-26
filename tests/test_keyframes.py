@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from aigen.cli import main
 from aigen.generation.kontext_pose_control import KontextPoseDenoised
@@ -36,6 +36,7 @@ from aigen.keyframe_judge import (
     judge_keyframe_run,
     select_keyframe_run,
 )
+from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -45,6 +46,61 @@ def write_json(path: Path, payload: object) -> None:
 def write_image(path: Path, size: tuple[int, int], color: tuple[int, int, int]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", size, color).save(path)
+
+
+def write_rectangle_candidate(path: Path, box: tuple[int, int, int, int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", (160, 240), (246, 238, 232))
+    draw = Image.new("L", image.size, 0)
+    mask_draw = ImageDraw.Draw(draw)
+    mask_draw.rectangle(box, fill=255)
+    image.paste((110, 70, 45), mask=draw)
+    image.save(path)
+
+
+def write_rectangle_contour(path: Path, box: tuple[int, int, int, int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("L", (160, 240), 0)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle(box, outline=255, width=3)
+    image.save(path)
+
+
+def write_score_fixture(root: Path) -> Path:
+    run_dir = root / "runs" / "score"
+    reference = root / "assets" / "reference.png"
+    contour = root / "assets" / "contour.png"
+    mask = root / "assets" / "mask.png"
+    write_image(reference, (160, 240), (240, 230, 220))
+    write_rectangle_contour(contour, (60, 30, 100, 210))
+    write_image(mask, (160, 240), (255, 255, 255))
+    outputs = []
+    candidates = {
+        "seed_002": (48, 35, 90, 205),
+        "seed_003": (60, 30, 100, 210),
+        "seed_005": (20, 55, 75, 190),
+    }
+    for index, (name, box) in enumerate(candidates.items(), start=2):
+        image_path = run_dir / f"{name}.png"
+        write_rectangle_candidate(image_path, box)
+        outputs.append({"name": name, "seed": index, "path": image_path.as_posix()})
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "score.fixture",
+            "assets": {
+                "reference": {"path": reference.as_posix()},
+                "contour": {"path": contour.as_posix()},
+                "boundary_mask": {"path": mask.as_posix()},
+            },
+            "outputs": outputs,
+            "effective_config": {
+                "keyframe": {"action": "walk", "phase": "contact", "direction": "left", "camera": "orthographic-side"}
+            },
+        },
+    )
+    return run_dir
 
 
 def write_keyframe_result(root: Path) -> Path:
@@ -531,6 +587,27 @@ class KeyframeTests(unittest.TestCase):
             )
 
         self.assertEqual(selection["selected"], ["seed_003"])
+
+    def test_keyframe_score_ranks_condition_match_from_saved_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_score_fixture(root)
+
+            result = score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="condition-test", foreground_threshold=20.0),
+                project_root=Path.cwd(),
+            )
+            candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
+
+            self.assertEqual(result["ranking"]["best"], "seed_003")
+            self.assertLess(
+                candidates["seed_002"]["scores"]["final"],
+                candidates["seed_003"]["scores"]["final"],
+            )
+            self.assertTrue(Path(result["outputs"]["scores"]).exists())
+            self.assertTrue(Path(result["outputs"]["ranked_contact_sheet"]).exists())
+            self.assertTrue(Path(result["outputs"]["condition_evidence_ranked"]).exists())
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

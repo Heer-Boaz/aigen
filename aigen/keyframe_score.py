@@ -1,0 +1,340 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from PIL import Image, ImageDraw
+from scipy import ndimage
+
+
+DEFAULT_SCORER_ID = "condition-v1"
+SCORE_SCHEMA_VERSION = 1
+
+
+class KeyframeScoreError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class KeyframeScoreConfig:
+    scorer_id: str = DEFAULT_SCORER_ID
+    foreground_threshold: float = 28.0
+    contour_radius: int = 8
+    distance_scale_px: float = 48.0
+
+
+def score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_root: Path) -> dict[str, Any]:
+    resolved_run_dir = run_dir.resolve()
+    result = _read_json(resolved_run_dir / "result.json")
+    assets = result["assets"]
+    score_dir = resolved_run_dir / "score" / config.scorer_id
+    masks_dir = score_dir / "masks"
+    evidence_dir = score_dir / "evidence"
+    if score_dir.exists():
+        shutil.rmtree(score_dir)
+    masks_dir.mkdir(parents=True)
+    evidence_dir.mkdir(parents=True)
+
+    target = _load_target(assets)
+    candidates = [
+        _score_candidate(output, target, config, masks_dir=masks_dir, evidence_dir=evidence_dir)
+        for output in result["outputs"]
+    ]
+    ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
+    ordered = {candidate["candidate"]: candidate for candidate in candidates}
+    ranked_candidates = [ordered[name] for name in ranking]
+    _save_ranked_sheet(ranked_candidates, score_dir / "ranked_contact_sheet.png", image_key="image")
+    _save_ranked_sheet(ranked_candidates, score_dir / "condition_evidence_ranked.png", image_key="condition_evidence")
+
+    payload = {
+        "schema_version": SCORE_SCHEMA_VERSION,
+        "status": "completed",
+        "run_dir": resolved_run_dir.as_posix(),
+        "job_id": result["job_id"],
+        "git_commit": _git_commit(project_root),
+        "source_result_sha256": _sha256_file(resolved_run_dir / "result.json"),
+        "scorer": {
+            "id": config.scorer_id,
+            "method": "foreground-boundary-to-target-contour",
+            "foreground_threshold": config.foreground_threshold,
+            "contour_radius": config.contour_radius,
+            "distance_scale_px": config.distance_scale_px,
+            "weights": _score_weights(),
+        },
+        "assets": {
+            "contour": assets["contour"],
+            "boundary_mask": assets["boundary_mask"],
+        },
+        "candidates": candidates,
+        "ranking": {
+            "final": ranking,
+            "best": ranking[0],
+        },
+        "outputs": {
+            "scores": (score_dir / "scores.json").as_posix(),
+            "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
+            "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
+        },
+    }
+    _write_json(score_dir / "scores.json", payload)
+    return payload
+
+
+def _load_target(assets: dict[str, Any]) -> dict[str, Any]:
+    contour = _load_luma_mask(Path(assets["contour"]["path"]), threshold=32)
+    boundary_weight = _load_boundary_weight(Path(assets["boundary_mask"]["path"]))
+    target_bbox = _bbox(contour)
+    target_silhouette = ndimage.binary_fill_holes(
+        ndimage.binary_closing(contour, structure=np.ones((5, 5), dtype=bool), iterations=2)
+    )
+    return {
+        "contour": contour,
+        "contour_dilated": _dilate(contour, 8),
+        "silhouette": target_silhouette,
+        "boundary_weight": boundary_weight,
+        "bbox": target_bbox,
+        "bbox_ratio": _bbox_ratio(target_bbox),
+    }
+
+
+def _score_candidate(
+    output: dict[str, Any],
+    target: dict[str, Any],
+    config: KeyframeScoreConfig,
+    *,
+    masks_dir: Path,
+    evidence_dir: Path,
+) -> dict[str, Any]:
+    candidate_name = output["name"]
+    image_path = Path(output["path"]).resolve()
+    image = _load_rgb(image_path)
+    foreground = _foreground_mask(image, config.foreground_threshold)
+    foreground_edge = foreground ^ _erode(foreground, 1)
+    foreground_bbox = _bbox(foreground)
+    candidate_edge_dilated = _dilate(foreground_edge, config.contour_radius)
+    target_contour = target["contour"]
+    target_contour_dilated = _dilate(target_contour, config.contour_radius)
+    boundary_weight = target["boundary_weight"]
+
+    weighted_edge = _weighted_sum(foreground_edge, boundary_weight)
+    contour_precision = _weighted_sum(foreground_edge & target_contour_dilated, boundary_weight) / weighted_edge
+    weighted_contour = _weighted_sum(target_contour, boundary_weight)
+    contour_recall = _weighted_sum(target_contour & candidate_edge_dilated, boundary_weight) / weighted_contour
+    contour_f1 = _f1(contour_precision, contour_recall)
+
+    distance = ndimage.distance_transform_edt(~foreground_edge)
+    weighted_distance_px = float((distance[target_contour] * boundary_weight[target_contour]).sum() / weighted_contour)
+    contour_distance_score = max(0.0, 1.0 - weighted_distance_px / config.distance_scale_px)
+    silhouette_intersection = float((foreground & target["silhouette"]).sum())
+    silhouette_union = float((foreground | target["silhouette"]).sum() + 1e-9)
+    silhouette_iou = silhouette_intersection / silhouette_union
+    outside_target_ratio = float((foreground & ~target["silhouette"]).sum() / (foreground.sum() + 1e-9))
+    silhouette_fit = silhouette_iou * (1.0 - outside_target_ratio)
+    candidate_bbox_ratio = _bbox_ratio(foreground_bbox)
+    side_profile_score = max(0.0, 1.0 - abs(candidate_bbox_ratio - target["bbox_ratio"]) / target["bbox_ratio"])
+    foreground_coverage = float(foreground.sum() / foreground.size)
+
+    scores = {
+        "condition": _weighted_score(
+            {
+                "contour_f1": contour_f1,
+                "contour_distance": contour_distance_score,
+                "silhouette_fit": silhouette_fit,
+            },
+            {
+                "contour_f1": 0.30,
+                "contour_distance": 0.20,
+                "silhouette_fit": 0.50,
+            },
+        ),
+        "contour": contour_f1,
+        "pose": contour_recall,
+        "side_profile": side_profile_score,
+        "artifact": _artifact_score(foreground_coverage),
+    }
+    scores["final"] = _weighted_score(scores, _score_weights())
+    hard_rejects = {
+        "missing_foreground": bool(foreground.sum() == 0),
+        "weak_condition_match": bool(scores["condition"] < 0.25),
+        "weak_side_profile": bool(scores["side_profile"] < 0.45),
+    }
+    mask_path = masks_dir / f"{candidate_name}__foreground.png"
+    evidence_path = evidence_dir / f"{candidate_name}__condition_diff.png"
+    _save_mask(foreground, mask_path)
+    _save_condition_evidence(image, target_contour, foreground_edge, evidence_path)
+    return {
+        "candidate": candidate_name,
+        "image": image_path.as_posix(),
+        "foreground_mask": mask_path.as_posix(),
+        "condition_evidence": evidence_path.as_posix(),
+        "hard_rejects": hard_rejects,
+        "metrics": {
+            "contour_precision": contour_precision,
+            "contour_recall": contour_recall,
+            "contour_f1": contour_f1,
+            "silhouette_iou": silhouette_iou,
+            "outside_target_ratio": outside_target_ratio,
+            "silhouette_fit": silhouette_fit,
+            "weighted_target_distance_px": weighted_distance_px,
+            "contour_distance_score": contour_distance_score,
+            "target_bbox_ratio": target["bbox_ratio"],
+            "candidate_bbox_ratio": candidate_bbox_ratio,
+            "foreground_coverage": foreground_coverage,
+        },
+        "scores": scores,
+    }
+
+
+def _score_weights() -> dict[str, float]:
+    return {
+        "condition": 0.75,
+        "contour": 0.05,
+        "pose": 0.00,
+        "side_profile": 0.15,
+        "artifact": 0.05,
+    }
+
+
+def _score_ranking_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        sum(1 for rejected in candidate["hard_rejects"].values() if rejected),
+        -candidate["scores"]["final"],
+        -candidate["scores"]["condition"],
+        -candidate["scores"]["contour"],
+        -candidate["scores"]["pose"],
+        -candidate["scores"]["side_profile"],
+    )
+
+
+def _weighted_score(scores: dict[str, float], weights: dict[str, float]) -> float:
+    return float(sum(scores[name] * weight for name, weight in weights.items()))
+
+
+def _f1(precision: float, recall: float) -> float:
+    return float(2.0 * precision * recall / (precision + recall + 1e-9))
+
+
+def _artifact_score(foreground_coverage: float) -> float:
+    if 0.04 <= foreground_coverage <= 0.55:
+        return 1.0
+    return max(0.0, 1.0 - min(abs(foreground_coverage - 0.18), 0.18) / 0.18)
+
+
+def _foreground_mask(image: np.ndarray, threshold: float) -> np.ndarray:
+    border = np.concatenate((image[0], image[-1], image[:, 0], image[:, -1]), axis=0).astype(np.float32)
+    background = np.median(border, axis=0)
+    distance = np.sqrt(((image.astype(np.float32) - background) ** 2).sum(axis=2))
+    foreground = distance > threshold
+    foreground = ndimage.binary_closing(foreground, structure=np.ones((3, 3), dtype=bool), iterations=2)
+    foreground = ndimage.binary_fill_holes(foreground)
+    labels, count = ndimage.label(foreground)
+    if count == 0:
+        return foreground
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    return labels == sizes.argmax()
+
+
+def _load_rgb(path: Path) -> np.ndarray:
+    with Image.open(path) as image:
+        return np.asarray(image.convert("RGB"), dtype=np.uint8)
+
+
+def _load_luma_mask(path: Path, *, threshold: int) -> np.ndarray:
+    with Image.open(path) as image:
+        return np.asarray(image.convert("L")) > threshold
+
+
+def _load_boundary_weight(path: Path) -> np.ndarray:
+    with Image.open(path) as image:
+        return 0.25 + 0.75 * (np.asarray(image.convert("L"), dtype=np.float32) / 255.0)
+
+
+def _weighted_sum(mask: np.ndarray, weight: np.ndarray) -> float:
+    return float(weight[mask].sum() + 1e-9)
+
+
+def _bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        raise KeyframeScoreError("Cannot score an empty mask")
+    return int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
+
+
+def _bbox_ratio(box: tuple[int, int, int, int]) -> float:
+    width = box[2] - box[0]
+    height = box[3] - box[1]
+    return float(width / height)
+
+
+def _dilate(mask: np.ndarray, radius: int) -> np.ndarray:
+    return ndimage.binary_dilation(mask, structure=np.ones((3, 3), dtype=bool), iterations=radius)
+
+
+def _erode(mask: np.ndarray, radius: int) -> np.ndarray:
+    return ndimage.binary_erosion(mask, structure=np.ones((3, 3), dtype=bool), iterations=radius)
+
+
+def _save_mask(mask: np.ndarray, output_path: Path) -> None:
+    Image.fromarray((mask.astype(np.uint8) * 255), mode="L").save(output_path)
+
+
+def _save_condition_evidence(
+    image: np.ndarray,
+    target_contour: np.ndarray,
+    candidate_edge: np.ndarray,
+    output_path: Path,
+) -> None:
+    canvas = Image.fromarray(image, mode="RGB").convert("RGBA")
+    evidence = np.zeros((*target_contour.shape, 4), dtype=np.uint8)
+    evidence[target_contour & ~candidate_edge] = (255, 0, 0, 210)
+    evidence[candidate_edge & ~target_contour] = (0, 180, 255, 190)
+    evidence[target_contour & candidate_edge] = (255, 255, 255, 230)
+    composed = Image.alpha_composite(canvas, Image.fromarray(evidence, mode="RGBA")).convert("RGB")
+    composed.save(output_path)
+
+
+def _save_ranked_sheet(candidates: list[dict[str, Any]], output_path: Path, *, image_key: str) -> None:
+    images = []
+    for rank, candidate in enumerate(candidates, start=1):
+        with Image.open(candidate[image_key]) as image:
+            images.append((rank, candidate, image.convert("RGB").copy()))
+    thumb_w = 256
+    label_h = 58
+    thumb_h = max(1, int(thumb_w * images[0][2].height / images[0][2].width))
+    sheet = Image.new("RGB", (thumb_w * len(images), thumb_h + label_h), "white")
+    draw = ImageDraw.Draw(sheet)
+    for index, (rank, candidate, image) in enumerate(images):
+        x = index * thumb_w
+        sheet.paste(image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS), (x, label_h))
+        draw.text((x + 8, 6), f"#{rank} {candidate['candidate']}", fill="black")
+        draw.text((x + 8, 24), f"final {candidate['scores']['final']:.3f}", fill="black")
+        draw.text((x + 8, 40), f"condition {candidate['scores']['condition']:.3f}", fill="black")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(output_path)
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise KeyframeScoreError(f"Cannot read keyframe score input {path.as_posix()}: {error}") from error
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git_commit(project_root: Path) -> str:
+    import subprocess
+
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project_root, text=True).strip()
