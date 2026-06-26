@@ -14,9 +14,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
 DEFAULT_JUDGE_REPO_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 DEFAULT_JUDGE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
+DEFAULT_JUDGE_QUANTIZATION = "bitsandbytes-8bit"
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
 DEFAULT_MIN_PIXELS = 256 * 28 * 28
 JUDGE_SCHEMA_VERSION = 1
+DEFAULT_CALIBRATION_FIXTURE = Path("judge_fixtures/ai46_walk_contact_640x960_ref384_seed_sweep.json")
+MAX_FULL_PAIRWISE_CANDIDATES = 16
 
 
 class KeyframeJudgeError(RuntimeError):
@@ -77,6 +80,18 @@ class PairwiseRanking(StrictModel):
     winner: str
     evidence: str
     comparisons: list[PairwiseComparison] = Field(default_factory=list)
+
+
+class OrderConstraint(StrictModel):
+    better: str
+    worse: str
+
+
+class CalibrationFixture(StrictModel):
+    schema_version: int
+    id: str
+    expected_order_constraints: list[OrderConstraint]
+    expected_rejects: dict[str, list[str]]
 
 
 @dataclass(frozen=True)
@@ -258,22 +273,74 @@ def judge_keyframe_run(
     return payload
 
 
-def select_keyframe_run(run_dir: Path, *, judge_id: str) -> dict[str, Any]:
+def calibrate_keyframe_judge(run_dir: Path, *, judge_id: str, fixture_path: Path) -> dict[str, Any]:
     judge_dir = run_dir.resolve() / "judge" / judge_id
     judge_result = _read_json(judge_dir / "judge.json")
+    fixture = _load_calibration_fixture(fixture_path)
+    final_order = judge_result["ranking"]["final"]
     candidates_by_name = {candidate["candidate"]: candidate for candidate in judge_result["candidates"]}
-    selected = []
-    rejected = []
-    for name in judge_result["ranking"]["final"]:
-        candidate = candidates_by_name[name]
-        judgment = candidate["judgment"]
-        if judgment["pass"] and not any(judgment["hard_rejects"].values()):
-            selected.append(candidate)
-        else:
-            rejected.append(candidate)
+    checks = []
+    for constraint in fixture.expected_order_constraints:
+        passed = final_order.index(constraint.better) < final_order.index(constraint.worse)
+        checks.append(
+            {
+                "type": "order",
+                "better": constraint.better,
+                "worse": constraint.worse,
+                "passed": passed,
+            }
+        )
+    for candidate_name, reject_names in fixture.expected_rejects.items():
+        hard_rejects = candidates_by_name[candidate_name]["judgment"]["hard_rejects"]
+        for reject_name in reject_names:
+            checks.append(
+                {
+                    "type": "hard_reject",
+                    "candidate": candidate_name,
+                    "reject": reject_name,
+                    "passed": bool(hard_rejects[reject_name]),
+                }
+            )
+    passed = all(check["passed"] for check in checks)
+    payload = {
+        "schema_version": 1,
+        "status": "completed",
+        "judge_status": "calibrated" if passed else "uncalibrated",
+        "usable_for_auto_select": passed,
+        "fixture": fixture.model_dump(mode="json"),
+        "judge": judge_id,
+        "run_dir": run_dir.resolve().as_posix(),
+        "checks": checks,
+    }
+    _write_json(judge_dir / "calibration.json", payload)
+    return payload
+
+
+def select_keyframe_run(
+    run_dir: Path,
+    *,
+    judge_id: str,
+    top: int,
+    allow_uncalibrated: bool,
+) -> dict[str, Any]:
+    if top < 1:
+        raise KeyframeJudgeError("select --top must be at least 1")
+    judge_dir = run_dir.resolve() / "judge" / judge_id
+    judge_result = _read_json(judge_dir / "judge.json")
+    calibration = _read_calibration(judge_dir)
+    if not allow_uncalibrated and not calibration.get("usable_for_auto_select", False):
+        raise KeyframeJudgeError(
+            "Refusing automatic selection: judge is uncalibrated on golden fixture. "
+            "Run `aigen keyframes judge-calibrate` or pass --allow-uncalibrated."
+        )
+    candidates_by_name = {candidate["candidate"]: candidate for candidate in judge_result["candidates"]}
+    ordered = [candidates_by_name[name] for name in judge_result["ranking"]["final"]]
+    if top > len(ordered):
+        raise KeyframeJudgeError(f"select --top {top} exceeds candidate count {len(ordered)}")
+    selected = ordered[:top]
+    rejected = ordered[top:]
     _write_json(judge_dir / "selected.json", {"schema_version": 1, "selected": selected})
     _write_json(judge_dir / "rejected.json", {"schema_version": 1, "rejected": rejected})
-    ordered = [candidates_by_name[name] for name in judge_result["ranking"]["final"]]
     _save_ranked_sheet(ordered, judge_dir / "ranked_contact_sheet.png", image_key="image")
     _save_ranked_sheet(ordered, judge_dir / "condition_overlay_ranked.png", image_key="overlay")
     payload = {
@@ -281,6 +348,8 @@ def select_keyframe_run(run_dir: Path, *, judge_id: str) -> dict[str, Any]:
         "status": "completed",
         "judge": judge_id,
         "run_dir": run_dir.resolve().as_posix(),
+        "calibration": calibration,
+        "top": top,
         "selected": [candidate["candidate"] for candidate in selected],
         "rejected": [candidate["candidate"] for candidate in rejected],
         "outputs": {
@@ -391,11 +460,10 @@ def _pairwise_prompt(candidate_a: str, candidate_b: str, effective_config: dict[
     return f"""You are doing a strict A/B comparison for platformer keyframe QA.
 
 You will receive these images in order:
-1. Original character reference.
-2. Target pose condition.
-3. Target contour condition.
-4. A side-by-side candidate sheet. #1 is {candidate_a}; #2 is {candidate_b}.
-5. A side-by-side red-contour overlay sheet with the same labels. #1 is {candidate_a}; #2 is {candidate_b}.
+1. Target contour condition.
+2. A side-by-side red-contour overlay sheet. #1 is {candidate_a}; #2 is {candidate_b}.
+3. A side-by-side full candidate sheet with the same labels. #1 is {candidate_a}; #2 is {candidate_b}.
+4. Original character reference for identity tiebreak only.
 
 Choose exactly one winner. Judge only by condition adherence first, then strict side profile, then identity and outfit preservation. Do not reward an image merely because it is prettier.
 
@@ -416,7 +484,7 @@ Return valid JSON only with exactly this shape:
 {{
   "candidate_a": "{candidate_a}",
   "candidate_b": "{candidate_b}",
-  "winner": "{candidate_a}",
+  "winner": "<candidate_a or candidate_b>",
   "evidence": "short factual reason"
 }}
 Do not wrap the JSON in Markdown code fences."""
@@ -432,7 +500,7 @@ def _run_pairwise_ranking(
     prompts_dir: Path,
     raw_dir: Path,
 ) -> PairwiseRanking | None:
-    top_names = initial_order[: config.pairwise_top_k]
+    top_names = _pairwise_candidate_names(candidate_results, initial_order, config.pairwise_top_k)
     if len(top_names) < 2:
         return None
     candidates_by_name = {candidate["candidate"]: candidate for candidate in candidate_results}
@@ -449,11 +517,10 @@ def _run_pairwise_ranking(
             _save_ranked_sheet(pair, pairwise_candidate_sheet, image_key="image")
             _save_ranked_sheet(pair, pairwise_overlay_sheet, image_key="overlay")
             image_paths = [
-                Path(assets["reference"]["path"]),
-                Path(assets["pose"]["path"]),
                 Path(assets["contour"]["path"]),
-                pairwise_candidate_sheet,
                 pairwise_overlay_sheet,
+                pairwise_candidate_sheet,
+                Path(assets["reference"]["path"]),
             ]
             prompt = _pairwise_prompt(candidate_a, candidate_b, effective_config)
             (prompts_dir / f"{slug}.txt").write_text(prompt, encoding="utf-8")
@@ -506,6 +573,22 @@ def _parse_pairwise_comparison(raw_text: str) -> PairwiseComparison:
         raise KeyframeJudgeError(f"Judge returned invalid pairwise comparison JSON: {error}") from error
 
 
+def _pairwise_candidate_names(
+    candidate_results: list[dict[str, Any]],
+    initial_order: list[str],
+    pairwise_top_k: int,
+) -> list[str]:
+    candidates_by_name = {candidate["candidate"]: candidate for candidate in candidate_results}
+    eligible = [
+        name
+        for name in initial_order
+        if not any(candidates_by_name[name]["judgment"]["hard_rejects"].values())
+    ]
+    if len(eligible) <= MAX_FULL_PAIRWISE_CANDIDATES:
+        return eligible
+    return eligible[:pairwise_top_k]
+
+
 def _json_from_vlm_response(raw_text: str) -> dict[str, Any]:
     text = raw_text.strip()
     if text.startswith("```"):
@@ -530,6 +613,24 @@ def _canonicalize_evidence(data: dict[str, Any]) -> None:
         value = evidence.get(key)
         if isinstance(value, list):
             evidence[key] = " ".join(str(item) for item in value)
+
+
+def _load_calibration_fixture(path: Path) -> CalibrationFixture:
+    try:
+        return CalibrationFixture.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, ValidationError) as error:
+        raise KeyframeJudgeError(f"Invalid judge calibration fixture {path.as_posix()}: {error}") from error
+
+
+def _read_calibration(judge_dir: Path) -> dict[str, Any]:
+    calibration_path = judge_dir / "calibration.json"
+    if not calibration_path.exists():
+        return {
+            "judge_status": "uncalibrated",
+            "usable_for_auto_select": False,
+            "reason": "missing calibration.json",
+        }
+    return _read_json(calibration_path)
 
 
 def _rank_candidate_names(candidate_results: list[dict[str, Any]]) -> list[str]:

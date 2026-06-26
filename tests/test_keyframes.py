@@ -25,11 +25,14 @@ from aigen.keyframes import (
     validate_keyframe_job,
 )
 from aigen.keyframe_judge import (
+    DEFAULT_CALIBRATION_FIXTURE,
     DEFAULT_JUDGE_ID,
+    DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
     KeyframeJudgeConfig,
     QwenKeyframeJudge,
+    calibrate_keyframe_judge,
     judge_keyframe_run,
     select_keyframe_run,
 )
@@ -450,7 +453,7 @@ class KeyframeTests(unittest.TestCase):
                 revision=DEFAULT_JUDGE_REVISION,
                 dtype="bfloat16",
                 attention_impl="sdpa",
-                quantization="bitsandbytes-4bit",
+                quantization=DEFAULT_JUDGE_QUANTIZATION,
                 min_pixels=1,
                 max_pixels=2,
                 max_new_tokens=512,
@@ -464,16 +467,70 @@ class KeyframeTests(unittest.TestCase):
                 project_root=Path.cwd(),
                 runner=FakeJudgeRunner(),
             )
-            selection = select_keyframe_run(run_dir, judge_id=DEFAULT_JUDGE_ID)
+            calibration = calibrate_keyframe_judge(
+                run_dir,
+                judge_id=DEFAULT_JUDGE_ID,
+                fixture_path=Path(DEFAULT_CALIBRATION_FIXTURE),
+            )
+            selection = select_keyframe_run(
+                run_dir,
+                judge_id=DEFAULT_JUDGE_ID,
+                top=1,
+                allow_uncalibrated=False,
+            )
             ranked_sheet_exists = Path(selection["outputs"]["ranked_contact_sheet"]).exists()
             overlay_sheet_exists = Path(selection["outputs"]["condition_overlay_ranked"]).exists()
 
         self.assertEqual(judge_result["ranking"]["final"], ["seed_003", "seed_002", "seed_005"])
+        self.assertTrue(calibration["usable_for_auto_select"])
         self.assertEqual(selection["best"], "seed_003")
-        self.assertEqual(selection["selected"], ["seed_003", "seed_002"])
-        self.assertEqual(selection["rejected"], ["seed_005"])
+        self.assertEqual(selection["selected"], ["seed_003"])
+        self.assertEqual(selection["rejected"], ["seed_002", "seed_005"])
         self.assertTrue(ranked_sheet_exists)
         self.assertTrue(overlay_sheet_exists)
+
+    def test_keyframe_select_refuses_uncalibrated_judge_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_keyframe_result(root)
+            config = KeyframeJudgeConfig(
+                judge_id=DEFAULT_JUDGE_ID,
+                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                repo_id=DEFAULT_JUDGE_REPO_ID,
+                revision=DEFAULT_JUDGE_REVISION,
+                dtype="bfloat16",
+                attention_impl="sdpa",
+                quantization=DEFAULT_JUDGE_QUANTIZATION,
+                min_pixels=1,
+                max_pixels=2,
+                max_new_tokens=512,
+                temperature=0.0,
+                pairwise_top_k=3,
+            )
+
+            judge_keyframe_run(
+                run_dir,
+                config,
+                project_root=Path.cwd(),
+                runner=FakeJudgeRunner(),
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Refusing automatic selection"):
+                select_keyframe_run(
+                    run_dir,
+                    judge_id=DEFAULT_JUDGE_ID,
+                    top=1,
+                    allow_uncalibrated=False,
+                )
+
+            selection = select_keyframe_run(
+                run_dir,
+                judge_id=DEFAULT_JUDGE_ID,
+                top=1,
+                allow_uncalibrated=True,
+            )
+
+        self.assertEqual(selection["selected"], ["seed_003"])
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -486,7 +543,7 @@ class KeyframeTests(unittest.TestCase):
                         revision=DEFAULT_JUDGE_REVISION,
                         dtype="bfloat16",
                         attention_impl="sdpa",
-                        quantization="bitsandbytes-4bit",
+                        quantization=DEFAULT_JUDGE_QUANTIZATION,
                         min_pixels=1,
                         max_pixels=2,
                         max_new_tokens=512,

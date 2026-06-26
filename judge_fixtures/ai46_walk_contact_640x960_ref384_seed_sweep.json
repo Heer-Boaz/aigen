@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "ai46.walk_contact.640x960_ref384.seed_sweep.v1",
+  "expected_order_constraints": [
+    {
+      "better": "seed_003",
+      "worse": "seed_002"
+    },
+    {
+      "better": "seed_003",
+      "worse": "seed_005"
+    },
+    {
+      "better": "seed_002",
+      "worse": "seed_005"
+    }
+  ],
+  "expected_rejects": {
+    "seed_005": [
+      "front_or_three_quarter_view"
+    ]
+  }
+}

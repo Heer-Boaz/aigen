@@ -39,13 +39,16 @@ from aigen.keyframes import (
     validate_keyframe_job,
 )
 from aigen.keyframe_judge import (
+    DEFAULT_CALIBRATION_FIXTURE,
     DEFAULT_JUDGE_ID,
+    DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
     DEFAULT_MAX_PIXELS,
     DEFAULT_MIN_PIXELS,
     KeyframeJudgeConfig,
     KeyframeJudgeError,
+    calibrate_keyframe_judge,
     judge_keyframe_run,
     select_keyframe_run,
 )
@@ -496,9 +499,9 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     )
     judge.add_argument(
         "--quantization",
-        choices=("bitsandbytes-4bit", "bitsandbytes-8bit", "none"),
-        default="bitsandbytes-4bit",
-        help="Local inference quantization for the 7B judge model",
+        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
+        default=DEFAULT_JUDGE_QUANTIZATION,
+        help="Local inference quantization for the 7B judge; 8-bit is the calibration default",
     )
     judge.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
     judge.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
@@ -507,9 +510,29 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     judge.add_argument("--pairwise-top-k", type=int, default=3, help="Final pairwise ranking candidate count")
     judge.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    calibrate = keyframe_subparsers.add_parser(
+        "judge-calibrate",
+        help="Calibrate a completed judge result against a golden fixture",
+    )
+    calibrate.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    calibrate.add_argument("--from-judge", default=DEFAULT_JUDGE_ID, help="Judge id to read")
+    calibrate.add_argument(
+        "--fixture",
+        type=Path,
+        default=PROJECT_ROOT / DEFAULT_CALIBRATION_FIXTURE,
+        help="Judge calibration fixture JSON",
+    )
+    calibrate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     select = keyframe_subparsers.add_parser("select", help="Select/reject outputs from a keyframe judge result")
     select.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
     select.add_argument("--from-judge", default=DEFAULT_JUDGE_ID, help="Judge id to read")
+    select.add_argument("--top", type=int, default=1, help="Number of top-ranked candidates to select")
+    select.add_argument(
+        "--allow-uncalibrated",
+        action="store_true",
+        help="Allow selection even when judge calibration is missing or failed",
+    )
     select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
@@ -1223,10 +1246,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
+            if args.keyframes_command == "judge-calibrate":
+                _dump_json(
+                    sys.stdout,
+                    calibrate_keyframe_judge(
+                        args.run_dir,
+                        judge_id=args.from_judge,
+                        fixture_path=args.fixture,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
             if args.keyframes_command == "select":
                 _dump_json(
                     sys.stdout,
-                    select_keyframe_run(args.run_dir, judge_id=args.from_judge),
+                    select_keyframe_run(
+                        args.run_dir,
+                        judge_id=args.from_judge,
+                        top=args.top,
+                        allow_uncalibrated=args.allow_uncalibrated,
+                    ),
                     pretty=not args.compact,
                 )
                 return 0
