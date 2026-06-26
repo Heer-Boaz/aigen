@@ -17,11 +17,8 @@ from aigen.generation.pixel_art import (
     run_pixel_art,
 )
 from aigen.generation.kontext_pose_control import (
-    BACKGROUND_ABLATION_SWEEP,
     CharacterKontextPoseError,
-    QUALITY_STRENGTH_SWEEP,
     run_character_kontext_pose_control,
-    run_character_kontext_pose_sweep,
 )
 from aigen.generation.nunchaku_kontext import (
     NunchakuKontextError,
@@ -30,6 +27,16 @@ from aigen.generation.nunchaku_kontext import (
 from aigen.generation.pose_control import (
     CharacterPoseError,
     run_character_pose_control,
+)
+from aigen.keyframes import (
+    KeyframeJobError,
+    KeyframeProfile,
+    c2_profile_template,
+    keyframe_job_schema,
+    load_keyframe_job,
+    plan_keyframe_job,
+    run_keyframe_job,
+    validate_keyframe_job,
 )
 from aigen.models.downloads import (
     ModelDownloadError,
@@ -378,6 +385,22 @@ NUNCHAKU_KONTEXT_POSE_PROFILES = {
 }
 
 
+KEYFRAME_MODEL_REVISIONS = {
+    "kontext": {
+        "repo_id": "eramth/flux-kontext-4bit-fp4",
+        "revision": "499964b43d54eda6ca7e21c346efe18e2a1cdad8",
+    },
+    "controlnet": {
+        "repo_id": "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
+        "revision": "5d700aaad96c5ddcdf8a38ef9b22a82aac2c38e5",
+    },
+    "nunchaku_transformer": {
+        "repo_id": "nunchaku-tech/nunchaku-flux.1-kontext-dev",
+        "revision": "70dff7728491f3016e256137e8f7d87812af0b4f",
+    },
+}
+
+
 def _dump_json(handle: TextIO, payload: object, pretty: bool) -> None:
     json.dump(
         payload,
@@ -393,6 +416,57 @@ def _write_json(path: Path, payload: object, pretty: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         _dump_json(handle, payload, pretty)
+
+
+def _keyframe_profile(profile_name: str) -> KeyframeProfile:
+    if profile_name != "nunchaku-kontext-pose-quality":
+        raise KeyframeJobError(f"Unknown keyframe profile: {profile_name}")
+    profile = NUNCHAKU_KONTEXT_POSE_PROFILES["quality"]
+    return KeyframeProfile(
+        name=profile_name,
+        model=profile.model,
+        controlnet_model=profile.controlnet_model,
+        nunchaku_transformer_model=profile.nunchaku_transformer_model,
+        attention_impl=profile.attention_impl,
+        dtype=profile.dtype,
+        pipeline_cpu_offload=profile.pipeline_cpu_offload,
+        nunchaku_layer_offload=profile.nunchaku_layer_offload,
+        vae_tiling=profile.vae_tiling,
+        model_revisions=KEYFRAME_MODEL_REVISIONS,
+    )
+
+
+def _keyframe_profile_for_job(job_path: Path) -> KeyframeProfile:
+    return _keyframe_profile(load_keyframe_job(job_path).pipeline.profile)
+
+
+def _add_keyframe_commands(subparsers: Any) -> None:
+    keyframes = subparsers.add_parser("keyframes", help="JSON-first character keyframe jobs")
+    keyframe_subparsers = keyframes.add_subparsers(dest="keyframes_command", required=True)
+
+    init = keyframe_subparsers.add_parser("init", help="Write a keyframe job template to stdout")
+    init.add_argument(
+        "--template",
+        choices=("c2-profile",),
+        required=True,
+        help="Template keyframe job to emit",
+    )
+    init.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    schema = keyframe_subparsers.add_parser("schema", help="Write the keyframe JSON schema to stdout")
+    schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    validate = keyframe_subparsers.add_parser("validate", help="Validate a keyframe job without running the GPU")
+    validate.add_argument("job", type=Path, help="Keyframe job JSON")
+    validate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    plan = keyframe_subparsers.add_parser("plan", help="Resolve a keyframe job without running the GPU")
+    plan.add_argument("job", type=Path, help="Keyframe job JSON")
+    plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    run = keyframe_subparsers.add_parser("run", help="Run a resolved keyframe job")
+    run.add_argument("job", type=Path, help="Keyframe job JSON")
+    run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def _add_model_commands(subparsers: Any) -> None:
@@ -440,7 +514,6 @@ def _add_generate_commands(subparsers: Any) -> None:
     _add_character_kontext_pose_command(generate_subparsers)
     _add_character_nunchaku_kontext_command(generate_subparsers)
     _add_character_nunchaku_kontext_pose_command(generate_subparsers)
-    _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers)
     _add_character_pose_command(generate_subparsers)
     _add_pixel_art_command(generate_subparsers)
 
@@ -1041,133 +1114,6 @@ def _add_character_nunchaku_kontext_pose_command(generate_subparsers: Any) -> No
     )
 
 
-def _add_character_nunchaku_kontext_pose_sweep_command(generate_subparsers: Any) -> None:
-    sweep = generate_subparsers.add_parser(
-        "character-nunchaku-kontext-pose-sweep",
-        help="Run the fixed-seed Nunchaku Kontext pose background ablation sweep",
-    )
-    sweep.add_argument(
-        "--profile",
-        choices=tuple(NUNCHAKU_KONTEXT_POSE_PROFILES),
-        default="local",
-        help="Nunchaku Kontext pose generation profile",
-    )
-    sweep.add_argument("--model", default=argparse.SUPPRESS, help="Local Diffusers FLUX Kontext component folder")
-    sweep.add_argument("--controlnet-model", default=argparse.SUPPRESS, help="Local FLUX pose ControlNet folder")
-    sweep.add_argument(
-        "--nunchaku-transformer-model",
-        type=Path,
-        default=argparse.SUPPRESS,
-        help="Local Nunchaku FLUX Kontext transformer safetensors file",
-    )
-    sweep.add_argument(
-        "--attention-impl",
-        default=argparse.SUPPRESS,
-        help="Nunchaku attention implementation, for example nunchaku-fp16",
-    )
-    sweep.add_argument("--reference-image", type=Path, required=True, help="Reference character image")
-    sweep.add_argument("--pose-image", type=Path, required=True, help="Pose control image")
-    sweep.add_argument("--prompt", required=True, help="Generation instruction")
-    sweep.add_argument("--output-dir", type=Path, required=True, help="Directory where sweep images are written")
-    sweep.add_argument(
-        "--sweep-variant-set",
-        choices=(BACKGROUND_ABLATION_SWEEP, QUALITY_STRENGTH_SWEEP),
-        default=BACKGROUND_ABLATION_SWEEP,
-        help="Fixed sweep variant set to run",
-    )
-    sweep.add_argument("--device", default="cuda", help="Torch device")
-    sweep.add_argument(
-        "--dtype",
-        choices=("auto", "bfloat16", "float16", "float32"),
-        default=argparse.SUPPRESS,
-        help="Torch dtype for non-transformer pipeline components",
-    )
-    sweep.add_argument("--steps", type=int, default=argparse.SUPPRESS, help="Denoising steps")
-    sweep.add_argument("--guidance-scale", type=float, default=argparse.SUPPRESS, help="Prompt guidance scale")
-    sweep.add_argument(
-        "--true-cfg-scale",
-        type=float,
-        default=argparse.SUPPRESS,
-        help="Kontext true CFG scale used with the negative prompt",
-    )
-    sweep.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Generated image width")
-    sweep.add_argument("--height", type=int, default=argparse.SUPPRESS, help="Generated image height")
-    sweep.add_argument(
-        "--reference-max-area",
-        type=int,
-        default=argparse.SUPPRESS,
-        help="Maximum pixel area for the Kontext reference image before VAE encoding",
-    )
-    sweep.add_argument(
-        "--max-sequence-length",
-        type=int,
-        default=argparse.SUPPRESS,
-        help="T5 text token budget for the prompt",
-    )
-    sweep.add_argument(
-        "--framing",
-        choices=("full-body", "portrait"),
-        default=argparse.SUPPRESS,
-        help="Character composition contract",
-    )
-    sweep.add_argument(
-        "--negative-prompt",
-        default=DEFAULT_NEGATIVE_PROMPT,
-        help="Prompt content to avoid; defaults to the built-in character-art negative prompt",
-    )
-    sweep.add_argument("--seed", type=int, default=argparse.SUPPRESS, help="Deterministic seed")
-    tiling = sweep.add_mutually_exclusive_group()
-    tiling.add_argument(
-        "--vae-tiling",
-        dest="vae_tiling",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Enable VAE tiling to reduce peak memory during encode/decode",
-    )
-    tiling.add_argument(
-        "--no-vae-tiling",
-        dest="vae_tiling",
-        action="store_false",
-        default=argparse.SUPPRESS,
-        help="Disable VAE tiling for smaller preview runs",
-    )
-    offload = sweep.add_mutually_exclusive_group()
-    offload.add_argument(
-        "--cpu-offload",
-        dest="pipeline_cpu_offload",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Enable Diffusers pipeline CPU offload",
-    )
-    offload.add_argument(
-        "--no-cpu-offload",
-        dest="pipeline_cpu_offload",
-        action="store_false",
-        default=argparse.SUPPRESS,
-        help="Keep Diffusers pipeline components on the target device",
-    )
-    nunchaku_offload = sweep.add_mutually_exclusive_group()
-    nunchaku_offload.add_argument(
-        "--nunchaku-layer-offload",
-        dest="nunchaku_layer_offload",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Enable Nunchaku internal transformer layer offload",
-    )
-    nunchaku_offload.add_argument(
-        "--no-nunchaku-layer-offload",
-        dest="nunchaku_layer_offload",
-        action="store_false",
-        default=argparse.SUPPRESS,
-        help="Keep Nunchaku transformer layers resident",
-    )
-    sweep.add_argument(
-        "--compact",
-        action="store_true",
-        help="Write compact JSON instead of pretty printed JSON",
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="aigen",
@@ -1175,6 +1121,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_generate_commands(subparsers)
+    _add_keyframe_commands(subparsers)
     _add_model_commands(subparsers)
     return parser
 
@@ -1199,6 +1146,49 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             _dump_json(sys.stdout, payload, pretty=not args.compact)
         return 0
+
+    if args.command == "keyframes":
+        try:
+            if args.keyframes_command == "init":
+                _dump_json(sys.stdout, c2_profile_template(), pretty=not args.compact)
+                return 0
+            if args.keyframes_command == "schema":
+                _dump_json(sys.stdout, keyframe_job_schema(), pretty=not args.compact)
+                return 0
+            profile = _keyframe_profile_for_job(args.job)
+            if args.keyframes_command == "validate":
+                _dump_json(
+                    sys.stdout,
+                    validate_keyframe_job(args.job, profile, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command == "plan":
+                _dump_json(
+                    sys.stdout,
+                    plan_keyframe_job(args.job, profile, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command == "run":
+                _dump_json(
+                    sys.stdout,
+                    run_keyframe_job(args.job, profile, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
+        except KeyframeJobError as error:
+            _dump_json(
+                sys.stderr,
+                {
+                    "schema_version": 1,
+                    "status": "error",
+                    "error": error.__class__.__name__,
+                    "message": str(error),
+                },
+                pretty=not args.compact,
+            )
+            return 1
 
     if args.command == "generate" and args.generate_command == "character-concept":
         values = vars(args)
@@ -1432,54 +1422,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     profile.nunchaku_transformer_model,
                 ),
                 attention_impl=values.get("attention_impl", profile.attention_impl),
-            )
-        except CharacterKontextPoseError as error:
-            _dump_json(
-                sys.stderr,
-                {
-                    "schema_version": 1,
-                    "status": "error",
-                    "error": error.__class__.__name__,
-                    "message": str(error),
-                },
-                pretty=not args.compact,
-            )
-            return 1
-        _dump_json(sys.stdout, result.to_json(), pretty=not args.compact)
-        return 0
-
-    if args.command == "generate" and args.generate_command == "character-nunchaku-kontext-pose-sweep":
-        values = vars(args)
-        profile = NUNCHAKU_KONTEXT_POSE_PROFILES[args.profile]
-        try:
-            result = run_character_kontext_pose_sweep(
-                values.get("model", profile.model),
-                values.get("controlnet_model", profile.controlnet_model),
-                args.reference_image,
-                args.pose_image,
-                args.output_dir,
-                args.prompt,
-                device=args.device,
-                dtype=values.get("dtype", profile.dtype),
-                steps=values.get("steps", profile.steps),
-                guidance_scale=values.get("guidance_scale", profile.guidance_scale),
-                true_cfg_scale=values.get("true_cfg_scale", profile.true_cfg_scale),
-                width=values.get("width", profile.width),
-                height=values.get("height", profile.height),
-                reference_max_area=values.get("reference_max_area", profile.reference_max_area),
-                max_sequence_length=values.get("max_sequence_length", profile.max_sequence_length),
-                framing=values.get("framing", profile.framing),
-                negative_prompt=args.negative_prompt,
-                seed=values.get("seed", profile.seed),
-                pipeline_cpu_offload=values.get("pipeline_cpu_offload", profile.pipeline_cpu_offload),
-                nunchaku_layer_offload=values.get("nunchaku_layer_offload", profile.nunchaku_layer_offload),
-                vae_tiling=values.get("vae_tiling", profile.vae_tiling),
-                nunchaku_transformer_model=values.get(
-                    "nunchaku_transformer_model",
-                    profile.nunchaku_transformer_model,
-                ),
-                attention_impl=values.get("attention_impl", profile.attention_impl),
-                sweep_variant_set=args.sweep_variant_set,
             )
         except CharacterKontextPoseError as error:
             _dump_json(

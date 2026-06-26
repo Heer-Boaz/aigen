@@ -15,8 +15,6 @@ import torch
 from aigen.cli import CHARACTER_KONTEXT_POSE_PROFILES, main
 from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseResult,
-    CharacterKontextPoseSweepResult,
-    KontextPoseDenoised,
     KontextPosePrepared,
     add_control_residuals,
     apply_control_residual_mask,
@@ -24,7 +22,6 @@ from aigen.generation.kontext_pose_control import (
     fit_size_to_area,
     residual_suffix_is_zero,
     run_character_kontext_pose_control,
-    run_character_kontext_pose_sweep,
 )
 
 
@@ -398,171 +395,6 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(result.nunchaku_transformer_model, nunchaku_model.resolve().as_posix())
         self.assertEqual(result.attention_impl, "nunchaku-fp16")
 
-    def test_sweep_reuses_conditioning_and_closes_session(self) -> None:
-        from PIL import Image
-
-        class FakeSweepSession:
-            instance: FakeSweepSession
-
-            def __init__(self, *args: object, **kwargs: object) -> None:
-                self.model_load_ms = 7.0
-                self.pipeline = FakePipeline()
-                self.prepare_calls = 0
-                self.control_prepare_calls = 0
-                self.denoise_prepared: list[KontextPosePrepared] = []
-                self.decode_chunk_size = 0
-                self.closed = False
-                FakeSweepSession.instance = self
-
-            def prepare(self, **kwargs: object) -> KontextPosePrepared:
-                self.prepare_calls += 1
-                return fake_prepared(kwargs["seed"])
-
-            def prepare_control_condition(
-                self,
-                prepared: KontextPosePrepared,
-                *,
-                pose_image: object,
-                seed: int,
-            ) -> tuple[str, bool, float]:
-                self.control_prepare_calls += 1
-                return "nearest-control", False, 3.0
-
-            def denoise_many(
-                self,
-                prepared: KontextPosePrepared,
-                variants: Sequence[object],
-            ) -> list[KontextPoseDenoised]:
-                self.denoise_prepared.append(prepared)
-                return [
-                    KontextPoseDenoised(
-                        name=variant.name,
-                        latents=torch.ones((1, 2, 3)),
-                        controlnet_conditioning_scale=variant.controlnet_conditioning_scale,
-                        control_guidance_start=variant.control_guidance_start,
-                        control_guidance_end=variant.control_guidance_end,
-                        seed=variant.seed,
-                        transformer_step_ms=[1.0],
-                        controlnet_step_ms=[0.0],
-                        controlnet_active_steps=0,
-                        controlnet_metadata={},
-                        timings_ms={"denoise_ms": 1.0},
-                    )
-                    for variant in variants
-                ]
-
-            def decode_many(
-                self,
-                prepared: KontextPosePrepared,
-                denoised: Sequence[KontextPoseDenoised],
-                *,
-                chunk_size: int = 1,
-            ) -> tuple[list[FakeImage], float]:
-                self.decode_chunk_size = chunk_size
-                return [FakeImage() for _result in denoised], 4.0
-
-            def close(self) -> None:
-                self.closed = True
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            reference_image = root / "reference.png"
-            pose_image = root / "pose.png"
-            output_dir = root / "sweep"
-            reference_image.write_bytes(b"reference")
-            Image.new("RGB", (16, 16), "black").save(pose_image)
-
-            with patch(
-                "aigen.generation.kontext_pose_control.CharacterKontextPoseSession",
-                FakeSweepSession,
-            ):
-                with patch(
-                    "aigen.generation.kontext_pose_control._load_flux_kontext_controlnet",
-                    side_effect=fake_loader,
-                ):
-                    result = run_character_kontext_pose_sweep(
-                        "/models/flux-kontext",
-                        "/models/controlnet",
-                        reference_image,
-                        pose_image,
-                        output_dir,
-                        "same character running",
-                        device="cpu",
-                        seed=123,
-                    )
-
-        session = FakeSweepSession.instance
-        self.assertEqual(session.prepare_calls, 1)
-        self.assertEqual(session.control_prepare_calls, 1)
-        self.assertEqual(session.denoise_prepared[0].control_image, "current-control")
-        self.assertEqual(session.denoise_prepared[1].control_image, "nearest-control")
-        self.assertEqual(session.decode_chunk_size, 1)
-        self.assertTrue(session.closed)
-        self.assertEqual(len(result.outputs), 4)
-        self.assertEqual(result.outputs[0]["name"], "A_scale000_current")
-
-    def test_sweep_closes_session_after_failure(self) -> None:
-        from PIL import Image
-
-        class FailingSweepSession:
-            instance: FailingSweepSession
-
-            def __init__(self, *args: object, **kwargs: object) -> None:
-                self.model_load_ms = 7.0
-                self.pipeline = FakePipeline()
-                self.closed = False
-                FailingSweepSession.instance = self
-
-            def prepare(self, **kwargs: object) -> KontextPosePrepared:
-                return fake_prepared(kwargs["seed"])
-
-            def prepare_control_condition(
-                self,
-                prepared: KontextPosePrepared,
-                *,
-                pose_image: object,
-                seed: int,
-            ) -> tuple[str, bool, float]:
-                return "nearest-control", False, 3.0
-
-            def denoise_many(
-                self,
-                prepared: KontextPosePrepared,
-                variants: Sequence[object],
-            ) -> list[KontextPoseDenoised]:
-                raise RuntimeError("denoise failed")
-
-            def close(self) -> None:
-                self.closed = True
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            reference_image = root / "reference.png"
-            pose_image = root / "pose.png"
-            reference_image.write_bytes(b"reference")
-            Image.new("RGB", (16, 16), "black").save(pose_image)
-
-            with patch(
-                "aigen.generation.kontext_pose_control.CharacterKontextPoseSession",
-                FailingSweepSession,
-            ):
-                with patch(
-                    "aigen.generation.kontext_pose_control._load_flux_kontext_controlnet",
-                    side_effect=fake_loader,
-                ):
-                    with self.assertRaisesRegex(RuntimeError, "denoise failed"):
-                        run_character_kontext_pose_sweep(
-                            "/models/flux-kontext",
-                            "/models/controlnet",
-                            reference_image,
-                            pose_image,
-                            root / "sweep",
-                            "same character running",
-                            device="cpu",
-                        )
-
-        self.assertTrue(FailingSweepSession.instance.closed)
-
     def test_cli_character_kontext_pose_uses_local_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -829,80 +661,6 @@ class KontextPoseControlTests(unittest.TestCase):
         self.assertEqual(run_pose_mock.call_args.kwargs["steps"], 20)
         self.assertEqual(run_pose_mock.call_args.kwargs["controlnet_conditioning_scale"], 0.50)
         self.assertEqual(run_pose_mock.call_args.kwargs["control_guidance_end"], 0.50)
-
-    def test_cli_character_nunchaku_kontext_pose_sweep_uses_local_profile(self) -> None:
-        from aigen.cli import NUNCHAKU_KONTEXT_POSE_PROFILES
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            reference_image = root / "reference.png"
-            pose_image = root / "pose.png"
-            output_dir = root / "sweep"
-            reference_image.write_bytes(b"reference")
-            pose_image.write_bytes(b"pose")
-            profile = NUNCHAKU_KONTEXT_POSE_PROFILES["local"]
-
-            with patch(
-                "aigen.cli.run_character_kontext_pose_sweep",
-                return_value=CharacterKontextPoseSweepResult(
-                    output_dir=output_dir.as_posix(),
-                    sweep_variant_set="background-ablation",
-                    outputs=[],
-                    model=profile.model,
-                    controlnet_model=profile.controlnet_model,
-                    reference_image=reference_image.as_posix(),
-                    pose_image=pose_image.as_posix(),
-                    prompt="same character in exact pose",
-                    pipeline_prompt="full body\n\nsame character in exact pose",
-                    negative_prompt="bad anatomy",
-                    width=profile.width,
-                    height=profile.height,
-                    reference_max_area=profile.reference_max_area,
-                    max_sequence_length=profile.max_sequence_length,
-                    timings_ms={"total_ms": 1.0},
-                    memory={},
-                    environment={},
-                    pipeline_cpu_offload=profile.pipeline_cpu_offload,
-                    nunchaku_layer_offload=profile.nunchaku_layer_offload,
-                    nunchaku_transformer_model=profile.nunchaku_transformer_model.as_posix(),
-                    attention_impl=profile.attention_impl,
-                ),
-            ) as run_sweep_mock:
-                stdout = io.StringIO()
-                with contextlib.redirect_stdout(stdout):
-                    exit_code = main(
-                        [
-                            "generate",
-                            "character-nunchaku-kontext-pose-sweep",
-                            "--reference-image",
-                            str(reference_image),
-                            "--pose-image",
-                            str(pose_image),
-                            "--prompt",
-                            "same character in exact pose",
-                            "--output-dir",
-                            str(output_dir),
-                            "--sweep-variant-set",
-                            "quality-strength",
-                            "--compact",
-                        ]
-                    )
-
-        payload = json.loads(stdout.getvalue())
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(payload["output_dir"], output_dir.as_posix())
-        self.assertEqual(run_sweep_mock.call_args.args[:5], (
-            profile.model,
-            profile.controlnet_model,
-            reference_image,
-            pose_image,
-            output_dir,
-        ))
-        self.assertEqual(run_sweep_mock.call_args.kwargs["steps"], 20)
-        self.assertEqual(run_sweep_mock.call_args.kwargs["pipeline_cpu_offload"], True)
-        self.assertEqual(run_sweep_mock.call_args.kwargs["nunchaku_layer_offload"], False)
-        self.assertEqual(run_sweep_mock.call_args.kwargs["sweep_variant_set"], "quality-strength")
-
 
 if __name__ == "__main__":
     unittest.main()

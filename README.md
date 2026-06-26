@@ -223,35 +223,25 @@ The Nunchaku pose profiles are split by intent:
   --seed 1
 ```
 
-For controlled background-leakage checks, run the phase-batched sweep. It loads
-the pipeline once, prepares the current and nearest-resized pose conditions,
-denoises all variants first, and decodes the images in small VAE chunks:
+For repeated action-keyframe work, use JSON-first keyframe jobs. The job file
+owns the character reference, pose/contour/mask assets, CLIP/T5 prompts, fixed
+seed variants, output naming, and acceptance notes:
 
 ```bash
-.venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose-sweep \
-  --profile local \
-  --reference-image ../ai-art/references/characters/ai51.png \
-  --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
-  --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots. clean plain neutral studio background, uniform soft gray backdrop, no graphic lines or colored streaks." \
-  --output-dir runs/characters/pose_control/ai51_background_ablation \
-  --seed 1 \
-  --compact
+.venv/bin/python -m aigen.cli keyframes init --template c2-profile > jobs/ai46_walk_contact.json
+.venv/bin/python -m aigen.cli keyframes validate jobs/ai46_walk_contact.json
+.venv/bin/python -m aigen.cli keyframes plan jobs/ai46_walk_contact.json
+.venv/bin/python -m aigen.cli keyframes run jobs/ai46_walk_contact.json
 ```
 
-For the next quality pass, keep the normal control-map path and compare pose
-strength against guidance duration at the quality profile size:
+The run writes:
 
-```bash
-.venv/bin/python -m aigen.cli generate character-nunchaku-kontext-pose-sweep \
-  --profile quality \
-  --sweep-variant-set quality-strength \
-  --reference-image ../ai-art/references/characters/ai51.png \
-  --pose-image runs/characters/pose_control/ai51_running_openpose_control_half.png \
-  --prompt "Same anime girl running. Blue eyes, short reddish-brown bob, white shirt, blue tie, burgundy leather jacket, skirt, gloves, blue socks, burgundy boots. clean plain neutral studio background, uniform soft gray backdrop, no graphic lines or colored streaks." \
-  --output-dir runs/characters/pose_control/ai51_quality_strength \
-  --seed 1 \
-  --compact
-```
+- `resolved.json` before denoising, with defaults, absolute paths, asset hashes,
+  model revisions, token counts, active ControlNet steps, and output paths.
+- generated PNGs for each fixed-seed variant.
+- `result.json` after denoising, with outputs, timings, tokens, VRAM, environment
+  and ControlNet metadata.
+- an optional contact sheet and copied condition assets.
 
 For generation dependencies:
 

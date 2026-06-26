@@ -1,0 +1,159 @@
+{
+  "acceptance": {
+    "manual": [
+      "strict side profile",
+      "short bob preserved",
+      "jacket, tie, shorts, socks and boots preserved",
+      "pose reads as walk contact frame"
+    ],
+    "minimum_passing_variants": 1
+  },
+  "assets": {
+    "boundary_mask": {
+      "height": 960,
+      "mode": "L",
+      "path": "/home/boaz/aigen/assets/masks/ai46_walk_contact_boundary_640x960.png",
+      "sha256": "c904090079a0b7137e302304a5b8e07807ea3325d621daeac53c33427ffce30b",
+      "width": 640
+    },
+    "contour": {
+      "height": 960,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/contours/ai46_walk_contact_canny_640x960.png",
+      "sha256": "a3122d7c33d59cf9703399b4ed3de4694048265bdf5bdb3686127386e1fdd2e6",
+      "width": 640
+    },
+    "pose": {
+      "height": 960,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/poses/ai46_walk_contact_pose_640x960.png",
+      "sha256": "2764a36684e37c86a0de5ba7a877ecb6832295823765e3a58961dd4d10fbc8cd",
+      "width": 640
+    }
+  },
+  "canvas": {
+    "height": 960,
+    "max_sequence_length": 128,
+    "reference_max_area": 294912,
+    "width": 640
+  },
+  "character": {
+    "id": "ai46",
+    "reference": {
+      "height": 2048,
+      "mode": "RGBA",
+      "path": "/home/boaz/aigen/assets/characters/AI46.png",
+      "sha256": "bf5a10ef9f18c046de27aca006b70f8f0b6613f30723f666c97684e847da37b2",
+      "width": 1024
+    }
+  },
+  "condition_plan": [
+    {
+      "active_steps": 15,
+      "end": 0.55,
+      "name": "pose",
+      "scale": 0.55,
+      "start": 0.0,
+      "type": "pose"
+    },
+    {
+      "active_steps": 12,
+      "end": 0.45,
+      "name": "profile_contour",
+      "scale": 0.45,
+      "start": 0.0,
+      "type": "canny"
+    }
+  ],
+  "conditions": [
+    {
+      "end": 0.55,
+      "image": "pose",
+      "name": "pose",
+      "scale": 0.55,
+      "start": 0.0,
+      "type": "pose"
+    },
+    {
+      "end": 0.45,
+      "image": "contour",
+      "name": "profile_contour",
+      "residual_mask": "boundary_mask",
+      "scale": 0.45,
+      "start": 0.0,
+      "type": "canny"
+    }
+  ],
+  "git_commit": "f9f22e9a4be841fbc38ea0c06335f37331dbc9a3",
+  "job_id": "ai46.walk.contact.left.640x960.ref384.v1",
+  "job_path": "/home/boaz/aigen/jobs/ai46/walk_contact_640x960_smoke.json",
+  "keyframe": {
+    "action": "walk",
+    "camera": "orthographic-side",
+    "direction": "left",
+    "phase": "contact"
+  },
+  "kind": "resolved-character-keyframe",
+  "output": {
+    "directory": "/home/boaz/aigen/runs/keyframes/ai46/walk_contact/640x960_ref384_v1",
+    "filename": "{id}__{variant}.png",
+    "files": [
+      {
+        "name": "seed_001",
+        "path": "/home/boaz/aigen/runs/keyframes/ai46/walk_contact/640x960_ref384_v1/ai46.walk.contact.left.640x960.ref384.v1__seed_001.png",
+        "seed": 1
+      }
+    ],
+    "overwrite": false,
+    "save_conditions": true,
+    "save_contact_sheet": true
+  },
+  "profile": {
+    "attention_impl": "nunchaku-fp16",
+    "dtype": "bfloat16",
+    "models": {
+      "controlnet": {
+        "path": "/home/boaz/aigen/aigen/models/diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
+        "repo_id": "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
+        "revision": "5d700aaad96c5ddcdf8a38ef9b22a82aac2c38e5"
+      },
+      "kontext": {
+        "path": "/home/boaz/aigen/aigen/models/diffusers/eramth/flux-kontext-4bit-fp4",
+        "repo_id": "eramth/flux-kontext-4bit-fp4",
+        "revision": "499964b43d54eda6ca7e21c346efe18e2a1cdad8"
+      },
+      "nunchaku_transformer": {
+        "path": "/home/boaz/aigen/aigen/models/nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev/svdq-fp4_r32-flux.1-kontext-dev.safetensors",
+        "repo_id": "nunchaku-tech/nunchaku-flux.1-kontext-dev",
+        "revision": "70dff7728491f3016e256137e8f7d87812af0b4f"
+      }
+    },
+    "name": "nunchaku-kontext-pose-quality",
+    "nunchaku_layer_offload": false,
+    "pipeline_cpu_offload": true,
+    "vae_tiling": false
+  },
+  "prompt": {
+    "clip": "Same anime girl in a strict orthographic left-facing 90-degree side profile, platformer character side-view walking pose, exactly one eye visible, nose and chin in silhouette, short light-brown bob haircut, brown leather jacket, white shirt, blue tie, brown shorts, blue thigh-high socks, brown boots.",
+    "t5": "Full-body vertical character concept, complete figure and feet visible, simple background. Same anime girl in a strict orthographic left-facing 90-degree side profile, platformer character side-view walking pose, exactly one eye visible, nose and chin in silhouette, shoulders overlapping in depth, chest facing sideways. Keep the same short light-brown bob haircut, blue eyes, white shirt, blue tie, brown leather jacket, brown shorts, gloves, blue thigh-high socks, and brown boots. Clean plain neutral studio background.",
+    "true_cfg_scale": 1.0
+  },
+  "sampling": {
+    "guidance_scale": 2.5,
+    "steps": 28
+  },
+  "schema_version": 1,
+  "spec_sha256": "c744df4cbdce117366bf2bae0f8a0be75eadae20526aa49e80edc92e1bcca67b",
+  "tokens": {
+    "clip": 69,
+    "clip_limit": 77,
+    "t5": 116,
+    "t5_limit": 128
+  },
+  "variants": [
+    {
+      "name": "seed_001",
+      "seed": 1
+    }
+  ]
+}

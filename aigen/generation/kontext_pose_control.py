@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,10 +17,6 @@ from aigen.generation.runtime_diagnostics import (
     parameter_locations,
     synchronized_time,
 )
-
-BACKGROUND_ABLATION_SWEEP = "background-ablation"
-QUALITY_STRENGTH_SWEEP = "quality-strength"
-
 
 @dataclass(frozen=True)
 class CharacterKontextPoseResult:
@@ -178,56 +174,6 @@ class KontextPoseVariant:
     control_guidance_end: float
 
 
-@dataclass(frozen=True)
-class CharacterKontextPoseSweepResult:
-    output_dir: str
-    sweep_variant_set: str
-    outputs: list[dict[str, Any]]
-    model: str
-    controlnet_model: str
-    reference_image: str
-    pose_image: str
-    prompt: str
-    pipeline_prompt: str
-    negative_prompt: str
-    width: int
-    height: int
-    reference_max_area: int
-    max_sequence_length: int
-    timings_ms: dict[str, float]
-    memory: dict[str, int]
-    environment: dict[str, Any]
-    pipeline_cpu_offload: bool
-    nunchaku_layer_offload: bool
-    nunchaku_transformer_model: str | None
-    attention_impl: str | None
-
-    def to_json(self) -> dict[str, Any]:
-        return {
-            "output_dir": self.output_dir,
-            "sweep_variant_set": self.sweep_variant_set,
-            "outputs": self.outputs,
-            "model": self.model,
-            "controlnet_model": self.controlnet_model,
-            "reference_image": self.reference_image,
-            "pose_image": self.pose_image,
-            "prompt": self.prompt,
-            "pipeline_prompt": self.pipeline_prompt,
-            "negative_prompt": self.negative_prompt,
-            "width": self.width,
-            "height": self.height,
-            "reference_max_area": self.reference_max_area,
-            "max_sequence_length": self.max_sequence_length,
-            "timings_ms": self.timings_ms,
-            "memory": self.memory,
-            "environment": self.environment,
-            "pipeline_cpu_offload": self.pipeline_cpu_offload,
-            "nunchaku_layer_offload": self.nunchaku_layer_offload,
-            "nunchaku_transformer_model": self.nunchaku_transformer_model,
-            "attention_impl": self.attention_impl,
-        }
-
-
 class CharacterKontextPoseError(RuntimeError):
     pass
 
@@ -286,7 +232,7 @@ class CharacterKontextPoseSession:
         reference_image: Path,
         pose_image: Path,
         prompt: str,
-        negative_prompt: str,
+        negative_prompt: str | None,
         true_cfg_scale: float,
         width: int,
         height: int,
@@ -295,11 +241,13 @@ class CharacterKontextPoseSession:
         steps: int,
         guidance_scale: float,
         seed: int,
+        t5_prompt: str | None = None,
     ) -> KontextPosePrepared:
         return self.prepare_images(
             reference_image=self.load_image(reference_image.resolve().as_posix()),
             pose_image=self.load_image(pose_image.resolve().as_posix()),
             prompt=prompt,
+            t5_prompt=t5_prompt,
             negative_prompt=negative_prompt,
             true_cfg_scale=true_cfg_scale,
             width=width,
@@ -317,7 +265,7 @@ class CharacterKontextPoseSession:
         reference_image: Any,
         pose_image: Any,
         prompt: str,
-        negative_prompt: str,
+        negative_prompt: str | None,
         true_cfg_scale: float,
         width: int,
         height: int,
@@ -326,11 +274,13 @@ class CharacterKontextPoseSession:
         steps: int,
         guidance_scale: float,
         seed: int,
+        t5_prompt: str | None = None,
     ) -> KontextPosePrepared:
         return self.pipeline.prepare_conditioning(
             image=reference_image,
             control_image=pose_image,
             prompt=prompt,
+            t5_prompt=t5_prompt,
             negative_prompt=negative_prompt,
             true_cfg_scale=true_cfg_scale,
             height=height,
@@ -530,170 +480,6 @@ def run_character_kontext_pose_control(
         nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix() if nunchaku_transformer_model else None,
         attention_impl=attention_impl,
         seed=seed,
-    )
-
-
-def run_character_kontext_pose_sweep(
-    model: str,
-    controlnet_model: str,
-    reference_image: Path,
-    pose_image: Path,
-    output_dir: Path,
-    prompt: str,
-    *,
-    device: str = "cuda",
-    dtype: str = "bfloat16",
-    steps: int = 20,
-    guidance_scale: float = 2.5,
-    true_cfg_scale: float = 1.0,
-    width: int = 384,
-    height: int = 576,
-    reference_max_area: int = 384 * 768,
-    max_sequence_length: int = 128,
-    framing: str = "full-body",
-    negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
-    seed: int = 1,
-    pipeline_cpu_offload: bool = True,
-    nunchaku_layer_offload: bool = False,
-    transformer_single_file: Path | None = None,
-    nunchaku_transformer_model: Path | None = None,
-    attention_impl: str | None = None,
-    vae_tiling: bool = False,
-    sweep_variant_set: str = BACKGROUND_ABLATION_SWEEP,
-) -> CharacterKontextPoseSweepResult:
-    from PIL import Image
-
-    torch, _, _, _, _ = _load_flux_kontext_controlnet()
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats(device)
-
-    total_start = synchronized_time(torch)
-    pipeline_prompt = compose_character_prompt(prompt, framing)
-    session = CharacterKontextPoseSession(
-        model,
-        controlnet_model,
-        device=device,
-        dtype=dtype,
-        transformer_single_file=transformer_single_file,
-        nunchaku_transformer_model=nunchaku_transformer_model,
-        attention_impl=attention_impl,
-        pipeline_cpu_offload=pipeline_cpu_offload,
-        nunchaku_layer_offload=nunchaku_layer_offload,
-        vae_tiling=vae_tiling,
-    )
-    try:
-        current_prepare_start = synchronized_time(torch)
-        current_prepared = session.prepare(
-            reference_image=reference_image,
-            pose_image=pose_image,
-            prompt=pipeline_prompt,
-            negative_prompt=negative_prompt,
-            true_cfg_scale=true_cfg_scale,
-            width=width,
-            height=height,
-            reference_max_area=reference_max_area,
-            max_sequence_length=max_sequence_length,
-            steps=steps,
-            guidance_scale=guidance_scale,
-            seed=seed,
-        )
-        current_prepare_ms = elapsed_ms(current_prepare_start, synchronized_time(torch))
-
-        nearest_prepared = current_prepared
-        nearest_prepare_ms = 0.0
-        nearest_variants: list[KontextPoseVariant] = []
-
-        if sweep_variant_set == BACKGROUND_ABLATION_SWEEP:
-            nearest_pose = Image.open(pose_image).convert("RGB").resize((width, height), Image.Resampling.NEAREST)
-            nearest_control_image, nearest_blocks_repeat, nearest_prepare_ms = session.prepare_control_condition(
-                current_prepared,
-                pose_image=nearest_pose,
-                seed=seed,
-            )
-            nearest_prepared = replace(
-                current_prepared,
-                control_image=nearest_control_image,
-                controlnet_blocks_repeat=nearest_blocks_repeat,
-            )
-            current_variants = [
-                KontextPoseVariant("A_scale000_current", seed, 0.00, 0.0, 0.50),
-                KontextPoseVariant("B_scale050_current", seed, 0.50, 0.0, 0.50),
-            ]
-            nearest_variants = [
-                KontextPoseVariant("C_scale050_nearest", seed, 0.50, 0.0, 0.50),
-                KontextPoseVariant("D_scale040_nearest_end045", seed, 0.40, 0.0, 0.45),
-            ]
-        elif sweep_variant_set == QUALITY_STRENGTH_SWEEP:
-            current_variants = [
-                KontextPoseVariant("Q1_scale050_end050", seed, 0.50, 0.0, 0.50),
-                KontextPoseVariant("Q2_scale060_end050", seed, 0.60, 0.0, 0.50),
-                KontextPoseVariant("Q3_scale050_end060", seed, 0.50, 0.0, 0.60),
-            ]
-        else:
-            raise ValueError(f"Unknown sweep variant set: {sweep_variant_set}")
-
-        if not torch.equal(current_prepared.base_latents, nearest_prepared.base_latents):
-            raise RuntimeError("Sweep variants do not share identical initial noise")
-
-        current_denoised = session.denoise_many(current_prepared, current_variants)
-        nearest_denoised = session.denoise_many(nearest_prepared, nearest_variants) if nearest_variants else []
-        all_denoised = [*current_denoised, *nearest_denoised]
-        images, decode_ms = session.decode_many(current_prepared, all_denoised, chunk_size=1)
-    finally:
-        session.close()
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    outputs = []
-    for image, denoised in zip(images, all_denoised, strict=True):
-        output_path = output_dir / f"{denoised.name}.png"
-        image.save(output_path)
-        outputs.append(
-            {
-                "name": denoised.name,
-                "output_path": output_path.resolve().as_posix(),
-                "seed": denoised.seed,
-                "controlnet_conditioning_scale": denoised.controlnet_conditioning_scale,
-                "control_guidance_start": denoised.control_guidance_start,
-                "control_guidance_end": denoised.control_guidance_end,
-                "controlnet_active_steps": denoised.controlnet_active_steps,
-                "controlnet_step_ms": denoised.controlnet_step_ms,
-                "transformer_step_ms": denoised.transformer_step_ms,
-                "controlnet_metadata": denoised.controlnet_metadata,
-                "timings_ms": denoised.timings_ms,
-            }
-        )
-
-    total_ms = elapsed_ms(total_start, synchronized_time(torch))
-    return CharacterKontextPoseSweepResult(
-        output_dir=output_dir.resolve().as_posix(),
-        sweep_variant_set=sweep_variant_set,
-        outputs=outputs,
-        model=model,
-        controlnet_model=controlnet_model,
-        reference_image=reference_image.resolve().as_posix(),
-        pose_image=pose_image.resolve().as_posix(),
-        prompt=prompt,
-        pipeline_prompt=pipeline_prompt,
-        negative_prompt=negative_prompt,
-        width=width,
-        height=height,
-        reference_max_area=reference_max_area,
-        max_sequence_length=max_sequence_length,
-        timings_ms={
-            "model_load_ms": session.model_load_ms,
-            "current_prepare_ms": current_prepare_ms,
-            "nearest_prepare_ms": nearest_prepare_ms,
-            "decode_ms": decode_ms,
-            "total_ms": total_ms,
-        },
-        memory=cuda_memory_stats(torch, device),
-        environment=_generation_environment(torch, session.pipeline),
-        pipeline_cpu_offload=pipeline_cpu_offload,
-        nunchaku_layer_offload=nunchaku_layer_offload,
-        nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix()
-        if nunchaku_transformer_model
-        else None,
-        attention_impl=attention_impl,
     )
 
 
@@ -963,7 +749,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             image: Any,
             control_image: Any,
             prompt: str,
-            negative_prompt: str,
+            negative_prompt: str | None,
             true_cfg_scale: float,
             height: int,
             width: int,
@@ -975,6 +761,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             max_area: int,
             reference_max_area: int,
             seed: int,
+            t5_prompt: str | None = None,
         ) -> KontextPosePrepared:
             aspect_ratio = width / height
             width = round((max_area * aspect_ratio) ** 0.5)
@@ -986,7 +773,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
             self.check_inputs(
                 prompt,
-                None,
+                t5_prompt,
                 height,
                 width,
                 negative_prompt=negative_prompt,
@@ -1003,9 +790,10 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             device = self._execution_device
 
             prompt_encode_start = synchronized_time(torch)
+            text_prompt = prompt if t5_prompt is None else t5_prompt
             prompt_token_count = len(
                 self.tokenizer_2(
-                    prompt,
+                    text_prompt,
                     padding=False,
                     truncation=False,
                 ).input_ids
@@ -1030,7 +818,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     )
 
             prompt_embeds, pooled_prompt_embeds, text_ids = self.encode_prompt(
-                prompt=prompt,
+                prompt,
+                t5_prompt,
                 device=device,
                 num_images_per_prompt=num_images_per_prompt,
                 max_sequence_length=max_sequence_length,
@@ -1043,7 +832,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             negative_text_ids = None
             if do_true_cfg:
                 negative_prompt_embeds, negative_pooled_prompt_embeds, negative_text_ids = self.encode_prompt(
-                    prompt=negative_prompt,
+                    negative_prompt,
                     device=device,
                     num_images_per_prompt=num_images_per_prompt,
                     max_sequence_length=max_sequence_length,
@@ -1426,6 +1215,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             outputs = []
             for start in range(0, len(denoised), chunk_size):
                 latents = torch.cat([result.latents for result in denoised[start : start + chunk_size]], dim=0)
+                latents = latents.to(device=prepared.device, dtype=prepared.dtype)
                 latents = self._unpack_latents(latents, prepared.height, prepared.width, self.vae_scale_factor)
                 latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 output = self.vae.decode(latents, return_dict=False)[0]
@@ -1439,7 +1229,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             image: Any,
             control_image: Any,
             prompt: str,
-            negative_prompt: str,
+            negative_prompt: str | None = None,
             true_cfg_scale: float = 1.0,
             height: int,
             width: int,
@@ -1455,12 +1245,14 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             max_sequence_length: int = 512,
             max_area: int = 1024**2,
             reference_max_area: int = 384 * 768,
+            t5_prompt: str | None = None,
         ) -> Any:
             pipeline_start = synchronized_time(torch)
             prepared = self.prepare_conditioning(
                 image=image,
                 control_image=control_image,
                 prompt=prompt,
+                t5_prompt=t5_prompt,
                 negative_prompt=negative_prompt,
                 true_cfg_scale=true_cfg_scale,
                 height=height,
