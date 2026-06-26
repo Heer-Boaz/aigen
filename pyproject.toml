@@ -21,6 +21,7 @@ generation = [
   "accelerate>=1",
   "bitsandbytes>=0.46.1",
   "diffusers[torch]>=0.38",
+  "qwen-vl-utils==0.0.8",
   "safetensors>=0.4",
   "transformers>=4.44",
   "torchvision==0.27.1",

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "post-generation keyframe judging"
+  },
+  "downloads": [
+    {
+      "name": "qwen2.5-vl-7b-instruct-keyframe-judge",
+      "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "local_path": "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+      "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+      "include": [
+        "*.json",
+        "*.safetensors",
+        "*.txt",
+        "*.model",
+        "tokenizer*",
+        "merges.txt",
+        "vocab.json"
+      ],
+      "exclude": [
+        "*.md",
+        ".gitattributes"
+      ]
+    }
+  ]
+}

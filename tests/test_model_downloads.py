@@ -110,6 +110,16 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "70dff7728491f3016e256137e8f7d87812af0b4f")
         self.assertIn("svdq-fp4_r32-flux.1-kontext-dev.safetensors", download.include)
 
+    def test_keyframe_judge_manifest_downloads_qwen_vl_7b(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_judge_qwen2_5_vl_7b.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "qwen2.5-vl-7b-instruct-keyframe-judge")
+        self.assertEqual(download.repo_id, "Qwen/Qwen2.5-VL-7B-Instruct")
+        self.assertEqual(download.local_path, "vlm/Qwen/Qwen2.5-VL-7B-Instruct")
+        self.assertEqual(download.revision, "cc594898137f460bfe9f0759e9844b3ce807cfb5")
+        self.assertIn("*.safetensors", download.include)
+
     def test_dry_run_plans_hub_download_without_network_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

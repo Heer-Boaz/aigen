@@ -24,6 +24,15 @@ from aigen.keyframes import (
     run_keyframe_job,
     validate_keyframe_job,
 )
+from aigen.keyframe_judge import (
+    DEFAULT_JUDGE_ID,
+    DEFAULT_JUDGE_REPO_ID,
+    DEFAULT_JUDGE_REVISION,
+    KeyframeJudgeConfig,
+    QwenKeyframeJudge,
+    judge_keyframe_run,
+    select_keyframe_run,
+)
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -33,6 +42,56 @@ def write_json(path: Path, payload: object) -> None:
 def write_image(path: Path, size: tuple[int, int], color: tuple[int, int, int]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", size, color).save(path)
+
+
+def write_keyframe_result(root: Path) -> Path:
+    run_dir = root / "runs" / "walk"
+    reference = root / "assets" / "reference.png"
+    pose = root / "assets" / "pose.png"
+    contour = root / "assets" / "contour.png"
+    mask = root / "assets" / "mask.png"
+    write_image(reference, (512, 768), (220, 180, 180))
+    write_image(pose, (640, 960), (0, 255, 0))
+    write_image(contour, (640, 960), (255, 255, 255))
+    write_image(mask, (640, 960), (96, 96, 96))
+    outputs = []
+    for index, name in enumerate(("seed_002", "seed_003", "seed_005")):
+        image_path = run_dir / f"{name}.png"
+        write_image(image_path, (640, 960), (255 - index * 20, 230, 230))
+        outputs.append({"name": name, "seed": index + 2, "path": image_path.as_posix()})
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "ai46.walk.contact.left.640x960.ref384.seed-sweep.v1",
+            "assets": {
+                "reference": {"path": reference.as_posix()},
+                "pose": {"path": pose.as_posix()},
+                "contour": {"path": contour.as_posix()},
+                "boundary_mask": {"path": mask.as_posix()},
+            },
+            "outputs": outputs,
+            "effective_config": {
+                "keyframe": {
+                    "action": "walk",
+                    "phase": "contact",
+                    "direction": "left",
+                    "camera": "orthographic-side",
+                },
+                "prompt": {
+                    "clip": "Same anime girl, strict side profile.",
+                    "t5": "Full-body orthographic side-view gameplay keyframe.",
+                    "true_cfg_scale": 1.0,
+                },
+                "acceptance": {"manual": ["strict side profile", "feet fully visible"]},
+                "condition_plan": [
+                    {"name": "pose", "type": "pose", "active_steps": 15},
+                    {"name": "profile_contour", "type": "canny", "active_steps": 12},
+                ],
+            },
+        },
+    )
+    return run_dir
 
 
 def profile() -> KeyframeProfile:
@@ -205,6 +264,73 @@ class FakeSession:
         self.closed = True
 
 
+class FakeJudgeRunner:
+    scores = {
+        "seed_002": (8.0, 8.0, True, {}),
+        "seed_003": (9.0, 9.0, True, {}),
+        "seed_005": (
+            5.0,
+            4.0,
+            False,
+            {"front_or_three_quarter_view": True, "two_eyes_visible": True},
+        ),
+    }
+
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        candidate = next(name for name in self.scores if name in prompt)
+        condition, side, passes, rejects = self.scores[candidate]
+        hard_rejects = {
+            "front_or_three_quarter_view": False,
+            "two_eyes_visible": False,
+            "wrong_direction": False,
+            "cropped_feet": False,
+            "missing_boots": False,
+            "long_hair": False,
+            "wrong_outfit": False,
+            "pose_not_walk_contact": False,
+            "severe_limb_error": False,
+        } | rejects
+        return json.dumps(
+            {
+                "candidate": candidate,
+                "pass": passes,
+                "rank_recommendation": {"seed_003": 1, "seed_002": 2, "seed_005": 3}[candidate],
+                "hard_rejects": hard_rejects,
+                "scores": {
+                    "condition_adherence": condition,
+                    "side_profile": side,
+                    "pose_match": condition,
+                    "contour_match": condition,
+                    "identity_preservation": 8,
+                    "outfit_preservation": 8,
+                    "artifact_quality": 7,
+                    "overall": condition,
+                },
+                "evidence": {
+                    "condition_match": f"{candidate} condition evidence",
+                    "identity_match": f"{candidate} identity evidence",
+                    "concerns": ["minor boot simplification"],
+                },
+            }
+        )
+
+    def rank_candidates(self, prompt: str, _image_paths: list[Path]) -> str:
+        candidate_a = prompt.split("#1 is ", 1)[1].split(";", 1)[0]
+        candidate_b = prompt.split("#2 is ", 1)[1].split(".", 1)[0]
+        winner = max(
+            (candidate_a, candidate_b),
+            key=lambda name: self.scores[name][0],
+        )
+        return json.dumps(
+            {
+                "candidate_a": candidate_a,
+                "candidate_b": candidate_b,
+                "winner": winner,
+                "evidence": f"{winner} follows the target contour most closely",
+            }
+        )
+
+
 class KeyframeTests(unittest.TestCase):
     def test_c2_template_has_no_unused_null_fields(self) -> None:
         template = c2_profile_template()
@@ -312,6 +438,62 @@ class KeyframeTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(KeyframeJobError, "1801 MB used before model load"):
                 _nvidia_smi_preflight()
+
+    def test_keyframe_judge_ranks_condition_first_and_selects_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_keyframe_result(root)
+            config = KeyframeJudgeConfig(
+                judge_id=DEFAULT_JUDGE_ID,
+                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                repo_id=DEFAULT_JUDGE_REPO_ID,
+                revision=DEFAULT_JUDGE_REVISION,
+                dtype="bfloat16",
+                attention_impl="sdpa",
+                quantization="bitsandbytes-4bit",
+                min_pixels=1,
+                max_pixels=2,
+                max_new_tokens=512,
+                temperature=0.0,
+                pairwise_top_k=3,
+            )
+
+            judge_result = judge_keyframe_run(
+                run_dir,
+                config,
+                project_root=Path.cwd(),
+                runner=FakeJudgeRunner(),
+            )
+            selection = select_keyframe_run(run_dir, judge_id=DEFAULT_JUDGE_ID)
+            ranked_sheet_exists = Path(selection["outputs"]["ranked_contact_sheet"]).exists()
+            overlay_sheet_exists = Path(selection["outputs"]["condition_overlay_ranked"]).exists()
+
+        self.assertEqual(judge_result["ranking"]["final"], ["seed_003", "seed_002", "seed_005"])
+        self.assertEqual(selection["best"], "seed_003")
+        self.assertEqual(selection["selected"], ["seed_003", "seed_002"])
+        self.assertEqual(selection["rejected"], ["seed_005"])
+        self.assertTrue(ranked_sheet_exists)
+        self.assertTrue(overlay_sheet_exists)
+
+    def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(RuntimeError, "Missing local judge model"):
+                QwenKeyframeJudge(
+                    KeyframeJudgeConfig(
+                        judge_id=DEFAULT_JUDGE_ID,
+                        model=Path(temp_dir) / "missing",
+                        repo_id=DEFAULT_JUDGE_REPO_ID,
+                        revision=DEFAULT_JUDGE_REVISION,
+                        dtype="bfloat16",
+                        attention_impl="sdpa",
+                        quantization="bitsandbytes-4bit",
+                        min_pixels=1,
+                        max_pixels=2,
+                        max_new_tokens=512,
+                        temperature=0.0,
+                        pairwise_top_k=3,
+                    )
+                )
 
 
 if __name__ == "__main__":

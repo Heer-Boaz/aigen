@@ -38,6 +38,17 @@ from aigen.keyframes import (
     run_keyframe_job,
     validate_keyframe_job,
 )
+from aigen.keyframe_judge import (
+    DEFAULT_JUDGE_ID,
+    DEFAULT_JUDGE_REPO_ID,
+    DEFAULT_JUDGE_REVISION,
+    DEFAULT_MAX_PIXELS,
+    DEFAULT_MIN_PIXELS,
+    KeyframeJudgeConfig,
+    KeyframeJudgeError,
+    judge_keyframe_run,
+    select_keyframe_run,
+)
 from aigen.models.downloads import (
     ModelDownloadError,
     download_models,
@@ -467,6 +478,39 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     run = keyframe_subparsers.add_parser("run", help="Run a resolved keyframe job")
     run.add_argument("job", type=Path, help="Keyframe job JSON")
     run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    judge = keyframe_subparsers.add_parser("judge", help="Judge a completed keyframe run with a local VLM")
+    judge.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    judge.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Judge id used for output directory naming")
+    judge.add_argument(
+        "--model",
+        type=Path,
+        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        help="Local Qwen2.5-VL-7B-Instruct model directory",
+    )
+    judge.add_argument("--dtype", default="bfloat16", help="Torch dtype for judge model weights")
+    judge.add_argument(
+        "--attention-impl",
+        default="sdpa",
+        help="Transformers attention implementation for the judge model",
+    )
+    judge.add_argument(
+        "--quantization",
+        choices=("bitsandbytes-4bit", "bitsandbytes-8bit", "none"),
+        default="bitsandbytes-4bit",
+        help="Local inference quantization for the 7B judge model",
+    )
+    judge.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
+    judge.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
+    judge.add_argument("--max-new-tokens", type=int, default=900, help="Judge response token budget")
+    judge.add_argument("--temperature", type=float, default=0.0, help="Judge sampling temperature")
+    judge.add_argument("--pairwise-top-k", type=int, default=3, help="Final pairwise ranking candidate count")
+    judge.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    select = keyframe_subparsers.add_parser("select", help="Select/reject outputs from a keyframe judge result")
+    select.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    select.add_argument("--from-judge", default=DEFAULT_JUDGE_ID, help="Judge id to read")
+    select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def _add_model_commands(subparsers: Any) -> None:
@@ -1155,6 +1199,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.keyframes_command == "schema":
                 _dump_json(sys.stdout, keyframe_job_schema(), pretty=not args.compact)
                 return 0
+            if args.keyframes_command == "judge":
+                _dump_json(
+                    sys.stdout,
+                    judge_keyframe_run(
+                        args.run_dir,
+                        KeyframeJudgeConfig(
+                            judge_id=args.judge,
+                            model=args.model,
+                            repo_id=DEFAULT_JUDGE_REPO_ID,
+                            revision=DEFAULT_JUDGE_REVISION,
+                            dtype=args.dtype,
+                            attention_impl=args.attention_impl,
+                            quantization=args.quantization,
+                            min_pixels=args.min_pixels,
+                            max_pixels=args.max_pixels,
+                            max_new_tokens=args.max_new_tokens,
+                            temperature=args.temperature,
+                            pairwise_top_k=args.pairwise_top_k,
+                        ),
+                        project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command == "select":
+                _dump_json(
+                    sys.stdout,
+                    select_keyframe_run(args.run_dir, judge_id=args.from_judge),
+                    pretty=not args.compact,
+                )
+                return 0
             profile = _keyframe_profile_for_job(args.job)
             if args.keyframes_command == "validate":
                 _dump_json(
@@ -1177,7 +1252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-        except KeyframeJobError as error:
+        except (KeyframeJobError, KeyframeJudgeError) as error:
             _dump_json(
                 sys.stderr,
                 {
