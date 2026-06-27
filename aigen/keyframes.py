@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
@@ -702,11 +703,12 @@ def _nvidia_smi_preflight() -> dict[str, int]:
         }
 
     snapshot = _nvidia_smi_memory_snapshot()
-    if snapshot["nvidia_smi_used_mb"] > NVIDIA_SMI_PREFLIGHT_LIMIT_MB:
+    limit_mb = int(os.environ.get("AIGEN_NVIDIA_SMI_PREFLIGHT_LIMIT_MB", NVIDIA_SMI_PREFLIGHT_LIMIT_MB))
+    if snapshot["nvidia_smi_used_mb"] > limit_mb:
         raise KeyframeJobError(
             "GPU framebuffer is not clean enough for a high-resolution keyframe run: "
             f"{snapshot['nvidia_smi_used_mb']} MB used before model load; "
-            f"limit is {NVIDIA_SMI_PREFLIGHT_LIMIT_MB} MB"
+            f"limit is {limit_mb} MB"
         )
     return {
         "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],

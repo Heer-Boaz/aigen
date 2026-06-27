@@ -1,0 +1,92 @@
+{
+  "$schema": "../../schemas/keyframe-job.schema.json",
+  "acceptance": {
+    "manual": [
+      "strict side profile",
+      "short bob preserved",
+      "jacket, tie, shorts, socks and boots preserved",
+      "pose reads as grounded platformer straight punch",
+      "front punching arm clearly extended with a closed fist",
+      "no pointing finger or open hand",
+      "both feet grounded and fully visible"
+    ],
+    "minimum_passing_variants": 1
+  },
+  "assets": {
+    "boundary_mask": {
+      "path": "../../assets/masks/ai46_punch_straight_boundary_512x768.png"
+    },
+    "contour": {
+      "path": "../../assets/contours/ai46_punch_straight_canny_512x768.png"
+    },
+    "pose": {
+      "path": "../../assets/poses/ai46_punch_straight_hand_pose_512x768.png"
+    }
+  },
+  "canvas": {
+    "height": 768,
+    "max_sequence_length": 128,
+    "reference_max_area": 294912,
+    "width": 512
+  },
+  "character": {
+    "id": "ai46",
+    "reference": {
+      "path": "../../assets/characters/AI46.png"
+    }
+  },
+  "conditions": [
+    {
+      "end": 0.60,
+      "image": "pose",
+      "name": "pose",
+      "scale": 0.62,
+      "start": 0.0,
+      "type": "pose"
+    },
+    {
+      "end": 0.45,
+      "image": "contour",
+      "name": "profile_contour",
+      "residual_mask": "boundary_mask",
+      "scale": 0.42,
+      "start": 0.0,
+      "type": "canny"
+    }
+  ],
+  "id": "ai46.punch.straight.hand.left.512x768.smoke.v1",
+  "keyframe": {
+    "action": "punch",
+    "camera": "orthographic-side",
+    "direction": "left",
+    "phase": "straight-hand"
+  },
+  "kind": "character-keyframe",
+  "output": {
+    "directory": "../../runs/keyframes/ai46/punch_straight/512x768_hand_smoke_v1",
+    "filename": "{id}__{variant}.png",
+    "overwrite": false,
+    "save_conditions": true,
+    "save_contact_sheet": true
+  },
+  "pipeline": {
+    "profile": "nunchaku-kontext-pose-quality"
+  },
+  "prompt": {
+    "clip": "Same anime girl in a strict orthographic left-facing side profile, grounded platformer straight punch attack frame, compact closed fist, front arm extended, exactly one eye visible, short light-brown bob, brown leather jacket, white shirt, blue tie, brown shorts, blue thigh-high socks, brown boots.",
+    "negative": "pointing finger, open hand, relaxed gesture, waving, boxing glove, front view, three-quarter view, long hair, ponytail, missing boots, cropped feet",
+    "t5": "Full-body orthographic left-facing side-view gameplay keyframe. Same anime girl performing a grounded platformer straight punch: front arm fully extended with a compact closed fist, rear arm pulled back, both feet planted, no jumping, no pointing finger, no open hand, no boxing gloves. Preserve one visible eye, profile nose and chin, short light-brown bob, white shirt, blue tie, brown leather jacket, brown shorts, gloves, blue thigh-high socks and brown boots. Clean neutral background.",
+    "true_cfg_scale": 1.15
+  },
+  "sampling": {
+    "guidance_scale": 2.5,
+    "steps": 28
+  },
+  "schema_version": 1,
+  "variants": [
+    {
+      "name": "seed_003",
+      "seed": 3
+    }
+  ]
+}
