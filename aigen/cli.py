@@ -59,6 +59,16 @@ from aigen.keyframe_score import (
     score_keyframe_run,
 )
 from aigen.keyframe_pose import KeyframePoseError
+from aigen.keyframe_refine import (
+    KeyframeRefineError,
+    KeyframeRefineProfile,
+    keyframe_refine_job_schema,
+    load_keyframe_refine_job,
+    plan_keyframe_refine_job,
+    run_keyframe_refine_job,
+    run_keyframe_refine_variant,
+    validate_keyframe_refine_job,
+)
 from aigen.models.downloads import (
     ModelDownloadError,
     download_models,
@@ -162,6 +172,16 @@ class NunchakuKontextPoseCliProfile:
     control_guidance_start: float
     control_guidance_end: float
     seed: int
+
+
+@dataclass(frozen=True)
+class KeyframeRefineCliProfile:
+    model: str
+    nunchaku_transformer_model: Path | None
+    attention_impl: str | None
+    dtype: str
+    pipeline_cpu_offload: bool
+    vae_tiling: bool
 
 
 @dataclass(frozen=True)
@@ -422,6 +442,21 @@ KEYFRAME_MODEL_REVISIONS = {
 }
 
 
+KEYFRAME_REFINE_PROFILES = {
+    "kontext-inpaint-local": KeyframeRefineCliProfile(
+        model=(MODELS_ROOT / "diffusers/eramth/flux-kontext-4bit-fp4").as_posix(),
+        nunchaku_transformer_model=(
+            MODELS_ROOT
+            / "nunchaku/nunchaku-tech/nunchaku-flux.1-kontext-dev/svdq-fp4_r32-flux.1-kontext-dev.safetensors"
+        ),
+        attention_impl="nunchaku-fp16",
+        dtype="bfloat16",
+        pipeline_cpu_offload=True,
+        vae_tiling=False,
+    ),
+}
+
+
 def _dump_json(handle: TextIO, payload: object, pretty: bool) -> None:
     json.dump(
         payload,
@@ -461,6 +496,29 @@ def _keyframe_profile_for_job(job_path: Path) -> KeyframeProfile:
     return _keyframe_profile(load_keyframe_job(job_path).pipeline.profile)
 
 
+def _keyframe_refine_profile(profile_name: str) -> KeyframeRefineProfile:
+    if profile_name not in KEYFRAME_REFINE_PROFILES:
+        raise KeyframeRefineError(f"Unknown keyframe refine profile: {profile_name}")
+    profile = KEYFRAME_REFINE_PROFILES[profile_name]
+    return KeyframeRefineProfile(
+        name=profile_name,
+        model=profile.model,
+        nunchaku_transformer_model=profile.nunchaku_transformer_model,
+        attention_impl=profile.attention_impl,
+        dtype=profile.dtype,
+        pipeline_cpu_offload=profile.pipeline_cpu_offload,
+        vae_tiling=profile.vae_tiling,
+        model_revisions={
+            "kontext": KEYFRAME_MODEL_REVISIONS["kontext"],
+            "nunchaku_transformer": KEYFRAME_MODEL_REVISIONS["nunchaku_transformer"],
+        },
+    )
+
+
+def _keyframe_refine_profile_for_job(job_path: Path) -> KeyframeRefineProfile:
+    return _keyframe_refine_profile(load_keyframe_refine_job(job_path).pipeline.profile)
+
+
 def _add_keyframe_commands(subparsers: Any) -> None:
     keyframes = subparsers.add_parser("keyframes", help="JSON-first character keyframe jobs")
     keyframe_subparsers = keyframes.add_subparsers(dest="keyframes_command", required=True)
@@ -477,6 +535,12 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     schema = keyframe_subparsers.add_parser("schema", help="Write the keyframe JSON schema to stdout")
     schema.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    refine_schema = keyframe_subparsers.add_parser(
+        "refine-schema",
+        help="Write the keyframe refine JSON schema to stdout",
+    )
+    refine_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     validate = keyframe_subparsers.add_parser("validate", help="Validate a keyframe job without running the GPU")
     validate.add_argument("job", type=Path, help="Keyframe job JSON")
     validate.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -488,6 +552,32 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     run = keyframe_subparsers.add_parser("run", help="Run a resolved keyframe job")
     run.add_argument("job", type=Path, help="Keyframe job JSON")
     run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    refine_validate = keyframe_subparsers.add_parser(
+        "refine-validate",
+        help="Validate a keyframe refine job without running the GPU",
+    )
+    refine_validate.add_argument("job", type=Path, help="Keyframe refine job JSON")
+    refine_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    refine_plan = keyframe_subparsers.add_parser(
+        "refine-plan",
+        help="Resolve a keyframe refine job without running the GPU",
+    )
+    refine_plan.add_argument("job", type=Path, help="Keyframe refine job JSON")
+    refine_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    refine_run = keyframe_subparsers.add_parser(
+        "refine-run",
+        help="Run a keyframe local inpaint refine job",
+    )
+    refine_run.add_argument("job", type=Path, help="Keyframe refine job JSON")
+    refine_run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    refine_run_variant = keyframe_subparsers.add_parser("refine-run-variant", help=argparse.SUPPRESS)
+    refine_run_variant.add_argument("job", type=Path, help=argparse.SUPPRESS)
+    refine_run_variant.add_argument("--variant", required=True, help=argparse.SUPPRESS)
+    refine_run_variant.add_argument("--compact", action="store_true", help=argparse.SUPPRESS)
 
     judge = keyframe_subparsers.add_parser("judge", help="Judge a completed keyframe run with a local VLM")
     judge.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
@@ -1252,6 +1342,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.keyframes_command == "schema":
                 _dump_json(sys.stdout, keyframe_job_schema(), pretty=not args.compact)
                 return 0
+            if args.keyframes_command == "refine-schema":
+                _dump_json(sys.stdout, keyframe_refine_job_schema(), pretty=not args.compact)
+                return 0
             if args.keyframes_command == "judge":
                 _dump_json(
                     sys.stdout,
@@ -1315,6 +1408,40 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
+            if args.keyframes_command in {"refine-validate", "refine-plan", "refine-run", "refine-run-variant"}:
+                profile = _keyframe_refine_profile_for_job(args.job)
+                if args.keyframes_command == "refine-validate":
+                    _dump_json(
+                        sys.stdout,
+                        validate_keyframe_refine_job(args.job, profile, project_root=PROJECT_ROOT),
+                        pretty=not args.compact,
+                    )
+                    return 0
+                if args.keyframes_command == "refine-plan":
+                    _dump_json(
+                        sys.stdout,
+                        plan_keyframe_refine_job(args.job, profile, project_root=PROJECT_ROOT),
+                        pretty=not args.compact,
+                    )
+                    return 0
+                if args.keyframes_command == "refine-run-variant":
+                    _dump_json(
+                        sys.stdout,
+                        run_keyframe_refine_variant(
+                            args.job,
+                            profile,
+                            variant_name=args.variant,
+                            project_root=PROJECT_ROOT,
+                        ),
+                        pretty=not args.compact,
+                    )
+                    return 0
+                _dump_json(
+                    sys.stdout,
+                    run_keyframe_refine_job(args.job, profile, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
             profile = _keyframe_profile_for_job(args.job)
             if args.keyframes_command == "validate":
                 _dump_json(
@@ -1337,7 +1464,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-        except (KeyframeJobError, KeyframeJudgeError, KeyframePoseError, KeyframeScoreError) as error:
+        except (KeyframeJobError, KeyframeJudgeError, KeyframePoseError, KeyframeScoreError, KeyframeRefineError) as error:
             _dump_json(
                 sys.stderr,
                 {

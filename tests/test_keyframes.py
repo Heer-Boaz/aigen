@@ -37,7 +37,13 @@ from aigen.keyframe_judge import (
     select_keyframe_run,
 )
 from aigen.keyframe_pose import OPENPOSE_BODY_COLORS, PoseKeypoints
+from aigen.keyframe_refine import (
+    KeyframeRefineProfile,
+    plan_keyframe_refine_job,
+    run_keyframe_refine_job,
+)
 from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run
+from aigen.prompt_tokens import PromptTokenCounts
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -236,6 +242,103 @@ def write_keyframe_result(root: Path) -> Path:
     return run_dir
 
 
+def write_refine_fixture(root: Path) -> Path:
+    run_dir = root / "runs" / "punch"
+    reference = root / "assets" / "AI46.png"
+    pose = root / "assets" / "punch_pose.png"
+    contour = root / "assets" / "punch_contour.png"
+    base_image = run_dir / "seed_005.png"
+    write_image(reference, (160, 240), (245, 226, 220))
+    write_rectangle_candidate(base_image, (55, 36, 112, 220))
+    write_pose_map(
+        pose,
+        {
+            0: (0.54, 0.16),
+            1: (0.52, 0.27),
+            2: (0.47, 0.31),
+            3: (0.31, 0.31),
+            4: (0.16, 0.31),
+            5: (0.58, 0.31),
+            6: (0.62, 0.43),
+            7: (0.65, 0.55),
+            8: (0.48, 0.54),
+            9: (0.42, 0.74),
+            10: (0.36, 0.91),
+            11: (0.56, 0.54),
+            12: (0.62, 0.74),
+            13: (0.68, 0.91),
+        },
+    )
+    write_rectangle_contour(contour, (20, 58, 118, 118))
+    write_json(
+        run_dir / "resolved.json",
+        {
+            "keyframe": {
+                "action": "punch",
+                "phase": "straight-fist",
+                "direction": "left",
+                "camera": "orthographic-side",
+            },
+        },
+    )
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "ai46.punch.fixture",
+            "outputs": [{"name": "seed_005", "seed": 5, "path": base_image.as_posix()}],
+        },
+    )
+    job_path = root / "jobs" / "punch_refine.json"
+    job_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(
+        job_path,
+        {
+            "$schema": "../../schemas/keyframe-refine-job.schema.json",
+            "schema_version": 1,
+            "kind": "keyframe-refine",
+            "id": "ai46.punch.straight.fist.refine.v1",
+            "pipeline": {"profile": "kontext-inpaint-local"},
+            "base": {"run_dir": "../runs/punch", "candidate": "seed_005"},
+            "character": {"id": "ai46", "reference": {"path": "../assets/AI46.png"}},
+            "region": {
+                "name": "punching_arm_fist",
+                "mask_source": {
+                    "type": "pose_contour_auto",
+                    "pose": "../assets/punch_pose.png",
+                    "contour": "../assets/punch_contour.png",
+                    "candidate_foreground": False,
+                },
+                "dilate_px": 8,
+                "feather_px": 3,
+                "crop_padding_px": 24,
+            },
+            "prompt": {
+                "clip": "Closed fist straight punch, preserve character and outfit.",
+                "t5": "Replace only the masked punching arm and hand with a compact closed fist.",
+                "negative": "open hand, pointing finger",
+                "true_cfg_scale": 1.25,
+            },
+            "sampling": {
+                "steps": 4,
+                "guidance_scale": 2.5,
+                "strength": 0.85,
+                "max_sequence_length": 128,
+            },
+            "variants": [{"name": "refine_001", "seed": 101}],
+            "output": {
+                "directory": "../runs/punch_refine",
+                "filename": "{id}__{variant}.png",
+                "overwrite": False,
+                "save_debug_images": True,
+                "save_contact_sheet": True,
+            },
+            "acceptance": {"manual": ["closed fist", "front arm extended"]},
+        },
+    )
+    return job_path
+
+
 def profile() -> KeyframeProfile:
     return KeyframeProfile(
         name="nunchaku-kontext-pose-quality",
@@ -250,6 +353,22 @@ def profile() -> KeyframeProfile:
         model_revisions={
             "kontext": {"repo_id": "kontext", "revision": "kontext-revision"},
             "controlnet": {"repo_id": "controlnet", "revision": "controlnet-revision"},
+            "nunchaku_transformer": {"repo_id": "nunchaku", "revision": "nunchaku-revision"},
+        },
+    )
+
+
+def refine_profile() -> KeyframeRefineProfile:
+    return KeyframeRefineProfile(
+        name="kontext-inpaint-local",
+        model="/models/kontext",
+        nunchaku_transformer_model=Path("/models/nunchaku.safetensors"),
+        attention_impl="nunchaku-fp16",
+        dtype="bfloat16",
+        pipeline_cpu_offload=True,
+        vae_tiling=False,
+        model_revisions={
+            "kontext": {"repo_id": "kontext", "revision": "kontext-revision"},
             "nunchaku_transformer": {"repo_id": "nunchaku", "revision": "nunchaku-revision"},
         },
     )
@@ -406,6 +525,30 @@ class FakeSession:
         self.closed = True
 
 
+class FakeRefiner:
+    instances: list[FakeRefiner] = []
+
+    def __init__(self, _profile: object) -> None:
+        self.model_load_ms = 1.0
+        self.torch = types.SimpleNamespace(
+            cuda=types.SimpleNamespace(
+                is_available=lambda: False,
+                reset_peak_memory_stats=lambda _device: None,
+            )
+        )
+        self.pipeline = object()
+        FakeRefiner.instances.append(self)
+
+    def refine(self, *, base_crop: Image.Image, mask_crop: Image.Image, seed: int, **_kwargs: object) -> Image.Image:
+        self.seed = seed
+        output = base_crop.copy()
+        output.paste((20, 40, 210), mask=mask_crop)
+        return output
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class FakeJudgeRunner:
     scores = {
         "seed_002": (8.0, 8.0, True, {}),
@@ -510,7 +653,10 @@ class KeyframeTests(unittest.TestCase):
             job_path = root / "job.json"
             write_json(job_path, job_payload(root))
 
-            with patch("aigen.keyframes._count_prompt_tokens", return_value=(12, 77, 24)):
+            with patch(
+                "aigen.keyframes.count_kontext_prompt_tokens",
+                return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
+            ):
                 resolved = plan_keyframe_job(job_path, profile(), project_root=Path.cwd())
 
         self.assertEqual(resolved["tokens"], {"clip": 12, "clip_limit": 77, "t5": 24, "t5_limit": 128})
@@ -527,7 +673,10 @@ class KeyframeTests(unittest.TestCase):
             job_path = root / "job.json"
             write_json(job_path, payload)
 
-            with patch("aigen.keyframes._count_prompt_tokens", return_value=(12, 77, 24)):
+            with patch(
+                "aigen.keyframes.count_kontext_prompt_tokens",
+                return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
+            ):
                 with self.assertRaisesRegex(KeyframeJobError, "Asset pose must be 512x768"):
                     validate_keyframe_job(job_path, profile(), project_root=Path.cwd())
 
@@ -538,7 +687,10 @@ class KeyframeTests(unittest.TestCase):
             job_path = root / "job.json"
             write_json(job_path, job_payload(root))
             with (
-                patch("aigen.keyframes._count_prompt_tokens", return_value=(12, 77, 24)),
+                patch(
+                    "aigen.keyframes.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
+                ),
                 patch("aigen.keyframes.CharacterKontextPoseSession", FakeSession),
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
@@ -709,6 +861,56 @@ class KeyframeTests(unittest.TestCase):
             self.assertGreater(candidates["seed_003"]["scores"]["pose"], candidates["seed_002"]["scores"]["pose"])
             self.assertEqual(candidates["seed_003"]["metrics"]["pose"]["common_keypoints"], 10)
             self.assertTrue(Path(result["outputs"]["pose_evidence_ranked"]).exists())
+
+    def test_keyframe_refine_plans_arm_mask_from_target_pose(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path = write_refine_fixture(root)
+
+            with patch(
+                "aigen.keyframe_refine.count_kontext_prompt_tokens",
+                return_value=PromptTokenCounts(clip=10, clip_limit=77, t5=18),
+            ):
+                resolved = plan_keyframe_refine_job(job_path, refine_profile(), project_root=Path.cwd())
+
+        self.assertEqual(resolved["mask_plan"]["front_arm_indices"], [2, 3, 4])
+        self.assertEqual(resolved["tokens"]["t5"], 18)
+        self.assertLess(resolved["mask_plan"]["crop_box"][0], 40)
+
+    def test_keyframe_refine_run_writes_mask_crop_and_preserves_outside_pixels(self) -> None:
+        FakeRefiner.instances.clear()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path = write_refine_fixture(root)
+            with (
+                patch(
+                    "aigen.keyframe_refine.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=10, clip_limit=77, t5=18),
+                ),
+                patch("aigen.keyframe_refine.KontextInpaintRefiner", FakeRefiner),
+                patch("aigen.keyframe_refine.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
+                patch("aigen.keyframe_refine._generation_environment", return_value={"env": "fake"}),
+                patch(
+                    "aigen.keyframe_refine._nvidia_smi_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                    },
+                ),
+            ):
+                result = run_keyframe_refine_job(job_path, refine_profile(), project_root=Path.cwd())
+
+            output_dir = root / "runs" / "punch_refine"
+            output_path = Path(result["outputs"][0]["path"])
+
+            self.assertTrue((output_dir / "resolved.json").exists())
+            self.assertTrue((output_dir / "debug" / "mask_feather.png").exists())
+            self.assertTrue((output_dir / "debug" / "crop.png").exists())
+            self.assertTrue((output_dir / "contact_sheet.png").exists())
+            self.assertTrue(output_path.exists())
+            self.assertFalse(result["outputs"][0]["mask_change"]["hard_rejects"]["outside_feather_changed"])
+            self.assertEqual(FakeRefiner.instances[0].seed, 101)
+            self.assertTrue(FakeRefiner.instances[0].closed)
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

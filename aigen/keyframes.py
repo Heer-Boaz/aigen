@@ -20,6 +20,7 @@ from aigen.generation.kontext_pose_control import (
     cuda_memory_stats,
     synchronized_time,
 )
+from aigen.prompt_tokens import count_kontext_prompt_tokens
 
 
 KEYFRAME_JOB_SCHEMA = "schemas/keyframe-job.schema.json"
@@ -304,12 +305,12 @@ def resolve_keyframe_job(
         if existing:
             raise KeyframeJobError(f"Output exists and overwrite=false: {existing[0]['path']}")
 
-    clip_tokens, clip_limit, t5_tokens = _count_prompt_tokens(profile.model, spec.prompt.clip, spec.prompt.t5)
-    if clip_tokens > clip_limit:
-        raise KeyframeJobError(f"CLIP prompt has {clip_tokens} tokens, limit is {clip_limit}")
-    if t5_tokens > spec.canvas.max_sequence_length:
+    tokens = count_kontext_prompt_tokens(profile.model, spec.prompt.clip, spec.prompt.t5)
+    if tokens.clip > tokens.clip_limit:
+        raise KeyframeJobError(f"CLIP prompt has {tokens.clip} tokens, limit is {tokens.clip_limit}")
+    if tokens.t5 > spec.canvas.max_sequence_length:
         raise KeyframeJobError(
-            f"T5 prompt has {t5_tokens} tokens, max_sequence_length is {spec.canvas.max_sequence_length}"
+            f"T5 prompt has {tokens.t5} tokens, max_sequence_length is {spec.canvas.max_sequence_length}"
         )
     if spec.prompt.negative is not None and spec.prompt.true_cfg_scale <= 1.0:
         raise KeyframeJobError("negative prompt is configured but true_cfg_scale <= 1.0")
@@ -346,9 +347,9 @@ def resolve_keyframe_job(
         },
         "acceptance": spec.acceptance.model_dump(mode="json"),
         "tokens": {
-            "clip": clip_tokens,
-            "clip_limit": clip_limit,
-            "t5": t5_tokens,
+            "clip": tokens.clip,
+            "clip_limit": tokens.clip_limit,
+            "t5": tokens.t5,
             "t5_limit": spec.canvas.max_sequence_length,
         },
         "git_commit": _git_commit(project_root),
@@ -641,16 +642,6 @@ def _save_contact_sheet(outputs: list[dict[str, Any]], output_path: Path) -> Non
         sheet.paste(image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS), (x, label_h))
         draw.text((x + 8, 8), output["name"], fill="black")
     sheet.save(output_path)
-
-
-def _count_prompt_tokens(model: str, clip_prompt: str, t5_prompt: str) -> tuple[int, int, int]:
-    from transformers import CLIPTokenizer, T5TokenizerFast
-
-    clip_tokenizer = CLIPTokenizer.from_pretrained(model, subfolder="tokenizer", local_files_only=True)
-    t5_tokenizer = T5TokenizerFast.from_pretrained(model, subfolder="tokenizer_2", local_files_only=True)
-    clip_tokens = len(clip_tokenizer(clip_prompt, padding=False, truncation=False).input_ids)
-    t5_tokens = len(t5_tokenizer(t5_prompt, padding=False, truncation=False).input_ids)
-    return clip_tokens, clip_tokenizer.model_max_length, t5_tokens
 
 
 def _asset_json(path: Path) -> dict[str, Any]:

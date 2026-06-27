@@ -1,0 +1,94 @@
+{
+  "$schema": "../../schemas/keyframe-refine-job.schema.json",
+  "acceptance": {
+    "manual": [
+      "closed fist",
+      "front arm extended",
+      "no pointing finger",
+      "no open hand",
+      "unmasked torso, head and legs unchanged",
+      "side profile preserved"
+    ]
+  },
+  "base": {
+    "candidate": "seed_005",
+    "run_dir": "../../runs/keyframes/ai46/punch_straight/512x768_fist_seed_sweep_v1"
+  },
+  "character": {
+    "id": "ai46",
+    "reference": {
+      "path": "../../assets/characters/AI46.png"
+    }
+  },
+  "id": "ai46.punch.straight.fist.refine.v1",
+  "kind": "keyframe-refine",
+  "output": {
+    "directory": "../../runs/keyframes/ai46/punch_straight/refine_fist_v1",
+    "filename": "{id}__{variant}.png",
+    "overwrite": false,
+    "save_contact_sheet": true,
+    "save_debug_images": true
+  },
+  "pipeline": {
+    "profile": "kontext-inpaint-local"
+  },
+  "prompt": {
+    "clip": "Closed fist straight punch, preserve the same anime girl, brown glove and leather sleeve.",
+    "negative": "pointing finger, open hand, relaxed hand, waving hand, boxing glove, extra fingers, missing fingers, twisted wrist, front view, changing outfit",
+    "t5": "Replace only the masked punching arm and hand. The front arm is fully extended in a straight platformer punch with a compact closed fist and brown glove. No pointing finger, no open hand, no waving, no boxing glove. Preserve the brown leather sleeve, anime lineart style, lighting and all unmasked pixels.",
+    "true_cfg_scale": 1.35
+  },
+  "region": {
+    "crop_padding_px": 128,
+    "dilate_px": 32,
+    "feather_px": 12,
+    "mask_source": {
+      "candidate_foreground": true,
+      "contour": "../../assets/contours/ai46_punch_straight_fist_canny_512x768.png",
+      "pose": "../../assets/poses/ai46_punch_straight_fist_pose_512x768.png",
+      "type": "pose_contour_auto"
+    },
+    "name": "punching_arm_fist"
+  },
+  "sampling": {
+    "guidance_scale": 2.5,
+    "max_sequence_length": 128,
+    "steps": 24,
+    "strength": 0.85
+  },
+  "schema_version": 1,
+  "variants": [
+    {
+      "name": "refine_001",
+      "seed": 101
+    },
+    {
+      "name": "refine_002",
+      "seed": 102
+    },
+    {
+      "name": "refine_003",
+      "seed": 103
+    },
+    {
+      "name": "refine_004",
+      "seed": 104
+    },
+    {
+      "name": "refine_005",
+      "seed": 105
+    },
+    {
+      "name": "refine_006",
+      "seed": 106
+    },
+    {
+      "name": "refine_007",
+      "seed": 107
+    },
+    {
+      "name": "refine_008",
+      "seed": 108
+    }
+  ]
+}
