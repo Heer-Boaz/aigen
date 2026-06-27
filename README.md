@@ -16,7 +16,8 @@ repo IDs and revisions are pinned for reproducible runs.
 For a fresh workstation, use the modular installer. It checks Python/GPU basics,
 creates `.venv`, installs the generation dependencies, installs the pinned
 Nunchaku wheel, downloads the keyframe generation models, downloads the Qwen
-judge model, and validates the keyframe CLI.
+judge model, downloads the DWPose scoring models, and validates the keyframe
+CLI.
 
 ```bash
 scripts/install.sh
@@ -37,6 +38,7 @@ judge:
 
 - `model_sources/kontext_pose_control_pipeline_4bit.json`
 - `model_sources/nunchaku_kontext_pipeline_fp4.json`
+- `model_sources/keyframe_pose_dwpose_onnx.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 
 The placeholder pixel-art manifest is deliberately not part of the installer.

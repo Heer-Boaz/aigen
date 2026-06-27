@@ -54,9 +54,11 @@ from aigen.keyframe_judge import (
 )
 from aigen.keyframe_score import (
     DEFAULT_SCORER_ID,
+    KeyframeScoreError,
     KeyframeScoreConfig,
     score_keyframe_run,
 )
+from aigen.keyframe_pose import KeyframePoseError
 from aigen.models.downloads import (
     ModelDownloadError,
     download_models,
@@ -1335,7 +1337,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-        except (KeyframeJobError, KeyframeJudgeError) as error:
+        except (KeyframeJobError, KeyframeJudgeError, KeyframePoseError, KeyframeScoreError) as error:
             _dump_json(
                 sys.stderr,
                 {

@@ -3,13 +3,22 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
+
+from aigen.keyframe_pose import (
+    DWPoseKeypointExtractor,
+    PoseKeypoints,
+    PoseScoreConfig,
+    extract_target_pose_map_keypoints,
+    save_pose_evidence,
+    score_pose_match,
+)
 
 
 DEFAULT_SCORER_ID = "condition-v1"
@@ -26,23 +35,45 @@ class KeyframeScoreConfig:
     foreground_threshold: float = 28.0
     contour_radius: int = 8
     distance_scale_px: float = 48.0
+    pose: PoseScoreConfig = field(default_factory=PoseScoreConfig)
 
 
-def score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_root: Path) -> dict[str, Any]:
+def score_keyframe_run(
+    run_dir: Path,
+    config: KeyframeScoreConfig,
+    *,
+    project_root: Path,
+    pose_extractor: Any | None = None,
+) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
     result = _read_json(resolved_run_dir / "result.json")
     assets = result["assets"]
     score_dir = resolved_run_dir / "score" / config.scorer_id
     masks_dir = score_dir / "masks"
     evidence_dir = score_dir / "evidence"
+    pose_evidence_dir = score_dir / "pose_evidence"
     if score_dir.exists():
         shutil.rmtree(score_dir)
     masks_dir.mkdir(parents=True)
     evidence_dir.mkdir(parents=True)
+    pose_evidence_dir.mkdir(parents=True)
 
     target = _load_target(assets)
+    pose_target = _load_pose_target(assets, config)
+    if pose_target is not None and pose_extractor is None:
+        pose_extractor = DWPoseKeypointExtractor(config.pose)
+
     candidates = [
-        _score_candidate(output, target, config, masks_dir=masks_dir, evidence_dir=evidence_dir)
+        _score_candidate(
+            output,
+            target,
+            pose_target,
+            pose_extractor,
+            config,
+            masks_dir=masks_dir,
+            evidence_dir=evidence_dir,
+            pose_evidence_dir=pose_evidence_dir,
+        )
         for output in result["outputs"]
     ]
     ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
@@ -50,6 +81,8 @@ def score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_ro
     ranked_candidates = [ordered[name] for name in ranking]
     _save_ranked_sheet(ranked_candidates, score_dir / "ranked_contact_sheet.png", image_key="image")
     _save_ranked_sheet(ranked_candidates, score_dir / "condition_evidence_ranked.png", image_key="condition_evidence")
+    if pose_target is not None:
+        _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
 
     payload = {
         "schema_version": SCORE_SCHEMA_VERSION,
@@ -64,11 +97,19 @@ def score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_ro
             "foreground_threshold": config.foreground_threshold,
             "contour_radius": config.contour_radius,
             "distance_scale_px": config.distance_scale_px,
-            "weights": _score_weights(),
+            "pose": {
+                "enabled": pose_target is not None,
+                "distance_scale": config.pose.distance_scale,
+                "min_common_keypoints": config.pose.min_common_keypoints,
+                "det_model": config.pose.det_model.as_posix(),
+                "pose_model": config.pose.pose_model.as_posix(),
+            },
+            "weights": _score_weights(pose_target is not None),
         },
         "assets": {
             "contour": assets["contour"],
             "boundary_mask": assets["boundary_mask"],
+            "pose": assets.get("pose"),
         },
         "candidates": candidates,
         "ranking": {
@@ -79,6 +120,7 @@ def score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_ro
             "scores": (score_dir / "scores.json").as_posix(),
             "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
             "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
+            "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix() if pose_target is not None else None,
         },
     }
     _write_json(score_dir / "scores.json", payload)
@@ -102,13 +144,23 @@ def _load_target(assets: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _load_pose_target(assets: dict[str, Any], config: KeyframeScoreConfig) -> PoseKeypoints | None:
+    pose_asset = assets.get("pose")
+    if pose_asset is None:
+        return None
+    return extract_target_pose_map_keypoints(Path(pose_asset["path"]), config.pose)
+
+
 def _score_candidate(
     output: dict[str, Any],
     target: dict[str, Any],
+    pose_target: PoseKeypoints | None,
+    pose_extractor: Any | None,
     config: KeyframeScoreConfig,
     *,
     masks_dir: Path,
     evidence_dir: Path,
+    pose_evidence_dir: Path,
 ) -> dict[str, Any]:
     candidate_name = output["name"]
     image_path = Path(output["path"]).resolve()
@@ -153,16 +205,28 @@ def _score_candidate(
             },
         ),
         "contour": contour_f1,
-        "pose": contour_recall,
+        "pose": 0.0,
         "side_profile": side_profile_score,
         "artifact": _artifact_score(foreground_coverage),
     }
-    scores["final"] = _weighted_score(scores, _score_weights())
+    pose_metrics: dict[str, Any] | None = None
+    pose_evidence_path: Path | None = None
+    if pose_target is not None:
+        candidate_pose = pose_extractor.extract(image_path)
+        pose_result = score_pose_match(pose_target, candidate_pose, config.pose)
+        scores["pose"] = pose_result.score
+        pose_metrics = pose_result.to_json()
+        pose_evidence_path = pose_evidence_dir / f"{candidate_name}__pose_match.png"
+        save_pose_evidence(image_path, pose_target, candidate_pose, pose_evidence_path)
+
+    scores["final"] = _weighted_score(scores, _score_weights(pose_target is not None))
     hard_rejects = {
         "missing_foreground": bool(foreground.sum() == 0),
         "weak_condition_match": bool(scores["condition"] < 0.25),
         "weak_side_profile": bool(scores["side_profile"] < 0.45),
     }
+    if pose_target is not None:
+        hard_rejects["weak_pose_match"] = bool(scores["pose"] < 0.20)
     mask_path = masks_dir / f"{candidate_name}__foreground.png"
     evidence_path = evidence_dir / f"{candidate_name}__condition_diff.png"
     _save_mask(foreground, mask_path)
@@ -172,6 +236,7 @@ def _score_candidate(
         "image": image_path.as_posix(),
         "foreground_mask": mask_path.as_posix(),
         "condition_evidence": evidence_path.as_posix(),
+        "pose_evidence": pose_evidence_path.as_posix() if pose_evidence_path is not None else None,
         "hard_rejects": hard_rejects,
         "metrics": {
             "contour_precision": contour_precision,
@@ -185,12 +250,21 @@ def _score_candidate(
             "target_bbox_ratio": target["bbox_ratio"],
             "candidate_bbox_ratio": candidate_bbox_ratio,
             "foreground_coverage": foreground_coverage,
+            "pose": pose_metrics,
         },
         "scores": scores,
     }
 
 
-def _score_weights() -> dict[str, float]:
+def _score_weights(pose_enabled: bool) -> dict[str, float]:
+    if pose_enabled:
+        return {
+            "condition": 0.50,
+            "contour": 0.05,
+            "pose": 0.25,
+            "side_profile": 0.15,
+            "artifact": 0.05,
+        }
     return {
         "condition": 0.75,
         "contour": 0.05,

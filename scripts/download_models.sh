@@ -13,6 +13,7 @@ Usage: scripts/download_models.sh
 Downloads the fixed production model set:
 - FLUX Kontext 4-bit model and Union ControlNet
 - Nunchaku FLUX Kontext FP4 transformer
+- DWPose ONNX annotator models for keyframe pose scoring
 - Qwen2.5-VL-7B keyframe judge
 EOF
 }
@@ -34,6 +35,7 @@ done
 manifest_args=(
   "model_sources/kontext_pose_control_pipeline_4bit.json"
   "model_sources/nunchaku_kontext_pipeline_fp4.json"
+  "model_sources/keyframe_pose_dwpose_onnx.json"
   "model_sources/keyframe_judge_qwen2_5_vl_7b.json"
 )
 

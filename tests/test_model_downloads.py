@@ -120,6 +120,17 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "cc594898137f460bfe9f0759e9844b3ce807cfb5")
         self.assertIn("*.safetensors", download.include)
 
+    def test_keyframe_pose_manifest_downloads_dwpose_onnx_models(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_pose_dwpose_onnx.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "dwpose-onnx-keyframe-scorer")
+        self.assertEqual(download.repo_id, "yzd-v/DWPose")
+        self.assertEqual(download.local_path, "annotators/yzd-v/DWPose")
+        self.assertEqual(download.revision, "1a7144101628d69ee7a3768d1ee3a094070dc388")
+        self.assertIn("yolox_l.onnx", download.include)
+        self.assertIn("dw-ll_ucoco_384.onnx", download.include)
+
     def test_dry_run_plans_hub_download_without_network_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

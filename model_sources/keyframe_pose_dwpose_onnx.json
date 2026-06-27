@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "phase": "post-generation keyframe pose scoring",
+    "runtime": "ONNX Runtime DWPose"
+  },
+  "downloads": [
+    {
+      "name": "dwpose-onnx-keyframe-scorer",
+      "repo_id": "yzd-v/DWPose",
+      "revision": "1a7144101628d69ee7a3768d1ee3a094070dc388",
+      "local_path": "annotators/yzd-v/DWPose",
+      "include": [
+        "yolox_l.onnx",
+        "dw-ll_ucoco_384.onnx",
+        "README.md"
+      ]
+    }
+  ]
+}

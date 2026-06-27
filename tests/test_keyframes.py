@@ -36,6 +36,7 @@ from aigen.keyframe_judge import (
     judge_keyframe_run,
     select_keyframe_run,
 )
+from aigen.keyframe_pose import OPENPOSE_BODY_COLORS, PoseKeypoints
 from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run
 
 
@@ -64,6 +65,35 @@ def write_rectangle_contour(path: Path, box: tuple[int, int, int, int]) -> None:
     draw = ImageDraw.Draw(image)
     draw.rectangle(box, outline=255, width=3)
     image.save(path)
+
+
+def write_pose_map(path: Path, points: dict[int, tuple[float, float]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", (160, 240), "black")
+    draw = ImageDraw.Draw(image)
+    for index, (x_norm, y_norm) in points.items():
+        color = tuple(int(value) for value in OPENPOSE_BODY_COLORS[index])
+        x = round(x_norm * image.width)
+        y = round(y_norm * image.height)
+        draw.ellipse((x - 5, y - 5, x + 5, y + 5), fill=color)
+    image.save(path)
+
+
+def pose_keypoints(points: dict[int, tuple[float, float]]) -> PoseKeypoints:
+    body = torch.full((18, 2), float("nan")).numpy()
+    scores = torch.zeros(18).numpy()
+    for index, point in points.items():
+        body[index] = point
+        scores[index] = 1.0
+    return PoseKeypoints(points=body, scores=scores, image_size=(160, 240))
+
+
+class FakePoseExtractor:
+    def __init__(self, poses: dict[str, PoseKeypoints]):
+        self.poses = poses
+
+    def extract(self, image_path: Path) -> PoseKeypoints:
+        return self.poses[image_path.name]
 
 
 def write_score_fixture(root: Path) -> Path:
@@ -101,6 +131,59 @@ def write_score_fixture(root: Path) -> Path:
         },
     )
     return run_dir
+
+
+def write_pose_score_fixture(root: Path) -> tuple[Path, dict[str, PoseKeypoints]]:
+    run_dir = root / "runs" / "pose-score"
+    reference = root / "assets" / "reference.png"
+    pose = root / "assets" / "pose.png"
+    contour = root / "assets" / "contour.png"
+    mask = root / "assets" / "mask.png"
+    target_points = {
+        0: (0.52, 0.16),
+        1: (0.50, 0.26),
+        2: (0.43, 0.30),
+        5: (0.57, 0.30),
+        8: (0.45, 0.52),
+        9: (0.40, 0.72),
+        10: (0.36, 0.90),
+        11: (0.55, 0.52),
+        12: (0.58, 0.72),
+        13: (0.65, 0.90),
+    }
+    shifted_points = {index: (x - 0.09, y + 0.02) for index, (x, y) in target_points.items()}
+    write_image(reference, (160, 240), (240, 230, 220))
+    write_pose_map(pose, target_points)
+    write_rectangle_contour(contour, (60, 30, 100, 210))
+    write_image(mask, (160, 240), (255, 255, 255))
+    outputs = []
+    poses = {}
+    for name, candidate_pose in (
+        ("seed_002", shifted_points),
+        ("seed_003", target_points),
+    ):
+        image_path = run_dir / f"{name}.png"
+        write_rectangle_candidate(image_path, (60, 30, 100, 210))
+        outputs.append({"name": name, "seed": int(name[-3:]), "path": image_path.as_posix()})
+        poses[image_path.name] = pose_keypoints(candidate_pose)
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "pose.score.fixture",
+            "assets": {
+                "reference": {"path": reference.as_posix()},
+                "pose": {"path": pose.as_posix()},
+                "contour": {"path": contour.as_posix()},
+                "boundary_mask": {"path": mask.as_posix()},
+            },
+            "outputs": outputs,
+            "effective_config": {
+                "keyframe": {"action": "walk", "phase": "contact", "direction": "left", "camera": "orthographic-side"}
+            },
+        },
+    )
+    return run_dir, poses
 
 
 def write_keyframe_result(root: Path) -> Path:
@@ -608,6 +691,24 @@ class KeyframeTests(unittest.TestCase):
             self.assertTrue(Path(result["outputs"]["scores"]).exists())
             self.assertTrue(Path(result["outputs"]["ranked_contact_sheet"]).exists())
             self.assertTrue(Path(result["outputs"]["condition_evidence_ranked"]).exists())
+
+    def test_keyframe_score_uses_pose_keypoints_when_pose_asset_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir, poses = write_pose_score_fixture(root)
+
+            result = score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="pose-test", foreground_threshold=20.0),
+                project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+            )
+            candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
+
+            self.assertEqual(result["ranking"]["best"], "seed_003")
+            self.assertGreater(candidates["seed_003"]["scores"]["pose"], candidates["seed_002"]["scores"]["pose"])
+            self.assertEqual(candidates["seed_003"]["metrics"]["pose"]["common_keypoints"], 10)
+            self.assertTrue(Path(result["outputs"]["pose_evidence_ranked"]).exists())
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
