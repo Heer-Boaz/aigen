@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "character": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_reference": {
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "type": "integer"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "width": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "sha256",
+            "mode",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "source_reference"
+      ],
+      "type": "object"
+    },
+    "kind": {
+      "const": "character-view-bank"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "views": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "properties": {
+          "acceptance": {
+            "type": "object"
+          },
+          "accepted_candidate": {
+            "type": "string"
+          },
+          "accepted_seed": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "assets": {
+            "type": "object"
+          },
+          "image": {
+            "additionalProperties": false,
+            "properties": {
+              "height": {
+                "type": "integer"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "sha256",
+              "mode",
+              "width",
+              "height"
+            ],
+            "type": "object"
+          },
+          "prompt": {
+            "type": "object"
+          },
+          "source_job": {
+            "type": "object"
+          },
+          "view": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "view",
+          "image",
+          "accepted_candidate",
+          "source_job"
+        ],
+        "type": "object"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "character",
+    "views"
+  ],
+  "type": "object"
+}

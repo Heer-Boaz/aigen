@@ -42,9 +42,14 @@ class PathSpec(StrictModel):
     path: str
 
 
+class IdentityPrimerSpec(StrictModel):
+    view: Literal["front", "left_profile", "right_profile", "back"]
+    path: str
+
+
 class RefineCharacterSpec(StrictModel):
     id: str
-    reference: PathSpec
+    identity_primer: IdentityPrimerSpec
 
 
 class RefineMaskSourceSpec(StrictModel):
@@ -240,7 +245,7 @@ def resolve_keyframe_refine_job(
     result = _read_json(base_dir / "result.json")
     base_output = _base_output(result, spec.base.candidate)
     base_image = _asset_json(Path(base_output["path"]).resolve())
-    reference = _asset_json(_resolve_path(spec.character.reference.path, job_path.parent))
+    identity_primer = _asset_json(_resolve_path(spec.character.identity_primer.path, job_path.parent))
     pose = _asset_json(_resolve_path(spec.region.mask_source.pose, job_path.parent))
     contour = _asset_json(_resolve_path(spec.region.mask_source.contour, job_path.parent))
     if pose["width"] != base_image["width"] or pose["height"] != base_image["height"]:
@@ -281,7 +286,10 @@ def resolve_keyframe_refine_job(
         },
         "character": {
             "id": spec.character.id,
-            "reference": reference,
+            "identity_primer": {
+                "view": spec.character.identity_primer.view,
+                **identity_primer,
+            },
         },
         "region": spec.region.model_dump(mode="json"),
         "assets": {
@@ -390,7 +398,7 @@ def run_keyframe_refine_job(
             "git_commit": resolved["git_commit"],
             "models": resolved["profile"]["models"],
             "assets": {
-                "reference": resolved["character"]["reference"],
+                "identity_primer": resolved["character"]["identity_primer"],
                 "base_image": resolved["base"]["image"],
                 "pose": resolved["assets"]["pose"],
                 "contour": resolved["assets"]["contour"],
@@ -438,13 +446,13 @@ def run_keyframe_refine_variant(
         torch_module = refiner.torch
         variant_start = synchronized_time(torch_module)
         base = Image.open(resolved["base"]["image"]["path"]).convert("RGB")
-        reference = Image.open(resolved["character"]["reference"]["path"]).convert("RGB")
+        identity_primer = Image.open(resolved["character"]["identity_primer"]["path"]).convert("RGB")
         base_crop = base.crop(mask_plan.crop_box)
         mask_crop = mask_plan.feather_mask.crop(mask_plan.crop_box)
         refined_crop = refiner.refine(
             base_crop=base_crop,
             mask_crop=mask_crop,
-            reference_image=reference,
+            reference_image=identity_primer,
             clip_prompt=spec.prompt.clip,
             t5_prompt=spec.prompt.t5,
             negative_prompt=spec.prompt.negative,

@@ -256,14 +256,27 @@ The Nunchaku pose profiles are split by intent:
 ```
 
 For repeated action-keyframe work, use JSON-first keyframe jobs. The job file
-owns the character reference, pose/contour/mask assets, CLIP/T5 prompts, fixed
-seed variants, output naming, and acceptance notes:
+owns the approved character identity-primer, pose/contour/mask assets, CLIP/T5
+prompts, fixed seed variants, output naming, and acceptance notes:
 
 ```bash
 .venv/bin/python -m aigen.cli keyframes init --template c2-profile > jobs/ai46_walk_contact.json
 .venv/bin/python -m aigen.cli keyframes validate jobs/ai46_walk_contact.json
 .venv/bin/python -m aigen.cli keyframes plan jobs/ai46_walk_contact.json
 .venv/bin/python -m aigen.cli keyframes run jobs/ai46_walk_contact.json
+```
+
+Canonical character views are stored in a versioned view bank. A keyframe job
+does not infer a reference image; it must name the exact approved view-primer it
+uses. Create view jobs under `characters` and accept one generated candidate into
+`assets/characters/<id>/view_bank.json`:
+
+```bash
+.venv/bin/python -m aigen.cli characters view-init --template ai46-left-profile > jobs/ai46/left_profile_view.json
+.venv/bin/python -m aigen.cli characters view-validate jobs/ai46/left_profile_view.json
+.venv/bin/python -m aigen.cli characters view-accept jobs/ai46/left_profile_view.json \
+  --run-dir runs/characters/ai46/views/left_profile_neutral_v1 \
+  --candidate seed_003
 ```
 
 The run writes:

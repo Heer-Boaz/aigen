@@ -30,13 +30,14 @@
   },
   "character": {
     "id": "ai46",
-    "reference": {
-      "path": "../../assets/characters/AI46.png"
+    "identity_primer": {
+      "view": "front",
+      "path": "../../assets/characters/ai46/views/front_v1.png"
     }
   },
   "conditions": [
     {
-      "end": 0.60,
+      "end": 0.6,
       "image": "pose",
       "name": "pose",
       "scale": 0.62,

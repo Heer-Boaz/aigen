@@ -16,8 +16,9 @@
   },
   "character": {
     "id": "ai46",
-    "reference": {
-      "path": "../../assets/characters/AI46.png"
+    "identity_primer": {
+      "view": "front",
+      "path": "../../assets/characters/ai46/views/front_v1.png"
     }
   },
   "id": "ai46.punch.straight.fist.refine.v1",

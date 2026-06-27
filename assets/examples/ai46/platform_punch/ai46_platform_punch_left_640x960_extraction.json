@@ -1,0 +1,88 @@
+{
+  "assets": {
+    "boundary_mask": {
+      "height": 960,
+      "mode": "L",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_boundary.png",
+      "sha256": "20e9e1201a63fc01952da9d5124c762922b5a0512c642de5aa58d26617d7954a",
+      "width": 640
+    },
+    "contour": {
+      "height": 960,
+      "mode": "L",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_contour.png",
+      "sha256": "5a4538fe213bf3bdd24cc386be7a45c30cdac710077c4b15eb3e0f2774fd4ef2",
+      "width": 640
+    },
+    "normalized_source": {
+      "height": 960,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_normalized.png",
+      "sha256": "0c3cc96d1c361b3f9ea2fe68d54c33d2196bfc254f1cbe660cd2e4543ea45392",
+      "width": 640
+    },
+    "pose": {
+      "height": 960,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_pose.png",
+      "sha256": "fdf09e4ed778adebafdbe24b3b5d64b70674f3208c5bc21b4a8e9751a1e426c2",
+      "width": 640
+    },
+    "source": {
+      "height": 120,
+      "mode": "RGBA",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_source.png",
+      "sha256": "8a830a228d990a20e7d4d96c3d1552f98f441a084ec5c439fff8d5849932d760",
+      "width": 88
+    }
+  },
+  "canvas": {
+    "height": 960,
+    "width": 640
+  },
+  "foreground": {
+    "coverage": 0.24230143229166667,
+    "normalized_bbox": [
+      38,
+      134,
+      601,
+      907
+    ],
+    "source_bbox": [
+      1,
+      1,
+      87,
+      119
+    ]
+  },
+  "kind": "keyframe-example-extraction",
+  "mirror_x": true,
+  "pose": {
+    "body_count": 1,
+    "mean_body_score": 0.7360822558403015,
+    "visible_body_keypoints": 18
+  },
+  "schema_version": 1,
+  "source": {
+    "height": 120,
+    "mode": "RGBA",
+    "path": "/mnt/c/Users/boazp/AppData/Local/Temp/tmp2FAD.png",
+    "sha256": "d6ee13e10346ecabb46f1f27dc44ebbafd466c715c2ba72209e7d678c8494372",
+    "width": 88
+  },
+  "transform": {
+    "canvas_paste": [
+      38,
+      134,
+      601,
+      907
+    ],
+    "scale": 6.548837209302326,
+    "source_crop": [
+      1,
+      1,
+      87,
+      119
+    ]
+  }
+}

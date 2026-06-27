@@ -366,7 +366,7 @@ def select_keyframe_run(
 
 def _candidate_image_paths(assets: dict[str, Any], candidate_path: Path, overlay_path: Path) -> list[Path]:
     paths = [
-        Path(assets["reference"]["path"]),
+        Path(assets["identity_primer"]["path"]),
         candidate_path,
         Path(assets["pose"]["path"]),
         Path(assets["contour"]["path"]),
@@ -385,19 +385,19 @@ def _candidate_prompt(candidate_name: str, effective_config: dict[str, Any]) -> 
     return f"""You are a strict visual QA judge for platformer character keyframes.
 
 You will receive these images in order:
-1. Original character reference.
+1. Approved character identity primer.
 2. Generated candidate image named {candidate_name}.
 3. Target pose condition.
 4. Target contour condition.
 5. Boundary mask if present.
 6. Candidate image with the target contour overlaid in red.
 
-Do not choose the prettiest image. Judge whether the candidate follows the control conditions while preserving the character.
+Do not choose the prettiest image. Judge whether the candidate follows the control conditions while preserving the approved character primer.
 
 Priority order:
 1. Condition adherence.
 2. Strict side-profile camera.
-3. Character identity and outfit preservation.
+3. Character identity and outfit preservation against the primer.
 4. Artifact and aesthetic quality.
 
 Hard reject if:
@@ -463,7 +463,7 @@ You will receive these images in order:
 1. Target contour condition.
 2. A side-by-side red-contour overlay sheet. #1 is {candidate_a}; #2 is {candidate_b}.
 3. A side-by-side full candidate sheet with the same labels. #1 is {candidate_a}; #2 is {candidate_b}.
-4. Original character reference for identity tiebreak only.
+4. Approved character identity primer for identity tiebreak only.
 
 Choose exactly one winner. Judge only by condition adherence first, then strict side profile, then identity and outfit preservation. Do not reward an image merely because it is prettier.
 
@@ -520,7 +520,7 @@ def _run_pairwise_ranking(
                 Path(assets["contour"]["path"]),
                 pairwise_overlay_sheet,
                 pairwise_candidate_sheet,
-                Path(assets["reference"]["path"]),
+                Path(assets["identity_primer"]["path"]),
             ]
             prompt = _pairwise_prompt(candidate_a, candidate_b, effective_config)
             (prompts_dir / f"{slug}.txt").write_text(prompt, encoding="utf-8")

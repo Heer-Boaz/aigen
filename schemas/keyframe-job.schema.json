@@ -115,13 +115,13 @@
           "title": "Id",
           "type": "string"
         },
-        "reference": {
-          "$ref": "#/$defs/PathSpec"
+        "identity_primer": {
+          "$ref": "#/$defs/IdentityPrimerSpec"
         }
       },
       "required": [
         "id",
-        "reference"
+        "identity_primer"
       ],
       "title": "CharacterSpec",
       "type": "object"
@@ -181,6 +181,31 @@
         "end"
       ],
       "title": "ControlConditionSpec",
+      "type": "object"
+    },
+    "IdentityPrimerSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "view": {
+          "enum": [
+            "front",
+            "left_profile",
+            "right_profile",
+            "back"
+          ],
+          "title": "View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view",
+        "path"
+      ],
+      "title": "IdentityPrimerSpec",
       "type": "object"
     },
     "KeyframeSpec": {

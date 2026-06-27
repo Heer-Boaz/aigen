@@ -28,6 +28,17 @@ from aigen.generation.pose_control import (
     CharacterPoseError,
     run_character_pose_control,
 )
+from aigen.character_views import (
+    CharacterViewError,
+    accept_character_view,
+    character_view_bank_schema,
+    character_view_job_schema,
+    left_profile_view_template,
+    load_character_view_job,
+    plan_character_view_job,
+    run_character_view_job,
+    validate_character_view_job,
+)
 from aigen.keyframes import (
     KeyframeJobError,
     KeyframeProfile,
@@ -57,6 +68,11 @@ from aigen.keyframe_score import (
     KeyframeScoreError,
     KeyframeScoreConfig,
     score_keyframe_run,
+)
+from aigen.keyframe_examples import (
+    KeyframeExampleError,
+    KeyframeExampleExtractionConfig,
+    extract_keyframe_example,
 )
 from aigen.keyframe_pose import KeyframePoseError
 from aigen.keyframe_refine import (
@@ -553,6 +569,23 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     run.add_argument("job", type=Path, help="Keyframe job JSON")
     run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    extract_example = keyframe_subparsers.add_parser(
+        "extract-example",
+        help="Extract pose, contour and boundary assets from a source keyframe example",
+    )
+    extract_example.add_argument("--source", type=Path, required=True, help="Source example image")
+    extract_example.add_argument("--output-dir", type=Path, required=True, help="Directory for extracted assets")
+    extract_example.add_argument("--name", required=True, help="Asset filename prefix")
+    extract_example.add_argument("--width", type=int, required=True, help="Output condition width")
+    extract_example.add_argument("--height", type=int, required=True, help="Output condition height")
+    extract_example.add_argument(
+        "--mirror-x",
+        action="store_true",
+        help="Mirror the example horizontally before extracting conditions",
+    )
+    extract_example.add_argument("--pose-device", default="cpu", help="DWPose device")
+    extract_example.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     refine_validate = keyframe_subparsers.add_parser(
         "refine-validate",
         help="Validate a keyframe refine job without running the GPU",
@@ -691,6 +724,42 @@ def _add_model_commands(subparsers: Any) -> None:
         action="store_true",
         help="Write compact JSON instead of pretty printed JSON",
     )
+
+
+def _add_character_commands(subparsers: Any) -> None:
+    characters = subparsers.add_parser("characters", help="Versioned character view bank tools")
+    character_subparsers = characters.add_subparsers(dest="characters_command", required=True)
+
+    view_init = character_subparsers.add_parser("view-init", help="Write a character-view job template to stdout")
+    view_init.add_argument("--template", choices=("ai46-left-profile",), required=True)
+    view_init.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_schema = character_subparsers.add_parser("view-schema", help="Write the character-view job schema")
+    view_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    bank_schema = character_subparsers.add_parser("view-bank-schema", help="Write the character view-bank schema")
+    bank_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_validate = character_subparsers.add_parser("view-validate", help="Validate a character-view job")
+    view_validate.add_argument("job", type=Path, help="Character-view job JSON")
+    view_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_plan = character_subparsers.add_parser("view-plan", help="Resolve a character-view job")
+    view_plan.add_argument("job", type=Path, help="Character-view job JSON")
+    view_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_run = character_subparsers.add_parser("view-run", help="Run a character-view job")
+    view_run.add_argument("job", type=Path, help="Character-view job JSON")
+    view_run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_accept = character_subparsers.add_parser(
+        "view-accept",
+        help="Accept one generated candidate as a canonical character view",
+    )
+    view_accept.add_argument("job", type=Path, help="Character-view job JSON")
+    view_accept.add_argument("--run-dir", type=Path, required=True, help="Completed character-view run directory")
+    view_accept.add_argument("--candidate", required=True, help="Candidate name to accept")
+    view_accept.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def _add_generate_commands(subparsers: Any) -> None:
@@ -1308,6 +1377,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_generate_commands(subparsers)
+    _add_character_commands(subparsers)
     _add_keyframe_commands(subparsers)
     _add_model_commands(subparsers)
     return parser
@@ -1334,6 +1404,67 @@ def main(argv: Sequence[str] | None = None) -> int:
             _dump_json(sys.stdout, payload, pretty=not args.compact)
         return 0
 
+    if args.command == "characters":
+        try:
+            if args.characters_command == "view-init":
+                _dump_json(sys.stdout, left_profile_view_template(), pretty=not args.compact)
+                return 0
+            if args.characters_command == "view-schema":
+                _dump_json(sys.stdout, character_view_job_schema(), pretty=not args.compact)
+                return 0
+            if args.characters_command == "view-bank-schema":
+                _dump_json(sys.stdout, character_view_bank_schema(), pretty=not args.compact)
+                return 0
+            if args.characters_command == "view-validate":
+                _dump_json(
+                    sys.stdout,
+                    validate_character_view_job(args.job, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.characters_command == "view-plan":
+                _dump_json(
+                    sys.stdout,
+                    plan_character_view_job(args.job, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.characters_command == "view-run":
+                _dump_json(
+                    sys.stdout,
+                    run_character_view_job(
+                        args.job,
+                        _keyframe_profile(load_character_view_job(args.job).pipeline.profile),
+                        project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.characters_command == "view-accept":
+                _dump_json(
+                    sys.stdout,
+                    accept_character_view(
+                        args.job,
+                        run_dir=args.run_dir,
+                        candidate=args.candidate,
+                        project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+        except CharacterViewError as error:
+            _dump_json(
+                sys.stderr,
+                {
+                    "schema_version": 1,
+                    "status": "error",
+                    "error": error.__class__.__name__,
+                    "message": str(error),
+                },
+                pretty=not args.compact,
+            )
+            return 1
+
     if args.command == "keyframes":
         try:
             if args.keyframes_command == "init":
@@ -1344,6 +1475,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             if args.keyframes_command == "refine-schema":
                 _dump_json(sys.stdout, keyframe_refine_job_schema(), pretty=not args.compact)
+                return 0
+            if args.keyframes_command == "extract-example":
+                _dump_json(
+                    sys.stdout,
+                    extract_keyframe_example(
+                        KeyframeExampleExtractionConfig(
+                            source=args.source,
+                            output_dir=args.output_dir,
+                            name=args.name,
+                            width=args.width,
+                            height=args.height,
+                            mirror_x=args.mirror_x,
+                            pose_device=args.pose_device,
+                        )
+                    ),
+                    pretty=not args.compact,
+                )
                 return 0
             if args.keyframes_command == "judge":
                 _dump_json(
@@ -1464,7 +1612,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-        except (KeyframeJobError, KeyframeJudgeError, KeyframePoseError, KeyframeScoreError, KeyframeRefineError) as error:
+        except (
+            KeyframeExampleError,
+            KeyframeJobError,
+            KeyframeJudgeError,
+            KeyframePoseError,
+            KeyframeScoreError,
+            KeyframeRefineError,
+        ) as error:
             _dump_json(
                 sys.stderr,
                 {

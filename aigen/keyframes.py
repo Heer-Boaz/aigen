@@ -18,6 +18,7 @@ from aigen.generation.kontext_pose_control import (
     KontextControlCondition,
     _generation_environment,
     cuda_memory_stats,
+    fit_size_to_area,
     synchronized_time,
 )
 from aigen.prompt_tokens import count_kontext_prompt_tokens
@@ -28,6 +29,15 @@ KEYFRAME_KIND = "character-keyframe"
 KEYFRAME_SCHEMA_VERSION = 1
 NVIDIA_SMI_PREFLIGHT_LIMIT_MB = 1800
 NVIDIA_SMI_SAMPLE_SECONDS = 0.25
+FLUX_TOKEN_SIZE = 16
+VRAM_ESTIMATE_BASELINE_FRAMEBUFFER_MB = 700
+VRAM_ESTIMATE_SAFETY_MARGIN_MB = 256
+VRAM_ESTIMATE_BASE_PEAK_MB = 15200
+VRAM_ESTIMATE_GENERATED_TOKEN_NUMERATOR = 22
+VRAM_ESTIMATE_REFERENCE_TOKEN_NUMERATOR = 5
+VRAM_ESTIMATE_TOKEN_DENOMINATOR = 100
+VRAM_ESTIMATE_TRUE_CFG_MB = 250
+VRAM_ESTIMATE_HIGH_GENERATED_TOKEN_THRESHOLD = 2100
 
 
 class StrictModel(BaseModel):
@@ -42,9 +52,14 @@ class PathSpec(StrictModel):
     path: str
 
 
+class IdentityPrimerSpec(StrictModel):
+    view: Literal["front", "left_profile", "right_profile", "back"]
+    path: str
+
+
 class CharacterSpec(StrictModel):
     id: str
-    reference: PathSpec
+    identity_primer: IdentityPrimerSpec
 
 
 class KeyframeSpec(StrictModel):
@@ -188,7 +203,10 @@ def c2_profile_template() -> dict[str, Any]:
             "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
             "character": {
                 "id": "ai46",
-                "reference": {"path": "../../assets/characters/AI46.png"},
+                "identity_primer": {
+                    "view": "front",
+                    "path": "../../assets/characters/ai46/views/front_v1.png",
+                },
             },
             "keyframe": {
                 "action": "walk",
@@ -291,6 +309,17 @@ def resolve_keyframe_job(
     check_outputs: bool,
 ) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
+    return resolve_keyframe_spec(spec, job_path, profile, project_root=project_root, check_outputs=check_outputs)
+
+
+def resolve_keyframe_spec(
+    spec: KeyframeJobSpec,
+    job_path: Path,
+    profile: KeyframeProfile,
+    *,
+    project_root: Path,
+    check_outputs: bool,
+) -> dict[str, Any]:
     if spec.pipeline.profile != profile.name:
         raise KeyframeJobError(f"Job uses profile {spec.pipeline.profile}, but CLI resolved {profile.name}")
 
@@ -305,12 +334,12 @@ def resolve_keyframe_job(
         if existing:
             raise KeyframeJobError(f"Output exists and overwrite=false: {existing[0]['path']}")
 
-    tokens = count_kontext_prompt_tokens(profile.model, spec.prompt.clip, spec.prompt.t5)
-    if tokens.clip > tokens.clip_limit:
-        raise KeyframeJobError(f"CLIP prompt has {tokens.clip} tokens, limit is {tokens.clip_limit}")
-    if tokens.t5 > spec.canvas.max_sequence_length:
+    prompt_tokens = count_kontext_prompt_tokens(profile.model, spec.prompt.clip, spec.prompt.t5)
+    if prompt_tokens.clip > prompt_tokens.clip_limit:
+        raise KeyframeJobError(f"CLIP prompt has {prompt_tokens.clip} tokens, limit is {prompt_tokens.clip_limit}")
+    if prompt_tokens.t5 > spec.canvas.max_sequence_length:
         raise KeyframeJobError(
-            f"T5 prompt has {tokens.t5} tokens, max_sequence_length is {spec.canvas.max_sequence_length}"
+            f"T5 prompt has {prompt_tokens.t5} tokens, max_sequence_length is {spec.canvas.max_sequence_length}"
         )
     if spec.prompt.negative is not None and spec.prompt.true_cfg_scale <= 1.0:
         raise KeyframeJobError("negative prompt is configured but true_cfg_scale <= 1.0")
@@ -322,6 +351,8 @@ def resolve_keyframe_job(
     if inactive:
         raise KeyframeJobError(f"Condition has zero active steps: {inactive[0]}")
 
+    token_metadata = _planned_token_metadata(spec, assets)
+    vram_plan = _vram_plan(spec, token_metadata)
     return {
         "schema_version": KEYFRAME_SCHEMA_VERSION,
         "kind": "resolved-character-keyframe",
@@ -330,10 +361,13 @@ def resolve_keyframe_job(
         "profile": _profile_json(profile),
         "character": {
             "id": spec.character.id,
-            "reference": assets["reference"],
+            "identity_primer": {
+                "view": spec.character.identity_primer.view,
+                **assets["identity_primer"],
+            },
         },
         "keyframe": spec.keyframe.model_dump(mode="json"),
-        "assets": {name: value for name, value in assets.items() if name != "reference"},
+        "assets": {name: value for name, value in assets.items() if name != "identity_primer"},
         "prompt": spec.prompt.model_dump(mode="json", exclude_none=True),
         "canvas": spec.canvas.model_dump(mode="json"),
         "sampling": spec.sampling.model_dump(mode="json"),
@@ -347,11 +381,13 @@ def resolve_keyframe_job(
         },
         "acceptance": spec.acceptance.model_dump(mode="json"),
         "tokens": {
-            "clip": tokens.clip,
-            "clip_limit": tokens.clip_limit,
-            "t5": tokens.t5,
+            "clip": prompt_tokens.clip,
+            "clip_limit": prompt_tokens.clip_limit,
+            "t5": prompt_tokens.t5,
             "t5_limit": spec.canvas.max_sequence_length,
         },
+        "token_metadata": token_metadata,
+        "vram_plan": vram_plan,
         "git_commit": _git_commit(project_root),
         "spec_sha256": _sha256_bytes(job_path.read_bytes()),
     }
@@ -375,8 +411,18 @@ def plan_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root:
 
 def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
-    resolved = resolve_keyframe_job(job_path, profile, project_root=project_root, check_outputs=True)
-    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_preflight())
+    return run_keyframe_spec(spec, job_path, profile, project_root=project_root)
+
+
+def run_keyframe_spec(
+    spec: KeyframeJobSpec,
+    job_path: Path,
+    profile: KeyframeProfile,
+    *,
+    project_root: Path,
+) -> dict[str, Any]:
+    resolved = resolve_keyframe_spec(spec, job_path, profile, project_root=project_root, check_outputs=True)
+    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_keyframe_preflight(resolved["vram_plan"]))
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_json(output_dir / "resolved.json", resolved)
@@ -401,7 +447,7 @@ def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: 
                 torch.cuda.reset_peak_memory_stats("cuda")
             total_start = synchronized_time(torch)
             prepared = session.prepare(
-                reference_image=Path(resolved["character"]["reference"]["path"]),
+                reference_image=Path(resolved["character"]["identity_primer"]["path"]),
                 pose_image=Path(resolved["assets"]["pose"]["path"]),
                 prompt=spec.prompt.clip,
                 t5_prompt=spec.prompt.t5,
@@ -466,7 +512,7 @@ def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: 
                 "spec_sha256": resolved["spec_sha256"],
                 "git_commit": resolved["git_commit"],
                 "models": resolved["profile"]["models"],
-                "assets": resolved["assets"] | {"reference": resolved["character"]["reference"]},
+                "assets": resolved["assets"] | {"identity_primer": resolved["character"]["identity_primer"]},
                 "outputs": outputs,
                 "effective_config": resolved,
                 "token_metadata": prepared.token_metadata,
@@ -514,7 +560,7 @@ def _profile_json(profile: KeyframeProfile) -> dict[str, Any]:
 
 def _resolve_assets(spec: KeyframeJobSpec, base_dir: Path) -> dict[str, dict[str, Any]]:
     assets: dict[str, dict[str, Any]] = {
-        "reference": _asset_json(_resolve_path(spec.character.reference.path, base_dir)),
+        "identity_primer": _asset_json(_resolve_path(spec.character.identity_primer.path, base_dir)),
         "pose": _asset_json(_resolve_path(spec.assets.pose.path, base_dir)),
     }
     for name in ("contour", "boundary_mask", "depth", "softedge"):
@@ -536,7 +582,7 @@ def _validate_conditions(spec: KeyframeJobSpec, assets: dict[str, dict[str, Any]
 
 def _validate_asset_dimensions(spec: KeyframeJobSpec, assets: dict[str, dict[str, Any]]) -> None:
     for name, asset in assets.items():
-        if name == "reference":
+        if name == "identity_primer":
             continue
         if asset["width"] != spec.canvas.width or asset["height"] != spec.canvas.height:
             raise KeyframeJobError(
@@ -569,6 +615,57 @@ def _condition_plan(condition: ControlConditionSpec, steps: int) -> dict[str, An
         "start": condition.start,
         "end": condition.end,
         "active_steps": active_steps,
+    }
+
+
+def _planned_token_metadata(spec: KeyframeJobSpec, assets: dict[str, dict[str, Any]]) -> dict[str, int]:
+    reference_width, reference_height = fit_size_to_area(
+        assets["identity_primer"]["width"],
+        assets["identity_primer"]["height"],
+        max_area=spec.canvas.reference_max_area,
+        multiple_of=FLUX_TOKEN_SIZE,
+    )
+    generated_tokens = _flux_tokens(spec.canvas.width, spec.canvas.height)
+    reference_tokens = _flux_tokens(reference_width, reference_height)
+    text_tokens = spec.canvas.max_sequence_length
+    return {
+        "reference_width": reference_width,
+        "reference_height": reference_height,
+        "reference_tokens": reference_tokens,
+        "generated_tokens": generated_tokens,
+        "text_tokens": text_tokens,
+        "total_tokens": generated_tokens + reference_tokens + text_tokens,
+    }
+
+
+def _flux_tokens(width: int, height: int) -> int:
+    return (width // FLUX_TOKEN_SIZE) * (height // FLUX_TOKEN_SIZE)
+
+
+def _vram_plan(spec: KeyframeJobSpec, token_metadata: dict[str, int]) -> dict[str, Any]:
+    true_cfg_extra_mb = VRAM_ESTIMATE_TRUE_CFG_MB if spec.prompt.true_cfg_scale > 1.0 else 0
+    high_generated_token_extra_mb = max(
+        0,
+        token_metadata["generated_tokens"] - VRAM_ESTIMATE_HIGH_GENERATED_TOKEN_THRESHOLD,
+    )
+    token_mb = (
+        token_metadata["generated_tokens"] * VRAM_ESTIMATE_GENERATED_TOKEN_NUMERATOR
+        + token_metadata["reference_tokens"] * VRAM_ESTIMATE_REFERENCE_TOKEN_NUMERATOR
+    ) // VRAM_ESTIMATE_TOKEN_DENOMINATOR
+    estimated_clean_peak_mb = (
+        VRAM_ESTIMATE_BASE_PEAK_MB + token_mb + true_cfg_extra_mb + high_generated_token_extra_mb
+    )
+    return {
+        "method": "nunchaku-kontext-controlnet-local-v1",
+        "baseline_framebuffer_mb": VRAM_ESTIMATE_BASELINE_FRAMEBUFFER_MB,
+        "safety_margin_mb": VRAM_ESTIMATE_SAFETY_MARGIN_MB,
+        "estimated_clean_peak_mb": estimated_clean_peak_mb,
+        "true_cfg_extra_mb": true_cfg_extra_mb,
+        "high_generated_token_extra_mb": high_generated_token_extra_mb,
+        "generated_tokens": token_metadata["generated_tokens"],
+        "reference_tokens": token_metadata["reference_tokens"],
+        "text_tokens": token_metadata["text_tokens"],
+        "total_tokens": token_metadata["total_tokens"],
     }
 
 
@@ -687,14 +784,50 @@ def _git_commit(project_root: Path) -> str:
 
 
 def _nvidia_smi_preflight() -> dict[str, int]:
+    return _nvidia_smi_preflight_limit(NVIDIA_SMI_PREFLIGHT_LIMIT_MB)
+
+
+def _nvidia_smi_keyframe_preflight(vram_plan: dict[str, Any]) -> dict[str, int]:
     if not _cuda_available():
         return {
             "nvidia_smi_preflight_used_mb": 0,
             "nvidia_smi_device_total_mb": 0,
+            "nvidia_smi_preflight_utilization_gpu": 0,
+            "vram_estimated_required_mb": 0,
+            "vram_estimated_headroom_mb": 0,
         }
 
     snapshot = _nvidia_smi_memory_snapshot()
-    limit_mb = int(os.environ.get("AIGEN_NVIDIA_SMI_PREFLIGHT_LIMIT_MB", NVIDIA_SMI_PREFLIGHT_LIMIT_MB))
+    extra_framebuffer_mb = max(0, snapshot["nvidia_smi_used_mb"] - vram_plan["baseline_framebuffer_mb"])
+    required_mb = vram_plan["estimated_clean_peak_mb"] + extra_framebuffer_mb + vram_plan["safety_margin_mb"]
+    headroom_mb = snapshot["nvidia_smi_device_total_mb"] - required_mb
+    if headroom_mb < 0:
+        raise KeyframeJobError(
+            "Estimated VRAM requirement exceeds available framebuffer: "
+            f"need about {required_mb} MB including margin, "
+            f"GPU has {snapshot['nvidia_smi_device_total_mb']} MB, "
+            f"currently used {snapshot['nvidia_smi_used_mb']} MB. "
+            "Close GPU consumers or lower output/reference tokens."
+        )
+    return {
+        "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],
+        "nvidia_smi_device_total_mb": snapshot["nvidia_smi_device_total_mb"],
+        "nvidia_smi_preflight_utilization_gpu": snapshot["nvidia_smi_utilization_gpu"],
+        "vram_estimated_required_mb": required_mb,
+        "vram_estimated_headroom_mb": headroom_mb,
+    }
+
+
+def _nvidia_smi_preflight_limit(limit_mb: int) -> dict[str, int]:
+    if not _cuda_available():
+        return {
+            "nvidia_smi_preflight_used_mb": 0,
+            "nvidia_smi_device_total_mb": 0,
+            "nvidia_smi_preflight_utilization_gpu": 0,
+        }
+
+    snapshot = _nvidia_smi_memory_snapshot()
+    limit_mb = int(os.environ.get("AIGEN_NVIDIA_SMI_PREFLIGHT_LIMIT_MB", limit_mb))
     if snapshot["nvidia_smi_used_mb"] > limit_mb:
         raise KeyframeJobError(
             "GPU framebuffer is not clean enough for a high-resolution keyframe run: "
@@ -704,6 +837,7 @@ def _nvidia_smi_preflight() -> dict[str, int]:
     return {
         "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],
         "nvidia_smi_device_total_mb": snapshot["nvidia_smi_device_total_mb"],
+        "nvidia_smi_preflight_utilization_gpu": snapshot["nvidia_smi_utilization_gpu"],
     }
 
 
@@ -717,7 +851,7 @@ def _nvidia_smi_memory_snapshot() -> dict[str, int]:
     output = subprocess.check_output(
         [
             "nvidia-smi",
-            "--query-gpu=memory.used,memory.total",
+            "--query-gpu=memory.used,memory.total,utilization.gpu",
             "--format=csv,noheader,nounits",
         ],
         text=True,
@@ -726,6 +860,7 @@ def _nvidia_smi_memory_snapshot() -> dict[str, int]:
     return {
         "nvidia_smi_used_mb": int(values[0].strip()),
         "nvidia_smi_device_total_mb": int(values[1].strip()),
+        "nvidia_smi_utilization_gpu": int(values[2].strip()),
     }
 
 

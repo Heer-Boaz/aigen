@@ -31,8 +31,9 @@
   },
   "character": {
     "id": "ai46",
-    "reference": {
-      "path": "../../assets/characters/AI46.png"
+    "identity_primer": {
+      "view": "front",
+      "path": "../../assets/characters/ai46/views/front_v1.png"
     }
   },
   "conditions": [
@@ -45,11 +46,11 @@
       "type": "pose"
     },
     {
-      "end": 0.50,
+      "end": 0.5,
       "image": "contour",
       "name": "profile_contour",
       "residual_mask": "boundary_mask",
-      "scale": 0.50,
+      "scale": 0.5,
       "start": 0.0,
       "type": "canny"
     }

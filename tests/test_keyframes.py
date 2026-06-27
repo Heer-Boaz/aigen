@@ -13,10 +13,17 @@ import torch
 from PIL import Image, ImageDraw
 
 from aigen.cli import main
+from aigen.character_views import (
+    accept_character_view,
+    left_profile_view_template,
+    plan_character_view_job,
+    run_character_view_job,
+)
 from aigen.generation.kontext_pose_control import KontextPoseDenoised
 from aigen.keyframes import (
     KeyframeJobError,
     KeyframeProfile,
+    _nvidia_smi_keyframe_preflight,
     _nvidia_smi_preflight,
     c2_profile_template,
     load_keyframe_job,
@@ -43,6 +50,7 @@ from aigen.keyframe_refine import (
     run_keyframe_refine_job,
 )
 from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run
+from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.prompt_tokens import PromptTokenCounts
 
 
@@ -102,6 +110,17 @@ class FakePoseExtractor:
         return self.poses[image_path.name]
 
 
+def fake_dwpose_control_image(image: Image.Image, **_kwargs: object) -> tuple[Image.Image, dict[str, object]]:
+    pose = Image.new("RGB", image.size, "black")
+    draw = ImageDraw.Draw(pose)
+    draw.line((20, 30, image.width - 20, 30), fill=(255, 0, 0), width=5)
+    return pose, {
+        "body_count": 1,
+        "visible_body_keypoints": 12,
+        "mean_body_score": 0.75,
+    }
+
+
 def write_score_fixture(root: Path) -> Path:
     run_dir = root / "runs" / "score"
     reference = root / "assets" / "reference.png"
@@ -126,7 +145,7 @@ def write_score_fixture(root: Path) -> Path:
             "status": "completed",
             "job_id": "score.fixture",
             "assets": {
-                "reference": {"path": reference.as_posix()},
+                "identity_primer": {"path": reference.as_posix()},
                 "contour": {"path": contour.as_posix()},
                 "boundary_mask": {"path": mask.as_posix()},
             },
@@ -178,7 +197,7 @@ def write_pose_score_fixture(root: Path) -> tuple[Path, dict[str, PoseKeypoints]
             "status": "completed",
             "job_id": "pose.score.fixture",
             "assets": {
-                "reference": {"path": reference.as_posix()},
+                "identity_primer": {"path": reference.as_posix()},
                 "pose": {"path": pose.as_posix()},
                 "contour": {"path": contour.as_posix()},
                 "boundary_mask": {"path": mask.as_posix()},
@@ -213,7 +232,7 @@ def write_keyframe_result(root: Path) -> Path:
             "status": "completed",
             "job_id": "ai46.walk.contact.left.640x960.ref384.seed-sweep.v1",
             "assets": {
-                "reference": {"path": reference.as_posix()},
+                "identity_primer": {"path": reference.as_posix()},
                 "pose": {"path": pose.as_posix()},
                 "contour": {"path": contour.as_posix()},
                 "boundary_mask": {"path": mask.as_posix()},
@@ -240,6 +259,78 @@ def write_keyframe_result(root: Path) -> Path:
         },
     )
     return run_dir
+
+
+def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
+    source = root / "assets" / "characters" / "ai46" / "views" / "front_v1.png"
+    pose = root / "assets" / "views" / "ai46" / "left_profile_pose.png"
+    contour = root / "assets" / "views" / "ai46" / "left_profile_contour.png"
+    mask = root / "assets" / "views" / "ai46" / "left_profile_boundary.png"
+    write_image(source, (160, 240), (240, 230, 220))
+    write_image(pose, (512, 768), (0, 255, 0))
+    write_image(contour, (512, 768), (255, 255, 255))
+    write_image(mask, (512, 768), (128, 128, 128))
+    run_dir = root / "runs" / "views"
+    candidate = run_dir / "seed_003.png"
+    write_image(candidate, (512, 768), (210, 180, 160))
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "ai46.left_profile.neutral.v1",
+            "outputs": [{"name": "seed_003", "seed": 3, "path": candidate.as_posix()}],
+        },
+    )
+    job_path = root / "jobs" / "ai46_left_profile_view.json"
+    job_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(
+        job_path,
+        {
+            "$schema": "../../schemas/character-view-job.schema.json",
+            "schema_version": 1,
+            "kind": "character-view",
+            "id": "ai46.left_profile.neutral.v1",
+            "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
+            "character": {"id": "ai46", "source_reference": {"path": "../assets/characters/ai46/views/front_v1.png"}},
+            "view": {"name": "left_profile", "camera": "orthographic-side", "pose": "neutral-standing"},
+            "assets": {
+                "pose": {"path": "../assets/views/ai46/left_profile_pose.png"},
+                "contour": {"path": "../assets/views/ai46/left_profile_contour.png"},
+                "boundary_mask": {"path": "../assets/views/ai46/left_profile_boundary.png"},
+            },
+            "prompt": {
+                "clip": "Same anime girl, neutral left profile.",
+                "t5": "Full-body neutral-standing character turnaround view.",
+                "true_cfg_scale": 1.0,
+            },
+            "canvas": {"width": 512, "height": 768, "reference_max_area": 294912, "max_sequence_length": 128},
+            "sampling": {"steps": 28, "guidance_scale": 2.5},
+            "conditions": [
+                {"name": "pose", "type": "pose", "image": "pose", "scale": 0.5, "start": 0.0, "end": 0.55},
+                {
+                    "name": "profile_contour",
+                    "type": "canny",
+                    "image": "contour",
+                    "residual_mask": "boundary_mask",
+                    "scale": 0.35,
+                    "start": 0.0,
+                    "end": 0.4,
+                },
+            ],
+            "variants": [{"name": "seed_003", "seed": 3}],
+            "output": {
+                "directory": "../runs/views",
+                "filename": "{id}__{variant}.png",
+                "canonical_path": "../assets/characters/ai46/views/left_profile_v1.png",
+                "bank_path": "../assets/characters/ai46/view_bank.json",
+                "overwrite": False,
+                "save_conditions": True,
+                "save_contact_sheet": True,
+            },
+            "acceptance": {"manual": ["strict left profile"], "minimum_passing_variants": 1},
+        },
+    )
+    return job_path, run_dir
 
 
 def write_refine_fixture(root: Path) -> Path:
@@ -300,7 +391,10 @@ def write_refine_fixture(root: Path) -> Path:
             "id": "ai46.punch.straight.fist.refine.v1",
             "pipeline": {"profile": "kontext-inpaint-local"},
             "base": {"run_dir": "../runs/punch", "candidate": "seed_005"},
-            "character": {"id": "ai46", "reference": {"path": "../assets/AI46.png"}},
+            "character": {
+                "id": "ai46",
+                "identity_primer": {"view": "front", "path": "../assets/AI46.png"},
+            },
             "region": {
                 "name": "punching_arm_fist",
                 "mask_source": {
@@ -389,7 +483,10 @@ def job_payload(root: Path) -> dict[str, object]:
         "kind": "character-keyframe",
         "id": "ai46.walk.contact.left.v1",
         "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
-        "character": {"id": "ai46", "reference": {"path": "assets/AI46.png"}},
+        "character": {
+            "id": "ai46",
+            "identity_primer": {"view": "front", "path": "assets/AI46.png"},
+        },
         "keyframe": {
             "action": "walk",
             "phase": "contact",
@@ -664,6 +761,21 @@ class KeyframeTests(unittest.TestCase):
         self.assertEqual(resolved["condition_plan"][1]["active_steps"], 11)
         self.assertEqual(len(resolved["output"]["files"]), 2)
         self.assertIn("sha256", resolved["assets"]["pose"])
+        self.assertEqual(resolved["character"]["identity_primer"]["view"], "front")
+        self.assertEqual(resolved["token_metadata"]["generated_tokens"], 1536)
+        self.assertEqual(resolved["token_metadata"]["reference_tokens"], 2048)
+        self.assertEqual(resolved["vram_plan"]["method"], "nunchaku-kontext-controlnet-local-v1")
+
+    def test_rejects_keyframe_job_without_identity_primer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            payload = job_payload(root)
+            payload["character"] = {"id": "ai46"}
+            job_path = root / "job.json"
+            write_json(job_path, payload)
+
+            with self.assertRaisesRegex(KeyframeJobError, "identity_primer"):
+                load_keyframe_job(job_path)
 
     def test_rejects_wrong_control_asset_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -695,10 +807,13 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframes._nvidia_smi_preflight",
+                    "aigen.keyframes._nvidia_smi_keyframe_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
+                        "nvidia_smi_preflight_utilization_gpu": 0,
+                        "vram_estimated_required_mb": 0,
+                        "vram_estimated_headroom_mb": 0,
                     },
                 ),
             ):
@@ -714,10 +829,141 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["outputs"][0]["controlnet_metadata"]["conditions"], ["pose", "profile_contour"])
             self.assertEqual(
+                FakeSession.instances[0].prepare_kwargs["reference_image"],
+                root / "assets" / "AI46.png",
+            )
+            self.assertEqual(
                 FakeSession.instances[0].prepare_kwargs["t5_prompt"],
                 "Full-body orthographic side-view gameplay keyframe.",
             )
             self.assertEqual(result["memory"]["nvidia_smi_peak_used_mb"], 0)
+
+    def test_character_view_accept_writes_canonical_view_bank_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, run_dir = write_character_view_fixture(root)
+
+            plan = plan_character_view_job(job_path, project_root=Path.cwd())
+            accepted = accept_character_view(job_path, run_dir=run_dir, candidate="seed_003", project_root=Path.cwd())
+            bank_path = Path(accepted["bank_path"])
+            bank = json.loads(bank_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(plan["view"]["name"], "left_profile")
+            self.assertTrue(Path(accepted["canonical_path"]).exists())
+            self.assertEqual(bank["views"]["left_profile"]["accepted_candidate"], "seed_003")
+            self.assertEqual(bank["views"]["left_profile"]["image"]["sha256"], accepted["canonical_sha256"])
+
+    def test_cli_character_view_init_outputs_view_job_template(self) -> None:
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            exit_code = main(["characters", "view-init", "--template", "ai46-left-profile"])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["kind"], "character-view")
+        self.assertEqual(payload["character"]["source_reference"]["path"], "../../assets/characters/ai46/views/front_v1.png")
+        self.assertEqual(left_profile_view_template()["view"]["name"], "left_profile")
+
+    def test_character_view_run_uses_source_reference_as_front_primer(self) -> None:
+        FakeSession.instances.clear()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, _run_dir = write_character_view_fixture(root)
+            with (
+                patch(
+                    "aigen.keyframes.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=10, clip_limit=77, t5=20),
+                ),
+                patch("aigen.keyframes.CharacterKontextPoseSession", FakeSession),
+                patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
+                patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
+                patch(
+                    "aigen.keyframes._nvidia_smi_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                        "nvidia_smi_preflight_utilization_gpu": 0,
+                    },
+                ),
+            ):
+                result = run_character_view_job(job_path, profile(), project_root=Path.cwd())
+
+            output_dir = root / "runs" / "views"
+            self.assertTrue((output_dir / "result.json").exists())
+            self.assertEqual(result["job_id"], "ai46.left_profile.neutral.v1")
+            self.assertEqual(
+                FakeSession.instances[0].prepare_kwargs["reference_image"],
+                root / "assets" / "characters" / "ai46" / "views" / "front_v1.png",
+            )
+
+    def test_extract_keyframe_example_writes_condition_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            image = Image.new("RGBA", (32, 48), (0, 255, 0, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((9, 5, 20, 40), fill=(120, 80, 60, 255))
+            draw.rectangle((3, 15, 28, 21), fill=(120, 80, 60, 255))
+            image.save(source)
+
+            with patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image):
+                result = extract_keyframe_example(
+                    KeyframeExampleExtractionConfig(
+                        source=source,
+                        output_dir=root / "assets" / "examples",
+                        name="punch_example",
+                        width=160,
+                        height=240,
+                        mirror_x=True,
+                    )
+                )
+
+            assets = result["assets"]
+            self.assertTrue(Path(assets["pose"]["path"]).exists())
+            self.assertTrue(Path(assets["contour"]["path"]).exists())
+            self.assertTrue(Path(assets["boundary_mask"]["path"]).exists())
+            self.assertEqual(assets["pose"]["width"], 160)
+            self.assertEqual(assets["contour"]["height"], 240)
+            self.assertEqual(result["pose"]["visible_body_keypoints"], 12)
+            self.assertTrue(result["mirror_x"])
+
+    def test_cli_extract_example_outputs_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            image = Image.new("RGBA", (32, 48), (0, 255, 0, 255))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((9, 5, 20, 40), fill=(120, 80, 60, 255))
+            image.save(source)
+            stdout = StringIO()
+
+            with (
+                patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image),
+                redirect_stdout(stdout),
+            ):
+                exit_code = main(
+                    [
+                        "keyframes",
+                        "extract-example",
+                        "--source",
+                        source.as_posix(),
+                        "--output-dir",
+                        (root / "assets").as_posix(),
+                        "--name",
+                        "sprite",
+                        "--width",
+                        "160",
+                        "--height",
+                        "240",
+                        "--mirror-x",
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["kind"], "keyframe-example-extraction")
+            self.assertEqual(payload["assets"]["metadata"]["path"], (root / "assets" / "sprite_extraction.json").as_posix())
 
     def test_preflight_rejects_dirty_framebuffer(self) -> None:
         with (
@@ -727,11 +973,33 @@ class KeyframeTests(unittest.TestCase):
                 return_value={
                     "nvidia_smi_used_mb": 1801,
                     "nvidia_smi_device_total_mb": 16303,
+                    "nvidia_smi_utilization_gpu": 0,
                 },
             ),
         ):
             with self.assertRaisesRegex(KeyframeJobError, "1801 MB used before model load"):
                 _nvidia_smi_preflight()
+
+    def test_keyframe_preflight_rejects_estimated_oom(self) -> None:
+        with (
+            patch("aigen.keyframes._cuda_available", return_value=True),
+            patch(
+                "aigen.keyframes._nvidia_smi_memory_snapshot",
+                return_value={
+                    "nvidia_smi_used_mb": 999,
+                    "nvidia_smi_device_total_mb": 16303,
+                    "nvidia_smi_utilization_gpu": 0,
+                },
+            ),
+        ):
+            with self.assertRaisesRegex(KeyframeJobError, "Estimated VRAM requirement exceeds"):
+                _nvidia_smi_keyframe_preflight(
+                    {
+                        "baseline_framebuffer_mb": 700,
+                        "safety_margin_mb": 256,
+                        "estimated_clean_peak_mb": 16033,
+                    }
+                )
 
     def test_keyframe_judge_ranks_condition_first_and_selects_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

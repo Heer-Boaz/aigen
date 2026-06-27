@@ -52,7 +52,7 @@ class PoseKeypoints:
 class PoseScoreConfig:
     distance_scale: float = 0.30
     min_common_keypoints: int = 6
-    target_color_tolerance: float = 42.0
+    target_color_tolerance: float = 120.0
     detector_score_threshold: float = 0.30
     device: str = "cpu"
     det_model: Path = DEFAULT_DWPOSE_DET_MODEL
@@ -114,10 +114,10 @@ def extract_target_pose_map_keypoints(image_path: Path, config: PoseScoreConfig)
     height, width, _ = image.shape
     points = np.full((BODY_KEYPOINT_COUNT, 2), np.nan, dtype=np.float32)
     scores = np.zeros(BODY_KEYPOINT_COUNT, dtype=np.float32)
+    labels = _body_color_labels(image, config.target_color_tolerance)
 
-    for index, color in enumerate(OPENPOSE_BODY_COLORS):
-        distance = np.sqrt(((image - color) ** 2).sum(axis=2))
-        mask = distance <= config.target_color_tolerance
+    for index in range(BODY_KEYPOINT_COUNT):
+        mask = labels == index
         if not mask.any():
             continue
         y_coords, x_coords = np.nonzero(_largest_component(mask))
@@ -128,6 +128,15 @@ def extract_target_pose_map_keypoints(image_path: Path, config: PoseScoreConfig)
         raise KeyframePoseError(f"Target pose map does not contain enough body keypoints: {image_path.as_posix()}")
 
     return PoseKeypoints(points=points, scores=scores, image_size=(width, height))
+
+
+def _body_color_labels(image: np.ndarray, tolerance: float) -> np.ndarray:
+    chroma = image.max(axis=2) - image.min(axis=2)
+    colored = (image.max(axis=2) > 35.0) & (chroma > 20.0)
+    distances = np.sqrt(((image[:, :, None, :] - OPENPOSE_BODY_COLORS[None, None, :, :]) ** 2).sum(axis=3))
+    nearest = distances.argmin(axis=2).astype(np.int16)
+    nearest[~colored | (distances.min(axis=2) > tolerance)] = -1
+    return nearest
 
 
 def score_pose_match(
