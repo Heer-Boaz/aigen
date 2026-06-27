@@ -879,7 +879,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframes._nvidia_smi_preflight",
+                    "aigen.keyframes._nvidia_smi_keyframe_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,

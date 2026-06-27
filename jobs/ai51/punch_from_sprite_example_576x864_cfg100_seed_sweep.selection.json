@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "job": {
+    "id": "ai51.punch.platformer.example.left.576x864.cfg100.seed-sweep.v1",
+    "path": "jobs/ai51/punch_from_sprite_example_576x864_cfg100_seed_sweep.json",
+    "sha256": "585b75c81fc847fef6d2a7a8c6fa0367d3d2c8456e5a3a8da8422b1c849e519e"
+  },
+  "run": {
+    "directory": "runs/keyframes/ai51/punch_straight/576x864_platformer_example_cfg100_seed_sweep_v1",
+    "git_commit": "4d529f1"
+  },
+  "selection_mode": "manual_condition_review",
+  "selected": [
+    {
+      "name": "seed_002",
+      "sha256": "6121a4755489edd47f8aa592b779cba12bea4694ea89abd0acaa19f190801a07"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "seed_003",
+      "reason": "Stronger pose than the identity-preserving seeds, but weaker character preservation than seed_002."
+    },
+    {
+      "name": "seed_004",
+      "reason": "Stronger pose than the identity-preserving seeds, but weaker character preservation than seed_002."
+    },
+    {
+      "name": "seed_005",
+      "reason": "Scorer winner, but visually too frontal and generic for the intended platformer attack frame."
+    }
+  ],
+  "reason": "Seed_002 is the best human-reviewed start: it keeps the AI51 side-primer identity reasonably intact while reading as a usable left-facing platformer attack frame. The current condition-v1 scorer is not trusted for this punch/action run because it ranks seed_005 higher despite weaker action intent and side-profile read.",
+  "next_step": "Run a larger 576x864 seed sweep with the same identity primer, prompt, pose, contour, boundary mask and condition settings."
+}
