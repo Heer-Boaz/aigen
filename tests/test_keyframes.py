@@ -1563,7 +1563,7 @@ class KeyframeTests(unittest.TestCase):
         self.assertEqual([region["id"] for region in resolved["polish_plan"]["regions"]], ["region_01", "region_02"])
         self.assertEqual([plan["region_id"] for plan in resolved["mask_plan"]], ["region_01", "region_02"])
         self.assertEqual(resolved["mask_plan"][0]["grounding"]["source"], "fake-grounder")
-        self.assertEqual(resolved["mask_plan"][0]["segmentation"]["method"], "grounding-dino-box-to-sam-mask")
+        self.assertEqual(resolved["mask_plan"][0]["segmentation"]["method"], "fake-grounder-box-to-sam-mask")
 
     def test_keyframe_polish_run_preserves_outside_pixels(self) -> None:
         FakeRefiner.instances.clear()

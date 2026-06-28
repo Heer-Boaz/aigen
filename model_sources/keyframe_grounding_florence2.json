@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "phase": "post-generation polish region grounding",
+    "runtime": "Native Transformers Florence-2 phrase grounding before SAM masking"
+  },
+  "downloads": [
+    {
+      "name": "florence-2-large-ft-keyframe-polish-grounding",
+      "repo_id": "florence-community/Florence-2-large-ft",
+      "revision": "26b734a54fdfbf9c398351eedfabb7f27fc470b7",
+      "local_path": "grounding/florence-community/Florence-2-large-ft",
+      "include": [
+        "*.json",
+        "*.safetensors",
+        "*.txt",
+        "merges.txt",
+        "vocab.json",
+        "tokenizer*"
+      ],
+      "exclude": [
+        "*.md",
+        ".gitattributes"
+      ]
+    }
+  ]
+}

@@ -110,6 +110,17 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertIn("*.safetensors", download.include)
         self.assertIn("tokenizer*", download.include)
 
+    def test_keyframe_grounding_manifest_downloads_florence2(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_grounding_florence2.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "florence-2-large-ft-keyframe-polish-grounding")
+        self.assertEqual(download.repo_id, "florence-community/Florence-2-large-ft")
+        self.assertEqual(download.revision, "26b734a54fdfbf9c398351eedfabb7f27fc470b7")
+        self.assertEqual(download.local_path, "grounding/florence-community/Florence-2-large-ft")
+        self.assertIn("*.json", download.include)
+        self.assertIn("*.safetensors", download.include)
+
     def test_dry_run_plans_hub_download_without_network_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

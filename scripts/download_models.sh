@@ -15,6 +15,7 @@ Downloads the fixed production model set:
 - Nunchaku FLUX Kontext FP4 transformer
 - SAM ViT-B checkpoint for keyframe foreground segmentation
 - GroundingDINO base model for polish region grounding
+- Florence-2 large-ft native checkpoint for polish region grounding
 - DWPose ONNX annotator models for keyframe pose scoring
 - Qwen2.5-VL-7B keyframe judge
 EOF
@@ -39,6 +40,7 @@ manifest_args=(
   "model_sources/keyframe_generation_nunchaku_transformer.json"
   "model_sources/keyframe_segmentation_sam_vit_b.json"
   "model_sources/keyframe_grounding_dino.json"
+  "model_sources/keyframe_grounding_florence2.json"
   "model_sources/keyframe_pose_dwpose_onnx.json"
   "model_sources/keyframe_judge_qwen2_5_vl_7b.json"
 )

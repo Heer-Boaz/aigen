@@ -24,7 +24,7 @@ scripts/install.sh
 The installer is modular internally and always installs the current production
 stack: FLUX Kontext, Shakker Union Pro ControlNet, Nunchaku, Qwen judge, DWPose
 pose scoring models, SAM foreground segmentation, GroundingDINO polish
-grounding and validation checks.
+grounding, Florence-2 polish grounding and validation checks.
 
 ```bash
 scripts/check_system.sh
@@ -40,6 +40,7 @@ The model manifests used by the installer are:
 - `model_sources/keyframe_generation_nunchaku_transformer.json`
 - `model_sources/keyframe_segmentation_sam_vit_b.json`
 - `model_sources/keyframe_grounding_dino.json`
+- `model_sources/keyframe_grounding_florence2.json`
 - `model_sources/keyframe_pose_dwpose_onnx.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 

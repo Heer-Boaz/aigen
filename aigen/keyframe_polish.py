@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from scipy import ndimage
 
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, synchronized_time
-from aigen.keyframe_grounding import GroundedRegionBox, GroundingConfig, GroundingDinoRegionGrounder
+from aigen.keyframe_grounding import GroundedRegionBox, GroundingConfig, KeyframeRegionGrounder
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight
 from aigen.keyframe_judge import KeyframeJudgeConfig, QwenKeyframeJudge
 from aigen.keyframe_refine import KeyframeRefineProfile, KontextInpaintRefiner
@@ -811,7 +811,7 @@ def build_polish_mask_plans(
     grounder: Any | None = None,
 ) -> list[PolishMaskPlan]:
     active_segmenter = segmenter if segmenter is not None else SamForegroundSegmenter(SamSegmentationConfig())
-    active_grounder = grounder if grounder is not None else GroundingDinoRegionGrounder(GroundingConfig())
+    active_grounder = grounder if grounder is not None else KeyframeRegionGrounder(GroundingConfig())
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
     base_array = np.asarray(base.convert("RGB"), dtype=np.uint8)
     return [
@@ -1198,7 +1198,7 @@ def _mask_plan_json(mask_plan: PolishMaskPlan, output_dir: Path | None = None) -
         "crop_box": list(mask_plan.crop_box),
         "grounding": mask_plan.grounding.to_json(),
         "segmentation": {
-            "method": "grounding-dino-box-to-sam-mask",
+            "method": f"{mask_plan.grounding.source}-box-to-sam-mask",
         },
         "parameters": {
             "strength": mask_plan.parameters.strength,
