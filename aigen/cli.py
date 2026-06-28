@@ -88,11 +88,13 @@ from aigen.keyframe_refine import (
 )
 from aigen.keyframe_polish import (
     KeyframePolishError,
-    diagnose_keyframe_polish,
     keyframe_polish_job_schema,
+    keyframe_polish_plan_schema,
     load_keyframe_polish_job,
-    plan_keyframe_polish_job,
+    plan_keyframe_polish,
+    preview_keyframe_polish_job,
     run_keyframe_polish_job,
+    select_keyframe_polish,
     validate_keyframe_polish_job,
 )
 from aigen.models.downloads import (
@@ -477,7 +479,7 @@ KEYFRAME_REFINE_PROFILES = {
         ),
         attention_impl="nunchaku-fp16",
         dtype="bfloat16",
-        pipeline_cpu_offload=True,
+        pipeline_cpu_offload=False,
         vae_tiling=False,
     ),
 }
@@ -577,6 +579,12 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     )
     polish_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    polish_plan_schema = keyframe_subparsers.add_parser(
+        "polish-plan-schema",
+        help="Write the generated keyframe polish plan JSON schema to stdout",
+    )
+    polish_plan_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     validate = keyframe_subparsers.add_parser("validate", help="Validate a keyframe job without running the GPU")
     validate.add_argument("job", type=Path, help="Keyframe job JSON")
     validate.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -632,31 +640,31 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     refine_run_variant.add_argument("--variant", required=True, help=argparse.SUPPRESS)
     refine_run_variant.add_argument("--compact", action="store_true", help=argparse.SUPPRESS)
 
-    polish_diagnose = keyframe_subparsers.add_parser(
-        "polish-diagnose",
-        help="Use the local VLM to decide which polish-job regions need local inpaint",
+    polish_plan = keyframe_subparsers.add_parser(
+        "polish-plan",
+        help="Use the local VLM to plan model-discovered local polish regions",
     )
-    polish_diagnose.add_argument("job", type=Path, help="Keyframe polish job JSON")
-    polish_diagnose.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Judge id recorded in diagnosis")
-    polish_diagnose.add_argument(
+    polish_plan.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_plan.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Planner id recorded in polish plan")
+    polish_plan.add_argument(
         "--model",
         type=Path,
         default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
         help="Local Qwen2.5-VL-7B-Instruct model directory",
     )
-    polish_diagnose.add_argument("--dtype", default="bfloat16", help="Torch dtype for judge model weights")
-    polish_diagnose.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
-    polish_diagnose.add_argument(
+    polish_plan.add_argument("--dtype", default="bfloat16", help="Torch dtype for planner model weights")
+    polish_plan.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
+    polish_plan.add_argument(
         "--quantization",
         choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
         default=DEFAULT_JUDGE_QUANTIZATION,
-        help="Local inference quantization for polish diagnosis",
+        help="Local inference quantization for polish planning",
     )
-    polish_diagnose.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
-    polish_diagnose.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
-    polish_diagnose.add_argument("--max-new-tokens", type=int, default=700, help="Diagnosis response token budget")
-    polish_diagnose.add_argument("--temperature", type=float, default=0.0, help="Diagnosis sampling temperature")
-    polish_diagnose.add_argument("--compact", action="store_true", help="Write compact JSON")
+    polish_plan.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
+    polish_plan.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
+    polish_plan.add_argument("--max-new-tokens", type=int, default=1200, help="Planner response token budget")
+    polish_plan.add_argument("--temperature", type=float, default=0.0, help="Planner sampling temperature")
+    polish_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     polish_validate = keyframe_subparsers.add_parser(
         "polish-validate",
@@ -665,12 +673,12 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     polish_validate.add_argument("job", type=Path, help="Keyframe polish job JSON")
     polish_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    polish_plan = keyframe_subparsers.add_parser(
-        "polish-plan",
+    polish_preview = keyframe_subparsers.add_parser(
+        "polish-preview",
         help="Resolve a keyframe polish job without running the GPU",
     )
-    polish_plan.add_argument("job", type=Path, help="Keyframe polish job JSON")
-    polish_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+    polish_preview.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_preview.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     polish_run = keyframe_subparsers.add_parser(
         "polish-run",
@@ -678,6 +686,32 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     )
     polish_run.add_argument("job", type=Path, help="Keyframe polish job JSON")
     polish_run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    polish_select = keyframe_subparsers.add_parser(
+        "polish-select",
+        help="Use the local VLM to select local polish variants and write final_composite.png",
+    )
+    polish_select.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_select.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Selector id recorded in polish selection")
+    polish_select.add_argument(
+        "--model",
+        type=Path,
+        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        help="Local Qwen2.5-VL-7B-Instruct model directory",
+    )
+    polish_select.add_argument("--dtype", default="bfloat16", help="Torch dtype for selector model weights")
+    polish_select.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
+    polish_select.add_argument(
+        "--quantization",
+        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
+        default=DEFAULT_JUDGE_QUANTIZATION,
+        help="Local inference quantization for polish selection",
+    )
+    polish_select.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
+    polish_select.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
+    polish_select.add_argument("--max-new-tokens", type=int, default=700, help="Selector response token budget")
+    polish_select.add_argument("--temperature", type=float, default=0.0, help="Selector sampling temperature")
+    polish_select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     judge = keyframe_subparsers.add_parser("judge", help="Judge a completed keyframe run with a local VLM")
     judge.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
@@ -1554,6 +1588,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.keyframes_command == "polish-schema":
                 _dump_json(sys.stdout, keyframe_polish_job_schema(), pretty=not args.compact)
                 return 0
+            if args.keyframes_command == "polish-plan-schema":
+                _dump_json(sys.stdout, keyframe_polish_plan_schema(), pretty=not args.compact)
+                return 0
             if args.keyframes_command == "extract-example":
                 _dump_json(
                     sys.stdout,
@@ -1644,10 +1681,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-            if args.keyframes_command == "polish-diagnose":
+            if args.keyframes_command == "polish-plan":
                 _dump_json(
                     sys.stdout,
-                    diagnose_keyframe_polish(
+                    plan_keyframe_polish(
                         args.job,
                         config=KeyframeJudgeConfig(
                             judge_id=args.judge,
@@ -1668,7 +1705,31 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
-            if args.keyframes_command in {"polish-validate", "polish-plan", "polish-run"}:
+            if args.keyframes_command == "polish-select":
+                _dump_json(
+                    sys.stdout,
+                    select_keyframe_polish(
+                        args.job,
+                        config=KeyframeJudgeConfig(
+                            judge_id=args.judge,
+                            model=args.model,
+                            repo_id=DEFAULT_JUDGE_REPO_ID,
+                            revision=DEFAULT_JUDGE_REVISION,
+                            dtype=args.dtype,
+                            attention_impl=args.attention_impl,
+                            quantization=args.quantization,
+                            min_pixels=args.min_pixels,
+                            max_pixels=args.max_pixels,
+                            max_new_tokens=args.max_new_tokens,
+                            temperature=args.temperature,
+                            pairwise_top_k=0,
+                        ),
+                        project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command in {"polish-validate", "polish-preview", "polish-run"}:
                 profile = _keyframe_polish_profile_for_job(args.job)
                 if args.keyframes_command == "polish-validate":
                     _dump_json(
@@ -1677,10 +1738,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         pretty=not args.compact,
                     )
                     return 0
-                if args.keyframes_command == "polish-plan":
+                if args.keyframes_command == "polish-preview":
                     _dump_json(
                         sys.stdout,
-                        plan_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
+                        preview_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
                         pretty=not args.compact,
                     )
                     return 0

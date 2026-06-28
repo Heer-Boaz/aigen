@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from scipy import ndimage
 
 from aigen.generation.character_concept import DTYPES
-from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, synchronized_time
+from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, module_device_report, synchronized_time
 from aigen.keyframe_pose import PoseScoreConfig, extract_target_pose_map_keypoints
 from aigen.keyframes import NvidiaSmiMemorySampler, _nvidia_smi_preflight
 from aigen.prompt_tokens import count_kontext_prompt_tokens
@@ -171,6 +171,7 @@ class KontextInpaintRefiner:
             self.pipeline.enable_model_cpu_offload()
         else:
             self.pipeline.to(device)
+        self.device_report = _pipeline_device_report(self.pipeline)
         self.model_load_ms = elapsed_ms(model_load_start, synchronized_time(self.torch))
 
     def refine(
@@ -480,6 +481,7 @@ def run_keyframe_refine_variant(
             "timings_ms": {
                 "model_load_ms": refiner.model_load_ms,
             },
+            "device_report": refiner.device_report,
             "memory": cuda_memory_stats(torch_module, "cuda") | memory_sampler.stop(),
             "environment": _generation_environment(torch_module),
         }
@@ -813,3 +815,16 @@ def _generation_environment(torch_module: Any) -> dict[str, Any]:
         environment["gpu_name"] = torch_module.cuda.get_device_name(0)
         environment["compute_capability"] = list(torch_module.cuda.get_device_capability(0))
     return environment
+
+
+def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
+    components = {}
+    for name in ("transformer", "vae", "text_encoder", "text_encoder_2"):
+        component = getattr(pipeline, name, None)
+        if component:
+            components[name] = module_device_report(component)
+    return {
+        "pipeline_class": type(pipeline).__qualname__,
+        "model_cpu_offload_seq": getattr(pipeline, "model_cpu_offload_seq", ""),
+        "components": components,
+    }

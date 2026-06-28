@@ -14,6 +14,7 @@ from aigen.generation.character_concept import (
 from aigen.generation.runtime_diagnostics import (
     cuda_memory_stats,
     elapsed_ms,
+    module_device_report,
     parameter_locations,
     synchronized_time,
 )
@@ -493,11 +494,25 @@ def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
         "transformer_class": type(pipeline.transformer).__qualname__,
         "transformer_device_map": getattr(pipeline.transformer, "hf_device_map", None),
         "transformer_quantization_config": str(getattr(pipeline.transformer.config, "quantization_config", None)),
+        "device_report": _pipeline_device_report(pipeline),
     }
     if torch_module.cuda.is_available():
         environment["gpu_name"] = torch_module.cuda.get_device_name(0)
         environment["compute_capability"] = list(torch_module.cuda.get_device_capability(0))
     return environment
+
+
+def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
+    components = {}
+    for name in ("controlnet", "transformer", "vae", "text_encoder", "text_encoder_2"):
+        component = getattr(pipeline, name, None)
+        if component:
+            components[name] = module_device_report(component)
+    return {
+        "pipeline_class": type(pipeline).__qualname__,
+        "model_cpu_offload_seq": getattr(pipeline, "model_cpu_offload_seq", ""),
+        "components": components,
+    }
 
 
 def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) -> list[Any]:

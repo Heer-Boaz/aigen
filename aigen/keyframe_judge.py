@@ -10,6 +10,8 @@ from typing import Any
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from aigen.generation.runtime_diagnostics import module_device_report
+
 
 DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
 DEFAULT_JUDGE_REPO_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
@@ -141,6 +143,7 @@ class QwenKeyframeJudge:
         self.process_vision_info = process_vision_info
         self.config = config
         self.torch = torch
+        self.device_report = module_device_report(self.model)
 
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         return self._generate(prompt, image_paths)
@@ -261,7 +264,7 @@ def judge_keyframe_run(
         "job_id": result["job_id"],
         "git_commit": _git_commit(project_root),
         "source_result_sha256": _sha256_file(resolved_run_dir / "result.json"),
-        "judge": _judge_config_json(config),
+        "judge": _judge_config_json(config) | {"device_report": _runner_device_report(active_runner)},
         "candidates": candidate_results,
         "ranking": {
             "initial": initial_order,
@@ -715,6 +718,13 @@ def _judge_config_json(config: KeyframeJudgeConfig) -> dict[str, Any]:
         "temperature": config.temperature,
         "pairwise_top_k": config.pairwise_top_k,
     }
+
+
+def _runner_device_report(runner: Any) -> dict[str, Any]:
+    report = getattr(runner, "device_report", {})
+    if isinstance(report, dict):
+        return report
+    return {"value": str(report)}
 
 
 def _validate_local_qwen_model(config: KeyframeJudgeConfig) -> None:

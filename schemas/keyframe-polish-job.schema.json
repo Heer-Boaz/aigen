@@ -54,20 +54,6 @@
       "title": "PolishCharacterSpec",
       "type": "object"
     },
-    "PolishDiagnosisSpec": {
-      "additionalProperties": false,
-      "properties": {
-        "path": {
-          "title": "Path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "title": "PolishDiagnosisSpec",
-      "type": "object"
-    },
     "PolishIdentityPrimerSpec": {
       "additionalProperties": false,
       "properties": {
@@ -93,15 +79,36 @@
       "title": "PolishIdentityPrimerSpec",
       "type": "object"
     },
+    "PolishMicroSweepSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "seed_offsets": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Seed Offsets",
+          "type": "array"
+        },
+        "strength_offsets": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Strength Offsets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "strength_offsets",
+        "seed_offsets"
+      ],
+      "title": "PolishMicroSweepSpec",
+      "type": "object"
+    },
     "PolishOutputSpec": {
       "additionalProperties": false,
       "properties": {
         "directory": {
           "title": "Directory",
-          "type": "string"
-        },
-        "filename": {
-          "title": "Filename",
           "type": "string"
         },
         "overwrite": {
@@ -119,7 +126,6 @@
       },
       "required": [
         "directory",
-        "filename",
         "overwrite",
         "save_debug_images",
         "save_contact_sheet"
@@ -141,126 +147,30 @@
       "title": "PolishPipelineSpec",
       "type": "object"
     },
-    "PolishPromptSpec": {
+    "PolishPlanPathSpec": {
       "additionalProperties": false,
       "properties": {
-        "clip": {
-          "title": "Clip",
+        "path": {
+          "title": "Path",
           "type": "string"
-        },
-        "negative": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Negative"
-        },
-        "t5": {
-          "title": "T5",
-          "type": "string"
-        },
-        "true_cfg_scale": {
-          "title": "True Cfg Scale",
-          "type": "number"
         }
       },
       "required": [
-        "clip",
-        "t5",
-        "true_cfg_scale"
+        "path"
       ],
-      "title": "PolishPromptSpec",
+      "title": "PolishPlanPathSpec",
       "type": "object"
     },
-    "PolishRegionSpec": {
+    "PolishPlannerSpec": {
       "additionalProperties": false,
       "properties": {
-        "crop_padding_px": {
-          "title": "Crop Padding Px",
-          "type": "integer"
-        },
-        "feather_px": {
-          "title": "Feather Px",
-          "type": "integer"
-        },
-        "mask": {
-          "enum": [
-            "auto_tie_shirt",
-            "auto_skirt_belt",
-            "auto_face"
-          ],
-          "title": "Mask",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "prompt": {
-          "$ref": "#/$defs/PolishPromptSpec"
-        }
-      },
-      "required": [
-        "name",
-        "mask",
-        "crop_padding_px",
-        "feather_px",
-        "prompt"
-      ],
-      "title": "PolishRegionSpec",
-      "type": "object"
-    },
-    "PolishSamplingSpec": {
-      "additionalProperties": false,
-      "properties": {
-        "guidance_scale": {
-          "title": "Guidance Scale",
-          "type": "number"
-        },
-        "max_sequence_length": {
-          "title": "Max Sequence Length",
-          "type": "integer"
-        },
-        "steps": {
-          "title": "Steps",
-          "type": "integer"
-        },
-        "strength": {
-          "title": "Strength",
-          "type": "number"
-        }
-      },
-      "required": [
-        "steps",
-        "guidance_scale",
-        "strength",
-        "max_sequence_length"
-      ],
-      "title": "PolishSamplingSpec",
-      "type": "object"
-    },
-    "PolishVariantSpec": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "seed": {
-          "title": "Seed",
+        "max_regions": {
+          "default": 4,
+          "title": "Max Regions",
           "type": "integer"
         }
       },
-      "required": [
-        "name",
-        "seed"
-      ],
-      "title": "PolishVariantSpec",
+      "title": "PolishPlannerSpec",
       "type": "object"
     }
   },
@@ -280,9 +190,6 @@
     "character": {
       "$ref": "#/$defs/PolishCharacterSpec"
     },
-    "diagnosis": {
-      "$ref": "#/$defs/PolishDiagnosisSpec"
-    },
     "id": {
       "title": "Id",
       "type": "string"
@@ -292,33 +199,25 @@
       "title": "Kind",
       "type": "string"
     },
+    "micro_sweep": {
+      "$ref": "#/$defs/PolishMicroSweepSpec"
+    },
     "output": {
       "$ref": "#/$defs/PolishOutputSpec"
     },
     "pipeline": {
       "$ref": "#/$defs/PolishPipelineSpec"
     },
-    "regions": {
-      "items": {
-        "$ref": "#/$defs/PolishRegionSpec"
-      },
-      "title": "Regions",
-      "type": "array"
+    "plan": {
+      "$ref": "#/$defs/PolishPlanPathSpec"
     },
-    "sampling": {
-      "$ref": "#/$defs/PolishSamplingSpec"
+    "planner": {
+      "$ref": "#/$defs/PolishPlannerSpec"
     },
     "schema_version": {
       "const": 1,
       "title": "Schema Version",
       "type": "integer"
-    },
-    "variants": {
-      "items": {
-        "$ref": "#/$defs/PolishVariantSpec"
-      },
-      "title": "Variants",
-      "type": "array"
     }
   },
   "required": [
@@ -329,10 +228,9 @@
     "pipeline",
     "base",
     "character",
-    "diagnosis",
-    "regions",
-    "sampling",
-    "variants",
+    "plan",
+    "planner",
+    "micro_sweep",
     "output",
     "acceptance"
   ],
