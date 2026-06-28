@@ -49,6 +49,11 @@ from aigen.keyframe_refine import (
     plan_keyframe_refine_job,
     run_keyframe_refine_job,
 )
+from aigen.keyframe_polish import (
+    diagnose_keyframe_polish,
+    plan_keyframe_polish_job,
+    run_keyframe_polish_job,
+)
 from aigen.keyframe_score import KeyframeScoreConfig, select_scored_keyframe_run, score_keyframe_run
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.prompt_tokens import PromptTokenCounts
@@ -433,6 +438,133 @@ def write_refine_fixture(root: Path) -> Path:
     return job_path
 
 
+def write_polish_fixture(root: Path) -> tuple[Path, Path]:
+    run_dir = root / "runs" / "punch"
+    reference = root / "assets" / "AI51_left_profile.png"
+    base_image = run_dir / "seed_060.png"
+    diagnosis = root / "jobs" / "seed_060_polish_diagnosis.json"
+    diagnosis.parent.mkdir(parents=True, exist_ok=True)
+    write_image(reference, (160, 240), (245, 226, 220))
+    write_rectangle_candidate(base_image, (55, 36, 112, 220))
+    write_json(
+        run_dir / "result.json",
+        {
+            "status": "completed",
+            "job_id": "ai51.punch.fixture",
+            "assets": {
+                "identity_primer": {
+                    "path": reference.as_posix(),
+                    "mode": "RGB",
+                    "width": 160,
+                    "height": 240,
+                    "sha256": "reference",
+                }
+            },
+            "effective_config": {
+                "keyframe": {
+                    "action": "punch",
+                    "phase": "platformer-example",
+                    "direction": "left",
+                    "camera": "orthographic-side",
+                },
+                "acceptance": {
+                    "manual": [
+                        "strict side profile",
+                        "front arm and hand pose match the source example",
+                    ]
+                },
+            },
+            "outputs": [{"name": "seed_060", "seed": 60, "path": base_image.as_posix()}],
+        },
+    )
+    write_json(
+        diagnosis,
+        {
+            "schema_version": 1,
+            "status": "completed",
+            "run_dir": run_dir.as_posix(),
+            "candidate": "seed_060",
+            "diagnosis": {
+                "candidate": "seed_060",
+                "region_assessments": {
+                    "face_expression": {"needs_polish": True, "reason": "expression is weak"},
+                    "tie_and_shirt": {"needs_polish": True, "reason": "tie is unclear"},
+                    "skirt_belt": {"needs_polish": True, "reason": "skirt panel needs cleanup"},
+                },
+                "selected_regions": [
+                    {"name": "face_expression", "priority": 1, "reason": "expression is weak"},
+                    {"name": "tie_and_shirt", "priority": 2, "reason": "tie is unclear"},
+                    {"name": "skirt_belt", "priority": 3, "reason": "skirt panel needs cleanup"},
+                ],
+                "summary": "Polish face and outfit details.",
+            },
+        },
+    )
+    job_path = root / "jobs" / "punch_polish.json"
+    write_json(
+        job_path,
+        {
+            "$schema": "../../schemas/keyframe-polish-job.schema.json",
+            "schema_version": 1,
+            "kind": "keyframe-polish",
+            "id": "ai51.punch.seed060.polish.v1",
+            "pipeline": {"profile": "kontext-inpaint-local"},
+            "base": {"run_dir": "../runs/punch", "candidate": "seed_060"},
+            "character": {
+                "id": "ai51",
+                "identity_primer": {"view": "left_profile", "path": "../assets/AI51_left_profile.png"},
+            },
+            "diagnosis": {"path": "seed_060_polish_diagnosis.json"},
+            "regions": [
+                {
+                    "name": "face_expression",
+                    "mask": "auto_face",
+                    "crop_padding_px": 16,
+                    "feather_px": 3,
+                    "prompt": {
+                        "clip": "Polish face.",
+                        "t5": "Refine only the face expression.",
+                        "true_cfg_scale": 1.0,
+                    },
+                },
+                {
+                    "name": "tie_and_shirt",
+                    "mask": "auto_tie_shirt",
+                    "crop_padding_px": 16,
+                    "feather_px": 3,
+                    "prompt": {
+                        "clip": "Clean blue tie and white shirt.",
+                        "t5": "Refine only the blue tie, collar and white shirt.",
+                        "true_cfg_scale": 1.0,
+                    },
+                },
+                {
+                    "name": "skirt_belt",
+                    "mask": "auto_skirt_belt",
+                    "crop_padding_px": 16,
+                    "feather_px": 3,
+                    "prompt": {
+                        "clip": "Restore brown leather skirt and belt.",
+                        "t5": "Refine only the brown leather skirt, belt and waist details.",
+                        "true_cfg_scale": 1.0,
+                    },
+                },
+            ],
+            "sampling": {"steps": 4, "guidance_scale": 2.0, "strength": 0.45, "max_sequence_length": 128},
+            "variants": [{"name": "polish_001", "seed": 201}],
+            "output": {
+                "directory": "../runs/punch_polish",
+                "filename": "{id}__{variant}.png",
+                "overwrite": False,
+                "save_debug_images": True,
+                "save_contact_sheet": True,
+            },
+            "acceptance": {"manual": ["outside mask unchanged", "tie and skirt details improved"]},
+        },
+    )
+    return job_path, diagnosis
+
+
 def profile() -> KeyframeProfile:
     return KeyframeProfile(
         name="nunchaku-kontext-pose-quality",
@@ -711,6 +843,30 @@ class FakeJudgeRunner:
                 "candidate_b": candidate_b,
                 "winner": winner,
                 "evidence": f"{winner} follows the target contour most closely",
+            }
+        )
+
+
+class FakePolishDiagnoser:
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        if len(image_paths) != 8:
+            raise AssertionError(f"Expected identity, candidate, and three region overlay/crop pairs, got {len(image_paths)}")
+        if "face_expression local crop" not in prompt or "skirt_belt local crop" not in prompt:
+            raise AssertionError("Polish diagnosis prompt does not expose local region crops")
+        return json.dumps(
+            {
+                "candidate": "seed_060",
+                "region_assessments": {
+                    "face_expression": {"needs_polish": True, "reason": "expression is weak"},
+                    "tie_and_shirt": {"needs_polish": True, "reason": "tie is unclear"},
+                    "skirt_belt": {"needs_polish": True, "reason": "skirt panel needs cleanup"},
+                },
+                "selected_regions": [
+                    {"name": "face_expression", "priority": 1, "reason": "expression is weak"},
+                    {"name": "tie_and_shirt", "priority": 2, "reason": "tie is unclear"},
+                    {"name": "skirt_belt", "priority": 3, "reason": "skirt panel needs cleanup"},
+                ],
+                "summary": "Polish face and outfit details.",
             }
         )
 
@@ -1260,6 +1416,88 @@ class KeyframeTests(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertFalse(result["outputs"][0]["mask_change"]["hard_rejects"]["outside_feather_changed"])
             self.assertEqual(FakeRefiner.instances[0].seed, 101)
+            self.assertTrue(FakeRefiner.instances[0].closed)
+
+    def test_keyframe_polish_diagnose_writes_model_selected_regions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, diagnosis_path = write_polish_fixture(root)
+
+            result = diagnose_keyframe_polish(
+                job_path,
+                config=KeyframeJudgeConfig(
+                    judge_id=DEFAULT_JUDGE_ID,
+                    model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                    repo_id=DEFAULT_JUDGE_REPO_ID,
+                    revision=DEFAULT_JUDGE_REVISION,
+                    dtype="bfloat16",
+                    attention_impl="sdpa",
+                    quantization=DEFAULT_JUDGE_QUANTIZATION,
+                    min_pixels=1,
+                    max_pixels=2,
+                    max_new_tokens=512,
+                    temperature=0.0,
+                    pairwise_top_k=0,
+                ),
+                project_root=Path.cwd(),
+                runner=FakePolishDiagnoser(),
+            )
+
+        self.assertEqual(
+            [region["name"] for region in result["diagnosis"]["selected_regions"]],
+            ["face_expression", "tie_and_shirt", "skirt_belt"],
+        )
+        self.assertTrue(result["diagnosis"]["region_assessments"]["face_expression"]["needs_polish"])
+        self.assertEqual(len(result["diagnosis_images"]), 8)
+
+    def test_keyframe_polish_plan_uses_only_diagnosed_regions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, _diagnosis_path = write_polish_fixture(root)
+
+            with patch(
+                "aigen.keyframe_polish.count_kontext_prompt_tokens",
+                return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+            ):
+                resolved = plan_keyframe_polish_job(job_path, refine_profile(), project_root=Path.cwd())
+
+        self.assertEqual([region["name"] for region in resolved["regions"]], ["face_expression", "tie_and_shirt", "skirt_belt"])
+        self.assertEqual([plan["region"] for plan in resolved["mask_plan"]], ["face_expression", "tie_and_shirt", "skirt_belt"])
+
+    def test_keyframe_polish_run_preserves_outside_pixels(self) -> None:
+        FakeRefiner.instances.clear()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, _diagnosis_path = write_polish_fixture(root)
+            with (
+                patch(
+                    "aigen.keyframe_polish.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+                ),
+                patch("aigen.keyframe_polish.KontextInpaintRefiner", FakeRefiner),
+                patch("aigen.keyframe_polish.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
+                patch("aigen.keyframe_polish._generation_environment", return_value={"env": "fake"}),
+                patch(
+                    "aigen.keyframe_polish._nvidia_smi_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                    },
+                ),
+            ):
+                result = run_keyframe_polish_job(job_path, refine_profile(), project_root=Path.cwd())
+
+            output_dir = root / "runs" / "punch_polish"
+            output_path = Path(result["outputs"][0]["path"])
+
+            self.assertTrue((output_dir / "resolved.json").exists())
+            self.assertTrue((output_dir / "debug" / "face_expression" / "mask_feather.png").exists())
+            self.assertTrue((output_dir / "debug" / "tie_and_shirt" / "mask_feather.png").exists())
+            self.assertTrue((output_dir / "debug" / "skirt_belt" / "mask_feather.png").exists())
+            self.assertTrue((output_dir / "contact_sheet.png").exists())
+            self.assertTrue(output_path.exists())
+            self.assertFalse(result["outputs"][0]["hard_rejects"]["outside_feather_changed"])
+            self.assertEqual(FakeRefiner.instances[0].seed, 201)
             self.assertTrue(FakeRefiner.instances[0].closed)
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:

@@ -1,0 +1,341 @@
+{
+  "$defs": {
+    "PolishAcceptanceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "manual": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Manual",
+          "type": "array"
+        }
+      },
+      "required": [
+        "manual"
+      ],
+      "title": "PolishAcceptanceSpec",
+      "type": "object"
+    },
+    "PolishBaseSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "title": "Candidate",
+          "type": "string"
+        },
+        "run_dir": {
+          "title": "Run Dir",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_dir",
+        "candidate"
+      ],
+      "title": "PolishBaseSpec",
+      "type": "object"
+    },
+    "PolishCharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "identity_primer": {
+          "$ref": "#/$defs/PolishIdentityPrimerSpec"
+        }
+      },
+      "required": [
+        "id",
+        "identity_primer"
+      ],
+      "title": "PolishCharacterSpec",
+      "type": "object"
+    },
+    "PolishDiagnosisSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "PolishDiagnosisSpec",
+      "type": "object"
+    },
+    "PolishIdentityPrimerSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "view": {
+          "enum": [
+            "front",
+            "left_profile",
+            "right_profile",
+            "back"
+          ],
+          "title": "View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view",
+        "path"
+      ],
+      "title": "PolishIdentityPrimerSpec",
+      "type": "object"
+    },
+    "PolishOutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "overwrite": {
+          "title": "Overwrite",
+          "type": "boolean"
+        },
+        "save_contact_sheet": {
+          "title": "Save Contact Sheet",
+          "type": "boolean"
+        },
+        "save_debug_images": {
+          "title": "Save Debug Images",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "directory",
+        "filename",
+        "overwrite",
+        "save_debug_images",
+        "save_contact_sheet"
+      ],
+      "title": "PolishOutputSpec",
+      "type": "object"
+    },
+    "PolishPipelineSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "PolishPipelineSpec",
+      "type": "object"
+    },
+    "PolishPromptSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "clip": {
+          "title": "Clip",
+          "type": "string"
+        },
+        "negative": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Negative"
+        },
+        "t5": {
+          "title": "T5",
+          "type": "string"
+        },
+        "true_cfg_scale": {
+          "title": "True Cfg Scale",
+          "type": "number"
+        }
+      },
+      "required": [
+        "clip",
+        "t5",
+        "true_cfg_scale"
+      ],
+      "title": "PolishPromptSpec",
+      "type": "object"
+    },
+    "PolishRegionSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "crop_padding_px": {
+          "title": "Crop Padding Px",
+          "type": "integer"
+        },
+        "feather_px": {
+          "title": "Feather Px",
+          "type": "integer"
+        },
+        "mask": {
+          "enum": [
+            "auto_tie_shirt",
+            "auto_skirt_belt",
+            "auto_face"
+          ],
+          "title": "Mask",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "prompt": {
+          "$ref": "#/$defs/PolishPromptSpec"
+        }
+      },
+      "required": [
+        "name",
+        "mask",
+        "crop_padding_px",
+        "feather_px",
+        "prompt"
+      ],
+      "title": "PolishRegionSpec",
+      "type": "object"
+    },
+    "PolishSamplingSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "guidance_scale": {
+          "title": "Guidance Scale",
+          "type": "number"
+        },
+        "max_sequence_length": {
+          "title": "Max Sequence Length",
+          "type": "integer"
+        },
+        "steps": {
+          "title": "Steps",
+          "type": "integer"
+        },
+        "strength": {
+          "title": "Strength",
+          "type": "number"
+        }
+      },
+      "required": [
+        "steps",
+        "guidance_scale",
+        "strength",
+        "max_sequence_length"
+      ],
+      "title": "PolishSamplingSpec",
+      "type": "object"
+    },
+    "PolishVariantSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "seed"
+      ],
+      "title": "PolishVariantSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "acceptance": {
+      "$ref": "#/$defs/PolishAcceptanceSpec"
+    },
+    "base": {
+      "$ref": "#/$defs/PolishBaseSpec"
+    },
+    "character": {
+      "$ref": "#/$defs/PolishCharacterSpec"
+    },
+    "diagnosis": {
+      "$ref": "#/$defs/PolishDiagnosisSpec"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "keyframe-polish",
+      "title": "Kind",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/PolishOutputSpec"
+    },
+    "pipeline": {
+      "$ref": "#/$defs/PolishPipelineSpec"
+    },
+    "regions": {
+      "items": {
+        "$ref": "#/$defs/PolishRegionSpec"
+      },
+      "title": "Regions",
+      "type": "array"
+    },
+    "sampling": {
+      "$ref": "#/$defs/PolishSamplingSpec"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "variants": {
+      "items": {
+        "$ref": "#/$defs/PolishVariantSpec"
+      },
+      "title": "Variants",
+      "type": "array"
+    }
+  },
+  "required": [
+    "$schema",
+    "schema_version",
+    "kind",
+    "id",
+    "pipeline",
+    "base",
+    "character",
+    "diagnosis",
+    "regions",
+    "sampling",
+    "variants",
+    "output",
+    "acceptance"
+  ],
+  "title": "KeyframePolishJobSpec",
+  "type": "object"
+}

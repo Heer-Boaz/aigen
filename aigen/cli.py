@@ -86,6 +86,15 @@ from aigen.keyframe_refine import (
     run_keyframe_refine_variant,
     validate_keyframe_refine_job,
 )
+from aigen.keyframe_polish import (
+    KeyframePolishError,
+    diagnose_keyframe_polish,
+    keyframe_polish_job_schema,
+    load_keyframe_polish_job,
+    plan_keyframe_polish_job,
+    run_keyframe_polish_job,
+    validate_keyframe_polish_job,
+)
 from aigen.models.downloads import (
     ModelDownloadError,
     download_models,
@@ -536,6 +545,10 @@ def _keyframe_refine_profile_for_job(job_path: Path) -> KeyframeRefineProfile:
     return _keyframe_refine_profile(load_keyframe_refine_job(job_path).pipeline.profile)
 
 
+def _keyframe_polish_profile_for_job(job_path: Path) -> KeyframeRefineProfile:
+    return _keyframe_refine_profile(load_keyframe_polish_job(job_path).pipeline.profile)
+
+
 def _add_keyframe_commands(subparsers: Any) -> None:
     keyframes = subparsers.add_parser("keyframes", help="JSON-first character keyframe jobs")
     keyframe_subparsers = keyframes.add_subparsers(dest="keyframes_command", required=True)
@@ -557,6 +570,12 @@ def _add_keyframe_commands(subparsers: Any) -> None:
         help="Write the keyframe refine JSON schema to stdout",
     )
     refine_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    polish_schema = keyframe_subparsers.add_parser(
+        "polish-schema",
+        help="Write the keyframe polish JSON schema to stdout",
+    )
+    polish_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     validate = keyframe_subparsers.add_parser("validate", help="Validate a keyframe job without running the GPU")
     validate.add_argument("job", type=Path, help="Keyframe job JSON")
@@ -612,6 +631,53 @@ def _add_keyframe_commands(subparsers: Any) -> None:
     refine_run_variant.add_argument("job", type=Path, help=argparse.SUPPRESS)
     refine_run_variant.add_argument("--variant", required=True, help=argparse.SUPPRESS)
     refine_run_variant.add_argument("--compact", action="store_true", help=argparse.SUPPRESS)
+
+    polish_diagnose = keyframe_subparsers.add_parser(
+        "polish-diagnose",
+        help="Use the local VLM to decide which polish-job regions need local inpaint",
+    )
+    polish_diagnose.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_diagnose.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Judge id recorded in diagnosis")
+    polish_diagnose.add_argument(
+        "--model",
+        type=Path,
+        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        help="Local Qwen2.5-VL-7B-Instruct model directory",
+    )
+    polish_diagnose.add_argument("--dtype", default="bfloat16", help="Torch dtype for judge model weights")
+    polish_diagnose.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
+    polish_diagnose.add_argument(
+        "--quantization",
+        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
+        default=DEFAULT_JUDGE_QUANTIZATION,
+        help="Local inference quantization for polish diagnosis",
+    )
+    polish_diagnose.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
+    polish_diagnose.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
+    polish_diagnose.add_argument("--max-new-tokens", type=int, default=700, help="Diagnosis response token budget")
+    polish_diagnose.add_argument("--temperature", type=float, default=0.0, help="Diagnosis sampling temperature")
+    polish_diagnose.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    polish_validate = keyframe_subparsers.add_parser(
+        "polish-validate",
+        help="Validate a keyframe polish job without running the GPU",
+    )
+    polish_validate.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    polish_plan = keyframe_subparsers.add_parser(
+        "polish-plan",
+        help="Resolve a keyframe polish job without running the GPU",
+    )
+    polish_plan.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    polish_run = keyframe_subparsers.add_parser(
+        "polish-run",
+        help="Run selected-candidate local detail polish",
+    )
+    polish_run.add_argument("job", type=Path, help="Keyframe polish job JSON")
+    polish_run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     judge = keyframe_subparsers.add_parser("judge", help="Judge a completed keyframe run with a local VLM")
     judge.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
@@ -1485,6 +1551,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.keyframes_command == "refine-schema":
                 _dump_json(sys.stdout, keyframe_refine_job_schema(), pretty=not args.compact)
                 return 0
+            if args.keyframes_command == "polish-schema":
+                _dump_json(sys.stdout, keyframe_polish_job_schema(), pretty=not args.compact)
+                return 0
             if args.keyframes_command == "extract-example":
                 _dump_json(
                     sys.stdout,
@@ -1575,6 +1644,52 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pretty=not args.compact,
                 )
                 return 0
+            if args.keyframes_command == "polish-diagnose":
+                _dump_json(
+                    sys.stdout,
+                    diagnose_keyframe_polish(
+                        args.job,
+                        config=KeyframeJudgeConfig(
+                            judge_id=args.judge,
+                            model=args.model,
+                            repo_id=DEFAULT_JUDGE_REPO_ID,
+                            revision=DEFAULT_JUDGE_REVISION,
+                            dtype=args.dtype,
+                            attention_impl=args.attention_impl,
+                            quantization=args.quantization,
+                            min_pixels=args.min_pixels,
+                            max_pixels=args.max_pixels,
+                            max_new_tokens=args.max_new_tokens,
+                            temperature=args.temperature,
+                            pairwise_top_k=0,
+                        ),
+                        project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command in {"polish-validate", "polish-plan", "polish-run"}:
+                profile = _keyframe_polish_profile_for_job(args.job)
+                if args.keyframes_command == "polish-validate":
+                    _dump_json(
+                        sys.stdout,
+                        validate_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
+                        pretty=not args.compact,
+                    )
+                    return 0
+                if args.keyframes_command == "polish-plan":
+                    _dump_json(
+                        sys.stdout,
+                        plan_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
+                        pretty=not args.compact,
+                    )
+                    return 0
+                _dump_json(
+                    sys.stdout,
+                    run_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
+                    pretty=not args.compact,
+                )
+                return 0
             if args.keyframes_command in {"refine-validate", "refine-plan", "refine-run", "refine-run-variant"}:
                 profile = _keyframe_refine_profile_for_job(args.job)
                 if args.keyframes_command == "refine-validate":
@@ -1638,6 +1753,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             KeyframePoseError,
             KeyframeScoreError,
             KeyframeRefineError,
+            KeyframePolishError,
         ) as error:
             _dump_json(
                 sys.stderr,
