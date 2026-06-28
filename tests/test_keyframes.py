@@ -49,7 +49,7 @@ from aigen.keyframe_refine import (
     plan_keyframe_refine_job,
     run_keyframe_refine_job,
 )
-from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run
+from aigen.keyframe_score import KeyframeScoreConfig, select_scored_keyframe_run, score_keyframe_run
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.prompt_tokens import PromptTokenCounts
 
@@ -563,13 +563,13 @@ class FakeImage:
 class FakePipeline:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
-        self.prepare_models_released = False
+        self.free_model_hooks_calls = 0
 
     def maybe_free_model_hooks(self) -> None:
-        self.prepare_models_released = True
+        self.free_model_hooks_calls += 1
 
     def denoise_prepared(self, prepared: object, **kwargs: object) -> object:
-        if not self.prepare_models_released:
+        if self.free_model_hooks_calls < 1:
             raise AssertionError("prepare-phase models must be released before denoise")
         self.calls.append(kwargs)
         return KontextPoseDenoised(
@@ -616,6 +616,8 @@ class FakeSession:
         return f"mask:{mask_image.size}"
 
     def decode_many(self, _prepared: object, denoised: list[object], *, chunk_size: int) -> tuple[list[FakeImage], float]:
+        if self.pipeline.free_model_hooks_calls < 2:
+            raise AssertionError("denoise-phase models must be released before decode")
         return [FakeImage(result.name) for result in denoised], 4.0
 
     def close(self) -> None:
@@ -1129,6 +1131,86 @@ class KeyframeTests(unittest.TestCase):
             self.assertGreater(candidates["seed_003"]["scores"]["pose"], candidates["seed_002"]["scores"]["pose"])
             self.assertEqual(candidates["seed_003"]["metrics"]["pose"]["common_keypoints"], 10)
             self.assertTrue(Path(result["outputs"]["pose_evidence_ranked"]).exists())
+
+    def test_keyframe_score_uses_extracted_source_pose_when_metadata_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir, poses = write_pose_score_fixture(root)
+            pose_path = root / "assets" / "pose.png"
+            normalized_source = root / "assets" / "normalized.png"
+            write_image(normalized_source, (160, 240), (240, 230, 220))
+            metadata_path = pose_path.with_name(f"{pose_path.stem.removesuffix('_pose')}_extraction.json")
+            write_json(
+                metadata_path,
+                {"assets": {"normalized_source": {"path": normalized_source.as_posix()}}},
+            )
+            poses[normalized_source.name] = poses["seed_002.png"]
+
+            result = score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="source-pose-test", foreground_threshold=20.0),
+                project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+            )
+            candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
+
+            self.assertEqual(result["ranking"]["best"], "seed_002")
+            self.assertGreater(candidates["seed_002"]["scores"]["pose"], candidates["seed_003"]["scores"]["pose"])
+
+    def test_keyframe_score_blocks_auto_select_when_pose_scores_degenerate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir, poses = write_pose_score_fixture(root)
+            bad_pose = pose_keypoints(
+                {
+                    0: (0.08, 0.88),
+                    1: (0.10, 0.80),
+                    2: (0.12, 0.72),
+                    5: (0.14, 0.68),
+                    8: (0.16, 0.60),
+                    9: (0.18, 0.48),
+                    10: (0.20, 0.36),
+                    11: (0.22, 0.62),
+                    12: (0.24, 0.50),
+                    13: (0.26, 0.38),
+                }
+            )
+            poses = {name: bad_pose for name in poses}
+
+            result = score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="pose-degenerate-test", foreground_threshold=20.0),
+                project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+            )
+
+            self.assertFalse(result["selection"]["usable_for_auto_select"])
+            self.assertEqual(
+                result["selection"]["blockers"],
+                ["pose_score_degenerate_all_candidates", "all_candidates_have_hard_rejects"],
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Refusing automatic score selection"):
+                select_scored_keyframe_run(run_dir, scorer_id="pose-degenerate-test")
+
+    def test_keyframe_score_select_writes_model_selected_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir, poses = write_pose_score_fixture(root)
+
+            score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="pose-select-test", foreground_threshold=20.0),
+                project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+            )
+            selection = select_scored_keyframe_run(run_dir, scorer_id="pose-select-test")
+
+            self.assertEqual(selection["best"], "seed_003")
+            self.assertEqual(selection["selected"], ["seed_003"])
+            self.assertEqual(selection["rejected"], ["seed_002"])
+            self.assertTrue(Path(selection["outputs"]["selected"]).exists())
+            self.assertTrue(Path(selection["outputs"]["rejected"]).exists())
 
     def test_keyframe_refine_plans_arm_mask_from_target_pose(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

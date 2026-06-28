@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -64,12 +65,14 @@ class PoseScoreResult:
     score: float
     common_keypoints: int
     weighted_mean_distance: float
+    aligned_mean_distance: float
 
     def to_json(self) -> dict[str, Any]:
         return {
             "score": self.score,
             "common_keypoints": self.common_keypoints,
             "weighted_mean_distance": self.weighted_mean_distance,
+            "aligned_mean_distance": self.aligned_mean_distance,
         }
 
 
@@ -147,13 +150,51 @@ def score_pose_match(
     valid = np.isfinite(target.points[:, 0]) & np.isfinite(candidate.points[:, 0])
     common = int(valid.sum())
     if common < config.min_common_keypoints:
-        return PoseScoreResult(score=0.0, common_keypoints=common, weighted_mean_distance=1.0)
+        return PoseScoreResult(
+            score=0.0,
+            common_keypoints=common,
+            weighted_mean_distance=1.0,
+            aligned_mean_distance=1.0,
+        )
 
-    distances = np.linalg.norm(target.points[valid] - candidate.points[valid], axis=1)
+    target_points = target.points[valid]
+    candidate_points = candidate.points[valid]
     weights = _body_keypoint_weights()[valid]
-    weighted_distance = float((distances * weights).sum() / weights.sum())
-    score = max(0.0, 1.0 - weighted_distance / config.distance_scale)
-    return PoseScoreResult(score=score, common_keypoints=common, weighted_mean_distance=weighted_distance)
+    distances = np.linalg.norm(target_points - candidate_points, axis=1)
+    weighted_distance = _weighted_distance(distances, weights)
+    aligned_candidate = _scale_translate_to_target(candidate_points, target_points, weights)
+    aligned_distances = np.linalg.norm(target_points - aligned_candidate, axis=1)
+    aligned_distance = _weighted_distance(aligned_distances, weights)
+    absolute_score = _linear_pose_score(weighted_distance, config.distance_scale)
+    aligned_score = _linear_pose_score(aligned_distance, config.distance_scale)
+    score = float(0.35 * absolute_score + 0.65 * aligned_score)
+    return PoseScoreResult(
+        score=score,
+        common_keypoints=common,
+        weighted_mean_distance=weighted_distance,
+        aligned_mean_distance=aligned_distance,
+    )
+
+
+def _weighted_distance(distances: np.ndarray, weights: np.ndarray) -> float:
+    return float((distances * weights).sum() / weights.sum())
+
+
+def _linear_pose_score(distance: float, distance_scale: float) -> float:
+    return max(0.0, 1.0 - distance / distance_scale)
+
+
+def _scale_translate_to_target(candidate: np.ndarray, target: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    weight_sum = weights.sum()
+    target_center = (target * weights[:, None]).sum(axis=0) / weight_sum
+    candidate_center = (candidate * weights[:, None]).sum(axis=0) / weight_sum
+    target_centered = target - target_center
+    candidate_centered = candidate - candidate_center
+    target_spread = np.sqrt(((target_centered**2).sum(axis=1) * weights).sum() / weight_sum)
+    candidate_spread = np.sqrt(((candidate_centered**2).sum(axis=1) * weights).sum() / weight_sum)
+    if candidate_spread <= 1e-6:
+        return candidate
+    return candidate_centered * (target_spread / candidate_spread) + target_center
 
 
 def save_pose_evidence(

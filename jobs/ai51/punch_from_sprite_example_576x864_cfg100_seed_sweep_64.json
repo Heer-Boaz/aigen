@@ -1,0 +1,151 @@
+{
+  "$schema": "../../schemas/keyframe-job.schema.json",
+  "acceptance": {
+    "manual": [
+      "strict side profile",
+      "short pink bob preserved",
+      "glossy brown leather jacket, skirt, socks and boots preserved",
+      "pose follows the source platformer attack example",
+      "front arm and hand pose match the source example",
+      "both feet visible"
+    ],
+    "minimum_passing_variants": 1
+  },
+  "assets": {
+    "boundary_mask": {
+      "path": "../../assets/examples/ai46/platform_punch/ai46_platform_punch_left_576x864_boundary.png"
+    },
+    "contour": {
+      "path": "../../assets/examples/ai46/platform_punch/ai46_platform_punch_left_576x864_contour.png"
+    },
+    "pose": {
+      "path": "../../assets/examples/ai46/platform_punch/ai46_platform_punch_left_576x864_pose.png"
+    }
+  },
+  "canvas": {
+    "height": 864,
+    "max_sequence_length": 128,
+    "reference_max_area": 294912,
+    "width": 576
+  },
+  "character": {
+    "id": "ai51",
+    "identity_primer": {
+      "path": "../../assets/characters/ai51/views/left_profile_v1.png",
+      "view": "left_profile"
+    }
+  },
+  "conditions": [
+    {
+      "end": 0.65,
+      "image": "pose",
+      "name": "source_pose",
+      "scale": 0.72,
+      "start": 0.0,
+      "type": "pose"
+    },
+    {
+      "end": 0.35,
+      "image": "contour",
+      "name": "source_contour",
+      "residual_mask": "boundary_mask",
+      "scale": 0.28,
+      "start": 0.0,
+      "type": "canny"
+    }
+  ],
+  "id": "ai51.punch.platformer.example.left.576x864.cfg100.seed-sweep-64.v1",
+  "keyframe": {
+    "action": "punch",
+    "camera": "orthographic-side",
+    "direction": "left",
+    "phase": "platformer-example"
+  },
+  "kind": "character-keyframe",
+  "output": {
+    "directory": "../../runs/keyframes/ai51/punch_straight/576x864_platformer_example_cfg100_seed_sweep_64_v1",
+    "filename": "{id}__{variant}.png",
+    "overwrite": false,
+    "save_conditions": true,
+    "save_contact_sheet": true
+  },
+  "pipeline": {
+    "profile": "nunchaku-kontext-pose-quality"
+  },
+  "prompt": {
+    "clip": "Same anime girl in a strict left-facing orthographic side view, platformer attack keyframe, front arm thrust forward with the same open hand pose as the source example, short pink bob, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, blue thigh-high socks, glossy brown boots.",
+    "t5": "Full-body left-facing orthographic platformer attack keyframe. Follow the source example pose: front arm thrust straight forward with the same open hand pose, rear arm pulled back, grounded fighting stance, both feet visible. Preserve the approved AI51 side-profile identity: short pink bob, one visible blue eye, white shirt, blue tie, glossy brown leather jacket, brown leather skirt, gloves, blue thigh-high socks and glossy brown boots. Preserve clean anime lineart and high-contrast glossy highlights. Clean neutral background.",
+    "true_cfg_scale": 1.0
+  },
+  "sampling": {
+    "guidance_scale": 2.5,
+    "steps": 28
+  },
+  "schema_version": 1,
+  "variants": [
+    {"name": "seed_018", "seed": 18},
+    {"name": "seed_019", "seed": 19},
+    {"name": "seed_020", "seed": 20},
+    {"name": "seed_021", "seed": 21},
+    {"name": "seed_022", "seed": 22},
+    {"name": "seed_023", "seed": 23},
+    {"name": "seed_024", "seed": 24},
+    {"name": "seed_025", "seed": 25},
+    {"name": "seed_026", "seed": 26},
+    {"name": "seed_027", "seed": 27},
+    {"name": "seed_028", "seed": 28},
+    {"name": "seed_029", "seed": 29},
+    {"name": "seed_030", "seed": 30},
+    {"name": "seed_031", "seed": 31},
+    {"name": "seed_032", "seed": 32},
+    {"name": "seed_033", "seed": 33},
+    {"name": "seed_034", "seed": 34},
+    {"name": "seed_035", "seed": 35},
+    {"name": "seed_036", "seed": 36},
+    {"name": "seed_037", "seed": 37},
+    {"name": "seed_038", "seed": 38},
+    {"name": "seed_039", "seed": 39},
+    {"name": "seed_040", "seed": 40},
+    {"name": "seed_041", "seed": 41},
+    {"name": "seed_042", "seed": 42},
+    {"name": "seed_043", "seed": 43},
+    {"name": "seed_044", "seed": 44},
+    {"name": "seed_045", "seed": 45},
+    {"name": "seed_046", "seed": 46},
+    {"name": "seed_047", "seed": 47},
+    {"name": "seed_048", "seed": 48},
+    {"name": "seed_049", "seed": 49},
+    {"name": "seed_050", "seed": 50},
+    {"name": "seed_051", "seed": 51},
+    {"name": "seed_052", "seed": 52},
+    {"name": "seed_053", "seed": 53},
+    {"name": "seed_054", "seed": 54},
+    {"name": "seed_055", "seed": 55},
+    {"name": "seed_056", "seed": 56},
+    {"name": "seed_057", "seed": 57},
+    {"name": "seed_058", "seed": 58},
+    {"name": "seed_059", "seed": 59},
+    {"name": "seed_060", "seed": 60},
+    {"name": "seed_061", "seed": 61},
+    {"name": "seed_062", "seed": 62},
+    {"name": "seed_063", "seed": 63},
+    {"name": "seed_064", "seed": 64},
+    {"name": "seed_065", "seed": 65},
+    {"name": "seed_066", "seed": 66},
+    {"name": "seed_067", "seed": 67},
+    {"name": "seed_068", "seed": 68},
+    {"name": "seed_069", "seed": 69},
+    {"name": "seed_070", "seed": 70},
+    {"name": "seed_071", "seed": 71},
+    {"name": "seed_072", "seed": 72},
+    {"name": "seed_073", "seed": 73},
+    {"name": "seed_074", "seed": 74},
+    {"name": "seed_075", "seed": 75},
+    {"name": "seed_076", "seed": 76},
+    {"name": "seed_077", "seed": 77},
+    {"name": "seed_078", "seed": 78},
+    {"name": "seed_079", "seed": 79},
+    {"name": "seed_080", "seed": 80},
+    {"name": "seed_081", "seed": 81}
+  ]
+}

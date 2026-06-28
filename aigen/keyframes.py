@@ -488,6 +488,7 @@ def run_keyframe_spec(
                 )
                 denoised.append(replace(result, latents=result.latents.detach().cpu()))
                 del result
+            session.pipeline.maybe_free_model_hooks()
             images, decode_ms = session.decode_many(prepared, denoised, chunk_size=1)
             outputs = []
             for image, result, planned in zip(images, denoised, resolved["output"]["files"], strict=True):

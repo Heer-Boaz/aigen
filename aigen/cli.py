@@ -67,6 +67,7 @@ from aigen.keyframe_score import (
     DEFAULT_SCORER_ID,
     KeyframeScoreError,
     KeyframeScoreConfig,
+    select_scored_keyframe_run,
     score_keyframe_run,
 )
 from aigen.keyframe_examples import (
@@ -676,6 +677,14 @@ def _add_keyframe_commands(subparsers: Any) -> None:
         help="Pixel distance that maps target-contour drift to zero distance score",
     )
     score.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    score_select = keyframe_subparsers.add_parser(
+        "score-select",
+        help="Select/reject outputs from a condition score result",
+    )
+    score_select.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    score_select.add_argument("--from-scorer", default=DEFAULT_SCORER_ID, help="Scorer id to read")
+    score_select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     select = keyframe_subparsers.add_parser("select", help="Select/reject outputs from a keyframe judge result")
     select.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
@@ -1540,6 +1549,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                             distance_scale_px=args.distance_scale_px,
                         ),
                         project_root=PROJECT_ROOT,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.keyframes_command == "score-select":
+                _dump_json(
+                    sys.stdout,
+                    select_scored_keyframe_run(
+                        args.run_dir,
+                        scorer_id=args.from_scorer,
                     ),
                     pretty=not args.compact,
                 )

@@ -23,6 +23,7 @@ from aigen.keyframe_pose import (
 
 DEFAULT_SCORER_ID = "condition-v1"
 SCORE_SCHEMA_VERSION = 1
+DEGENERATE_POSE_SCORE_THRESHOLD = 0.05
 
 
 class KeyframeScoreError(RuntimeError):
@@ -59,9 +60,10 @@ def score_keyframe_run(
     pose_evidence_dir.mkdir(parents=True)
 
     target = _load_target(assets)
-    pose_target = _load_pose_target(assets, config)
-    if pose_target is not None and pose_extractor is None:
+    pose_target_source = _pose_target_source(assets)
+    if pose_target_source is not None and pose_extractor is None:
         pose_extractor = DWPoseKeypointExtractor(config.pose)
+    pose_target = _load_pose_target(assets, config, pose_extractor, pose_target_source)
 
     candidates = [
         _score_candidate(
@@ -76,6 +78,7 @@ def score_keyframe_run(
         )
         for output in result["outputs"]
     ]
+    pose_enabled = pose_target is not None
     ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
     ordered = {candidate["candidate"]: candidate for candidate in candidates}
     ranked_candidates = [ordered[name] for name in ranking]
@@ -98,13 +101,13 @@ def score_keyframe_run(
             "contour_radius": config.contour_radius,
             "distance_scale_px": config.distance_scale_px,
             "pose": {
-                "enabled": pose_target is not None,
+                "enabled": pose_enabled,
                 "distance_scale": config.pose.distance_scale,
                 "min_common_keypoints": config.pose.min_common_keypoints,
                 "det_model": config.pose.det_model.as_posix(),
                 "pose_model": config.pose.pose_model.as_posix(),
             },
-            "weights": _score_weights(pose_target is not None),
+            "weights": _score_weights(pose_enabled),
         },
         "assets": {
             "contour": assets["contour"],
@@ -116,6 +119,7 @@ def score_keyframe_run(
             "final": ranking,
             "best": ranking[0],
         },
+        "selection": _selection_status(candidates, pose_enabled),
         "outputs": {
             "scores": (score_dir / "scores.json").as_posix(),
             "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
@@ -125,6 +129,62 @@ def score_keyframe_run(
     }
     _write_json(score_dir / "scores.json", payload)
     return payload
+
+
+def select_scored_keyframe_run(
+    run_dir: Path,
+    *,
+    scorer_id: str = DEFAULT_SCORER_ID,
+) -> dict[str, Any]:
+    score_dir = run_dir.resolve() / "score" / scorer_id
+    score_result = _read_json(score_dir / "scores.json")
+    selection = score_result["selection"]
+    if not selection["usable_for_auto_select"]:
+        raise KeyframeScoreError(
+            "Refusing automatic score selection: scorer evidence is not usable for auto-select "
+            f"({', '.join(selection['blockers'])})."
+        )
+
+    candidates_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
+    selected = [candidates_by_name[score_result["ranking"]["best"]]]
+    rejected = [
+        candidates_by_name[name]
+        for name in score_result["ranking"]["final"]
+        if name != score_result["ranking"]["best"]
+    ]
+    selected_path = score_dir / "selected.json"
+    rejected_path = score_dir / "rejected.json"
+    _write_json(selected_path, {"schema_version": 1, "selected": selected})
+    _write_json(rejected_path, {"schema_version": 1, "rejected": rejected})
+    return {
+        "schema_version": 1,
+        "status": "completed",
+        "scorer": scorer_id,
+        "run_dir": run_dir.resolve().as_posix(),
+        "selection": selection,
+        "best": selected[0]["candidate"],
+        "selected": [candidate["candidate"] for candidate in selected],
+        "rejected": [candidate["candidate"] for candidate in rejected],
+        "outputs": {
+            "selected": selected_path.as_posix(),
+            "rejected": rejected_path.as_posix(),
+            "ranked_contact_sheet": score_result["outputs"]["ranked_contact_sheet"],
+            "condition_evidence_ranked": score_result["outputs"]["condition_evidence_ranked"],
+            "pose_evidence_ranked": score_result["outputs"]["pose_evidence_ranked"],
+        },
+    }
+
+
+def _selection_status(candidates: list[dict[str, Any]], pose_enabled: bool) -> dict[str, Any]:
+    blockers = []
+    if pose_enabled and max(candidate["scores"]["pose"] for candidate in candidates) < DEGENERATE_POSE_SCORE_THRESHOLD:
+        blockers.append("pose_score_degenerate_all_candidates")
+    if all(any(candidate["hard_rejects"].values()) for candidate in candidates):
+        blockers.append("all_candidates_have_hard_rejects")
+    return {
+        "usable_for_auto_select": len(blockers) == 0,
+        "blockers": blockers,
+    }
 
 
 def _load_target(assets: dict[str, Any]) -> dict[str, Any]:
@@ -144,11 +204,30 @@ def _load_target(assets: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _load_pose_target(assets: dict[str, Any], config: KeyframeScoreConfig) -> PoseKeypoints | None:
+def _load_pose_target(
+    assets: dict[str, Any],
+    config: KeyframeScoreConfig,
+    pose_extractor: Any | None,
+    pose_target_source: Path | None,
+) -> PoseKeypoints | None:
     pose_asset = assets.get("pose")
     if pose_asset is None:
         return None
+    if pose_target_source is not None:
+        return pose_extractor.extract(pose_target_source)
     return extract_target_pose_map_keypoints(Path(pose_asset["path"]), config.pose)
+
+
+def _pose_target_source(assets: dict[str, Any]) -> Path | None:
+    pose_asset = assets.get("pose")
+    if pose_asset is None:
+        return None
+    pose_path = Path(pose_asset["path"])
+    metadata_path = pose_path.with_name(f"{pose_path.stem.removesuffix('_pose')}_extraction.json")
+    if not metadata_path.is_file():
+        return None
+    metadata = _read_json(metadata_path)
+    return Path(metadata["assets"]["normalized_source"]["path"])
 
 
 def _score_candidate(
