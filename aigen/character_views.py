@@ -177,12 +177,12 @@ def left_profile_view_template() -> dict[str, Any]:
             "$schema": "../../schemas/character-view-job.schema.json",
             "schema_version": CHARACTER_VIEW_SCHEMA_VERSION,
             "kind": CHARACTER_VIEW_KIND,
-            "id": "ai46.left_profile.neutral.v1",
+            "id": "ai46.left_profile.neutral",
             "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
             "character": {
                 "id": "ai46",
                 "source_reference": {
-                    "path": "../../assets/characters/ai46/views/front_v1.png",
+                    "path": "../../assets/characters/ai46/views/front.png",
                 },
             },
             "view": {
@@ -244,9 +244,9 @@ def left_profile_view_template() -> dict[str, Any]:
                 {"name": "seed_004", "seed": 4},
             ],
             "output": {
-                "directory": "../../runs/characters/ai46/views/left_profile_neutral_v1",
+                "directory": "../../runs/characters/ai46/views/left_profile_neutral",
                 "filename": "{id}__{variant}.png",
-                "canonical_path": "../../assets/characters/ai46/views/left_profile_v1.png",
+                "canonical_path": "../../assets/characters/ai46/views/left_profile.png",
                 "bank_path": "../../assets/characters/ai46/view_bank.json",
                 "overwrite": False,
                 "save_conditions": True,
@@ -384,16 +384,6 @@ def accept_character_view(
         "image": canonical_asset,
         "accepted_candidate": candidate,
         "accepted_seed": output.get("seed"),
-        "source_job": {
-            "view_job_id": resolved["job_id"],
-            "view_job_path": resolved["job_path"],
-            "view_job_sha256": resolved["spec_sha256"],
-            "run_dir": run_dir.resolve().as_posix(),
-            "run_job_id": result["job_id"],
-            "result_sha256": _sha256_bytes((run_dir.resolve() / "result.json").read_bytes()),
-            "candidate_path": source_image.as_posix(),
-            "candidate_sha256": _sha256_bytes(source_image.read_bytes()),
-        },
         "prompt": resolved["prompt"],
         "assets": resolved["assets"],
         "acceptance": resolved["acceptance"],
@@ -541,13 +531,12 @@ def _view_entry_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": True,
-        "required": ["view", "image", "accepted_candidate", "source_job"],
+        "required": ["view", "image", "accepted_candidate"],
         "properties": {
             "view": {"type": "object"},
             "image": _asset_schema(),
             "accepted_candidate": {"type": "string"},
             "accepted_seed": {"type": ["integer", "null"]},
-            "source_job": {"type": "object"},
             "prompt": {"type": "object"},
             "assets": {"type": "object"},
             "acceptance": {"type": "object"},

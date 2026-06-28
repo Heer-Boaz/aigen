@@ -34,12 +34,13 @@ PY
 fi
 
 run "$venv_python" -m aigen.cli --help
+run "$venv_python" -m aigen.cli briefs schema --compact
 run "$venv_python" -m aigen.cli keyframes schema --compact
 
 if [[ "${AIGEN_SKIP_MODEL_CHECK:-0}" == "1" ]]; then
   log "model-backed keyframe validation skipped"
 else
-  run "$venv_python" -m aigen.cli keyframes validate "$repo_root/jobs/ai46/walk_contact_640x960_ref384_seed_sweep.json" --compact
+  run "$venv_python" -m aigen.cli keyframes validate "$repo_root/jobs/ai46/walk_contact.json" --compact
 fi
 
 log "install check passed"

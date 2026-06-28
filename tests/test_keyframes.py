@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
@@ -23,26 +24,23 @@ from aigen.generation.kontext_pose_control import KontextPoseDenoised
 from aigen.keyframes import (
     KeyframeJobError,
     KeyframeProfile,
-    _nvidia_smi_keyframe_preflight,
-    _nvidia_smi_preflight,
     c2_profile_template,
     load_keyframe_job,
     plan_keyframe_job,
     run_keyframe_job,
     validate_keyframe_job,
 )
+from aigen.keyframe_memory import KeyframeMemoryError, nvidia_smi_keyframe_preflight, nvidia_smi_preflight
 from aigen.keyframe_judge import (
-    DEFAULT_CALIBRATION_FIXTURE,
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
     KeyframeJudgeConfig,
     QwenKeyframeJudge,
-    calibrate_keyframe_judge,
     judge_keyframe_run,
-    select_keyframe_run,
 )
+from aigen.keyframe_grounding import GroundedRegionBox
 from aigen.keyframe_pose import OPENPOSE_BODY_COLORS, PoseKeypoints
 from aigen.keyframe_refine import (
     KeyframeRefineProfile,
@@ -50,6 +48,7 @@ from aigen.keyframe_refine import (
     run_keyframe_refine_job,
 )
 from aigen.keyframe_polish import (
+    diagnose_keyframe_polish,
     plan_keyframe_polish,
     preview_keyframe_polish_job,
     run_keyframe_polish_job,
@@ -116,6 +115,36 @@ class FakePoseExtractor:
         return self.poses[image_path.name]
 
 
+class FakeSegmenter:
+    def segment(self, image_path: Path) -> np.ndarray:
+        with Image.open(image_path) as image:
+            pixels = np.asarray(image.convert("RGB"), dtype=np.float32)
+        background = pixels[0, 0]
+        return np.sqrt(((pixels - background) ** 2).sum(axis=2)) > 20.0
+
+    def segment_image_box(self, image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+        left, top, right, bottom = box
+        mask = np.zeros(image.shape[:2], dtype=bool)
+        mask[top:bottom, left:right] = True
+        return mask
+
+
+class FakeGrounder:
+    def ground_region(
+        self,
+        _image: Image.Image,
+        prompt: str,
+        prior_box: tuple[int, int, int, int],
+    ) -> GroundedRegionBox:
+        return GroundedRegionBox(
+            box=prior_box,
+            label=prompt,
+            score=1.0,
+            source="fake-grounder",
+            prior_iou=1.0,
+        )
+
+
 def fake_dwpose_control_image(image: Image.Image, **_kwargs: object) -> tuple[Image.Image, dict[str, object]]:
     pose = Image.new("RGB", image.size, "black")
     draw = ImageDraw.Draw(pose)
@@ -127,15 +156,30 @@ def fake_dwpose_control_image(image: Image.Image, **_kwargs: object) -> tuple[Im
     }
 
 
-def write_score_fixture(root: Path) -> Path:
+def write_score_fixture(root: Path) -> tuple[Path, dict[str, PoseKeypoints]]:
     run_dir = root / "runs" / "score"
     reference = root / "assets" / "reference.png"
+    pose = root / "assets" / "pose.png"
     contour = root / "assets" / "contour.png"
     mask = root / "assets" / "mask.png"
+    target_points = {
+        0: (0.52, 0.16),
+        1: (0.50, 0.26),
+        2: (0.43, 0.30),
+        5: (0.57, 0.30),
+        8: (0.45, 0.52),
+        9: (0.40, 0.72),
+        10: (0.36, 0.90),
+        11: (0.55, 0.52),
+        12: (0.58, 0.72),
+        13: (0.65, 0.90),
+    }
     write_image(reference, (160, 240), (240, 230, 220))
+    write_pose_map(pose, target_points)
     write_rectangle_contour(contour, (60, 30, 100, 210))
     write_image(mask, (160, 240), (255, 255, 255))
     outputs = []
+    poses = {}
     candidates = {
         "seed_002": (48, 35, 90, 205),
         "seed_003": (60, 30, 100, 210),
@@ -145,6 +189,7 @@ def write_score_fixture(root: Path) -> Path:
         image_path = run_dir / f"{name}.png"
         write_rectangle_candidate(image_path, box)
         outputs.append({"name": name, "seed": index, "path": image_path.as_posix()})
+        poses[image_path.name] = pose_keypoints(target_points)
     write_json(
         run_dir / "result.json",
         {
@@ -152,6 +197,7 @@ def write_score_fixture(root: Path) -> Path:
             "job_id": "score.fixture",
             "assets": {
                 "identity_primer": {"path": reference.as_posix()},
+                "pose": {"path": pose.as_posix()},
                 "contour": {"path": contour.as_posix()},
                 "boundary_mask": {"path": mask.as_posix()},
             },
@@ -161,7 +207,7 @@ def write_score_fixture(root: Path) -> Path:
             },
         },
     )
-    return run_dir
+    return run_dir, poses
 
 
 def write_pose_score_fixture(root: Path) -> tuple[Path, dict[str, PoseKeypoints]]:
@@ -236,7 +282,7 @@ def write_keyframe_result(root: Path) -> Path:
         run_dir / "result.json",
         {
             "status": "completed",
-            "job_id": "ai46.walk.contact.left.640x960.ref384.seed-sweep.v1",
+            "job_id": "ai46.walk.contact.left",
             "assets": {
                 "identity_primer": {"path": reference.as_posix()},
                 "pose": {"path": pose.as_posix()},
@@ -268,7 +314,7 @@ def write_keyframe_result(root: Path) -> Path:
 
 
 def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
-    source = root / "assets" / "characters" / "ai46" / "views" / "front_v1.png"
+    source = root / "assets" / "characters" / "ai46" / "views" / "front.png"
     pose = root / "assets" / "views" / "ai46" / "left_profile_pose.png"
     contour = root / "assets" / "views" / "ai46" / "left_profile_contour.png"
     mask = root / "assets" / "views" / "ai46" / "left_profile_boundary.png"
@@ -283,7 +329,7 @@ def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
         run_dir / "result.json",
         {
             "status": "completed",
-            "job_id": "ai46.left_profile.neutral.v1",
+            "job_id": "ai46.left_profile.neutral",
             "outputs": [{"name": "seed_003", "seed": 3, "path": candidate.as_posix()}],
         },
     )
@@ -295,9 +341,9 @@ def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
             "$schema": "../../schemas/character-view-job.schema.json",
             "schema_version": 1,
             "kind": "character-view",
-            "id": "ai46.left_profile.neutral.v1",
+            "id": "ai46.left_profile.neutral",
             "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
-            "character": {"id": "ai46", "source_reference": {"path": "../assets/characters/ai46/views/front_v1.png"}},
+            "character": {"id": "ai46", "source_reference": {"path": "../assets/characters/ai46/views/front.png"}},
             "view": {"name": "left_profile", "camera": "orthographic-side", "pose": "neutral-standing"},
             "assets": {
                 "pose": {"path": "../assets/views/ai46/left_profile_pose.png"},
@@ -327,7 +373,7 @@ def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
             "output": {
                 "directory": "../runs/views",
                 "filename": "{id}__{variant}.png",
-                "canonical_path": "../assets/characters/ai46/views/left_profile_v1.png",
+                "canonical_path": "../assets/characters/ai46/views/left_profile.png",
                 "bank_path": "../assets/characters/ai46/view_bank.json",
                 "overwrite": False,
                 "save_conditions": True,
@@ -394,7 +440,7 @@ def write_refine_fixture(root: Path) -> Path:
             "$schema": "../../schemas/keyframe-refine-job.schema.json",
             "schema_version": 1,
             "kind": "keyframe-refine",
-            "id": "ai46.punch.straight.fist.refine.v1",
+            "id": "ai46.punch.straight.fist.refine",
             "pipeline": {"profile": "kontext-inpaint-local"},
             "base": {"run_dir": "../runs/punch", "candidate": "seed_005"},
             "character": {
@@ -488,7 +534,7 @@ def write_polish_fixture(root: Path) -> tuple[Path, Path]:
             "polish_plan": {
                 "schema_version": 1,
                 "kind": "keyframe-polish-plan",
-                "job_id": "ai51.punch.seed060.polish.v1",
+                "job_id": "ai51.punch.seed060.polish",
                 "base_candidate": "seed_060",
                 "needs_polish": True,
                 "regions": [
@@ -550,7 +596,7 @@ def write_polish_fixture(root: Path) -> tuple[Path, Path]:
             "$schema": "../../schemas/keyframe-polish-job.schema.json",
             "schema_version": 1,
             "kind": "keyframe-polish",
-            "id": "ai51.punch.seed060.polish.v1",
+            "id": "ai51.punch.seed060.polish",
             "pipeline": {"profile": "kontext-inpaint-local"},
             "base": {"run_dir": "../runs/punch", "candidate": "seed_060"},
             "character": {
@@ -620,7 +666,7 @@ def job_payload(root: Path) -> dict[str, object]:
         "$schema": "../../schemas/keyframe-job.schema.json",
         "schema_version": 1,
         "kind": "character-keyframe",
-        "id": "ai46.walk.contact.left.v1",
+        "id": "ai46.walk.contact.left",
         "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
         "character": {
             "id": "ai46",
@@ -673,7 +719,7 @@ def job_payload(root: Path) -> dict[str, object]:
             {"name": "seed_002", "seed": 2},
         ],
         "output": {
-            "directory": "runs/keyframes/ai46/walk_contact/v1",
+            "directory": "runs/keyframes/ai46/walk_contact/batch",
             "filename": "{id}__{variant}.png",
             "overwrite": False,
             "save_conditions": True,
@@ -838,23 +884,6 @@ class FakeJudgeRunner:
             }
         )
 
-    def rank_candidates(self, prompt: str, _image_paths: list[Path]) -> str:
-        candidate_a = prompt.split("#1 is ", 1)[1].split(";", 1)[0]
-        candidate_b = prompt.split("#2 is ", 1)[1].split(".", 1)[0]
-        winner = max(
-            (candidate_a, candidate_b),
-            key=lambda name: self.scores[name][0],
-        )
-        return json.dumps(
-            {
-                "candidate_a": candidate_a,
-                "candidate_b": candidate_b,
-                "winner": winner,
-                "evidence": f"{winner} follows the target contour most closely",
-            }
-        )
-
-
 class FakePolishPlanner:
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         if len(image_paths) < 3:
@@ -865,7 +894,7 @@ class FakePolishPlanner:
             {
                 "schema_version": 1,
                 "kind": "keyframe-polish-plan",
-                "job_id": "ai51.punch.seed060.polish.v1",
+                "job_id": "ai51.punch.seed060.polish",
                 "base_candidate": "seed_060",
                 "needs_polish": True,
                 "regions": [
@@ -972,7 +1001,7 @@ class KeyframeTests(unittest.TestCase):
         self.assertEqual(resolved["character"]["identity_primer"]["view"], "front")
         self.assertEqual(resolved["token_metadata"]["generated_tokens"], 1536)
         self.assertEqual(resolved["token_metadata"]["reference_tokens"], 2048)
-        self.assertEqual(resolved["vram_plan"]["method"], "nunchaku-kontext-controlnet-local-v1")
+        self.assertEqual(resolved["vram_plan"]["method"], "nunchaku-kontext-controlnet-local")
 
     def test_rejects_keyframe_job_without_identity_primer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1015,7 +1044,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframes._nvidia_smi_keyframe_preflight",
+                    "aigen.keyframes.nvidia_smi_keyframe_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
@@ -1027,7 +1056,7 @@ class KeyframeTests(unittest.TestCase):
             ):
                 result = run_keyframe_job(job_path, profile(), project_root=Path.cwd())
 
-            output_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "v1"
+            output_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "batch"
             result_path = output_dir / "result.json"
             resolved_path = output_dir / "resolved.json"
 
@@ -1070,7 +1099,7 @@ class KeyframeTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(exit_code, 0)
         self.assertEqual(payload["kind"], "character-view")
-        self.assertEqual(payload["character"]["source_reference"]["path"], "../../assets/characters/ai46/views/front_v1.png")
+        self.assertEqual(payload["character"]["source_reference"]["path"], "../../assets/characters/ai46/views/front.png")
         self.assertEqual(left_profile_view_template()["view"]["name"], "left_profile")
 
     def test_character_view_run_uses_source_reference_as_front_primer(self) -> None:
@@ -1087,7 +1116,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframes._nvidia_smi_keyframe_preflight",
+                    "aigen.keyframes.nvidia_smi_keyframe_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
@@ -1099,10 +1128,10 @@ class KeyframeTests(unittest.TestCase):
 
             output_dir = root / "runs" / "views"
             self.assertTrue((output_dir / "result.json").exists())
-            self.assertEqual(result["job_id"], "ai46.left_profile.neutral.v1")
+            self.assertEqual(result["job_id"], "ai46.left_profile.neutral")
             self.assertEqual(
                 FakeSession.instances[0].prepare_kwargs["reference_image"],
-                root / "assets" / "characters" / "ai46" / "views" / "front_v1.png",
+                root / "assets" / "characters" / "ai46" / "views" / "front.png",
             )
 
     def test_extract_keyframe_example_writes_condition_assets(self) -> None:
@@ -1146,10 +1175,7 @@ class KeyframeTests(unittest.TestCase):
             image.save(source)
             stdout = StringIO()
 
-            with (
-                patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image),
-                redirect_stdout(stdout),
-            ):
+            with patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image), redirect_stdout(stdout):
                 exit_code = main(
                     [
                         "keyframes",
@@ -1175,9 +1201,9 @@ class KeyframeTests(unittest.TestCase):
 
     def test_preflight_rejects_dirty_framebuffer(self) -> None:
         with (
-            patch("aigen.keyframes._cuda_available", return_value=True),
+            patch("aigen.keyframe_memory.cuda_available", return_value=True),
             patch(
-                "aigen.keyframes._nvidia_smi_memory_snapshot",
+                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
                 return_value={
                     "nvidia_smi_used_mb": 1801,
                     "nvidia_smi_device_total_mb": 16303,
@@ -1185,14 +1211,14 @@ class KeyframeTests(unittest.TestCase):
                 },
             ),
         ):
-            with self.assertRaisesRegex(KeyframeJobError, "1801 MB used before model load"):
-                _nvidia_smi_preflight()
+            with self.assertRaisesRegex(KeyframeMemoryError, "1801 MB used before model load"):
+                nvidia_smi_preflight()
 
     def test_keyframe_preflight_rejects_estimated_oom(self) -> None:
         with (
-            patch("aigen.keyframes._cuda_available", return_value=True),
+            patch("aigen.keyframe_memory.cuda_available", return_value=True),
             patch(
-                "aigen.keyframes._nvidia_smi_memory_snapshot",
+                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
                 return_value={
                     "nvidia_smi_used_mb": 999,
                     "nvidia_smi_device_total_mb": 16303,
@@ -1200,16 +1226,53 @@ class KeyframeTests(unittest.TestCase):
                 },
             ),
         ):
-            with self.assertRaisesRegex(KeyframeJobError, "Estimated VRAM requirement exceeds"):
-                _nvidia_smi_keyframe_preflight(
+            with self.assertRaisesRegex(KeyframeMemoryError, "Estimated VRAM requirement exceeds"):
+                nvidia_smi_keyframe_preflight(
                     {
                         "baseline_framebuffer_mb": 700,
                         "safety_margin_mb": 256,
                         "estimated_clean_peak_mb": 16033,
+                        "true_cfg_enabled": False,
+                        "true_cfg_extra_mb": 0,
+                        "canvas_width": 512,
+                        "canvas_height": 768,
+                        "generated_tokens": 1536,
+                        "reference_tokens": 2048,
                     }
                 )
 
-    def test_keyframe_judge_ranks_condition_first_and_selects_outputs(self) -> None:
+    def test_keyframe_preflight_reports_max_output_canvas(self) -> None:
+        with (
+            patch("aigen.keyframe_memory.cuda_available", return_value=True),
+            patch(
+                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
+                return_value={
+                    "nvidia_smi_used_mb": 700,
+                    "nvidia_smi_device_total_mb": 16303,
+                    "nvidia_smi_utilization_gpu": 0,
+                },
+            ),
+        ):
+            result = nvidia_smi_keyframe_preflight(
+                {
+                    "baseline_framebuffer_mb": 700,
+                    "safety_margin_mb": 256,
+                    "estimated_clean_peak_mb": 15400,
+                    "true_cfg_enabled": False,
+                    "true_cfg_extra_mb": 0,
+                    "canvas_width": 576,
+                    "canvas_height": 864,
+                    "generated_tokens": 1944,
+                    "reference_tokens": 1107,
+                }
+            )
+
+        self.assertGreater(result["vram_estimated_headroom_mb"], 0)
+        self.assertGreaterEqual(result["vram_max_output_canvas"]["generated_tokens"], 1944)
+        self.assertEqual(result["vram_max_output_canvas"]["width"] % 16, 0)
+        self.assertEqual(result["vram_max_output_canvas"]["height"] % 16, 0)
+
+    def test_keyframe_judge_writes_semantic_gate_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
@@ -1225,7 +1288,6 @@ class KeyframeTests(unittest.TestCase):
                 max_pixels=2,
                 max_new_tokens=512,
                 temperature=0.0,
-                pairwise_top_k=3,
             )
 
             judge_result = judge_keyframe_run(
@@ -1234,80 +1296,30 @@ class KeyframeTests(unittest.TestCase):
                 project_root=Path.cwd(),
                 runner=FakeJudgeRunner(),
             )
-            calibration = calibrate_keyframe_judge(
-                run_dir,
-                judge_id=DEFAULT_JUDGE_ID,
-                fixture_path=Path(DEFAULT_CALIBRATION_FIXTURE),
-            )
-            selection = select_keyframe_run(
-                run_dir,
-                judge_id=DEFAULT_JUDGE_ID,
-                top=1,
-                allow_uncalibrated=False,
-            )
-            ranked_sheet_exists = Path(selection["outputs"]["ranked_contact_sheet"]).exists()
-            overlay_sheet_exists = Path(selection["outputs"]["condition_overlay_ranked"]).exists()
+            judge_dir = run_dir / "judge" / DEFAULT_JUDGE_ID
+            overlay_exists = Path(judge_result["candidates"][0]["overlay"]).exists()
+            prompt_exists = (judge_dir / "prompts" / "seed_002.txt").exists()
+            raw_exists = (judge_dir / "raw" / "seed_002.json").exists()
 
-        self.assertEqual(judge_result["ranking"]["final"], ["seed_003", "seed_002", "seed_005"])
-        self.assertTrue(calibration["usable_for_auto_select"])
-        self.assertEqual(selection["best"], "seed_003")
-        self.assertEqual(selection["selected"], ["seed_003"])
-        self.assertEqual(selection["rejected"], ["seed_002", "seed_005"])
-        self.assertTrue(ranked_sheet_exists)
-        self.assertTrue(overlay_sheet_exists)
-
-    def test_keyframe_select_refuses_uncalibrated_judge_by_default(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            run_dir = write_keyframe_result(root)
-            config = KeyframeJudgeConfig(
-                judge_id=DEFAULT_JUDGE_ID,
-                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
-                repo_id=DEFAULT_JUDGE_REPO_ID,
-                revision=DEFAULT_JUDGE_REVISION,
-                dtype="bfloat16",
-                attention_impl="sdpa",
-                quantization=DEFAULT_JUDGE_QUANTIZATION,
-                min_pixels=1,
-                max_pixels=2,
-                max_new_tokens=512,
-                temperature=0.0,
-                pairwise_top_k=3,
-            )
-
-            judge_keyframe_run(
-                run_dir,
-                config,
-                project_root=Path.cwd(),
-                runner=FakeJudgeRunner(),
-            )
-
-            with self.assertRaisesRegex(RuntimeError, "Refusing automatic selection"):
-                select_keyframe_run(
-                    run_dir,
-                    judge_id=DEFAULT_JUDGE_ID,
-                    top=1,
-                    allow_uncalibrated=False,
-                )
-
-            selection = select_keyframe_run(
-                run_dir,
-                judge_id=DEFAULT_JUDGE_ID,
-                top=1,
-                allow_uncalibrated=True,
-            )
-
-        self.assertEqual(selection["selected"], ["seed_003"])
+        self.assertEqual(judge_result["semantic_gate"]["passed"], ["seed_002", "seed_003"])
+        self.assertEqual(judge_result["semantic_gate"]["blocked"][0]["candidate"], "seed_005")
+        self.assertFalse(judge_result["semantic_gate"]["usable_for_auto_select"])
+        self.assertEqual(judge_result["semantic_gate"]["selection_owner"], "condition_score")
+        self.assertTrue(overlay_exists)
+        self.assertTrue(prompt_exists)
+        self.assertTrue(raw_exists)
 
     def test_keyframe_score_ranks_condition_match_from_saved_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            run_dir = write_score_fixture(root)
+            run_dir, poses = write_score_fixture(root)
 
             result = score_keyframe_run(
                 run_dir,
-                KeyframeScoreConfig(scorer_id="condition-test", foreground_threshold=20.0),
+                KeyframeScoreConfig(scorer_id="condition-test"),
                 project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1327,9 +1339,10 @@ class KeyframeTests(unittest.TestCase):
 
             result = score_keyframe_run(
                 run_dir,
-                KeyframeScoreConfig(scorer_id="pose-test", foreground_threshold=20.0),
+                KeyframeScoreConfig(scorer_id="pose-test"),
                 project_root=Path.cwd(),
                 pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1354,9 +1367,10 @@ class KeyframeTests(unittest.TestCase):
 
             result = score_keyframe_run(
                 run_dir,
-                KeyframeScoreConfig(scorer_id="source-pose-test", foreground_threshold=20.0),
+                KeyframeScoreConfig(scorer_id="source-pose-test"),
                 project_root=Path.cwd(),
                 pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1385,9 +1399,10 @@ class KeyframeTests(unittest.TestCase):
 
             result = score_keyframe_run(
                 run_dir,
-                KeyframeScoreConfig(scorer_id="pose-degenerate-test", foreground_threshold=20.0),
+                KeyframeScoreConfig(scorer_id="pose-degenerate-test"),
                 project_root=Path.cwd(),
                 pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
             )
 
             self.assertFalse(result["selection"]["usable_for_auto_select"])
@@ -1406,9 +1421,10 @@ class KeyframeTests(unittest.TestCase):
 
             score_keyframe_run(
                 run_dir,
-                KeyframeScoreConfig(scorer_id="pose-select-test", foreground_threshold=20.0),
+                KeyframeScoreConfig(scorer_id="pose-select-test"),
                 project_root=Path.cwd(),
                 pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
             )
             selection = select_scored_keyframe_run(run_dir, scorer_id="pose-select-test")
 
@@ -1417,6 +1433,24 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(selection["rejected"], ["seed_002"])
             self.assertTrue(Path(selection["outputs"]["selected"]).exists())
             self.assertTrue(Path(selection["outputs"]["rejected"]).exists())
+
+    def test_keyframe_score_select_supports_top_k(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir, poses = write_score_fixture(root)
+
+            score_keyframe_run(
+                run_dir,
+                KeyframeScoreConfig(scorer_id="top-k-test"),
+                project_root=Path.cwd(),
+                pose_extractor=FakePoseExtractor(poses),
+                segmenter=FakeSegmenter(),
+            )
+            selection = select_scored_keyframe_run(run_dir, scorer_id="top-k-test", top_k=2)
+
+            self.assertEqual(selection["best"], "seed_003")
+            self.assertEqual(selection["selected"], ["seed_003", "seed_002"])
+            self.assertEqual(selection["rejected"], ["seed_005"])
 
     def test_keyframe_refine_plans_arm_mask_from_target_pose(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1447,7 +1481,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframe_refine.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
                 patch("aigen.keyframe_refine._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframe_refine._nvidia_smi_preflight",
+                    "aigen.keyframe_refine.nvidia_smi_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
@@ -1468,12 +1502,25 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(FakeRefiner.instances[0].seed, 101)
             self.assertTrue(FakeRefiner.instances[0].closed)
 
-    def test_keyframe_polish_plan_writes_model_discovered_regions(self) -> None:
+    def test_keyframe_polish_plan_is_static_and_model_free(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, plan_path = write_polish_fixture(root)
+
+            result = plan_keyframe_polish(job_path, project_root=Path.cwd())
+
+        self.assertEqual(result["status"], "planned")
+        self.assertEqual(result["job_id"], "ai51.punch.seed060.polish")
+        self.assertEqual(result["plan_path"], plan_path.resolve().as_posix())
+        self.assertTrue(result["plan_exists"])
+        self.assertEqual(result["base"]["candidate"], "seed_060")
+
+    def test_keyframe_polish_diagnose_writes_model_discovered_regions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             job_path, _plan_path = write_polish_fixture(root)
 
-            result = plan_keyframe_polish(
+            result = diagnose_keyframe_polish(
                 job_path,
                 config=KeyframeJudgeConfig(
                     judge_id=DEFAULT_JUDGE_ID,
@@ -1487,7 +1534,6 @@ class KeyframeTests(unittest.TestCase):
                     max_pixels=2,
                     max_new_tokens=512,
                     temperature=0.0,
-                    pairwise_top_k=0,
                 ),
                 project_root=Path.cwd(),
                 runner=FakePolishPlanner(),
@@ -1506,10 +1552,18 @@ class KeyframeTests(unittest.TestCase):
                 "aigen.keyframe_polish.count_kontext_prompt_tokens",
                 return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
             ):
-                resolved = preview_keyframe_polish_job(job_path, refine_profile(), project_root=Path.cwd())
+                resolved = preview_keyframe_polish_job(
+                    job_path,
+                    refine_profile(),
+                    project_root=Path.cwd(),
+                    segmenter=FakeSegmenter(),
+                    grounder=FakeGrounder(),
+                )
 
         self.assertEqual([region["id"] for region in resolved["polish_plan"]["regions"]], ["region_01", "region_02"])
         self.assertEqual([plan["region_id"] for plan in resolved["mask_plan"]], ["region_01", "region_02"])
+        self.assertEqual(resolved["mask_plan"][0]["grounding"]["source"], "fake-grounder")
+        self.assertEqual(resolved["mask_plan"][0]["segmentation"]["method"], "grounding-dino-box-to-sam-mask")
 
     def test_keyframe_polish_run_preserves_outside_pixels(self) -> None:
         FakeRefiner.instances.clear()
@@ -1525,14 +1579,20 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframe_polish.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
                 patch("aigen.keyframe_polish._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframe_polish._nvidia_smi_preflight",
+                    "aigen.keyframe_polish.nvidia_smi_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
             ):
-                result = run_keyframe_polish_job(job_path, refine_profile(), project_root=Path.cwd())
+                result = run_keyframe_polish_job(
+                    job_path,
+                    refine_profile(),
+                    project_root=Path.cwd(),
+                    segmenter=FakeSegmenter(),
+                    grounder=FakeGrounder(),
+                )
 
             output_dir = root / "runs" / "punch_polish"
             output_path = Path(result["outputs"][0]["path"])
@@ -1560,14 +1620,20 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframe_polish.cuda_memory_stats", return_value={"max_allocated_mb": 0}),
                 patch("aigen.keyframe_polish._generation_environment", return_value={"env": "fake"}),
                 patch(
-                    "aigen.keyframe_polish._nvidia_smi_preflight",
+                    "aigen.keyframe_polish.nvidia_smi_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
             ):
-                run_keyframe_polish_job(job_path, refine_profile(), project_root=Path.cwd())
+                run_keyframe_polish_job(
+                    job_path,
+                    refine_profile(),
+                    project_root=Path.cwd(),
+                    segmenter=FakeSegmenter(),
+                    grounder=FakeGrounder(),
+                )
             result = select_keyframe_polish(
                 job_path,
                 config=KeyframeJudgeConfig(
@@ -1582,7 +1648,6 @@ class KeyframeTests(unittest.TestCase):
                     max_pixels=2,
                     max_new_tokens=512,
                     temperature=0.0,
-                    pairwise_top_k=0,
                 ),
                 project_root=Path.cwd(),
                 runner=FakePolishSelector(),
@@ -1607,7 +1672,6 @@ class KeyframeTests(unittest.TestCase):
                         max_pixels=2,
                         max_new_tokens=512,
                         temperature=0.0,
-                        pairwise_top_k=3,
                     )
                 )
 

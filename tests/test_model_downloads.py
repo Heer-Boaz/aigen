@@ -45,39 +45,8 @@ def download_manifest_payload() -> dict[str, object]:
 
 
 class ModelDownloadTests(unittest.TestCase):
-    def test_pose_control_manifest_downloads_base_and_controlnet(self) -> None:
-        manifest = load_download_manifest(Path("model_sources/pose_control_pipeline.json"))
-        base, controlnet = manifest.downloads
-
-        self.assertEqual(base.name, "flux1-dev-bf16-diffusers")
-        self.assertEqual(base.repo_id, "black-forest-labs/FLUX.1-dev")
-        self.assertEqual(base.local_path, "diffusers/black-forest-labs/FLUX.1-dev-bf16")
-        self.assertIn("transformer/*", base.include)
-        self.assertIn("text_encoder_2/*", base.include)
-        self.assertNotIn("flux1-dev.safetensors", base.include)
-        self.assertEqual(controlnet.name, "flux1-dev-controlnet-union-pro-2.0")
-        self.assertEqual(controlnet.repo_id, "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0")
-        self.assertEqual(
-            controlnet.local_path,
-            "diffusers/Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0",
-        )
-        self.assertIn("diffusion_pytorch_model.safetensors", controlnet.include)
-
-    def test_pose_control_4bit_manifest_downloads_base_and_controlnet(self) -> None:
-        manifest = load_download_manifest(Path("model_sources/pose_control_pipeline_4bit.json"))
-        base, controlnet = manifest.downloads
-
-        self.assertEqual(base.name, "flux1-dev-bnb-4bit-diffusers")
-        self.assertEqual(base.repo_id, "diffusers/FLUX.1-dev-bnb-4bit")
-        self.assertEqual(base.local_path, "diffusers/black-forest-labs/FLUX.1-dev-bnb-4bit")
-        self.assertIn("transformer/*", base.include)
-        self.assertIn("text_encoder_2/*", base.include)
-        self.assertEqual(controlnet.name, "flux1-dev-controlnet-union-pro-2.0")
-        self.assertEqual(controlnet.repo_id, "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0")
-        self.assertIn("diffusion_pytorch_model.safetensors", controlnet.include)
-
-    def test_kontext_pose_control_manifest_downloads_kontext_and_controlnet(self) -> None:
-        manifest = load_download_manifest(Path("model_sources/kontext_pose_control_pipeline_4bit.json"))
+    def test_keyframe_generation_manifest_downloads_kontext_and_controlnet(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_generation_kontext_controlnet.json"))
         kontext, controlnet = manifest.downloads
 
         self.assertEqual(kontext.name, "flux-kontext-4bit-fp4")
@@ -86,19 +55,8 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(controlnet.repo_id, "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0")
         self.assertIn("diffusion_pytorch_model.safetensors", controlnet.include)
 
-    def test_full_bf16_offload_manifest_downloads_only_diffusers_tree(self) -> None:
-        manifest = load_download_manifest(Path("model_sources/character_pipeline_full_bf16_offload.json"))
-        download = manifest.downloads[0]
-
-        self.assertEqual(download.name, "flux1-kontext-dev-bf16-diffusers")
-        self.assertEqual(download.repo_id, "black-forest-labs/FLUX.1-Kontext-dev")
-        self.assertEqual(download.local_path, "diffusers/black-forest-labs/FLUX.1-Kontext-dev-bf16")
-        self.assertIn("transformer/*", download.include)
-        self.assertIn("text_encoder_2/*", download.include)
-        self.assertNotIn("flux1-kontext-dev.safetensors", download.include)
-
-    def test_nunchaku_kontext_manifest_downloads_blackwell_fp4_transformer(self) -> None:
-        manifest = load_download_manifest(Path("model_sources/nunchaku_kontext_pipeline_fp4.json"))
+    def test_keyframe_generation_manifest_downloads_blackwell_fp4_transformer(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_generation_nunchaku_transformer.json"))
         download = manifest.downloads[0]
 
         self.assertEqual(download.name, "nunchaku-flux1-kontext-dev-fp4-blackwell")
@@ -130,6 +88,27 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "1a7144101628d69ee7a3768d1ee3a094070dc388")
         self.assertIn("yolox_l.onnx", download.include)
         self.assertIn("dw-ll_ucoco_384.onnx", download.include)
+
+    def test_keyframe_segmentation_manifest_downloads_sam_checkpoint(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_segmentation_sam_vit_b.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "sam-vit-b-keyframe-segmentation")
+        self.assertEqual(download.repo_id, "ybelkada/segment-anything")
+        self.assertEqual(download.local_path, "segmentation/ybelkada/segment-anything")
+        self.assertEqual(download.revision, "7790786db131bcdc639f24a915d9f2c331d843ee")
+        self.assertIn("checkpoints/sam_vit_b_01ec64.pth", download.include)
+
+    def test_keyframe_grounding_manifest_downloads_grounding_dino(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/keyframe_grounding_dino.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "grounding-dino-base-keyframe-polish-grounding")
+        self.assertEqual(download.repo_id, "IDEA-Research/grounding-dino-base")
+        self.assertEqual(download.revision, "12bdfa3120f3e7ec7b434d90674b3396eccf88eb")
+        self.assertEqual(download.local_path, "grounding/IDEA-Research/grounding-dino-base")
+        self.assertIn("*.safetensors", download.include)
+        self.assertIn("tokenizer*", download.include)
 
     def test_dry_run_plans_hub_download_without_network_call(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

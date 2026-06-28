@@ -1,0 +1,245 @@
+{
+  "$defs": {
+    "BriefCharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "view_bank": {
+          "$ref": "#/$defs/PathSpec"
+        }
+      },
+      "required": [
+        "id",
+        "view_bank"
+      ],
+      "title": "BriefCharacterSpec",
+      "type": "object"
+    },
+    "BriefExampleSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "mirror_x": {
+          "title": "Mirror X",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "width",
+        "height",
+        "mirror_x"
+      ],
+      "title": "BriefExampleSpec",
+      "type": "object"
+    },
+    "BriefGenerationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "output_directory": {
+          "title": "Output Directory",
+          "type": "string"
+        },
+        "overwrite": {
+          "title": "Overwrite",
+          "type": "boolean"
+        },
+        "save_conditions": {
+          "title": "Save Conditions",
+          "type": "boolean"
+        },
+        "save_contact_sheet": {
+          "title": "Save Contact Sheet",
+          "type": "boolean"
+        },
+        "seed_count": {
+          "title": "Seed Count",
+          "type": "integer"
+        },
+        "seed_start": {
+          "title": "Seed Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seed_start",
+        "seed_count",
+        "output_directory",
+        "filename",
+        "overwrite",
+        "save_conditions",
+        "save_contact_sheet"
+      ],
+      "title": "BriefGenerationSpec",
+      "type": "object"
+    },
+    "BriefOutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "assets_directory": {
+          "title": "Assets Directory",
+          "type": "string"
+        },
+        "job_path": {
+          "title": "Job Path",
+          "type": "string"
+        },
+        "plan_path": {
+          "title": "Plan Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assets_directory",
+        "plan_path",
+        "job_path"
+      ],
+      "title": "BriefOutputSpec",
+      "type": "object"
+    },
+    "BriefRequestSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "camera": {
+          "const": "platformer-side-view",
+          "title": "Camera",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "phase": {
+          "title": "Phase",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "phase",
+        "direction",
+        "camera",
+        "description"
+      ],
+      "title": "BriefRequestSpec",
+      "type": "object"
+    },
+    "PathSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "PathSpec",
+      "type": "object"
+    },
+    "PipelineSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "PipelineSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "character": {
+      "$ref": "#/$defs/BriefCharacterSpec"
+    },
+    "example": {
+      "$ref": "#/$defs/BriefExampleSpec"
+    },
+    "generation": {
+      "$ref": "#/$defs/BriefGenerationSpec"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "keyframe-brief",
+      "title": "Kind",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/BriefOutputSpec"
+    },
+    "pipeline": {
+      "$ref": "#/$defs/PipelineSpec"
+    },
+    "request": {
+      "$ref": "#/$defs/BriefRequestSpec"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "$schema",
+    "schema_version",
+    "kind",
+    "id",
+    "pipeline",
+    "character",
+    "request",
+    "example",
+    "generation",
+    "output"
+  ],
+  "title": "KeyframeBriefSpec",
+  "type": "object"
+}

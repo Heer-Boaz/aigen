@@ -99,9 +99,6 @@
           "prompt": {
             "type": "object"
           },
-          "source_job": {
-            "type": "object"
-          },
           "view": {
             "type": "object"
           }
@@ -109,8 +106,7 @@
         "required": [
           "view",
           "image",
-          "accepted_candidate",
-          "source_job"
+          "accepted_candidate"
         ],
         "type": "object"
       },

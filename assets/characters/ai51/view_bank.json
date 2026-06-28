@@ -4,7 +4,7 @@
     "source_reference": {
       "height": 2048,
       "mode": "RGBA",
-      "path": "/home/boaz/aigen/assets/characters/ai51/views/front_v1.png",
+      "path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
       "sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
       "width": 1024
     }
@@ -29,14 +29,9 @@
       "image": {
         "height": 2048,
         "mode": "RGBA",
-        "path": "/home/boaz/aigen/assets/characters/ai51/views/front_v1.png",
+        "path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
         "sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
         "width": 1024
-      },
-      "source_job": {
-        "candidate_path": "/home/boaz/aigen/assets/characters/ai51/views/front_v1.png",
-        "candidate_sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
-        "view_job_id": "source.ai51.front.v1"
       },
       "view": {
         "camera": "orthographic-front",
@@ -88,7 +83,7 @@
       "image": {
         "height": 768,
         "mode": "RGB",
-        "path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile_v1.png",
+        "path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
         "sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
         "width": 512
       },
@@ -97,16 +92,6 @@
         "negative": "walking pose, action pose, punch, front view, three-quarter view, long hair, ponytail, brown hair, pants, shorts, flat boots, cropped feet",
         "t5": "Full-body neutral-standing character turnaround view. Generate the approved left-profile identity primer for the same anime girl. Strict orthographic side view, relaxed neutral standing pose, arms down, feet grounded, one visible blue eye, profile nose and chin, short pink bob haircut, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, gloves, blue thigh-high socks and glossy brown boots. Preserve the clean anime lineart style and high-contrast glossy highlights. Clean neutral background.",
         "true_cfg_scale": 1.25
-      },
-      "source_job": {
-        "candidate_path": "/home/boaz/aigen/runs/characters/ai51/views/left_profile_neutral_v1/ai51.left_profile.neutral.v1__seed_001.png",
-        "candidate_sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
-        "result_sha256": "e41685f8121858aaa8f79457f25ce5e8b042ddb00dc7d8281432ce38affdbe7a",
-        "run_dir": "/home/boaz/aigen/runs/characters/ai51/views/left_profile_neutral_v1",
-        "run_job_id": "ai51.left_profile.neutral.v1",
-        "view_job_id": "ai51.left_profile.neutral.v1",
-        "view_job_path": "/home/boaz/aigen/jobs/ai51/left_profile_view.json",
-        "view_job_sha256": "5db1848ac6aba12976725abb0f670d00c4e87adf1d493e818c53de20216da39d"
       },
       "view": {
         "camera": "orthographic-side",

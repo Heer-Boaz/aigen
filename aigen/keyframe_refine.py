@@ -14,10 +14,12 @@ from PIL import Image, ImageDraw, ImageFilter
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from scipy import ndimage
 
-from aigen.generation.character_concept import DTYPES
+from aigen.diffusers_kontext_adapter import kontext_inpaint_text_kwargs
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, module_device_report, synchronized_time
+from aigen.generation.runtime_types import DTYPES
+from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight
 from aigen.keyframe_pose import PoseScoreConfig, extract_target_pose_map_keypoints
-from aigen.keyframes import NvidiaSmiMemorySampler, _nvidia_smi_preflight
+from aigen.keyframe_segmentation import SamForegroundSegmenter, SamSegmentationConfig
 from aigen.prompt_tokens import count_kontext_prompt_tokens
 
 
@@ -118,8 +120,8 @@ class KeyframeRefineJobSpec(StrictModel):
 class KeyframeRefineProfile:
     name: str
     model: str
-    nunchaku_transformer_model: Path | None
-    attention_impl: str | None
+    nunchaku_transformer_model: Path
+    attention_impl: str
     dtype: str
     pipeline_cpu_offload: bool
     vae_tiling: bool
@@ -150,16 +152,14 @@ class KontextInpaintRefiner:
             "torch_dtype": _torch_dtype(self.torch, profile.dtype),
             "local_files_only": True,
         }
-        if profile.nunchaku_transformer_model is not None:
-            from nunchaku import NunchakuFluxTransformer2dModel
+        from nunchaku import NunchakuFluxTransformer2dModel
 
-            transformer = NunchakuFluxTransformer2dModel.from_pretrained(
-                profile.nunchaku_transformer_model.resolve().as_posix(),
-                torch_dtype=_torch_dtype(self.torch, profile.dtype),
-            )
-            if profile.attention_impl:
-                transformer.set_attention_impl(profile.attention_impl)
-            pipeline_kwargs["transformer"] = transformer
+        transformer = NunchakuFluxTransformer2dModel.from_pretrained(
+            profile.nunchaku_transformer_model.resolve().as_posix(),
+            torch_dtype=_torch_dtype(self.torch, profile.dtype),
+        )
+        transformer.set_attention_impl(profile.attention_impl)
+        pipeline_kwargs["transformer"] = transformer
 
         self.pipeline = pipeline_class.from_pretrained(profile.model, **pipeline_kwargs)
         if profile.vae_tiling:
@@ -194,8 +194,6 @@ class KontextInpaintRefiner:
             "image": base_crop,
             "image_reference": reference_image,
             "mask_image": mask_crop,
-            "prompt": clip_prompt,
-            "prompt_2": t5_prompt,
             "true_cfg_scale": true_cfg_scale,
             "height": base_crop.height,
             "width": base_crop.width,
@@ -207,9 +205,13 @@ class KontextInpaintRefiner:
             "_auto_resize": False,
             "generator": self.torch.Generator(device=self.device).manual_seed(seed),
         }
-        if negative_prompt:
-            args["negative_prompt"] = negative_prompt
-            args["negative_prompt_2"] = negative_prompt
+        args.update(
+            kontext_inpaint_text_kwargs(
+                clip_prompt=clip_prompt,
+                t5_prompt=t5_prompt,
+                negative_prompt=negative_prompt,
+            )
+        )
         return self.pipeline(**args).images[0]
 
     def close(self) -> None:
@@ -283,7 +285,7 @@ def resolve_keyframe_refine_job(
             "run_dir": base_dir.as_posix(),
             "candidate": spec.base.candidate,
             "image": base_image,
-            "source_job_id": result["job_id"],
+            "base_job_id": result["job_id"],
         },
         "character": {
             "id": spec.character.id,
@@ -338,9 +340,10 @@ def plan_keyframe_refine_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
+    segmenter: Any | None = None,
 ) -> dict[str, Any]:
     resolved = resolve_keyframe_refine_job(job_path, profile, project_root=project_root, check_outputs=True)
-    mask_plan = build_refine_mask_plan(resolved)
+    mask_plan = build_refine_mask_plan(resolved, segmenter=segmenter)
     return {
         **resolved,
         "mask_plan": _mask_plan_json(mask_plan),
@@ -352,21 +355,23 @@ def run_keyframe_refine_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
+    segmenter: Any | None = None,
 ) -> dict[str, Any]:
     spec = load_keyframe_refine_job(job_path)
     resolved = resolve_keyframe_refine_job(job_path, profile, project_root=project_root, check_outputs=True)
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    mask_plan = build_refine_mask_plan(resolved)
+    mask_plan = build_refine_mask_plan(resolved, segmenter=segmenter)
+    _save_mask_artifacts(mask_plan, output_dir)
     resolved = {
         **resolved,
-        "mask_plan": _mask_plan_json(mask_plan),
+        "mask_plan": _mask_plan_json(mask_plan, output_dir),
     }
     _write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_debug_images:
         _save_debug_images(resolved, mask_plan, output_dir)
 
-    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_preflight())
+    memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_preflight())
     memory_sampler.start()
     try:
         total_start = perf_counter()
@@ -378,10 +383,16 @@ def run_keyframe_refine_job(
                     profile,
                     variant_name=spec.variants[0].name,
                     project_root=project_root,
+                    resolved=resolved,
                 )
             )
         else:
-            variant_results = _run_refine_variants_in_subprocesses(job_path, spec, project_root)
+            variant_results = _run_refine_variants_in_subprocesses(
+                job_path,
+                spec,
+                project_root,
+                output_dir / "resolved.json",
+            )
 
         outputs = [result["output"] for result in variant_results]
         if spec.output.save_contact_sheet:
@@ -426,20 +437,19 @@ def run_keyframe_refine_variant(
     *,
     variant_name: str,
     project_root: Path,
+    resolved: dict[str, Any],
 ) -> dict[str, Any]:
     spec = load_keyframe_refine_job(job_path)
-    resolved = resolve_keyframe_refine_job(job_path, profile, project_root=project_root, check_outputs=False)
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    mask_plan = build_refine_mask_plan(resolved)
-    resolved = {**resolved, "mask_plan": _mask_plan_json(mask_plan)}
+    mask_plan = _load_refine_mask_plan(resolved["mask_plan"])
     variant_lookup = {variant.name: variant for variant in spec.variants}
     planned_lookup = {planned["name"]: planned for planned in resolved["output"]["files"]}
     if variant_name not in variant_lookup:
         raise KeyframeRefineError(f"Refine job has no variant named {variant_name}")
     variant = variant_lookup[variant_name]
     planned = planned_lookup[variant_name]
-    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_preflight())
+    memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_preflight())
     memory_sampler.start()
     refiner: KontextInpaintRefiner | None = None
     try:
@@ -499,6 +509,7 @@ def _run_refine_variants_in_subprocesses(
     job_path: Path,
     spec: KeyframeRefineJobSpec,
     project_root: Path,
+    resolved_path: Path,
 ) -> list[dict[str, Any]]:
     results = []
     output_dir = _resolve_output_dir(spec.output.directory, job_path.parent)
@@ -507,13 +518,14 @@ def _run_refine_variants_in_subprocesses(
             [
                 sys.executable,
                 "-m",
-                "aigen.cli",
-                "keyframes",
-                "refine-run-variant",
+                "aigen.keyframe_refine_worker",
                 job_path.resolve().as_posix(),
                 "--variant",
                 variant.name,
-                "--compact",
+                "--resolved",
+                resolved_path.resolve().as_posix(),
+                "--project-root",
+                project_root.resolve().as_posix(),
             ],
             cwd=project_root,
         )
@@ -527,7 +539,7 @@ def _variant_result_path(output_dir: Path, variant_name: str) -> Path:
     return output_dir / "variant_results" / f"{variant_name}.json"
 
 
-def build_refine_mask_plan(resolved: dict[str, Any]) -> RefineMaskPlan:
+def build_refine_mask_plan(resolved: dict[str, Any], *, segmenter: Any | None = None) -> RefineMaskPlan:
     pose = extract_target_pose_map_keypoints(Path(resolved["assets"]["pose"]["path"]), PoseScoreConfig(min_common_keypoints=5))
     width, height = pose.image_size
     direction = _direction_from_resolved(resolved)
@@ -549,8 +561,12 @@ def build_refine_mask_plan(resolved: dict[str, Any]) -> RefineMaskPlan:
     contour_near_arm = contour & ndimage.binary_dilation(arm_band, iterations=max(8, round(width * 0.04)))
     hard = arm_band | contour_near_arm
     if resolved["region"]["mask_source"]["candidate_foreground"]:
-        candidate = _load_rgb(Path(resolved["base"]["image"]["path"]))
-        foreground = _foreground_mask(candidate)
+        active_segmenter = segmenter if segmenter is not None else SamForegroundSegmenter(SamSegmentationConfig())
+        foreground = active_segmenter.segment(Path(resolved["base"]["image"]["path"]))
+        if foreground.shape != hard.shape:
+            raise KeyframeRefineError(
+                f"Candidate foreground mask has shape {foreground.shape}, expected {hard.shape}"
+            )
         hard &= ndimage.binary_dilation(foreground, iterations=8)
     dilated = ndimage.binary_dilation(hard, iterations=resolved["region"]["dilate_px"])
     hard_image = Image.fromarray((dilated.astype(np.uint8) * 255), mode="L")
@@ -572,12 +588,11 @@ def _profile_json(profile: KeyframeRefineProfile) -> dict[str, Any]:
             **profile.model_revisions["kontext"],
             "path": profile.model,
         },
-    }
-    if profile.nunchaku_transformer_model is not None:
-        models["nunchaku_transformer"] = {
+        "nunchaku_transformer": {
             **profile.model_revisions["nunchaku_transformer"],
             "path": profile.nunchaku_transformer_model.resolve().as_posix(),
-        }
+        },
+    }
     return {
         "name": profile.name,
         "dtype": profile.dtype,
@@ -635,13 +650,39 @@ def _align_up(value: int, multiple: int) -> int:
     return ((value + multiple - 1) // multiple) * multiple
 
 
-def _mask_plan_json(mask_plan: RefineMaskPlan) -> dict[str, Any]:
-    return {
+def _mask_plan_json(mask_plan: RefineMaskPlan, output_dir: Path | None = None) -> dict[str, Any]:
+    payload = {
         "crop_box": list(mask_plan.crop_box),
         "front_arm_indices": list(mask_plan.front_arm_indices),
         "arm_line_width_px": mask_plan.arm_line_width_px,
         "fist_radius_px": mask_plan.fist_radius_px,
     }
+    if output_dir is not None:
+        payload["hard_mask"] = _asset_json(_mask_artifact_dir(output_dir) / "hard.png")
+        payload["feather_mask"] = _asset_json(_mask_artifact_dir(output_dir) / "feather.png")
+    return payload
+
+
+def _save_mask_artifacts(mask_plan: RefineMaskPlan, output_dir: Path) -> None:
+    mask_dir = _mask_artifact_dir(output_dir)
+    mask_dir.mkdir(parents=True, exist_ok=True)
+    mask_plan.hard_mask.save(mask_dir / "hard.png")
+    mask_plan.feather_mask.save(mask_dir / "feather.png")
+
+
+def _load_refine_mask_plan(mask_plan: dict[str, Any]) -> RefineMaskPlan:
+    return RefineMaskPlan(
+        hard_mask=Image.open(mask_plan["hard_mask"]["path"]).convert("L"),
+        feather_mask=Image.open(mask_plan["feather_mask"]["path"]).convert("L"),
+        crop_box=tuple(mask_plan["crop_box"]),
+        front_arm_indices=tuple(mask_plan["front_arm_indices"]),
+        arm_line_width_px=mask_plan["arm_line_width_px"],
+        fist_radius_px=mask_plan["fist_radius_px"],
+    )
+
+
+def _mask_artifact_dir(output_dir: Path) -> Path:
+    return output_dir / "masks"
 
 
 def _save_debug_images(resolved: dict[str, Any], mask_plan: RefineMaskPlan, output_dir: Path) -> None:
@@ -711,26 +752,6 @@ def _save_contact_sheet(outputs: list[dict[str, Any]], output_path: Path) -> Non
         sheet.paste(image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS), (x, label_h))
         draw.text((x + 8, 8), output["name"], fill="black")
     sheet.save(output_path)
-
-
-def _foreground_mask(image: np.ndarray, threshold: float = 28.0) -> np.ndarray:
-    border = np.concatenate((image[0], image[-1], image[:, 0], image[:, -1]), axis=0).astype(np.float32)
-    background = np.median(border, axis=0)
-    distance = np.sqrt(((image.astype(np.float32) - background) ** 2).sum(axis=2))
-    foreground = distance > threshold
-    foreground = ndimage.binary_closing(foreground, structure=np.ones((3, 3), dtype=bool), iterations=2)
-    foreground = ndimage.binary_fill_holes(foreground)
-    labels, count = ndimage.label(foreground)
-    if count == 0:
-        return foreground
-    sizes = np.bincount(labels.ravel())
-    sizes[0] = 0
-    return labels == sizes.argmax()
-
-
-def _load_rgb(path: Path) -> np.ndarray:
-    with Image.open(path) as image:
-        return np.asarray(image.convert("RGB"), dtype=np.uint8)
 
 
 def _load_luma(path: Path) -> np.ndarray:

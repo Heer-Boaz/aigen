@@ -1,0 +1,88 @@
+{
+  "assets": {
+    "boundary_mask": {
+      "height": 912,
+      "mode": "L",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_boundary.png",
+      "sha256": "aa110edde40b3fe9b5ab3cd4e5c43437f1e6f413af7200294b1b84990dcdd4cf",
+      "width": 608
+    },
+    "contour": {
+      "height": 912,
+      "mode": "L",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_contour.png",
+      "sha256": "3efab8b5f4a22bf6fb41d4db3b797051658476817e390c6f2ef3c7c69d2df4de",
+      "width": 608
+    },
+    "normalized_source": {
+      "height": 912,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_normalized.png",
+      "sha256": "a7ec6879690375d4dabc19c8bb4414bb7ed7e03e007a8454254738c19173a432",
+      "width": 608
+    },
+    "pose": {
+      "height": 912,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_pose.png",
+      "sha256": "90a4ca702ebda969231455b9dbe99c996bedf3657b58cbb6d4db33f3508247c3",
+      "width": 608
+    },
+    "source": {
+      "height": 120,
+      "mode": "RGBA",
+      "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_source.png",
+      "sha256": "8a830a228d990a20e7d4d96c3d1552f98f441a084ec5c439fff8d5849932d760",
+      "width": 88
+    }
+  },
+  "canvas": {
+    "height": 912,
+    "width": 608
+  },
+  "foreground": {
+    "coverage": 0.2603282981301939,
+    "normalized_bbox": [
+      36,
+      123,
+      571,
+      862
+    ],
+    "source_bbox": [
+      2,
+      2,
+      86,
+      118
+    ]
+  },
+  "kind": "keyframe-example-extraction",
+  "mirror_x": false,
+  "pose": {
+    "body_count": 1,
+    "mean_body_score": 0.7195056080818176,
+    "visible_body_keypoints": 18
+  },
+  "schema_version": 1,
+  "source": {
+    "height": 120,
+    "mode": "RGBA",
+    "path": "/home/boaz/aigen/assets/examples/ai46/platform_punch/ai46_platform_punch_left_640x960_source.png",
+    "sha256": "8a830a228d990a20e7d4d96c3d1552f98f441a084ec5c439fff8d5849932d760",
+    "width": 88
+  },
+  "transform": {
+    "canvas_paste": [
+      36,
+      123,
+      571,
+      862
+    ],
+    "scale": 6.369523809523809,
+    "source_crop": [
+      2,
+      2,
+      86,
+      118
+    ]
+  }
+}

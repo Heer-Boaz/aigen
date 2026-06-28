@@ -32,7 +32,7 @@
     "id": "ai46",
     "identity_primer": {
       "view": "front",
-      "path": "../../assets/characters/ai46/views/front_v1.png"
+      "path": "../../assets/characters/ai46/views/front.png"
     }
   },
   "conditions": [
@@ -54,7 +54,7 @@
       "type": "canny"
     }
   ],
-  "id": "ai46.walk.contact.left.v1",
+  "id": "ai46.walk.contact.left",
   "keyframe": {
     "action": "walk",
     "camera": "orthographic-side",
@@ -63,7 +63,7 @@
   },
   "kind": "character-keyframe",
   "output": {
-    "directory": "../../runs/keyframes/ai46/walk_contact/v1",
+    "directory": "../../runs/keyframes/ai46/walk_contact/batch",
     "filename": "{id}__{variant}.png",
     "overwrite": false,
     "save_conditions": true,

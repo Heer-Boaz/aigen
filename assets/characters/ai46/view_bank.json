@@ -4,7 +4,7 @@
     "source_reference": {
       "height": 2048,
       "mode": "RGBA",
-      "path": "/home/boaz/aigen/assets/characters/ai46/views/front_v1.png",
+      "path": "/home/boaz/aigen/assets/characters/ai46/views/front.png",
       "sha256": "bf5a10ef9f18c046de27aca006b70f8f0b6613f30723f666c97684e847da37b2",
       "width": 1024
     }
@@ -22,15 +22,9 @@
       "image": {
         "height": 2048,
         "mode": "RGBA",
-        "path": "/home/boaz/aigen/assets/characters/ai46/views/front_v1.png",
+        "path": "/home/boaz/aigen/assets/characters/ai46/views/front.png",
         "sha256": "bf5a10ef9f18c046de27aca006b70f8f0b6613f30723f666c97684e847da37b2",
         "width": 1024
-      },
-      "source_job": {
-        "git_commit": "094186a50874b2386f18c3844a7bb82ea739315f",
-        "source_path": "/home/boaz/aigen/assets/characters/ai46/views/front_v1.png",
-        "source_sha256": "bf5a10ef9f18c046de27aca006b70f8f0b6613f30723f666c97684e847da37b2",
-        "type": "source_reference"
       },
       "view": {
         "camera": "orthographic-front",
@@ -79,7 +73,7 @@
       "image": {
         "height": 768,
         "mode": "RGB",
-        "path": "/home/boaz/aigen/assets/characters/ai46/views/left_profile_v1.png",
+        "path": "/home/boaz/aigen/assets/characters/ai46/views/left_profile.png",
         "sha256": "cbf595b57e0948919797770432d0ff7c1edca04526f28458f764f5aa21d93a8c",
         "width": 512
       },
@@ -88,16 +82,6 @@
         "negative": "walking pose, action pose, punch, open hand gesture, front view, three-quarter view, long hair, ponytail, cropped feet",
         "t5": "Full-body neutral-standing character turnaround view. Generate the approved left-profile identity primer for the same anime girl. Strict orthographic side view, relaxed neutral standing pose, arms down, feet grounded, one visible eye, profile nose and chin, short light-brown bob, white shirt, blue tie, brown leather jacket, brown shorts, gloves, blue thigh-high socks and brown boots. Clean neutral background.",
         "true_cfg_scale": 1.25
-      },
-      "source_job": {
-        "candidate_path": "/home/boaz/aigen/runs/characters/ai46/views/left_profile_neutral_v1/ai46.left_profile.neutral.v1__seed_002.png",
-        "candidate_sha256": "cbf595b57e0948919797770432d0ff7c1edca04526f28458f764f5aa21d93a8c",
-        "result_sha256": "a5c84de16a876dd6ba0da4345fb4ae3d893aa4fbdd0e422468c5def15656161d",
-        "run_dir": "/home/boaz/aigen/runs/characters/ai46/views/left_profile_neutral_v1",
-        "run_job_id": "ai46.left_profile.neutral.v1",
-        "view_job_id": "ai46.left_profile.neutral.v1",
-        "view_job_path": "/home/boaz/aigen/jobs/ai46/left_profile_view.json",
-        "view_job_sha256": "5f8eae2d7b36cb5120c466527332452ea58f76a00e931961aad07c75f79d381b"
       },
       "view": {
         "camera": "orthographic-side",

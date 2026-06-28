@@ -19,9 +19,10 @@ from aigen.keyframe_pose import (
     save_pose_evidence,
     score_pose_match,
 )
+from aigen.keyframe_segmentation import SamForegroundSegmenter, SamSegmentationConfig
 
 
-DEFAULT_SCORER_ID = "condition-v1"
+DEFAULT_SCORER_ID = "condition"
 SCORE_SCHEMA_VERSION = 1
 DEGENERATE_POSE_SCORE_THRESHOLD = 0.05
 
@@ -33,10 +34,10 @@ class KeyframeScoreError(RuntimeError):
 @dataclass(frozen=True)
 class KeyframeScoreConfig:
     scorer_id: str = DEFAULT_SCORER_ID
-    foreground_threshold: float = 28.0
     contour_radius: int = 8
     distance_scale_px: float = 48.0
     pose: PoseScoreConfig = field(default_factory=PoseScoreConfig)
+    segmentation: SamSegmentationConfig = field(default_factory=SamSegmentationConfig)
 
 
 def score_keyframe_run(
@@ -45,6 +46,7 @@ def score_keyframe_run(
     *,
     project_root: Path,
     pose_extractor: Any | None = None,
+    segmenter: Any | None = None,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
     result = _read_json(resolved_run_dir / "result.json")
@@ -61,8 +63,10 @@ def score_keyframe_run(
 
     target = _load_target(assets)
     pose_target_source = _pose_target_source(assets)
-    if pose_target_source is not None and pose_extractor is None:
+    if pose_extractor is None:
         pose_extractor = DWPoseKeypointExtractor(config.pose)
+    if segmenter is None:
+        segmenter = SamForegroundSegmenter(config.segmentation)
     pose_target = _load_pose_target(assets, config, pose_extractor, pose_target_source)
 
     candidates = [
@@ -71,6 +75,7 @@ def score_keyframe_run(
             target,
             pose_target,
             pose_extractor,
+            segmenter,
             config,
             masks_dir=masks_dir,
             evidence_dir=evidence_dir,
@@ -78,14 +83,12 @@ def score_keyframe_run(
         )
         for output in result["outputs"]
     ]
-    pose_enabled = pose_target is not None
     ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
     ordered = {candidate["candidate"]: candidate for candidate in candidates}
     ranked_candidates = [ordered[name] for name in ranking]
     _save_ranked_sheet(ranked_candidates, score_dir / "ranked_contact_sheet.png", image_key="image")
     _save_ranked_sheet(ranked_candidates, score_dir / "condition_evidence_ranked.png", image_key="condition_evidence")
-    if pose_target is not None:
-        _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
+    _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
 
     payload = {
         "schema_version": SCORE_SCHEMA_VERSION,
@@ -96,35 +99,39 @@ def score_keyframe_run(
         "source_result_sha256": _sha256_file(resolved_run_dir / "result.json"),
         "scorer": {
             "id": config.scorer_id,
-            "method": "foreground-boundary-to-target-contour",
-            "foreground_threshold": config.foreground_threshold,
+            "method": "sam-box-prompted-foreground-boundary-to-target-contour",
             "contour_radius": config.contour_radius,
             "distance_scale_px": config.distance_scale_px,
             "pose": {
-                "enabled": pose_enabled,
                 "distance_scale": config.pose.distance_scale,
                 "min_common_keypoints": config.pose.min_common_keypoints,
                 "det_model": config.pose.det_model.as_posix(),
                 "pose_model": config.pose.pose_model.as_posix(),
             },
-            "weights": _score_weights(pose_enabled),
+            "segmentation": {
+                "model": "segment-anything",
+                "model_type": config.segmentation.model_type,
+                "checkpoint": config.segmentation.checkpoint.as_posix(),
+                "device": config.segmentation.device,
+            },
+            "weights": SCORE_WEIGHTS,
         },
         "assets": {
             "contour": assets["contour"],
             "boundary_mask": assets["boundary_mask"],
-            "pose": assets.get("pose"),
+            "pose": assets["pose"],
         },
         "candidates": candidates,
         "ranking": {
             "final": ranking,
             "best": ranking[0],
         },
-        "selection": _selection_status(candidates, pose_enabled),
+        "selection": _selection_status(candidates),
         "outputs": {
             "scores": (score_dir / "scores.json").as_posix(),
             "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
             "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
-            "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix() if pose_target is not None else None,
+            "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix(),
         },
     }
     _write_json(score_dir / "scores.json", payload)
@@ -135,7 +142,10 @@ def select_scored_keyframe_run(
     run_dir: Path,
     *,
     scorer_id: str = DEFAULT_SCORER_ID,
+    top_k: int = 1,
 ) -> dict[str, Any]:
+    if top_k < 1:
+        raise KeyframeScoreError("top_k must be at least 1")
     score_dir = run_dir.resolve() / "score" / scorer_id
     score_result = _read_json(score_dir / "scores.json")
     selection = score_result["selection"]
@@ -146,11 +156,12 @@ def select_scored_keyframe_run(
         )
 
     candidates_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
-    selected = [candidates_by_name[score_result["ranking"]["best"]]]
+    selected_names = score_result["ranking"]["final"][:top_k]
+    selected = [candidates_by_name[name] for name in selected_names]
     rejected = [
         candidates_by_name[name]
         for name in score_result["ranking"]["final"]
-        if name != score_result["ranking"]["best"]
+        if name not in set(selected_names)
     ]
     selected_path = score_dir / "selected.json"
     rejected_path = score_dir / "rejected.json"
@@ -175,9 +186,9 @@ def select_scored_keyframe_run(
     }
 
 
-def _selection_status(candidates: list[dict[str, Any]], pose_enabled: bool) -> dict[str, Any]:
+def _selection_status(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     blockers = []
-    if pose_enabled and max(candidate["scores"]["pose"] for candidate in candidates) < DEGENERATE_POSE_SCORE_THRESHOLD:
+    if max(candidate["scores"]["pose"] for candidate in candidates) < DEGENERATE_POSE_SCORE_THRESHOLD:
         blockers.append("pose_score_degenerate_all_candidates")
     if all(any(candidate["hard_rejects"].values()) for candidate in candidates):
         blockers.append("all_candidates_have_hard_rejects")
@@ -207,21 +218,17 @@ def _load_target(assets: dict[str, Any]) -> dict[str, Any]:
 def _load_pose_target(
     assets: dict[str, Any],
     config: KeyframeScoreConfig,
-    pose_extractor: Any | None,
+    pose_extractor: Any,
     pose_target_source: Path | None,
-) -> PoseKeypoints | None:
-    pose_asset = assets.get("pose")
-    if pose_asset is None:
-        return None
+) -> PoseKeypoints:
+    pose_asset = assets["pose"]
     if pose_target_source is not None:
         return pose_extractor.extract(pose_target_source)
     return extract_target_pose_map_keypoints(Path(pose_asset["path"]), config.pose)
 
 
 def _pose_target_source(assets: dict[str, Any]) -> Path | None:
-    pose_asset = assets.get("pose")
-    if pose_asset is None:
-        return None
+    pose_asset = assets["pose"]
     pose_path = Path(pose_asset["path"])
     metadata_path = pose_path.with_name(f"{pose_path.stem.removesuffix('_pose')}_extraction.json")
     if not metadata_path.is_file():
@@ -233,8 +240,9 @@ def _pose_target_source(assets: dict[str, Any]) -> Path | None:
 def _score_candidate(
     output: dict[str, Any],
     target: dict[str, Any],
-    pose_target: PoseKeypoints | None,
-    pose_extractor: Any | None,
+    pose_target: PoseKeypoints,
+    pose_extractor: Any,
+    segmenter: Any,
     config: KeyframeScoreConfig,
     *,
     masks_dir: Path,
@@ -244,7 +252,7 @@ def _score_candidate(
     candidate_name = output["name"]
     image_path = Path(output["path"]).resolve()
     image = _load_rgb(image_path)
-    foreground = _foreground_mask(image, config.foreground_threshold)
+    foreground = segmenter.segment(image_path)
     foreground_edge = foreground ^ _erode(foreground, 1)
     foreground_bbox = _bbox(foreground)
     candidate_edge_dilated = _dilate(foreground_edge, config.contour_radius)
@@ -288,24 +296,20 @@ def _score_candidate(
         "side_profile": side_profile_score,
         "artifact": _artifact_score(foreground_coverage),
     }
-    pose_metrics: dict[str, Any] | None = None
-    pose_evidence_path: Path | None = None
-    if pose_target is not None:
-        candidate_pose = pose_extractor.extract(image_path)
-        pose_result = score_pose_match(pose_target, candidate_pose, config.pose)
-        scores["pose"] = pose_result.score
-        pose_metrics = pose_result.to_json()
-        pose_evidence_path = pose_evidence_dir / f"{candidate_name}__pose_match.png"
-        save_pose_evidence(image_path, pose_target, candidate_pose, pose_evidence_path)
+    candidate_pose = pose_extractor.extract(image_path)
+    pose_result = score_pose_match(pose_target, candidate_pose, config.pose)
+    scores["pose"] = pose_result.score
+    pose_metrics = pose_result.to_json()
+    pose_evidence_path = pose_evidence_dir / f"{candidate_name}__pose_match.png"
+    save_pose_evidence(image_path, pose_target, candidate_pose, pose_evidence_path)
 
-    scores["final"] = _weighted_score(scores, _score_weights(pose_target is not None))
+    scores["final"] = _weighted_score(scores, SCORE_WEIGHTS)
     hard_rejects = {
         "missing_foreground": bool(foreground.sum() == 0),
         "weak_condition_match": bool(scores["condition"] < 0.25),
         "weak_side_profile": bool(scores["side_profile"] < 0.45),
+        "weak_pose_match": bool(scores["pose"] < 0.20),
     }
-    if pose_target is not None:
-        hard_rejects["weak_pose_match"] = bool(scores["pose"] < 0.20)
     mask_path = masks_dir / f"{candidate_name}__foreground.png"
     evidence_path = evidence_dir / f"{candidate_name}__condition_diff.png"
     _save_mask(foreground, mask_path)
@@ -315,7 +319,7 @@ def _score_candidate(
         "image": image_path.as_posix(),
         "foreground_mask": mask_path.as_posix(),
         "condition_evidence": evidence_path.as_posix(),
-        "pose_evidence": pose_evidence_path.as_posix() if pose_evidence_path is not None else None,
+        "pose_evidence": pose_evidence_path.as_posix(),
         "hard_rejects": hard_rejects,
         "metrics": {
             "contour_precision": contour_precision,
@@ -335,22 +339,13 @@ def _score_candidate(
     }
 
 
-def _score_weights(pose_enabled: bool) -> dict[str, float]:
-    if pose_enabled:
-        return {
-            "condition": 0.50,
-            "contour": 0.05,
-            "pose": 0.25,
-            "side_profile": 0.15,
-            "artifact": 0.05,
-        }
-    return {
-        "condition": 0.75,
-        "contour": 0.05,
-        "pose": 0.00,
-        "side_profile": 0.15,
-        "artifact": 0.05,
-    }
+SCORE_WEIGHTS = {
+    "condition": 0.50,
+    "contour": 0.05,
+    "pose": 0.25,
+    "side_profile": 0.15,
+    "artifact": 0.05,
+}
 
 
 def _score_ranking_key(candidate: dict[str, Any]) -> tuple[Any, ...]:
@@ -376,21 +371,6 @@ def _artifact_score(foreground_coverage: float) -> float:
     if 0.04 <= foreground_coverage <= 0.55:
         return 1.0
     return max(0.0, 1.0 - min(abs(foreground_coverage - 0.18), 0.18) / 0.18)
-
-
-def _foreground_mask(image: np.ndarray, threshold: float) -> np.ndarray:
-    border = np.concatenate((image[0], image[-1], image[:, 0], image[:, -1]), axis=0).astype(np.float32)
-    background = np.median(border, axis=0)
-    distance = np.sqrt(((image.astype(np.float32) - background) ** 2).sum(axis=2))
-    foreground = distance > threshold
-    foreground = ndimage.binary_closing(foreground, structure=np.ones((3, 3), dtype=bool), iterations=2)
-    foreground = ndimage.binary_fill_holes(foreground)
-    labels, count = ndimage.label(foreground)
-    if count == 0:
-        return foreground
-    sizes = np.bincount(labels.ravel())
-    sizes[0] = 0
-    return labels == sizes.argmax()
 
 
 def _load_rgb(path: Path) -> np.ndarray:

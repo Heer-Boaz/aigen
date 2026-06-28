@@ -35,7 +35,7 @@
   "character": {
     "id": "ai51",
     "source_reference": {
-      "path": "../../assets/characters/ai51/views/front_v1.png"
+      "path": "../../assets/characters/ai51/views/front.png"
     }
   },
   "conditions": [
@@ -57,12 +57,12 @@
       "type": "canny"
     }
   ],
-  "id": "ai51.left_profile.neutral.v1",
+  "id": "ai51.left_profile.neutral",
   "kind": "character-view",
   "output": {
     "bank_path": "../../assets/characters/ai51/view_bank.json",
-    "canonical_path": "../../assets/characters/ai51/views/left_profile_v1.png",
-    "directory": "../../runs/characters/ai51/views/left_profile_neutral_v1",
+    "canonical_path": "../../assets/characters/ai51/views/left_profile.png",
+    "directory": "../../runs/characters/ai51/views/left_profile_neutral",
     "filename": "{id}__{variant}.png",
     "overwrite": false,
     "save_conditions": true,

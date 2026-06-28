@@ -1,0 +1,329 @@
+{
+  "$defs": {
+    "BriefControlPlanSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "title": "End",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "residual_mask_source": {
+          "anyOf": [
+            {
+              "const": "example_boundary_mask",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Residual Mask Source"
+        },
+        "scale": {
+          "title": "Scale",
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "example_pose",
+            "example_contour"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "number"
+        },
+        "type": {
+          "enum": [
+            "pose",
+            "canny",
+            "softedge",
+            "depth"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "source",
+        "scale",
+        "start",
+        "end"
+      ],
+      "title": "BriefControlPlanSpec",
+      "type": "object"
+    },
+    "BriefPolishPlanSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_regions": {
+          "title": "Max Regions",
+          "type": "integer"
+        },
+        "policy": {
+          "title": "Policy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "policy",
+        "max_regions"
+      ],
+      "title": "BriefPolishPlanSpec",
+      "type": "object"
+    },
+    "BriefScoringPlanSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "priorities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Priorities",
+          "type": "array"
+        },
+        "top_k": {
+          "title": "Top K",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "top_k",
+        "priorities",
+        "checks"
+      ],
+      "title": "BriefScoringPlanSpec",
+      "type": "object"
+    },
+    "CanvasSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "max_sequence_length": {
+          "title": "Max Sequence Length",
+          "type": "integer"
+        },
+        "reference_max_area": {
+          "title": "Reference Max Area",
+          "type": "integer"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "reference_max_area",
+        "max_sequence_length"
+      ],
+      "title": "CanvasSpec",
+      "type": "object"
+    },
+    "IdentityPrimerSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "view": {
+          "enum": [
+            "front",
+            "left_profile",
+            "right_profile",
+            "back"
+          ],
+          "title": "View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view",
+        "path"
+      ],
+      "title": "IdentityPrimerSpec",
+      "type": "object"
+    },
+    "PromptSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "clip": {
+          "title": "Clip",
+          "type": "string"
+        },
+        "negative": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Negative"
+        },
+        "t5": {
+          "title": "T5",
+          "type": "string"
+        },
+        "true_cfg_scale": {
+          "title": "True Cfg Scale",
+          "type": "number"
+        }
+      },
+      "required": [
+        "clip",
+        "t5",
+        "true_cfg_scale"
+      ],
+      "title": "PromptSpec",
+      "type": "object"
+    },
+    "SamplingSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "guidance_scale": {
+          "title": "Guidance Scale",
+          "type": "number"
+        },
+        "steps": {
+          "title": "Steps",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "steps",
+        "guidance_scale"
+      ],
+      "title": "SamplingSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "brief_id": {
+      "title": "Brief Id",
+      "type": "string"
+    },
+    "canvas": {
+      "$ref": "#/$defs/CanvasSpec"
+    },
+    "controls": {
+      "items": {
+        "$ref": "#/$defs/BriefControlPlanSpec"
+      },
+      "title": "Controls",
+      "type": "array"
+    },
+    "identity_description": {
+      "title": "Identity Description",
+      "type": "string"
+    },
+    "identity_primer": {
+      "$ref": "#/$defs/IdentityPrimerSpec"
+    },
+    "kind": {
+      "const": "keyframe-brief-plan",
+      "title": "Kind",
+      "type": "string"
+    },
+    "planner_id": {
+      "title": "Planner Id",
+      "type": "string"
+    },
+    "planner_prompt_sha256": {
+      "title": "Planner Prompt Sha256",
+      "type": "string"
+    },
+    "platformer_camera_description": {
+      "title": "Platformer Camera Description",
+      "type": "string"
+    },
+    "polish": {
+      "$ref": "#/$defs/BriefPolishPlanSpec"
+    },
+    "pose_description": {
+      "title": "Pose Description",
+      "type": "string"
+    },
+    "prompt": {
+      "$ref": "#/$defs/PromptSpec"
+    },
+    "rationale": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Rationale",
+      "type": "array"
+    },
+    "sampling": {
+      "$ref": "#/$defs/SamplingSpec"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "scoring": {
+      "$ref": "#/$defs/BriefScoringPlanSpec"
+    },
+    "source_brief_sha256": {
+      "title": "Source Brief Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "$schema",
+    "schema_version",
+    "kind",
+    "brief_id",
+    "planner_id",
+    "source_brief_sha256",
+    "planner_prompt_sha256",
+    "identity_description",
+    "pose_description",
+    "platformer_camera_description",
+    "identity_primer",
+    "prompt",
+    "canvas",
+    "sampling",
+    "controls",
+    "scoring",
+    "polish",
+    "rationale"
+  ],
+  "title": "KeyframeBriefPlanSpec",
+  "type": "object"
+}

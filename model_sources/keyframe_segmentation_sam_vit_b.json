@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "phase": "post-generation keyframe foreground segmentation",
+    "runtime": "Segment Anything box-prompted foreground masks"
+  },
+  "downloads": [
+    {
+      "name": "sam-vit-b-keyframe-segmentation",
+      "repo_id": "ybelkada/segment-anything",
+      "revision": "7790786db131bcdc639f24a915d9f2c331d843ee",
+      "local_path": "segmentation/ybelkada/segment-anything",
+      "include": [
+        "checkpoints/sam_vit_b_01ec64.pth"
+      ]
+    }
+  ]
+}

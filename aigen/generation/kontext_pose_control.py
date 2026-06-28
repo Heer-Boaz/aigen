@@ -1,113 +1,17 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from aigen.generation.character_concept import (
-    DEFAULT_NEGATIVE_PROMPT,
-    DTYPES,
-    compose_character_prompt,
-)
+from aigen.flux_geometry import fit_size_to_area
 from aigen.generation.runtime_diagnostics import (
-    cuda_memory_stats,
     elapsed_ms,
     module_device_report,
-    parameter_locations,
     synchronized_time,
 )
-
-@dataclass(frozen=True)
-class CharacterKontextPoseResult:
-    output_path: str
-    model: str
-    controlnet_model: str
-    reference_image: str
-    pose_image: str
-    prompt: str
-    pipeline_prompt: str
-    negative_prompt: str
-    width: int
-    height: int
-    reference_width: int
-    reference_height: int
-    reference_max_area: int
-    reference_tokens: int
-    generated_tokens: int
-    text_tokens: int
-    total_tokens: int
-    max_sequence_length: int
-    timings_ms: dict[str, float]
-    transformer_step_ms: list[float]
-    controlnet_step_ms: list[float]
-    controlnet_active_steps: int
-    controlnet_metadata: dict[str, Any]
-    memory: dict[str, int]
-    environment: dict[str, Any]
-    parameter_locations: list[dict[str, Any]]
-    steps: int
-    guidance_scale: float
-    true_cfg_scale: float
-    controlnet_conditioning_scale: float
-    control_guidance_start: float
-    control_guidance_end: float
-    dtype: str
-    device: str
-    pipeline_cpu_offload: bool
-    nunchaku_layer_offload: bool
-    vae_tiling: bool
-    transformer_single_file: str | None
-    nunchaku_transformer_model: str | None
-    attention_impl: str | None
-    seed: int
-
-    def to_json(self) -> dict[str, Any]:
-        return {
-            "output_path": self.output_path,
-            "model": self.model,
-            "controlnet_model": self.controlnet_model,
-            "reference_image": self.reference_image,
-            "pose_image": self.pose_image,
-            "prompt": self.prompt,
-            "pipeline_prompt": self.pipeline_prompt,
-            "negative_prompt": self.negative_prompt,
-            "width": self.width,
-            "height": self.height,
-            "reference_width": self.reference_width,
-            "reference_height": self.reference_height,
-            "reference_max_area": self.reference_max_area,
-            "reference_tokens": self.reference_tokens,
-            "generated_tokens": self.generated_tokens,
-            "text_tokens": self.text_tokens,
-            "total_tokens": self.total_tokens,
-            "max_sequence_length": self.max_sequence_length,
-            "timings_ms": self.timings_ms,
-            "transformer_step_ms": self.transformer_step_ms,
-            "controlnet_step_ms": self.controlnet_step_ms,
-            "controlnet_active_steps": self.controlnet_active_steps,
-            "controlnet_metadata": self.controlnet_metadata,
-            "memory": self.memory,
-            "environment": self.environment,
-            "parameter_locations": self.parameter_locations,
-            "steps": self.steps,
-            "guidance_scale": self.guidance_scale,
-            "true_cfg_scale": self.true_cfg_scale,
-            "controlnet_conditioning_scale": self.controlnet_conditioning_scale,
-            "control_guidance_start": self.control_guidance_start,
-            "control_guidance_end": self.control_guidance_end,
-            "dtype": self.dtype,
-            "device": self.device,
-            "pipeline_cpu_offload": self.pipeline_cpu_offload,
-            "nunchaku_layer_offload": self.nunchaku_layer_offload,
-            "vae_tiling": self.vae_tiling,
-            "transformer_single_file": self.transformer_single_file,
-            "nunchaku_transformer_model": self.nunchaku_transformer_model,
-            "attention_impl": self.attention_impl,
-            "seed": self.seed,
-        }
-
+from aigen.generation.runtime_types import DTYPES
 
 @dataclass(frozen=True)
 class KontextPosePrepared:
@@ -358,132 +262,6 @@ class CharacterKontextPoseSession:
         self.pipeline.maybe_free_model_hooks()
 
 
-def run_character_kontext_pose_control(
-    model: str,
-    controlnet_model: str,
-    reference_image: Path,
-    pose_image: Path,
-    output_path: Path,
-    prompt: str,
-    *,
-    device: str = "cuda",
-    dtype: str = "bfloat16",
-    steps: int = 28,
-    guidance_scale: float = 3.5,
-    true_cfg_scale: float = 1.0,
-    width: int = 384,
-    height: int = 576,
-    reference_max_area: int = 384 * 768,
-    max_sequence_length: int = 128,
-    framing: str = "full-body",
-    negative_prompt: str = DEFAULT_NEGATIVE_PROMPT,
-    seed: int = 1,
-    pipeline_cpu_offload: bool = False,
-    nunchaku_layer_offload: bool = False,
-    controlnet_conditioning_scale: float = 0.65,
-    control_guidance_start: float = 0.0,
-    control_guidance_end: float = 0.65,
-    transformer_single_file: Path | None = None,
-    nunchaku_transformer_model: Path | None = None,
-    attention_impl: str | None = None,
-    vae_tiling: bool = False,
-) -> CharacterKontextPoseResult:
-    torch, pipeline_class, controlnet_class, transformer_class, load_image = _load_flux_kontext_controlnet()
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats(device)
-
-    total_start = synchronized_time(torch)
-    model_load_start = synchronized_time(torch)
-    pipeline = _build_kontext_pose_pipeline(
-        pipeline_class,
-        controlnet_class,
-        transformer_class,
-        model,
-        controlnet_model,
-        transformer_single_file,
-        nunchaku_transformer_model,
-        attention_impl,
-        _torch_dtype(torch, dtype),
-        device,
-        pipeline_cpu_offload,
-        nunchaku_layer_offload,
-        vae_tiling,
-    )
-    model_load_ms = elapsed_ms(model_load_start, synchronized_time(torch))
-
-    pipeline_prompt = compose_character_prompt(prompt, framing)
-    image = pipeline(
-        image=load_image(reference_image.resolve().as_posix()),
-        control_image=load_image(pose_image.resolve().as_posix()),
-        prompt=pipeline_prompt,
-        negative_prompt=negative_prompt,
-        true_cfg_scale=true_cfg_scale,
-        width=width,
-        height=height,
-        max_area=width * height,
-        reference_max_area=reference_max_area,
-        max_sequence_length=max_sequence_length,
-        num_inference_steps=steps,
-        guidance_scale=guidance_scale,
-        controlnet_conditioning_scale=controlnet_conditioning_scale,
-        control_guidance_start=control_guidance_start,
-        control_guidance_end=control_guidance_end,
-        generator=torch.Generator(device=device).manual_seed(seed),
-    ).images[0]
-    total_ms = elapsed_ms(total_start, synchronized_time(torch))
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output_path)
-    token_metadata = pipeline.last_token_metadata
-    timings_ms = dict(pipeline.last_timings_ms)
-    timings_ms["model_load_ms"] = model_load_ms
-    timings_ms["total_ms"] = total_ms
-    memory = cuda_memory_stats(torch, device)
-    return CharacterKontextPoseResult(
-        output_path=output_path.resolve().as_posix(),
-        model=model,
-        controlnet_model=controlnet_model,
-        reference_image=reference_image.resolve().as_posix(),
-        pose_image=pose_image.resolve().as_posix(),
-        prompt=prompt,
-        pipeline_prompt=pipeline_prompt,
-        negative_prompt=negative_prompt,
-        width=width,
-        height=height,
-        reference_width=token_metadata["reference_width"],
-        reference_height=token_metadata["reference_height"],
-        reference_max_area=reference_max_area,
-        reference_tokens=token_metadata["reference_tokens"],
-        generated_tokens=token_metadata["generated_tokens"],
-        text_tokens=token_metadata["text_tokens"],
-        total_tokens=token_metadata["total_tokens"],
-        max_sequence_length=max_sequence_length,
-        timings_ms=timings_ms,
-        transformer_step_ms=pipeline.last_transformer_step_ms,
-        controlnet_step_ms=pipeline.last_controlnet_step_ms,
-        controlnet_active_steps=pipeline.last_controlnet_active_steps,
-        controlnet_metadata=pipeline.last_controlnet_metadata,
-        memory=memory,
-        environment=_generation_environment(torch, pipeline),
-        parameter_locations=parameter_locations(pipeline.transformer),
-        steps=steps,
-        guidance_scale=guidance_scale,
-        true_cfg_scale=true_cfg_scale,
-        controlnet_conditioning_scale=controlnet_conditioning_scale,
-        control_guidance_start=control_guidance_start,
-        control_guidance_end=control_guidance_end,
-        dtype=dtype,
-        device=device,
-        pipeline_cpu_offload=pipeline_cpu_offload,
-        nunchaku_layer_offload=nunchaku_layer_offload,
-        vae_tiling=vae_tiling,
-        transformer_single_file=transformer_single_file.resolve().as_posix() if transformer_single_file else None,
-        nunchaku_transformer_model=nunchaku_transformer_model.resolve().as_posix() if nunchaku_transformer_model else None,
-        attention_impl=attention_impl,
-        seed=seed,
-    )
-
-
 def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
     import bitsandbytes as bnb
 
@@ -515,7 +293,11 @@ def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
     }
 
 
-def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) -> list[Any]:
+def extend_control_residuals(
+    samples: Sequence[Any],
+    total_image_tokens: int,
+    zero_suffix_cache: dict[tuple[Any, ...], Any] | None = None,
+) -> list[Any]:
     import torch
 
     extended = []
@@ -528,10 +310,16 @@ def extend_control_residuals(samples: Sequence[Any], total_image_tokens: int) ->
             raise ValueError(f"ControlNet residual is longer than transformer image tokens: {sample.shape[1]}")
 
         if missing_tokens:
+            key = (sample.shape[0], missing_tokens, sample.shape[2], sample.device, sample.dtype)
+            zero_suffix = None if zero_suffix_cache is None else zero_suffix_cache.get(key)
+            if zero_suffix is None:
+                zero_suffix = sample.new_zeros(sample.shape[0], missing_tokens, sample.shape[2])
+                if zero_suffix_cache is not None:
+                    zero_suffix_cache[key] = zero_suffix
             sample = torch.cat(
                 (
                     sample,
-                    sample.new_zeros(sample.shape[0], missing_tokens, sample.shape[2]),
+                    zero_suffix,
                 ),
                 dim=1,
             )
@@ -558,19 +346,6 @@ def apply_control_residual_mask(samples: Sequence[Any] | None, residual_mask: An
 
 def residual_suffix_is_zero(samples: Sequence[Any], generated_tokens: int) -> bool:
     return all(sample[:, generated_tokens:].count_nonzero().item() == 0 for sample in samples)
-
-
-def fit_size_to_area(width: int, height: int, *, max_area: int, multiple_of: int) -> tuple[int, int]:
-    if width <= 0 or height <= 0:
-        raise ValueError("Reference dimensions must be positive")
-    if max_area <= 0:
-        raise ValueError("reference_max_area must be positive")
-
-    scale = min(1.0, math.sqrt(max_area / (width * height)))
-    return (
-        max(multiple_of, int(width * scale) // multiple_of * multiple_of),
-        max(multiple_of, int(height * scale) // multiple_of * multiple_of),
-    )
 
 
 def _build_kontext_pose_pipeline(
@@ -961,7 +736,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             )
             return latents
 
-        @torch.no_grad()
+        @torch.inference_mode()
         def denoise_prepared(
             self,
             prepared: KontextPosePrepared,
@@ -1048,6 +823,16 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             }
 
             self.scheduler.set_begin_index(0)
+            generated_token_count = latents.shape[1]
+            control_zero_suffixes: dict[tuple[Any, ...], Any] = {}
+            latent_model_input = latents.new_empty(
+                (
+                    latents.shape[0],
+                    generated_token_count + prepared.image_latents.shape[1],
+                    latents.shape[2],
+                )
+            )
+            latent_model_input[:, generated_token_count:].copy_(prepared.image_latents)
             progress_bar_context = self.progress_bar(total=num_inference_steps)
             with progress_bar_context as progress_bar:
                 for i, t in enumerate(timesteps):
@@ -1055,7 +840,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         continue
 
                     self._current_timestep = t
-                    latent_model_input = torch.cat([latents, prepared.image_latents], dim=1)
+                    latent_model_input[:, :generated_token_count].copy_(latents)
                     timestep = t.expand(latents.shape[0]).to(latents.dtype)
                     controlnet_block_samples = None
                     controlnet_single_block_samples = None
@@ -1107,6 +892,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                         controlnet_block_samples = extend_control_residuals(
                             controlnet_block_samples,
                             total_image_tokens,
+                            control_zero_suffixes,
                         )
                         if not controlnet_metadata["double_residual_count"]:
                             controlnet_metadata = {
@@ -1131,6 +917,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             controlnet_single_block_samples = extend_control_residuals(
                                 controlnet_single_block_samples,
                                 total_image_tokens,
+                                control_zero_suffixes,
                             )
                             if not controlnet_metadata["single_residual_count"]:
                                 controlnet_metadata["single_residual_count"] = len(controlnet_single_block_samples)
@@ -1235,6 +1022,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
                 output = self.vae.decode(latents, return_dict=False)[0]
                 outputs.extend(self.image_processor.postprocess(output, output_type=output_type))
+                del latents, output
             return outputs, elapsed_ms(vae_decode_start, synchronized_time(torch))
 
         @torch.no_grad()

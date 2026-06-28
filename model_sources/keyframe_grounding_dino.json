@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "target_hardware": {
+    "phase": "post-generation polish region grounding",
+    "runtime": "GroundingDINO text-to-box localization before SAM masking"
+  },
+  "downloads": [
+    {
+      "name": "grounding-dino-base-keyframe-polish-grounding",
+      "repo_id": "IDEA-Research/grounding-dino-base",
+      "revision": "12bdfa3120f3e7ec7b434d90674b3396eccf88eb",
+      "local_path": "grounding/IDEA-Research/grounding-dino-base",
+      "include": [
+        "*.json",
+        "*.safetensors",
+        "*.txt",
+        "tokenizer*",
+        "vocab.txt"
+      ],
+      "exclude": [
+        "*.md",
+        ".gitattributes"
+      ]
+    }
+  ]
+}

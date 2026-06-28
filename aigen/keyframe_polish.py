@@ -14,10 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from scipy import ndimage
 
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, synchronized_time
+from aigen.keyframe_grounding import GroundedRegionBox, GroundingConfig, GroundingDinoRegionGrounder
+from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight
 from aigen.keyframe_judge import KeyframeJudgeConfig, QwenKeyframeJudge
 from aigen.keyframe_refine import KeyframeRefineProfile, KontextInpaintRefiner
-from aigen.keyframes import NvidiaSmiMemorySampler, _nvidia_smi_preflight
+from aigen.keyframe_segmentation import SamForegroundSegmenter, SamSegmentationConfig, foreground_box_mask
 from aigen.prompt_tokens import count_kontext_prompt_tokens
+from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
 
 
 KEYFRAME_POLISH_JOB_SCHEMA = "schemas/keyframe-polish-job.schema.json"
@@ -265,6 +268,7 @@ class PolishMaskPlan:
     index: int
     label: str
     operation: str
+    grounding: GroundedRegionBox
     prompt: str
     negative_prompt: str
     hard_mask: Image.Image
@@ -305,6 +309,47 @@ def load_keyframe_polish_plan(path: Path) -> KeyframePolishPlan:
 
 
 def plan_keyframe_polish(
+    job_path: Path,
+    *,
+    project_root: Path,
+) -> dict[str, Any]:
+    spec = load_keyframe_polish_job(job_path)
+    context = _polish_context(spec, job_path)
+    plan_path = _resolve_path_for_write(spec.plan.path, job_path.parent)
+    output_dir = _resolve_output_dir(spec.output.directory, job_path.parent)
+    return {
+        "schema_version": KEYFRAME_POLISH_SCHEMA_VERSION,
+        "status": "planned",
+        "job_path": job_path.resolve().as_posix(),
+        "job_id": spec.id,
+        "base": {
+            "run_dir": context.base_dir.as_posix(),
+            "candidate": spec.base.candidate,
+            "image": _asset_json(context.base_path),
+            "base_job_id": context.result["job_id"],
+        },
+        "character": {
+            "id": spec.character.id,
+            "identity_primer": {
+                "view": spec.character.identity_primer.view,
+                **_asset_json(context.identity_primer_path),
+            },
+        },
+        "planner": spec.planner.model_dump(mode="json"),
+        "plan_path": plan_path.as_posix(),
+        "plan_exists": plan_path.is_file(),
+        "micro_sweep": spec.micro_sweep.model_dump(mode="json"),
+        "output": {
+            **spec.output.model_dump(mode="json"),
+            "directory": output_dir.as_posix(),
+        },
+        "acceptance": spec.acceptance.model_dump(mode="json"),
+        "git_commit": _git_commit(project_root),
+        "spec_sha256": _sha256_bytes(job_path.read_bytes()),
+    }
+
+
+def diagnose_keyframe_polish(
     job_path: Path,
     *,
     config: KeyframeJudgeConfig,
@@ -379,7 +424,7 @@ def resolve_keyframe_polish_job(
             "run_dir": context.base_dir.as_posix(),
             "candidate": spec.base.candidate,
             "image": _asset_json(context.base_path),
-            "source_job_id": context.result["job_id"],
+            "base_job_id": context.result["job_id"],
         },
         "character": {
             "id": spec.character.id,
@@ -406,18 +451,17 @@ def resolve_keyframe_polish_job(
 
 def validate_keyframe_polish_job(
     job_path: Path,
-    profile: KeyframeRefineProfile,
     *,
     project_root: Path,
 ) -> dict[str, Any]:
-    resolved = resolve_keyframe_polish_job(job_path, profile, project_root=project_root, check_outputs=False)
+    resolved = plan_keyframe_polish(job_path, project_root=project_root)
     return {
         "status": "valid",
         "job_id": resolved["job_id"],
-        "profile": resolved["profile"]["name"],
-        "regions": [region["id"] for region in resolved["polish_plan"]["regions"]],
-        "tokens": resolved["tokens"],
-        "outputs": resolved["output"]["files"],
+        "base": resolved["base"],
+        "plan_path": resolved["plan_path"],
+        "plan_exists": resolved["plan_exists"],
+        "output": resolved["output"],
     }
 
 
@@ -426,10 +470,18 @@ def preview_keyframe_polish_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
+    segmenter: Any | None = None,
+    grounder: Any | None = None,
 ) -> dict[str, Any]:
     resolved = resolve_keyframe_polish_job(job_path, profile, project_root=project_root, check_outputs=True)
     context = _polish_context(load_keyframe_polish_job(job_path), job_path)
-    mask_plans = build_polish_mask_plans(context.base_image, context.identity_primer, resolved)
+    mask_plans = build_polish_mask_plans(
+        context.base_image,
+        context.identity_primer,
+        resolved,
+        segmenter=segmenter,
+        grounder=grounder,
+    )
     return {
         **resolved,
         "mask_plan": [_mask_plan_json(plan) for plan in mask_plans],
@@ -441,19 +493,28 @@ def run_keyframe_polish_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
+    segmenter: Any | None = None,
+    grounder: Any | None = None,
 ) -> dict[str, Any]:
     spec = load_keyframe_polish_job(job_path)
     resolved = resolve_keyframe_polish_job(job_path, profile, project_root=project_root, check_outputs=True)
     context = _polish_context(spec, job_path)
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    mask_plans = build_polish_mask_plans(context.base_image, context.identity_primer, resolved)
-    resolved = {**resolved, "mask_plan": [_mask_plan_json(plan) for plan in mask_plans]}
+    mask_plans = build_polish_mask_plans(
+        context.base_image,
+        context.identity_primer,
+        resolved,
+        segmenter=segmenter,
+        grounder=grounder,
+    )
+    _save_mask_artifacts(mask_plans, output_dir)
+    resolved = {**resolved, "mask_plan": [_mask_plan_json(plan, output_dir) for plan in mask_plans]}
     _write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_debug_images:
         _save_debug_images(context.base_image, mask_plans, output_dir)
 
-    memory_sampler = NvidiaSmiMemorySampler(_nvidia_smi_preflight())
+    memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_preflight())
     memory_sampler.start()
     refiner: KontextInpaintRefiner | None = None
     try:
@@ -553,7 +614,7 @@ def select_keyframe_polish(
     result = _read_json(output_dir / "result.json")
     resolved = result["effective_config"]
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
-    mask_plans = build_polish_mask_plans(context.base_image, context.identity_primer, resolved)
+    mask_plans = _load_polish_mask_plans(context.base_image, context.identity_primer, resolved["mask_plan"])
     outputs_by_region = _outputs_by_region(result["outputs"])
     active_runner = runner if runner is not None else QwenKeyframeJudge(config)
     composite = context.base_image.copy()
@@ -741,26 +802,79 @@ def _validate_polish_plan(spec: KeyframePolishJobSpec, plan: KeyframePolishPlan,
             raise KeyframePolishError(f"Region {region.id} uses unsupported operation {region.operation}")
 
 
-def build_polish_mask_plans(base: Image.Image, identity_primer: Image.Image, resolved: dict[str, Any]) -> list[PolishMaskPlan]:
-    foreground = _foreground_mask(np.asarray(base, dtype=np.uint8))
+def build_polish_mask_plans(
+    base: Image.Image,
+    identity_primer: Image.Image,
+    resolved: dict[str, Any],
+    *,
+    segmenter: Any | None = None,
+    grounder: Any | None = None,
+) -> list[PolishMaskPlan]:
+    active_segmenter = segmenter if segmenter is not None else SamForegroundSegmenter(SamSegmentationConfig())
+    active_grounder = grounder if grounder is not None else GroundingDinoRegionGrounder(GroundingConfig())
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
-    return [_build_region_mask(index, region, foreground, base, identity_primer) for index, region in enumerate(plan.regions, start=1)]
+    base_array = np.asarray(base.convert("RGB"), dtype=np.uint8)
+    return [
+        _build_region_mask(index, region, active_segmenter, active_grounder, base_array, base, identity_primer)
+        for index, region in enumerate(plan.regions, start=1)
+    ]
+
+
+def _load_polish_mask_plans(
+    base: Image.Image,
+    identity_primer: Image.Image,
+    mask_plan_manifest: list[dict[str, Any]],
+) -> list[PolishMaskPlan]:
+    plans = []
+    for index, item in enumerate(mask_plan_manifest, start=1):
+        hard_mask = Image.open(item["hard_mask"]["path"]).convert("L")
+        feather_mask = Image.open(item["feather_mask"]["path"]).convert("L")
+        crop_box = tuple(item["crop_box"])
+        parameters = BoundedPolishParameters(**item["parameters"])
+        plans.append(
+            PolishMaskPlan(
+                region_id=item["region_id"],
+                index=index,
+                label=item["label"],
+                operation=item["operation"],
+                grounding=GroundedRegionBox(
+                    box=tuple(item["grounding"]["box"]),
+                    label=item["grounding"]["label"],
+                    score=item["grounding"]["score"],
+                    source=item["grounding"]["source"],
+                    prior_iou=item["grounding"]["prior_iou"],
+                ),
+                prompt=item["prompt"],
+                negative_prompt=item["negative_prompt"],
+                hard_mask=hard_mask,
+                feather_mask=feather_mask,
+                crop_box=crop_box,
+                reference_card=_reference_detail_card(identity_primer, base, crop_box),
+                parameters=parameters,
+            )
+        )
+    return plans
 
 
 def _build_region_mask(
     index: int,
     region: PlannedPolishRegion,
-    foreground: np.ndarray,
+    segmenter: Any,
+    grounder: Any,
+    base_array: np.ndarray,
     base: Image.Image,
     identity_primer: Image.Image,
 ) -> PolishMaskPlan:
     width, height = base.size
-    hard = Image.new("L", base.size, 0)
-    ImageDraw.Draw(hard).rectangle(region.bbox, fill=255)
-    hard_array = np.asarray(hard, dtype=np.uint8) > 0
-    hard_array &= foreground
+    grounding = grounder.ground_region(base, region.mask_prompt, region.bbox)
+    hard_array = segmenter.segment_image_box(base_array, grounding.box)
+    if hard_array.shape != (height, width):
+        raise KeyframePolishError(
+            f"Segmentation mask for polish region {region.id} has shape {hard_array.shape}, expected {(height, width)}"
+        )
+    hard_array &= _bbox_mask_array(base.size, grounding.box)
     if not hard_array.any():
-        hard_array = np.asarray(hard, dtype=np.uint8) > 0
+        raise KeyframePolishError(f"Segmentation produced no usable mask for polish region {region.id}")
     parameters = _bound_parameters(region.operation, region.parameters)
     hard_array = ndimage.binary_dilation(hard_array, iterations=max(1, round(width * 0.006)))
     hard = Image.fromarray((hard_array.astype(np.uint8) * 255), mode="L")
@@ -771,6 +885,7 @@ def _build_region_mask(
         index=index,
         label=region.label,
         operation=region.operation,
+        grounding=grounding,
         prompt=region.prompt,
         negative_prompt=region.negative_prompt,
         hard_mask=hard,
@@ -889,6 +1004,14 @@ def _save_debug_images(base: Image.Image, mask_plans: list[PolishMaskPlan], outp
         _mask_overlay(base, mask_plan.feather_mask).save(region_dir / "mask_overlay.png")
 
 
+def _save_mask_artifacts(mask_plans: list[PolishMaskPlan], output_dir: Path) -> None:
+    for mask_plan in mask_plans:
+        region_dir = _mask_artifact_dir(output_dir, mask_plan.region_id)
+        region_dir.mkdir(parents=True, exist_ok=True)
+        mask_plan.hard_mask.save(region_dir / "hard.png")
+        mask_plan.feather_mask.save(region_dir / "feather.png")
+
+
 def _save_selection_evidence(
     base: Image.Image,
     identity_primer: Path,
@@ -974,7 +1097,7 @@ def _outputs_by_region(outputs: list[dict[str, Any]]) -> dict[str, list[dict[str
 
 
 def _candidate_crop_grid(base: Image.Image) -> Image.Image:
-    foreground = _foreground_mask(np.asarray(base, dtype=np.uint8))
+    foreground = foreground_box_mask(np.asarray(base, dtype=np.uint8))
     left, top, right, bottom = _bbox(foreground)
     cols = 3
     rows = 3
@@ -996,8 +1119,8 @@ def _candidate_crop_grid(base: Image.Image) -> Image.Image:
 
 
 def _identity_candidate_comparison_grid(identity_primer: Image.Image, candidate: Image.Image) -> Image.Image:
-    identity_foreground = _foreground_mask(np.asarray(identity_primer, dtype=np.uint8))
-    candidate_foreground = _foreground_mask(np.asarray(candidate, dtype=np.uint8))
+    identity_foreground = foreground_box_mask(np.asarray(identity_primer, dtype=np.uint8))
+    candidate_foreground = foreground_box_mask(np.asarray(candidate, dtype=np.uint8))
     identity_box = _bbox(identity_foreground)
     candidate_box = _bbox(candidate_foreground)
     cols = 3
@@ -1065,12 +1188,18 @@ def _reference_detail_card(identity_primer: Image.Image, base: Image.Image, crop
     return card
 
 
-def _mask_plan_json(mask_plan: PolishMaskPlan) -> dict[str, Any]:
-    return {
+def _mask_plan_json(mask_plan: PolishMaskPlan, output_dir: Path | None = None) -> dict[str, Any]:
+    payload = {
         "region_id": mask_plan.region_id,
         "label": mask_plan.label,
         "operation": mask_plan.operation,
+        "prompt": mask_plan.prompt,
+        "negative_prompt": mask_plan.negative_prompt,
         "crop_box": list(mask_plan.crop_box),
+        "grounding": mask_plan.grounding.to_json(),
+        "segmentation": {
+            "method": "grounding-dino-box-to-sam-mask",
+        },
         "parameters": {
             "strength": mask_plan.parameters.strength,
             "steps": mask_plan.parameters.steps,
@@ -1082,6 +1211,11 @@ def _mask_plan_json(mask_plan: PolishMaskPlan) -> dict[str, Any]:
             "max_sequence_length": mask_plan.parameters.max_sequence_length,
         },
     }
+    if output_dir is not None:
+        region_dir = _mask_artifact_dir(output_dir, mask_plan.region_id)
+        payload["hard_mask"] = _asset_json(region_dir / "hard.png")
+        payload["feather_mask"] = _asset_json(region_dir / "feather.png")
+    return payload
 
 
 def _mask_overlay(base: Image.Image, mask: Image.Image) -> Image.Image:
@@ -1139,26 +1273,23 @@ def _save_contact_sheet(outputs: list[dict[str, Any]], output_path: Path) -> Non
     sheet.save(output_path)
 
 
-def _foreground_mask(image: np.ndarray, threshold: float = 28.0) -> np.ndarray:
-    border = np.concatenate((image[0], image[-1], image[:, 0], image[:, -1]), axis=0).astype(np.float32)
-    background = np.median(border, axis=0)
-    distance = np.sqrt(((image.astype(np.float32) - background) ** 2).sum(axis=2))
-    foreground = distance > threshold
-    foreground = ndimage.binary_closing(foreground, structure=np.ones((3, 3), dtype=bool), iterations=2)
-    foreground = ndimage.binary_fill_holes(foreground)
-    labels, count = ndimage.label(foreground)
-    if count == 0:
-        return foreground
-    sizes = np.bincount(labels.ravel())
-    sizes[0] = 0
-    return labels == sizes.argmax()
-
-
 def _bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
     ys, xs = np.nonzero(mask)
     if len(xs) == 0:
         raise KeyframePolishError("Polish base image contains no foreground subject")
     return int(xs.min()), int(ys.min()), int(xs.max() + 1), int(ys.max() + 1)
+
+
+def _bbox_mask_array(size: tuple[int, int], bbox: tuple[int, int, int, int]) -> np.ndarray:
+    width, height = size
+    left, top, right, bottom = bbox
+    mask = np.zeros((height, width), dtype=bool)
+    mask[top:bottom, left:right] = True
+    return mask
+
+
+def _mask_artifact_dir(output_dir: Path, region_id: str) -> Path:
+    return output_dir / "masks" / region_id
 
 
 def _expanded_aligned_box(mask: np.ndarray, padding: int, width: int, height: int) -> tuple[int, int, int, int]:
@@ -1181,19 +1312,10 @@ def _align_up(value: int, multiple: int) -> int:
 
 
 def _json_from_vlm_response(raw_text: str) -> dict[str, Any]:
-    text = raw_text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines[-1].strip() != "```":
-            raise KeyframePolishError("VLM returned an unterminated Markdown JSON block")
-        text = "\n".join(lines[1:-1]).strip()
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise KeyframePolishError(f"VLM returned non-JSON output: {error}") from error
-    if not isinstance(data, dict):
-        raise KeyframePolishError("VLM returned JSON that is not an object")
-    return data
+        return json_object_from_vlm_response(raw_text)
+    except VlmJsonError as error:
+        raise KeyframePolishError(str(error)) from error
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -1258,12 +1380,11 @@ def _profile_json(profile: KeyframeRefineProfile) -> dict[str, Any]:
             **profile.model_revisions["kontext"],
             "path": profile.model,
         },
-    }
-    if profile.nunchaku_transformer_model is not None:
-        models["nunchaku_transformer"] = {
+        "nunchaku_transformer": {
             **profile.model_revisions["nunchaku_transformer"],
             "path": profile.nunchaku_transformer_model.resolve().as_posix(),
-        }
+        },
+    }
     return {
         "name": profile.name,
         "dtype": profile.dtype,

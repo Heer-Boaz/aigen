@@ -11,15 +11,16 @@ from PIL import Image
 from scipy import ndimage
 
 from aigen.keyframe_pose import DEFAULT_DWPOSE_DET_MODEL, DEFAULT_DWPOSE_POSE_MODEL
+from aigen.keyframe_segmentation import foreground_box_mask
 
 
 EXAMPLE_EXTRACTION_SCHEMA_VERSION = 1
 DEFAULT_FOREGROUND_HEIGHT_RATIO = 0.84
 DEFAULT_FOREGROUND_WIDTH_RATIO = 0.88
 DEFAULT_BOTTOM_MARGIN_RATIO = 0.055
-DEFAULT_FOREGROUND_THRESHOLD = 34.0
 DEFAULT_BOUNDARY_RADIUS_PX = 18
 DEFAULT_BOUNDARY_FEATHER_PX = 7
+DEFAULT_BOUNDARY_FEATHER_SUPPORT_PX = DEFAULT_BOUNDARY_FEATHER_PX * 3
 
 
 class KeyframeExampleError(RuntimeError):
@@ -45,7 +46,7 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
     output_dir.mkdir(parents=True, exist_ok=True)
 
     image = _load_rgba(source)
-    foreground = _foreground_mask(image)
+    foreground = _source_foreground(image)
     box = _bbox(foreground)
     normalized, normalized_foreground, transform = _normalize_example(
         image,
@@ -111,20 +112,12 @@ def _load_rgba(path: Path) -> Image.Image:
         raise KeyframeExampleError(f"Cannot read example image {path.as_posix()}: {error}") from error
 
 
-def _foreground_mask(image: Image.Image) -> np.ndarray:
+def _source_foreground(image: Image.Image) -> np.ndarray:
     data = np.asarray(image, dtype=np.uint8)
-    alpha = data[:, :, 3]
-    if int((alpha < 250).sum()) > 0:
-        return _largest_component(alpha > 8)
-
-    rgb = data[:, :, :3].astype(np.float32)
-    border = np.concatenate((rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]), axis=0)
-    background = np.median(border, axis=0)
-    distance = np.sqrt(((rgb - background) ** 2).sum(axis=2))
-    foreground = distance > DEFAULT_FOREGROUND_THRESHOLD
-    foreground = ndimage.binary_closing(foreground, structure=np.ones((3, 3), dtype=bool), iterations=1)
-    foreground = ndimage.binary_fill_holes(foreground)
-    return _largest_component(foreground)
+    alpha = data[..., 3]
+    if alpha.min() != alpha.max():
+        return _largest_component(ndimage.binary_fill_holes(alpha > 0))
+    return foreground_box_mask(data[..., :3])
 
 
 def _normalize_example(
@@ -220,6 +213,12 @@ def _boundary_mask(foreground: np.ndarray) -> Image.Image:
     )
     band = outer & ~inner
     soft = ndimage.gaussian_filter(band.astype(np.float32), sigma=DEFAULT_BOUNDARY_FEATHER_PX)
+    support = ndimage.binary_dilation(
+        band,
+        structure=np.ones((3, 3), dtype=bool),
+        iterations=DEFAULT_BOUNDARY_FEATHER_SUPPORT_PX,
+    )
+    soft = np.where(support, soft, 0.0)
     soft = soft / max(float(soft.max()), 1e-6)
     return Image.fromarray((soft * 255.0).astype(np.uint8), mode="L")
 

@@ -1,0 +1,43 @@
+{
+  "$schema": "../../schemas/keyframe-brief.schema.json",
+  "character": {
+    "id": "ai51",
+    "view_bank": {
+      "path": "../../assets/characters/ai51/view_bank.json"
+    }
+  },
+  "example": {
+    "height": 864,
+    "mirror_x": false,
+    "name": "ai51_platform_punch",
+    "path": "../../assets/examples/ai46/platform_punch/ai46_platform_punch_left_608x912_source.png",
+    "width": 576
+  },
+  "generation": {
+    "filename": "{id}__{variant}.png",
+    "output_directory": "../../runs/keyframes/ai51/punch_platformer/brief_batch",
+    "overwrite": false,
+    "save_conditions": true,
+    "save_contact_sheet": true,
+    "seed_count": 64,
+    "seed_start": 60
+  },
+  "id": "ai51.punch.platformer.left",
+  "kind": "keyframe-brief",
+  "output": {
+    "assets_directory": "../../runs/briefs/ai51/punch_platformer/assets",
+    "job_path": "../../runs/briefs/ai51/punch_platformer/job.json",
+    "plan_path": "../../runs/briefs/ai51/punch_platformer/plan.json"
+  },
+  "pipeline": {
+    "profile": "nunchaku-kontext-pose-quality"
+  },
+  "request": {
+    "action": "punch",
+    "camera": "platformer-side-view",
+    "description": "Create a readable side-scroller attack/punch keyframe from the example sprite. Preserve the approved AI51 identity and anime lineart style. A platformer camera may show a little front-facing information when that makes the action, outfit and face more readable.",
+    "direction": "left",
+    "phase": "attack-start"
+  },
+  "schema_version": 1
+}

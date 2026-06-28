@@ -32,7 +32,7 @@
   "character": {
     "id": "ai46",
     "source_reference": {
-      "path": "../../assets/characters/ai46/views/front_v1.png"
+      "path": "../../assets/characters/ai46/views/front.png"
     }
   },
   "conditions": [
@@ -54,12 +54,12 @@
       "type": "canny"
     }
   ],
-  "id": "ai46.left_profile.neutral.v1",
+  "id": "ai46.left_profile.neutral",
   "kind": "character-view",
   "output": {
     "bank_path": "../../assets/characters/ai46/view_bank.json",
-    "canonical_path": "../../assets/characters/ai46/views/left_profile_v1.png",
-    "directory": "../../runs/characters/ai46/views/left_profile_neutral_v1",
+    "canonical_path": "../../assets/characters/ai46/views/left_profile.png",
+    "directory": "../../runs/characters/ai46/views/left_profile_neutral",
     "filename": "{id}__{variant}.png",
     "overwrite": false,
     "save_conditions": true,
