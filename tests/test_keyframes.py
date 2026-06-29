@@ -1315,18 +1315,23 @@ class KeyframeTests(unittest.TestCase):
             }
             scores = {
                 "control_off": (0.10, 0.10, 0.10),
-                "current_contour_baseline": (0.20, 0.12, 0.19),
-                "pose_only_strong": (0.28, 0.40, 0.36),
-                "canny_lineart_unmasked": (0.42, 0.18, 0.35),
-                "softedge_unmasked": (0.60, 0.20, 0.46),
-                "gray_unmasked": (0.55, 0.22, 0.43),
-                "pose_plus_softedge": (0.72, 0.58, 0.63),
-                "pose_plus_gray": (0.68, 0.55, 0.60),
-                "pose_plus_canny_lineart": (0.62, 0.50, 0.57),
+                "current_recipe": (0.20, 0.12, 0.19),
+                "clean_pose_only": (0.28, 0.40, 0.36),
+                "clean_softedge_only": (0.60, 0.20, 0.46),
+                "clean_canny_only": (0.42, 0.18, 0.35),
+                "clean_pose_plus_softedge": (0.72, 0.58, 0.63),
+                "clean_pose_plus_arm_hand": (0.68, 0.55, 0.60),
             }
             candidates = [
                 {
                     "candidate": name,
+                    "hard_rejects": {
+                        "missing_foreground": False,
+                        "weak_condition_match": False,
+                        "weak_side_profile": False,
+                        "weak_pose_match": False,
+                        "artifact_quality_failure": False,
+                    },
                     "scores": {
                         "condition": condition,
                         "contour": condition,
@@ -1398,6 +1403,10 @@ class KeyframeTests(unittest.TestCase):
             ):
                 run_keyframe_job(job_path, profile(), project_root=Path.cwd())
                 run_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "batch"
+                audit_dir = run_dir / "control_audit"
+                audit_dir.mkdir(parents=True)
+                Image.new("RGB", (16, 16), (255, 0, 0)).save(audit_dir / "old_variant.png")
+                (audit_dir / "variant_runs" / "old_variant").mkdir(parents=True)
                 audit = run_keyframe_control_audit(
                     run_dir,
                     project_root=Path.cwd(),
@@ -1405,22 +1414,21 @@ class KeyframeTests(unittest.TestCase):
                     score_runner=fake_score_runner,
                 )
 
-            audit_dir = run_dir / "control_audit"
             self.assertEqual(audit["status"], "passed")
             self.assertEqual(audit["seed"], 42)
             self.assertTrue((audit_dir / "audit.json").exists())
             self.assertTrue((audit_dir / "contact_sheet.png").exists())
+            self.assertFalse((audit_dir / "old_variant.png").exists())
+            self.assertFalse((audit_dir / "variant_runs" / "old_variant").exists())
             output_names = [output["name"] for output in audit["generation_outputs"]]
             self.assertEqual(output_names, [
                 "control_off",
-                "current_contour_baseline",
-                "pose_only_strong",
-                "canny_lineart_unmasked",
-                "softedge_unmasked",
-                "gray_unmasked",
-                "pose_plus_softedge",
-                "pose_plus_gray",
-                "pose_plus_canny_lineart",
+                "current_recipe",
+                "clean_pose_only",
+                "clean_softedge_only",
+                "clean_canny_only",
+                "clean_pose_plus_softedge",
+                "clean_pose_plus_arm_hand",
             ])
             control_off_job = load_keyframe_job(audit_dir / "variant_runs" / "control_off" / "job.json")
             self.assertEqual(control_off_job.variants[0].seed, 42)
@@ -1429,13 +1437,14 @@ class KeyframeTests(unittest.TestCase):
                 [0.0],
             )
             last_variant_job = load_keyframe_job(
-                audit_dir / "variant_runs" / "pose_plus_canny_lineart" / "job.json"
+                audit_dir / "variant_runs" / "clean_pose_plus_arm_hand" / "job.json"
             )
             self.assertEqual(
                 [condition.scale for condition in last_variant_job.conditions],
-                [0.80, 0.55],
+                [0.75, 0.60],
             )
-            self.assertGreater(audit["score_deltas_vs_control_off"]["pose_plus_softedge"]["condition"], 0.05)
+            self.assertEqual(last_variant_job.conditions[1].residual_mask, "arm_hand_mask")
+            self.assertGreater(audit["score_deltas_vs_control_off"]["clean_pose_plus_softedge"]["condition"], 0.05)
 
     def test_character_view_accept_writes_canonical_view_bank_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1531,6 +1540,15 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(assets["contour"]["height"], 240)
             self.assertEqual(result["pose"]["visible_body_keypoints"], 12)
             self.assertTrue(result["mirror_x"])
+            self.assertEqual(result["control_policy"]["production_controls"], ["pose", "canny_lineart", "softedge"])
+            with Image.open(assets["softedge"]["path"]) as softedge_image:
+                softedge = np.asarray(softedge_image.convert("RGB"), dtype=np.uint8)
+                self.assertTrue(np.array_equal(softedge[..., 0], softedge[..., 1]))
+                self.assertTrue(np.array_equal(softedge[..., 1], softedge[..., 2]))
+            with Image.open(assets["gray"]["path"]) as gray_image:
+                gray = np.asarray(gray_image.convert("RGB"), dtype=np.uint8)
+                self.assertFalse(np.any(np.all(gray == (120, 80, 60), axis=2)))
+                self.assertFalse(np.any(np.all(gray == (0, 255, 0), axis=2)))
 
     def test_cli_extract_example_outputs_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

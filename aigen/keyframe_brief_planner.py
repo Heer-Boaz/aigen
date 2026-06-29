@@ -199,6 +199,7 @@ Describe the character's lower body in separate parts: waist garment, visible sk
 The example sprite is only the source of truth for action pose, silhouette intent and gameplay readability.
 The example sprite may depict a different character. Never use the example sprite for identity, hair, outfit, colors or style.
 Inspect the example sprite yourself. Describe the body pose, hand/arm/leg placement, silhouette, action phase and platformer readability from that image.
+The extracted non-pose controls are clean abstract geometry templates rendered from the foreground silhouette. They do not contain sprite colors, sprite texture or internal sprite linework.
 Platformer side-view animation may cheat toward the camera when that improves readability. Do not require an exact mathematical 90-degree profile unless the request explicitly says so.
 This is a full-body gameplay keyframe. Keep the whole character visible, including both feet; never plan a waist-up, bust, portrait or upper-body crop.
 
@@ -228,12 +229,11 @@ Contract details:
 - canvas: object with width={spec.example.width}, height={spec.example.height}, reference_max_area as an integer between 200000 and 524288, max_sequence_length=128.
 - sampling: object with steps as an integer between 20 and 32 and guidance_scale as a number between 2.0 and 3.2.
 - controls: non-empty array. Each control has name, type, source, scale, start, end and optional residual_mask_source.
-- control.source is the extracted asset source and must be exactly "example_pose", "example_canny_lineart", "example_softedge" or "example_gray".
-- control.type is the ControlNet condition type and must be exactly "pose", "canny", "softedge" or "gray"; never return "source" as a type.
+- control.source is the extracted asset source and must be exactly "example_pose", "example_canny_lineart" or "example_softedge".
+- control.type is the ControlNet condition type and must be exactly "pose", "canny" or "softedge"; never return "source" as a type.
 - source "example_pose" must use type "pose".
-- source "example_canny_lineart" must use type "canny".
-- source "example_softedge" must use type "softedge".
-- source "example_gray" must use type "gray".
+- source "example_canny_lineart" must use type "canny" and is a clean foreground-geometry outline, not sprite lineart.
+- source "example_softedge" must use type "softedge" and is a clean foreground-geometry edge map, not sprite texture.
 - residual_mask_source may be "example_boundary_mask", "example_full_silhouette_mask" or "example_arm_hand_mask" when a non-pose control should be spatially limited.
 - scoring: object with top_k, priorities and checks for selecting the best generated candidates.
 - scoring.top_k must be an integer between 1 and {spec.generation.seed_count}; prefer 3 unless the generation count is smaller.
@@ -247,7 +247,7 @@ Contract details:
 Keep prompts specific to the approved identity primer and the example action. Use separate CLIP and T5 prompt text. Do not mention internal filenames in prompts.
 Build prompt.clip and prompt.t5 from every identity_details slot plus the example action. Do not omit the waist garment, legwear or footwear.
 Build the prompt text from what you see in the supplied identity images and example sprite. Do not reuse generic placeholder identity text.
-Choose control strengths from the image evidence. Strong pose control is useful when limb placement matters. Dense gray or softedge control is useful when the source sprite silhouette must have structure authority. Canny lineart is useful when visible sprite linework matters. Do not blindly copy fixed numeric examples.
+Choose control strengths from the image evidence. Strong pose control is useful when limb placement matters. Clean softedge or canny geometry control is useful when the source sprite silhouette must have structure authority. Do not request dense gray/source-image control for production keyframes. Do not blindly copy fixed numeric examples.
 Never return placeholder strings such as "...".
 prompt.true_cfg_scale is required.
 Omit prompt.negative when true_cfg_scale is 1.0."""
@@ -272,7 +272,7 @@ Rules:
 - prompt.true_cfg_scale is required. If prompt.negative is absent, set prompt.true_cfg_scale to 1.0.
 - Copy prompt.clip and prompt.t5 exactly from the original JSON.
 - Do not add prompt.negative unless the original JSON already had prompt.negative.
-- controls[].type must be "pose", "canny", "softedge" or "gray".
+- controls[].type must be "pose", "canny" or "softedge".
 - polish.profile must be "kontext-inpaint-local".
 - polish.seed_offsets must contain integers.
 - rationale must be an array of strings.

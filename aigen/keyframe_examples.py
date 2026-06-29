@@ -21,6 +21,10 @@ DEFAULT_BOTTOM_MARGIN_RATIO = 0.055
 DEFAULT_BOUNDARY_RADIUS_PX = 18
 DEFAULT_BOUNDARY_FEATHER_PX = 7
 DEFAULT_BOUNDARY_FEATHER_SUPPORT_PX = DEFAULT_BOUNDARY_FEATHER_PX * 3
+GEOMETRY_EDGE_RADIUS_PX = 2
+GEOMETRY_SOFTEDGE_INNER_SIGMA = 1.0
+GEOMETRY_SOFTEDGE_OUTER_SIGMA = 4.0
+GEOMETRY_SIMPLIFY_SCALE = 0.125
 
 
 class KeyframeExampleError(RuntimeError):
@@ -63,9 +67,9 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         pose_model=config.pose_model,
     )
     foreground_image = _clean_foreground_image(normalized, normalized_foreground)
-    gray = _source_gray(foreground_image, normalized_foreground)
-    canny_lineart = _source_canny_lineart(foreground_image, normalized_foreground)
-    softedge = _source_softedge(foreground_image, normalized_foreground)
+    gray = _geometry_gray(normalized_foreground)
+    canny_lineart = _geometry_canny_lineart(normalized_foreground)
+    softedge = _geometry_softedge(normalized_foreground)
     filled_silhouette = _filled_silhouette(normalized_foreground)
     boundary = _boundary_mask(normalized_foreground)
     arm_hand_mask = _arm_hand_mask(normalized_foreground)
@@ -111,6 +115,14 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         },
         "transform": transform,
         "pose": pose_metadata,
+        "control_policy": {
+            "pose": "DWPose whole-body extraction from the normalized example",
+            "canny_lineart": "clean anti-aliased geometry outline from foreground silhouette; no sprite texture or colors",
+            "softedge": "clean anti-aliased geometry softedge from foreground silhouette; no sprite texture or colors",
+            "gray": "flat geometry silhouette control; no sprite texture or colors",
+            "production_controls": ["pose", "canny_lineart", "softedge"],
+            "debug_only_controls": ["gray", "foreground_clean", "normalized_source"],
+        },
         "assets": {
             "source": image_asset_json(assets["source"]),
             "normalized_source": image_asset_json(assets["normalized_source"]),
@@ -228,42 +240,67 @@ def _clean_foreground_image(image: Image.Image, foreground: np.ndarray) -> Image
     return Image.fromarray(clean, mode="RGB")
 
 
-def _source_gray(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
-    gray = np.asarray(foreground_image.convert("L"), dtype=np.uint8)
-    gray = np.where(foreground, gray, 0).astype(np.uint8)
+def _geometry_gray(foreground: np.ndarray) -> Image.Image:
+    silhouette = _anti_aliased_silhouette(foreground)
+    gray = (silhouette * 192.0).astype(np.uint8)
     return Image.fromarray(gray, mode="L").convert("RGB")
 
 
-def _source_canny_lineart(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
-    luma = np.asarray(foreground_image.convert("L"), dtype=np.float32) / 255.0
-    gradient_x = ndimage.sobel(luma, axis=1)
-    gradient_y = ndimage.sobel(luma, axis=0)
-    gradient = np.hypot(gradient_x, gradient_y)
-    silhouette_edge = foreground ^ ndimage.binary_erosion(
-        foreground,
+def _geometry_canny_lineart(foreground: np.ndarray) -> Image.Image:
+    mask = _geometry_mask(foreground)
+    edge = mask ^ ndimage.binary_erosion(
+        mask,
         structure=np.ones((3, 3), dtype=bool),
-        iterations=1,
+        iterations=GEOMETRY_EDGE_RADIUS_PX,
     )
-    edge = (gradient > 0.08) | ndimage.binary_dilation(
-        silhouette_edge,
-        structure=np.ones((3, 3), dtype=bool),
-        iterations=1,
-    )
-    edge &= ndimage.binary_dilation(foreground, structure=np.ones((3, 3), dtype=bool), iterations=1)
-    return Image.fromarray((edge.astype(np.uint8) * 255), mode="L").convert("RGB")
+    line = ndimage.gaussian_filter(edge.astype(np.float32), sigma=0.45)
+    line = line / max(float(line.max()), 1e-6)
+    return Image.fromarray((line * 255.0).astype(np.uint8), mode="L").convert("RGB")
 
 
-def _source_softedge(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
-    lineart = np.asarray(_source_canny_lineart(foreground_image, foreground).convert("L"), dtype=np.float32) / 255.0
-    silhouette = foreground.astype(np.float32)
-    boundary = np.abs(ndimage.gaussian_filter(silhouette, sigma=1.2) - ndimage.gaussian_filter(silhouette, sigma=3.0))
-    soft = np.maximum(ndimage.gaussian_filter(lineart, sigma=0.7), boundary)
+def _geometry_softedge(foreground: np.ndarray) -> Image.Image:
+    mask = _geometry_mask(foreground).astype(np.float32)
+    inner = ndimage.gaussian_filter(mask, sigma=GEOMETRY_SOFTEDGE_INNER_SIGMA)
+    outer = ndimage.gaussian_filter(mask, sigma=GEOMETRY_SOFTEDGE_OUTER_SIGMA)
+    soft = np.abs(inner - outer)
     soft = soft / max(float(soft.max()), 1e-6)
     return Image.fromarray((soft * 255.0).astype(np.uint8), mode="L").convert("RGB")
 
 
 def _filled_silhouette(foreground: np.ndarray) -> Image.Image:
-    return Image.fromarray((foreground.astype(np.uint8) * 255), mode="L")
+    return Image.fromarray((_anti_aliased_silhouette(foreground) * 255.0).astype(np.uint8), mode="L")
+
+
+def _anti_aliased_silhouette(foreground: np.ndarray) -> np.ndarray:
+    return _smooth_geometry_alpha(foreground)
+
+
+def _geometry_mask(foreground: np.ndarray) -> np.ndarray:
+    smooth = _smooth_geometry_alpha(foreground)
+    mask = smooth > 0.38
+    return _largest_component(ndimage.binary_fill_holes(mask))
+
+
+def _smooth_geometry_alpha(foreground: np.ndarray) -> np.ndarray:
+    height, width = foreground.shape
+    source = Image.fromarray((foreground.astype(np.uint8) * 255), mode="L")
+    simplified_size = (
+        max(1, round(width * GEOMETRY_SIMPLIFY_SCALE)),
+        max(1, round(height * GEOMETRY_SIMPLIFY_SCALE)),
+    )
+    simplified = source.resize(simplified_size, Image.Resampling.LANCZOS).resize(
+        (width, height),
+        Image.Resampling.LANCZOS,
+    )
+    smooth = np.asarray(simplified, dtype=np.float32) / 255.0
+    smooth = ndimage.gaussian_filter(smooth, sigma=0.6)
+    closed = ndimage.binary_closing(
+        smooth > 0.30,
+        structure=np.ones((3, 3), dtype=bool),
+        iterations=2,
+    )
+    support = ndimage.binary_fill_holes(_largest_component(closed))
+    return np.where(support, smooth, 0.0)
 
 
 def _boundary_mask(foreground: np.ndarray) -> Image.Image:

@@ -28,6 +28,7 @@ CONTROL_AUDIT_MINIMAL_PROMPT = (
     "Same character, full body, clean neutral background, preserve outfit and side-view character design."
 )
 MATERIAL_SCORE_DELTA = 0.05
+AUDIT_ARTIFACT_SCORE_FLOOR = 0.60
 CONTROL_AUDIT_VARIANT_TIMEOUT_SECONDS = 300
 
 
@@ -328,7 +329,15 @@ def _prepare_audit_dir(audit_dir: Path, variants: list[ControlAuditVariant]) -> 
         audit_dir / "contact_sheet.png",
     ):
         path.unlink(missing_ok=True)
+    for stale_image in audit_dir.glob("*.png"):
+        stale_image.unlink()
     shutil.rmtree(audit_dir / "score", ignore_errors=True)
+    active_variant_names = {variant.name for variant in variants}
+    variant_runs_dir = audit_dir / "variant_runs"
+    if variant_runs_dir.exists():
+        for variant_dir in variant_runs_dir.iterdir():
+            if variant_dir.is_dir() and variant_dir.name not in active_variant_names:
+                shutil.rmtree(variant_dir)
     for variant in variants:
         (audit_dir / f"{variant.name}.png").unlink(missing_ok=True)
 
@@ -368,36 +377,28 @@ def _audit_variants(spec: KeyframeJobSpec) -> list[ControlAuditVariant]:
                 _condition("pose", "pose", "pose", 0.0, 0.0, 0.65),
             ],
         ),
-        ControlAuditVariant("current_contour_baseline", [condition.model_copy() for condition in spec.conditions]),
-        ControlAuditVariant("pose_only_strong", [_condition("pose", "pose", "pose", 0.90, 0.0, 0.65)]),
+        ControlAuditVariant("current_recipe", [condition.model_copy() for condition in spec.conditions]),
+        ControlAuditVariant("clean_pose_only", [_condition("pose", "pose", "pose", 0.90, 0.0, 0.65)]),
         ControlAuditVariant(
-            "canny_lineart_unmasked",
-            [_condition("canny_lineart", "canny", "canny_lineart", 0.70, 0.0, 0.80)],
+            "clean_softedge_only",
+            [_condition("softedge", "softedge", "softedge", 0.60, 0.0, 0.75)],
         ),
         ControlAuditVariant(
-            "softedge_unmasked",
-            [_condition("softedge", "softedge", "softedge", 0.70, 0.0, 0.80)],
+            "clean_canny_only",
+            [_condition("canny_lineart", "canny", "canny_lineart", 0.55, 0.0, 0.70)],
         ),
-        ControlAuditVariant("gray_unmasked", [_condition("gray", "gray", "gray", 0.90, 0.0, 0.80)]),
         ControlAuditVariant(
-            "pose_plus_softedge",
+            "clean_pose_plus_softedge",
             [
-                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
-                _condition("softedge", "softedge", "softedge", 0.55, 0.0, 0.80),
+                _condition("pose", "pose", "pose", 0.75, 0.0, 0.65),
+                _condition("softedge", "softedge", "softedge", 0.45, 0.0, 0.75),
             ],
         ),
         ControlAuditVariant(
-            "pose_plus_gray",
+            "clean_pose_plus_arm_hand",
             [
-                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
-                _condition("gray", "gray", "gray", 0.65, 0.0, 0.80),
-            ],
-        ),
-        ControlAuditVariant(
-            "pose_plus_canny_lineart",
-            [
-                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
-                _condition("canny_lineart", "canny", "canny_lineart", 0.55, 0.0, 0.80),
+                _condition("pose", "pose", "pose", 0.75, 0.0, 0.65),
+                _condition("softedge", "softedge", "softedge", 0.60, 0.0, 0.65, "arm_hand_mask"),
             ],
         ),
     ]
@@ -410,8 +411,17 @@ def _condition(
     scale: float,
     start: float,
     end: float,
+    residual_mask: str | None = None,
 ) -> ControlConditionSpec:
-    return ControlConditionSpec(name=name, type=condition_type, image=image, scale=scale, start=start, end=end)
+    return ControlConditionSpec(
+        name=name,
+        type=condition_type,
+        image=image,
+        scale=scale,
+        start=start,
+        end=end,
+        residual_mask=residual_mask,
+    )
 
 
 def _variant_json(variant: ControlAuditVariant, steps: int) -> dict[str, Any]:
@@ -503,13 +513,11 @@ def _audit_pass_status(
     score_deltas: dict[str, dict[str, float]],
 ) -> dict[str, Any]:
     strong_names = (
-        "pose_only_strong",
-        "canny_lineart_unmasked",
-        "softedge_unmasked",
-        "gray_unmasked",
-        "pose_plus_softedge",
-        "pose_plus_gray",
-        "pose_plus_canny_lineart",
+        "clean_pose_only",
+        "clean_softedge_only",
+        "clean_canny_only",
+        "clean_pose_plus_softedge",
+        "clean_pose_plus_arm_hand",
     )
     completed_strong_names = [name for name in strong_names if name in score_deltas]
     best_condition_delta = (
@@ -530,6 +538,13 @@ def _audit_pass_status(
     ]
     if failed_variants:
         blockers.extend(f"audit_variant_failed:{name}" for name in failed_variants)
+    passing_strong_names = [
+        name
+        for name in completed_strong_names
+        if _candidate_can_pass_control_audit(score_by_name[name])
+    ]
+    if not passing_strong_names:
+        blockers.append("no_strong_control_variant_passes_artifact_and_condition_gates")
     if max(best_condition_delta, best_pose_delta) <= MATERIAL_SCORE_DELTA:
         blockers.append("strong_control_not_materially_closer_to_conditions")
     return {
@@ -539,3 +554,11 @@ def _audit_pass_status(
         "best_pose_delta": best_pose_delta,
         "control_off_scores": score_by_name["control_off"]["scores"],
     }
+
+
+def _candidate_can_pass_control_audit(candidate: dict[str, Any]) -> bool:
+    if any(candidate["hard_rejects"].values()):
+        return False
+    if candidate["scores"]["artifact"] < AUDIT_ARTIFACT_SCORE_FLOOR:
+        return False
+    return candidate["scores"]["condition"] >= 0.25 or candidate["scores"]["pose"] >= 0.20

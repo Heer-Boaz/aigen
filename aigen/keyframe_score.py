@@ -27,6 +27,7 @@ DEFAULT_SCORER_ID = "condition"
 SCORE_SCHEMA_VERSION = 1
 DEGENERATE_POSE_SCORE_THRESHOLD = 0.05
 SEMANTIC_SCORE_FLOOR = 8.5
+ARTIFACT_SCORE_FLOOR = 0.60
 SEMANTIC_SELECTION_SCORE_KEYS = (
     "condition_adherence",
     "pose_match",
@@ -399,6 +400,7 @@ def _score_candidate(
         "weak_condition_match": bool(scores["condition"] < 0.25),
         "weak_side_profile": bool(scores["side_profile"] < 0.45),
         "weak_pose_match": bool(scores["pose"] < 0.20),
+        "artifact_quality_failure": bool(scores["artifact"] < ARTIFACT_SCORE_FLOOR),
     }
     mask_path = masks_dir / f"{candidate_name}__foreground.png"
     evidence_path = evidence_dir / f"{candidate_name}__condition_diff.png"

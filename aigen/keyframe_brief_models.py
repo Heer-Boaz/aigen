@@ -83,8 +83,8 @@ class KeyframeBriefSpec(StrictModel):
 
 class BriefControlPlanSpec(StrictModel):
     name: str
-    type: Literal["pose", "canny", "softedge", "gray"]
-    source: Literal["example_pose", "example_canny_lineart", "example_softedge", "example_gray"]
+    type: Literal["pose", "canny", "softedge"]
+    source: Literal["example_pose", "example_canny_lineart", "example_softedge"]
     scale: float = Field(ge=0.0, le=1.0)
     start: float = Field(ge=0.0, le=1.0)
     end: float = Field(ge=0.0, le=1.0)
@@ -99,7 +99,6 @@ class BriefControlPlanSpec(StrictModel):
         expected_types = {
             "example_canny_lineart": "canny",
             "example_softedge": "softedge",
-            "example_gray": "gray",
         }
         if self.source in expected_types and self.type != expected_types[self.source]:
             raise ValueError(f"{self.source} controls must use type {expected_types[self.source]}")

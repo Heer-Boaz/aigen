@@ -286,7 +286,6 @@ def _condition_from_plan(control: BriefControlPlanSpec) -> ControlConditionSpec:
         "example_pose": "pose",
         "example_canny_lineart": "canny_lineart",
         "example_softedge": "softedge",
-        "example_gray": "gray",
     }[control.source]
     residual_mask = {
         None: None,
