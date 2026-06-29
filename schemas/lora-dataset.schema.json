@@ -1,0 +1,312 @@
+{
+  "$defs": {
+    "ImageLoraSourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "title": "Caption",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "split": {
+          "anyOf": [
+            {
+              "enum": [
+                "train",
+                "val"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Split"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "image",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "caption"
+      ],
+      "title": "ImageLoraSourceSpec",
+      "type": "object"
+    },
+    "KeyframeRunLoraSourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Candidates"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "run_dir": {
+          "title": "Run Dir",
+          "type": "string"
+        },
+        "selection_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Path"
+        },
+        "split": {
+          "anyOf": [
+            {
+              "enum": [
+                "train",
+                "val"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Split"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "keyframe_run",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "run_dir"
+      ],
+      "title": "KeyframeRunLoraSourceSpec",
+      "type": "object"
+    },
+    "LoraDatasetCharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "trigger_token": {
+          "title": "Trigger Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "trigger_token"
+      ],
+      "title": "LoraDatasetCharacterSpec",
+      "type": "object"
+    },
+    "LoraDatasetOutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "overwrite": {
+          "title": "Overwrite",
+          "type": "boolean"
+        },
+        "save_contact_sheet": {
+          "title": "Save Contact Sheet",
+          "type": "boolean"
+        },
+        "validation_ratio": {
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "title": "Validation Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "directory",
+        "overwrite",
+        "validation_ratio",
+        "save_contact_sheet"
+      ],
+      "title": "LoraDatasetOutputSpec",
+      "type": "object"
+    },
+    "ViewBankLoraSourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "split": {
+          "anyOf": [
+            {
+              "enum": [
+                "train",
+                "val"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Split"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "const": "view_bank",
+          "title": "Type",
+          "type": "string"
+        },
+        "views": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Views"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "ViewBankLoraSourceSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "character": {
+      "$ref": "#/$defs/LoraDatasetCharacterSpec"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "lora-dataset",
+      "title": "Kind",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/LoraDatasetOutputSpec"
+    },
+    "sources": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "image": "#/$defs/ImageLoraSourceSpec",
+            "keyframe_run": "#/$defs/KeyframeRunLoraSourceSpec",
+            "view_bank": "#/$defs/ViewBankLoraSourceSpec"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ViewBankLoraSourceSpec"
+          },
+          {
+            "$ref": "#/$defs/KeyframeRunLoraSourceSpec"
+          },
+          {
+            "$ref": "#/$defs/ImageLoraSourceSpec"
+          }
+        ]
+      },
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "$schema",
+    "kind",
+    "id",
+    "character",
+    "sources",
+    "output"
+  ],
+  "title": "LoraDatasetSpec",
+  "type": "object"
+}
