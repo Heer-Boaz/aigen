@@ -36,15 +36,18 @@ from aigen.keyframe_memory import (
     nvidia_smi_preflight,
 )
 from aigen.keyframe_judge import (
+    KeyframeJudgeError,
+    judge_keyframe_run,
+)
+from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
-    KeyframeJudgeConfig,
-    KeyframeJudgeError,
-    QwenKeyframeJudge,
-    _judge_device_map,
-    judge_keyframe_run,
+    QwenVlm,
+    QwenVlmError,
+    qwen_vlm_device_map,
+    QwenVlmConfig,
 )
 from aigen.keyframe_grounding import (
     GroundedRegionBox,
@@ -1133,6 +1136,41 @@ class FakeJudgeRunner:
         return None
 
 
+class FakeViewTrainingJudgeRunner:
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompt = prompt
+        return json.dumps(
+            {
+                "usable_for_lora_training": True,
+                "hard_rejects": {
+                    "identity_mismatch": False,
+                    "outfit_mismatch": False,
+                    "hairstyle_mismatch": False,
+                    "malformed_subject": False,
+                    "bad_background": False,
+                    "low_image_quality": False,
+                },
+                "scores": {
+                    "identity_preservation": 9,
+                    "outfit_preservation": 9,
+                    "hairstyle_preservation": 9,
+                    "anatomy_quality": 9,
+                    "background_quality": 9,
+                    "style_consistency": 9,
+                    "overall": 9,
+                },
+                "evidence": {
+                    "identity": "same character identity",
+                    "quality": "clean neutral canonical view",
+                    "concerns": [],
+                },
+            }
+        )
+
+    def close(self) -> None:
+        return None
+
+
 class ClosingFakeJudgeRunner(FakeJudgeRunner):
     def __init__(self) -> None:
         self.closed = False
@@ -1535,6 +1573,39 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(bank["views"]["left_profile"]["accepted_candidate"], "seed_003")
             self.assertEqual(bank["views"]["left_profile"]["image"]["sha256"], accepted["canonical_sha256"])
 
+    def test_cli_character_view_lora_validate_writes_training_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, run_dir = write_character_view_fixture(root)
+            accepted = accept_character_view(job_path, run_dir=run_dir, candidate="seed_003", project_root=Path.cwd())
+            bank_path = Path(accepted["bank_path"])
+            stdout = StringIO()
+            runner = FakeViewTrainingJudgeRunner()
+
+            with (
+                patch("aigen.character_view_training_validation.QwenVlm", return_value=runner),
+                redirect_stdout(stdout),
+            ):
+                exit_code = main(
+                    [
+                        "characters",
+                        "view-lora-validate",
+                        bank_path.as_posix(),
+                        "--view",
+                        "left_profile",
+                        "--compact",
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+            bank = json.loads(bank_path.read_text(encoding="utf-8"))
+            validation = bank["views"]["left_profile"]["training_validation"]
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["status"], "validated")
+            self.assertEqual(validation["usable_for_lora_training"], True)
+            self.assertEqual(validation["scores"]["identity_preservation"], 9)
+            self.assertNotIn("keyframe", runner.prompt)
+
     def test_cli_character_view_schema_has_no_embedded_character_prompt(self) -> None:
         stdout = StringIO()
 
@@ -1746,7 +1817,7 @@ class KeyframeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
-            config = KeyframeJudgeConfig(
+            config = QwenVlmConfig(
                 judge_id=DEFAULT_JUDGE_ID,
                 model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                 repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -1760,7 +1831,7 @@ class KeyframeTests(unittest.TestCase):
                 temperature=0.0,
             )
 
-            with patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=FakeJudgeRunner()):
+            with patch("aigen.keyframe_judge.QwenVlm", return_value=FakeJudgeRunner()):
                 judge_result = judge_keyframe_run(
                     run_dir,
                     config,
@@ -1785,10 +1856,10 @@ class KeyframeTests(unittest.TestCase):
             run_dir = write_keyframe_result(root)
             runner = ClosingFakeJudgeRunner()
 
-            with patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=runner):
+            with patch("aigen.keyframe_judge.QwenVlm", return_value=runner):
                 judge_keyframe_run(
                     run_dir,
-                    KeyframeJudgeConfig(
+                    QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -1810,7 +1881,7 @@ class KeyframeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
-            config = KeyframeJudgeConfig(
+            config = QwenVlmConfig(
                 judge_id=DEFAULT_JUDGE_ID,
                 model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                 repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -1825,7 +1896,7 @@ class KeyframeTests(unittest.TestCase):
             )
 
             with (
-                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=PassesFieldJudgeRunner()),
+                patch("aigen.keyframe_judge.QwenVlm", return_value=PassesFieldJudgeRunner()),
                 self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
             ):
                 judge_keyframe_run(run_dir, config, project_root=Path.cwd())
@@ -1834,7 +1905,7 @@ class KeyframeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
-            config = KeyframeJudgeConfig(
+            config = QwenVlmConfig(
                 judge_id=DEFAULT_JUDGE_ID,
                 model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                 repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -1849,7 +1920,7 @@ class KeyframeTests(unittest.TestCase):
             )
 
             with (
-                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=MarkdownJudgeRunner()),
+                patch("aigen.keyframe_judge.QwenVlm", return_value=MarkdownJudgeRunner()),
                 self.assertRaisesRegex(KeyframeJudgeError, "VLM returned non-JSON output"),
             ):
                 judge_keyframe_run(run_dir, config, project_root=Path.cwd())
@@ -1858,7 +1929,7 @@ class KeyframeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
-            config = KeyframeJudgeConfig(
+            config = QwenVlmConfig(
                 judge_id=DEFAULT_JUDGE_ID,
                 model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                 repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -1873,7 +1944,7 @@ class KeyframeTests(unittest.TestCase):
             )
 
             with (
-                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=EvidenceListJudgeRunner()),
+                patch("aigen.keyframe_judge.QwenVlm", return_value=EvidenceListJudgeRunner()),
                 self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
             ):
                 judge_keyframe_run(run_dir, config, project_root=Path.cwd())
@@ -2204,10 +2275,10 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             job_path, _plan_path = write_polish_fixture(root)
 
-            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakePolishPlanner()):
+            with patch("aigen.keyframe_polish.QwenVlm", return_value=FakePolishPlanner()):
                 result = diagnose_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2239,10 +2310,10 @@ class KeyframeTests(unittest.TestCase):
             write_json(run_dir / "result.json", result)
             write_rectangle_contour(run_dir / "score" / "seed_060__condition_diff.png", (20, 20, 80, 80))
 
-            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=ScoreEvidencePolishPlanner()):
+            with patch("aigen.keyframe_polish.QwenVlm", return_value=ScoreEvidencePolishPlanner()):
                 result = diagnose_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2266,10 +2337,10 @@ class KeyframeTests(unittest.TestCase):
             job_path, _plan_path = write_polish_fixture(root)
             runner = ClosingFakePolishPlanner()
 
-            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=runner):
+            with patch("aigen.keyframe_polish.QwenVlm", return_value=runner):
                 diagnose_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2545,10 +2616,10 @@ class KeyframeTests(unittest.TestCase):
                     project_root=Path.cwd(),
                     progress=SILENT_STATUS,
                 )
-            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakePolishSelector()):
+            with patch("aigen.keyframe_polish.QwenVlm", return_value=FakePolishSelector()):
                 result = select_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2597,10 +2668,10 @@ class KeyframeTests(unittest.TestCase):
                     progress=SILENT_STATUS,
                 )
             runner = ClosingFakePolishSelector()
-            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=runner):
+            with patch("aigen.keyframe_polish.QwenVlm", return_value=runner):
                 select_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2649,12 +2720,12 @@ class KeyframeTests(unittest.TestCase):
                 )
 
             with (
-                patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakeUnrestoredPolishSelector()),
+                patch("aigen.keyframe_polish.QwenVlm", return_value=FakeUnrestoredPolishSelector()),
                 self.assertRaisesRegex(KeyframePolishError, "unrestored detail"),
             ):
                 select_keyframe_polish(
                     job_path,
-                    config=KeyframeJudgeConfig(
+                    config=QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2670,11 +2741,11 @@ class KeyframeTests(unittest.TestCase):
                     project_root=Path.cwd(),
                 )
 
-    def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
+    def test_qwen_vlm_reports_missing_local_model_before_loading_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(RuntimeError, "Missing local judge model"):
-                QwenKeyframeJudge(
-                    KeyframeJudgeConfig(
+            with self.assertRaisesRegex(QwenVlmError, "Missing local Qwen VLM"):
+                QwenVlm(
+                    QwenVlmConfig(
                         judge_id=DEFAULT_JUDGE_ID,
                         model=Path(temp_dir) / "missing",
                         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -2689,13 +2760,13 @@ class KeyframeTests(unittest.TestCase):
                     )
                 )
 
-    def test_qwen_judge_requires_cuda_device_map(self) -> None:
+    def test_qwen_vlm_requires_cuda_device_map(self) -> None:
         cuda_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: True))
         cpu_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False))
 
-        self.assertEqual(_judge_device_map(cuda_torch), {"": 0})
-        with self.assertRaisesRegex(KeyframeJudgeError, "requires CUDA"):
-            _judge_device_map(cpu_torch)
+        self.assertEqual(qwen_vlm_device_map(cuda_torch), {"": 0})
+        with self.assertRaisesRegex(QwenVlmError, "requires CUDA"):
+            qwen_vlm_device_map(cpu_torch)
 
     def test_qwen_judge_cli_rejects_unsupported_4bit_quantization(self) -> None:
         parser = build_parser()

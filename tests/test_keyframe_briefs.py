@@ -18,12 +18,12 @@ from aigen.keyframe_briefs import (
     materialize_keyframe_brief,
     write_lora_dataset_spec_from_brief,
 )
-from aigen.keyframe_judge import (
+from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
-    KeyframeJudgeConfig,
+    QwenVlmConfig,
 )
 from aigen.prompt_tokens import PromptTokenCounts
 from aigen.progress import SILENT_STATUS
@@ -56,8 +56,8 @@ def fake_dwpose_control_image(image: Image.Image, **_kwargs: object) -> tuple[Im
     return pose, {"body_count": 1, "visible_body_keypoints": 12, "mean_body_score": 0.80}
 
 
-def judge_config() -> KeyframeJudgeConfig:
-    return KeyframeJudgeConfig(
+def judge_config() -> QwenVlmConfig:
+    return QwenVlmConfig(
         judge_id=DEFAULT_JUDGE_ID,
         model=Path("unused"),
         repo_id=DEFAULT_JUDGE_REPO_ID,
@@ -135,11 +135,7 @@ class FakeBriefPlanner:
                     "view_bank": (
                         "AI51 anime girl character sheet, short pink bob, glossy brown jacket, white shirt, "
                         "blue tie, brown leather skirt, blue thigh-high socks and brown boots"
-                    ),
-                    "keyframe_run": (
-                        "AI51 anime girl platformer attack keyframe, same short pink bob and glossy brown "
-                        "leather outfit, readable left-facing side-view punch-start pose"
-                    ),
+                    )
                 },
                 "rationale": ["left_profile primer reduces camera-yaw negotiation"],
             }
@@ -228,7 +224,7 @@ class KeyframeBriefTests(unittest.TestCase):
             brief_path, left_profile = write_brief_fixture(root)
             planner = FakeBriefPlanner(left_profile)
 
-            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+            with patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner):
                 result = plan_keyframe_brief(
                     brief_path,
                     judge_config(),
@@ -245,7 +241,6 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertNotIn("policy", plan["polish"])
             self.assertEqual(plan["identity_details"]["waist_garment"], "brown leather skirt")
             self.assertIn("short pink bob", plan["lora_captions"]["view_bank"])
-            self.assertIn("platformer attack keyframe", plan["lora_captions"]["keyframe_run"])
             self.assertIn("Platformer side-view animation may cheat", planner.prompt)
             self.assertIn("hair, clothing, colors and style", planner.prompt)
             self.assertIn("Choose control strengths from the image evidence", planner.prompt)
@@ -256,7 +251,7 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertIn("Describe the character's lower body in separate parts", planner.prompt)
             self.assertIn("This is a full-body gameplay keyframe", planner.prompt)
             self.assertIn("Build prompt.clip and prompt.t5 from every identity_details slot", planner.prompt)
-            self.assertIn("Build lora_captions from the supplied images", planner.prompt)
+            self.assertIn("Build lora_captions.view_bank from the supplied identity images", planner.prompt)
             self.assertIn("The example sprite may depict a different character", planner.prompt)
             self.assertNotIn('"scale": 0.72', planner.prompt)
             self.assertNotIn('"scale": 0.25', planner.prompt)
@@ -272,7 +267,7 @@ class KeyframeBriefTests(unittest.TestCase):
             brief_path, left_profile = write_brief_fixture(root)
             planner = ClosingFakeBriefPlanner(left_profile)
 
-            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+            with patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner):
                 plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
 
         self.assertTrue(planner.closed)
@@ -282,7 +277,7 @@ class KeyframeBriefTests(unittest.TestCase):
             root = Path(temp_dir)
             brief_path, left_profile = write_brief_fixture(root)
             planner = FakeBriefPlanner(left_profile)
-            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+            with patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner):
                 plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
 
             with (
@@ -310,7 +305,7 @@ class KeyframeBriefTests(unittest.TestCase):
             root = Path(temp_dir)
             brief_path, left_profile = write_brief_fixture(root)
             planner = FakeBriefPlanner(left_profile)
-            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+            with patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner):
                 plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
 
             result = write_lora_dataset_spec_from_brief(
@@ -332,13 +327,8 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(dataset_spec["sources"][0]["type"], "view_bank")
             self.assertEqual(dataset_spec["sources"][0]["views"], ["front", "left_profile"])
             self.assertEqual(dataset_spec["sources"][0]["caption_source"], {"plan": "../plans/punch_plan.json", "field": "view_bank"})
-            self.assertEqual(dataset_spec["sources"][1]["type"], "keyframe_run")
-            self.assertEqual(
-                dataset_spec["sources"][1]["caption_source"],
-                {"plan": "../plans/punch_plan.json", "field": "keyframe_run"},
-            )
-            self.assertIn("short pink bob", result["captions"]["view_bank"])
-            self.assertIn("punch-start pose", result["captions"]["keyframe_run"])
+            self.assertEqual(len(dataset_spec["sources"]), 1)
+            self.assertIn("short pink bob", result["caption"])
             self.assertEqual(dataset_spec["output"]["validation_ratio"], 0.2)
             self.assertEqual(dataset_spec["output"]["save_contact_sheet"], True)
 
@@ -348,7 +338,7 @@ class KeyframeBriefTests(unittest.TestCase):
             brief_path, _left_profile = write_brief_fixture(root)
 
             with (
-                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=InvalidBriefPlanner()),
+                patch("aigen.keyframe_brief_planner.QwenVlm", return_value=InvalidBriefPlanner()),
                 self.assertRaisesRegex(KeyframeBriefError, "Invalid generated brief plan"),
             ):
                 plan_keyframe_brief(
@@ -365,7 +355,7 @@ class KeyframeBriefTests(unittest.TestCase):
             brief_path, left_profile = write_brief_fixture(root)
 
             with (
-                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=PlaceholderBriefPlanner(left_profile)),
+                patch("aigen.keyframe_brief_planner.QwenVlm", return_value=PlaceholderBriefPlanner(left_profile)),
                 self.assertRaisesRegex(KeyframeBriefError, "scoring priorities and checks must be concrete"),
             ):
                 plan_keyframe_brief(
@@ -381,7 +371,7 @@ class KeyframeBriefTests(unittest.TestCase):
             planner = MissingTrueCfgBriefPlanner(left_profile)
 
             with (
-                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner),
+                patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner),
                 self.assertRaisesRegex(KeyframeBriefError, "Invalid generated brief plan"),
             ):
                 plan_keyframe_brief(

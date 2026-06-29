@@ -4,25 +4,15 @@ import hashlib
 import json
 import shutil
 from contextlib import closing
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aigen.generation.runtime_diagnostics import module_device_report
-from aigen.generation.runtime_types import resolve_torch_dtype
 from aigen.manifest_io import read_json, sha256_file, write_json
 from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
-
-
-DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
-DEFAULT_JUDGE_REPO_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
-DEFAULT_JUDGE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
-DEFAULT_JUDGE_QUANTIZATION = "bitsandbytes-8bit"
-DEFAULT_MAX_PIXELS = 512 * 28 * 28
-DEFAULT_MIN_PIXELS = 256 * 28 * 28
+from aigen.vlm_qwen import QwenVlm, QwenVlmConfig, qwen_vlm_config_json
 
 
 class KeyframeJudgeError(RuntimeError):
@@ -71,112 +61,9 @@ class CandidateJudgment(StrictModel):
     evidence: JudgeEvidence
 
 
-@dataclass(frozen=True)
-class KeyframeJudgeConfig:
-    judge_id: str
-    model: Path
-    repo_id: str
-    revision: str
-    dtype: str
-    attention_impl: str
-    quantization: str
-    min_pixels: int
-    max_pixels: int
-    max_new_tokens: int
-    temperature: float
-
-
-class QwenKeyframeJudge:
-    def __init__(self, config: KeyframeJudgeConfig) -> None:
-        _validate_local_qwen_model(config)
-
-        import torch
-        from qwen_vl_utils import process_vision_info
-        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
-
-        dtype = _torch_dtype(torch, config.dtype)
-        quantization_config = _quantization_config(torch, config)
-        device_map = _judge_device_map(torch)
-        try:
-            processor = AutoProcessor.from_pretrained(
-                config.model.as_posix(),
-                min_pixels=config.min_pixels,
-                max_pixels=config.max_pixels,
-                local_files_only=True,
-            )
-            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                config.model.as_posix(),
-                torch_dtype=dtype,
-                attn_implementation=config.attention_impl,
-                device_map=device_map,
-                quantization_config=quantization_config,
-                local_files_only=True,
-            )
-        except OSError as error:
-            raise KeyframeJudgeError(f"Failed to load local judge model from {config.model.as_posix()}: {error}") from error
-        self.model = model
-        self.processor = processor
-        self.process_vision_info = process_vision_info
-        self.config = config
-        self.torch = torch
-        self.device_report = module_device_report(self.model)
-
-    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
-        return self._generate(prompt, image_paths)
-
-    def close(self) -> None:
-        del self.model
-        del self.processor
-        if self.torch.cuda.is_available():
-            self.torch.cuda.empty_cache()
-
-    def _generate(self, prompt: str, image_paths: list[Path]) -> str:
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "image": path.as_posix(),
-                        "min_pixels": self.config.min_pixels,
-                        "max_pixels": self.config.max_pixels,
-                    }
-                    for path in image_paths
-                ]
-                + [{"type": "text", "text": prompt}],
-            }
-        ]
-        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        image_inputs, video_inputs = self.process_vision_info(messages)
-        inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
-        inputs = inputs.to(next(self.model.parameters()).device)
-        generate_kwargs: dict[str, Any] = {"max_new_tokens": self.config.max_new_tokens}
-        if self.config.temperature > 0.0:
-            generate_kwargs["do_sample"] = True
-            generate_kwargs["temperature"] = self.config.temperature
-        else:
-            generate_kwargs["do_sample"] = False
-        with self.torch.inference_mode():
-            generated_ids = self.model.generate(**inputs, **generate_kwargs)
-        trimmed_ids = [
-            output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids, strict=True)
-        ]
-        return self.processor.batch_decode(
-            trimmed_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )[0]
-
-
 def judge_keyframe_run(
     run_dir: Path,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     *,
     project_root: Path,
 ) -> dict[str, Any]:
@@ -194,7 +81,7 @@ def judge_keyframe_run(
     raw_dir.mkdir(parents=True, exist_ok=True)
     overlay_dir.mkdir(parents=True, exist_ok=True)
 
-    with closing(QwenKeyframeJudge(config)) as active_runner:
+    with closing(QwenVlm(config)) as active_runner:
         candidate_results = []
         for output in result["outputs"]:
             candidate_name = output["name"]
@@ -229,7 +116,7 @@ def judge_keyframe_run(
             "job_id": result["job_id"],
             "git_commit": _git_commit(project_root),
             "source_result_sha256": sha256_file(resolved_run_dir / "result.json"),
-            "judge": _judge_config_json(config) | {"device_report": active_runner.device_report},
+            "judge": qwen_vlm_config_json(config) | {"device_report": active_runner.device_report},
             "candidates": candidate_results,
             "semantic_gate": _semantic_gate(candidate_results),
         }
@@ -357,22 +244,6 @@ def _save_contour_overlay(candidate_path: Path, contour_path: Path, output_path:
     composed.save(output_path)
 
 
-def _judge_config_json(config: KeyframeJudgeConfig) -> dict[str, Any]:
-    return {
-        "id": config.judge_id,
-        "model": config.model.resolve().as_posix(),
-        "repo_id": config.repo_id,
-        "revision": config.revision,
-        "dtype": config.dtype,
-        "attention_impl": config.attention_impl,
-        "quantization": config.quantization,
-        "min_pixels": config.min_pixels,
-        "max_pixels": config.max_pixels,
-        "max_new_tokens": config.max_new_tokens,
-        "temperature": config.temperature,
-    }
-
-
 def _semantic_gate(candidate_results: list[dict[str, Any]]) -> dict[str, Any]:
     passed = []
     blocked = []
@@ -399,42 +270,6 @@ def _semantic_gate(candidate_results: list[dict[str, Any]]) -> dict[str, Any]:
         "usable_for_auto_select": False,
         "selection_owner": "condition_score",
     }
-
-
-def _validate_local_qwen_model(config: KeyframeJudgeConfig) -> None:
-    if not config.model.exists():
-        raise KeyframeJudgeError(
-            "Missing local judge model. Download "
-            f"{config.repo_id} to {config.model.as_posix()} before running keyframe judging."
-        )
-    config_path = config.model / "config.json"
-    if not config_path.exists():
-        raise KeyframeJudgeError(f"Local judge model is incomplete; missing {config_path.as_posix()}")
-    if not any(config.model.glob("*.safetensors")):
-        raise KeyframeJudgeError(
-            "Local judge model is incomplete; missing safetensors weights in "
-            f"{config.model.as_posix()}"
-        )
-
-
-def _quantization_config(torch: Any, config: KeyframeJudgeConfig) -> Any | None:
-    if config.quantization == "none":
-        return None
-    if config.quantization != "bitsandbytes-8bit":
-        raise KeyframeJudgeError(f"Unknown judge quantization: {config.quantization}")
-    from transformers import BitsAndBytesConfig
-
-    return BitsAndBytesConfig(load_in_8bit=True)
-
-
-def _judge_device_map(torch: Any) -> dict[str, int | str]:
-    if not torch.cuda.is_available():
-        raise KeyframeJudgeError("Qwen keyframe judge requires CUDA; CPU inference is not a supported pipeline path")
-    return {"": 0}
-
-
-def _torch_dtype(torch: Any, dtype: str) -> Any:
-    return resolve_torch_dtype(torch, dtype, auto_value="auto")
 
 
 def _sha256_text(value: str) -> str:

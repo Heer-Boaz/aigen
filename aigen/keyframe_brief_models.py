@@ -169,9 +169,8 @@ class BriefPolishPlanSpec(StrictModel):
 
 class BriefLoraCaptionPlanSpec(StrictModel):
     view_bank: str = Field(min_length=1)
-    keyframe_run: str = Field(min_length=1)
 
-    @field_validator("view_bank", "keyframe_run")
+    @field_validator("view_bank")
     @classmethod
     def concrete_caption(cls, value: str) -> str:
         placeholders = {"", ".", "...", "caption", "training caption", "lora caption"}

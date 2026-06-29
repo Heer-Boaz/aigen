@@ -38,5 +38,5 @@
     "description": "Create a readable side-scroller attack/punch keyframe from the example sprite. Preserve the approved AI51 identity and anime lineart style. A platformer camera may show a little front-facing information when that makes the action, outfit and face more readable.",
     "direction": "left",
     "phase": "attack-start"
-  },
+  }
 }

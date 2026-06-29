@@ -18,7 +18,6 @@ from aigen.keyframe_image_ops import (
     save_contact_sheet,
 )
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight
-from aigen.keyframe_judge import KeyframeJudgeConfig, QwenKeyframeJudge
 from aigen.keyframe_polish_context import (
     load_polish_context,
 )
@@ -54,6 +53,7 @@ from aigen.keyframe_profiles import KeyframeRefineProfile
 from aigen.keyframe_refine import KontextInpaintRefiner
 from aigen.manifest_io import read_json, resolve_existing_path, resolve_output_path, sha256_bytes, write_json
 from aigen.progress import StatusReporter
+from aigen.vlm_qwen import QwenVlm, QwenVlmConfig
 
 
 KEYFRAME_POLISH_JOB_SCHEMA = "schemas/keyframe-polish-job.schema.json"
@@ -129,7 +129,7 @@ def plan_keyframe_polish(
 def diagnose_keyframe_polish(
     job_path: Path,
     *,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     project_root: Path,
 ) -> dict[str, Any]:
     spec = load_keyframe_polish_job(job_path)
@@ -138,7 +138,7 @@ def diagnose_keyframe_polish(
     evidence_dir = plan_path.with_suffix("")
     evidence = save_polish_planner_evidence(context, evidence_dir)
     prompt = polish_planner_prompt(spec, context, evidence.prompt_order)
-    with closing(QwenKeyframeJudge(config)) as active_runner:
+    with closing(QwenVlm(config)) as active_runner:
         raw_text = active_runner.judge_candidate(prompt, evidence.image_paths)
         plan = parse_polish_plan(raw_text)
         validate_polish_plan(spec, plan, context.base_image.size)
@@ -406,7 +406,7 @@ def run_keyframe_polish_job(
 def select_keyframe_polish(
     job_path: Path,
     *,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     project_root: Path,
 ) -> dict[str, Any]:
     spec = load_keyframe_polish_job(job_path)
@@ -417,7 +417,7 @@ def select_keyframe_polish(
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
     mask_plans = load_polish_mask_plans(context.base_image, context.identity_primer, resolved["mask_plan"])
     outputs_by_region = _outputs_by_region(result["outputs"])
-    with closing(QwenKeyframeJudge(config)) as active_runner:
+    with closing(QwenVlm(config)) as active_runner:
         composite = context.base_image.copy()
         selections = []
         for mask_plan in mask_plans:

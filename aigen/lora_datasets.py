@@ -14,7 +14,6 @@ from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.keyframe_brief_models import load_keyframe_brief_plan
 from aigen.lora_dataset_models import (
-    KeyframeRunLoraSourceSpec,
     LoraCaptionSourceSpec,
     LoraDatasetError,
     LoraDatasetSpec,
@@ -22,7 +21,6 @@ from aigen.lora_dataset_models import (
     load_lora_dataset_spec,
 )
 from aigen.manifest_io import (
-    read_json,
     resolve_existing_path,
     resolve_output_path,
     sha256_file,
@@ -34,6 +32,15 @@ from aigen.progress import StatusReporter
 
 PHASH_SIZE = 32
 PHASH_LOW_FREQUENCY_SIZE = 8
+LORA_TRAINING_MINIMUM_SCORES = {
+    "identity_preservation": 8.0,
+    "outfit_preservation": 8.0,
+    "hairstyle_preservation": 8.0,
+    "anatomy_quality": 8.0,
+    "background_quality": 8.0,
+    "style_consistency": 8.0,
+    "overall": 8.0,
+}
 
 
 @dataclass(frozen=True)
@@ -111,10 +118,7 @@ def _dataset_candidates(spec: LoraDatasetSpec, base_dir: Path) -> list[LoraDatas
     candidates: list[LoraDatasetCandidate] = []
     caption_cache: dict[Path, Any] = {}
     for source in spec.sources:
-        if isinstance(source, ViewBankLoraSourceSpec):
-            candidates.extend(_view_bank_candidates(spec, source, base_dir, caption_cache))
-        elif isinstance(source, KeyframeRunLoraSourceSpec):
-            candidates.extend(_keyframe_run_candidates(spec, source, base_dir, caption_cache))
+        candidates.extend(_view_bank_candidates(spec, source, base_dir, caption_cache))
     return candidates
 
 
@@ -134,6 +138,7 @@ def _view_bank_candidates(
         if view_name not in bank.views:
             raise LoraDatasetError(f"View bank has no accepted view: {view_name}")
         entry = bank.views[view_name]
+        training_validation = _lora_training_validation(entry, view_name)
         manual_acceptance = entry.acceptance.manual if entry.acceptance else []
         caption = _caption(
             spec.character.trigger_token,
@@ -160,69 +165,30 @@ def _view_bank_candidates(
                     "accepted_seed": entry.accepted_seed,
                     "bank": bank_path.as_posix(),
                     "caption_source": caption_metadata,
+                    "training_validation": training_validation,
                 },
             )
         )
     return candidates
 
 
-def _keyframe_run_candidates(
-    spec: LoraDatasetSpec,
-    source: KeyframeRunLoraSourceSpec,
-    base_dir: Path,
-    caption_cache: dict[Path, Any],
-) -> list[LoraDatasetCandidate]:
-    run_dir = resolve_existing_path(source.run_dir, base_dir)
-    _reject_failed_audit_run(run_dir)
-    result = read_json(run_dir / "result.json", label="keyframe run result")
-    selection = _score_selected_keyframes(source, base_dir)
-    source_caption, caption_metadata = _source_caption(source.caption_source, base_dir, caption_cache)
-    outputs_by_name = {output["name"]: output for output in result["outputs"]}
-    candidates = []
-    for selected in selection["selected"]:
-        selected_name = selected["candidate"]
-        if selected_name not in outputs_by_name:
-            raise LoraDatasetError(f"Keyframe run has no selected candidate: {selected_name}")
-        output = outputs_by_name[selected_name]
-        effective = result["effective_config"]
-        caption = _caption(
-            spec.character.trigger_token,
-            source_caption,
-            [
-                effective["keyframe"]["action"],
-                effective["keyframe"]["phase"],
-                effective["keyframe"]["direction"],
-                effective["keyframe"]["camera"],
-            ],
-            source.tags,
-        )
-        candidates.append(
-            LoraDatasetCandidate(
-                source_kind="keyframe_run",
-                name=selected_name,
-                image_path=Path(output["path"]),
-                caption=caption,
-                tags=source.tags,
-                split=source.split,
-                source_metadata={
-                    "run_dir": run_dir.as_posix(),
-                    "job_id": result["job_id"],
-                    "seed": output["seed"],
-                    "keyframe": effective["keyframe"],
-                    "caption_source": caption_metadata,
-                    "score_selection": {
-                        "selection_path": selection["path"],
-                        "selection_mode": selection["selection_mode"],
-                        "scorer": selection["scorer"],
-                        "semantic_gate": selection["semantic_gate"],
-                        "scores": selected["scores"],
-                        "hard_rejects": selected["hard_rejects"],
-                        "metrics": selected["metrics"],
-                    },
-                },
-            )
-        )
-    return candidates
+def _lora_training_validation(entry: Any, view_name: str) -> dict[str, Any]:
+    validation = entry.training_validation
+    if validation is None:
+        raise LoraDatasetError(f"View {view_name} has no model-backed LoRA training validation")
+    payload = validation.model_dump(mode="json")
+    if not payload["usable_for_lora_training"]:
+        raise LoraDatasetError(f"View {view_name} is not usable for LoRA training")
+    hard_rejects = payload["hard_rejects"]
+    if any(bool(rejected) for rejected in hard_rejects.values()):
+        raise LoraDatasetError(f"View {view_name} has LoRA training hard rejects")
+    scores = payload["scores"]
+    low_scores = [
+        name for name, minimum in LORA_TRAINING_MINIMUM_SCORES.items() if float(scores[name]) < minimum
+    ]
+    if low_scores:
+        raise LoraDatasetError(f"View {view_name} has LoRA training scores below threshold: {', '.join(low_scores)}")
+    return payload
 
 
 def _source_caption(
@@ -235,64 +201,6 @@ def _source_caption(
         caption_cache[plan_path] = load_keyframe_brief_plan(plan_path).lora_captions
     caption = getattr(caption_cache[plan_path], source.field)
     return caption, {"plan": plan_path.as_posix(), "field": source.field}
-
-
-def _score_selected_keyframes(source: KeyframeRunLoraSourceSpec, base_dir: Path) -> dict[str, Any]:
-    selection_path = resolve_existing_path(source.selection_path, base_dir)
-    payload = read_json(selection_path, label="keyframe selection")
-    if "selection_mode" not in payload or payload["selection_mode"] != "condition_score_with_semantic_gate":
-        raise LoraDatasetError("keyframe_run LoRA sources require condition_score_with_semantic_gate selection")
-    if "semantic_gate" not in payload:
-        raise LoraDatasetError("keyframe_run LoRA sources require usable semantic gate evidence")
-    semantic_gate = payload["semantic_gate"]
-    if (
-        not isinstance(semantic_gate, dict)
-        or "usable_for_auto_select" not in semantic_gate
-        or semantic_gate["usable_for_auto_select"] is not True
-    ):
-        raise LoraDatasetError("keyframe_run LoRA sources require usable semantic gate evidence")
-    if "selected" not in payload:
-        raise LoraDatasetError("keyframe selection contains no selected candidates")
-    selected = payload["selected"]
-    if not selected:
-        raise LoraDatasetError("keyframe selection contains no selected candidates")
-    scored = []
-    for item in selected:
-        if not isinstance(item, dict):
-            raise LoraDatasetError("keyframe_run LoRA sources require scored selected candidate objects")
-        if not {"candidate", "scores", "hard_rejects", "metrics"}.issubset(item):
-            raise LoraDatasetError("keyframe selected candidates must include candidate, scores, hard_rejects and metrics")
-        candidate = item["candidate"]
-        scores = item["scores"]
-        hard_rejects = item["hard_rejects"]
-        metrics = item["metrics"]
-        if (
-            not isinstance(candidate, str)
-            or not isinstance(scores, dict)
-            or not isinstance(hard_rejects, dict)
-            or not isinstance(metrics, dict)
-        ):
-            raise LoraDatasetError("keyframe selected candidates must include candidate, scores, hard_rejects and metrics")
-        if any(bool(rejected) for rejected in hard_rejects.values()):
-            raise LoraDatasetError(f"Refusing hard-rejected keyframe candidate as LoRA source: {candidate}")
-        scored.append(item)
-    if "scorer" not in payload:
-        raise LoraDatasetError("keyframe selection must include scorer")
-    return {
-        "path": selection_path.as_posix(),
-        "selection_mode": payload["selection_mode"],
-        "scorer": payload["scorer"],
-        "semantic_gate": semantic_gate,
-        "selected": scored,
-    }
-
-
-def _reject_failed_audit_run(run_dir: Path) -> None:
-    audit_path = run_dir / "audit.json"
-    if audit_path.exists():
-        audit = read_json(audit_path, label="control audit")
-        if not audit["passed"]:
-            raise LoraDatasetError(f"Refusing failed control-audit output as LoRA source: {run_dir.as_posix()}")
 
 
 def _write_dataset_images(

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 LORA_DATASET_SCHEMA = "schemas/lora-dataset.schema.json"
@@ -24,7 +24,7 @@ class LoraDatasetCharacterSpec(StrictModel):
 
 class LoraCaptionSourceSpec(StrictModel):
     plan: str
-    field: Literal["view_bank", "keyframe_run"]
+    field: Literal["view_bank"]
 
 
 class ViewBankLoraSourceSpec(StrictModel):
@@ -34,33 +34,6 @@ class ViewBankLoraSourceSpec(StrictModel):
     caption_source: LoraCaptionSourceSpec
     tags: list[str] = Field(default_factory=list)
     split: Literal["train", "val"] | None = None
-
-    @model_validator(mode="after")
-    def caption_source_matches_view_bank(self) -> ViewBankLoraSourceSpec:
-        if self.caption_source.field != "view_bank":
-            raise ValueError("view_bank LoRA sources require caption_source.field=view_bank")
-        return self
-
-
-class KeyframeRunLoraSourceSpec(StrictModel):
-    type: Literal["keyframe_run"]
-    run_dir: str
-    selection_path: str
-    caption_source: LoraCaptionSourceSpec
-    tags: list[str] = Field(default_factory=list)
-    split: Literal["train", "val"] | None = None
-
-    @model_validator(mode="after")
-    def caption_source_matches_keyframe_run(self) -> KeyframeRunLoraSourceSpec:
-        if self.caption_source.field != "keyframe_run":
-            raise ValueError("keyframe_run LoRA sources require caption_source.field=keyframe_run")
-        return self
-
-
-LoraDatasetSourceSpec = Annotated[
-    ViewBankLoraSourceSpec | KeyframeRunLoraSourceSpec,
-    Field(discriminator="type"),
-]
 
 
 class LoraDatasetOutputSpec(StrictModel):
@@ -75,7 +48,7 @@ class LoraDatasetSpec(StrictModel):
     kind: Literal["lora-dataset"]
     id: str
     character: LoraDatasetCharacterSpec
-    sources: list[LoraDatasetSourceSpec]
+    sources: list[ViewBankLoraSourceSpec]
     output: LoraDatasetOutputSpec
 
 

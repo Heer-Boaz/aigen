@@ -17,7 +17,6 @@ from aigen.keyframe_brief_models import (
     KeyframeBriefSpec,
     load_keyframe_brief,
 )
-from aigen.keyframe_judge import KeyframeJudgeConfig, QwenKeyframeJudge
 from aigen.manifest_io import (
     resolve_existing_path,
     resolve_output_path,
@@ -26,12 +25,13 @@ from aigen.manifest_io import (
     sha256_file,
     write_json,
 )
+from aigen.vlm_qwen import QwenVlm, QwenVlmConfig
 from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
 
 
 def plan_keyframe_brief(
     brief_path: Path,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     *,
     project_root: Path,
 ) -> dict[str, Any]:
@@ -45,7 +45,7 @@ def plan_keyframe_brief(
     prompt = _planner_prompt(spec, view_options, evidence.order_lines)
     raw_path = plan_path.with_suffix(".raw.txt")
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(QwenKeyframeJudge(config)) as active_runner:
+    with closing(QwenVlm(config)) as active_runner:
         raw_text = active_runner.judge_candidate(
             prompt,
             evidence.image_paths,
@@ -72,7 +72,7 @@ def plan_keyframe_brief(
 def _validate_generated_plan(
     raw_text: str,
     spec: KeyframeBriefSpec,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     brief_path: Path,
     prompt: str,
     view_options: list[dict[str, Any]],
@@ -161,14 +161,13 @@ Contract details:
 - polish.profile must be exactly "kontext-inpaint-local".
 - polish.strength_offsets must be numeric offsets around the selected local inpaint strength, including zero and at least one nearby exploration value.
 - polish.seed_offsets must be integer offsets for local polish variants, not floats.
-- lora_captions: object with view_bank and keyframe_run.
-- lora_captions.view_bank is an identity-only training caption for the approved view-bank images. Describe the character, outfit, colors, style and canonical views. Do not include the trigger token.
-- lora_captions.keyframe_run is a training caption for generated selected keyframes. Describe the same identity plus the requested action, direction, camera/readability and pose phase. Do not include the trigger token.
+- lora_captions: object with view_bank.
+- lora_captions.view_bank is an identity-only training caption for the approved view-bank images. Describe the character, outfit, colors, style and canonical views. Do not include action poses or the trigger token.
 - rationale must be an array of concrete strings.
 
 Keep prompts specific to the approved identity primer and the example action. Use separate CLIP and T5 prompt text. Do not mention internal filenames in prompts.
 Build prompt.clip and prompt.t5 from every identity_details slot plus the example action. Do not omit the waist garment, legwear or footwear.
-Build lora_captions from the supplied images too; the human should not write these captions manually, and dataset-build must not derive them later from generation prompts.
+Build lora_captions.view_bank from the supplied identity images too; the human should not write this caption manually, and dataset-build must not derive it later from generation prompts.
 Build the prompt text from what you see in the supplied identity images and example sprite. Do not reuse generic placeholder identity text.
 Choose control strengths from the image evidence. Strong pose control is useful when limb placement matters. Clean softedge or canny geometry control is useful when the source sprite silhouette must have structure authority. Do not request dense gray/source-image control for production keyframes. Do not blindly copy fixed numeric examples.
 Never return placeholder strings such as "...".

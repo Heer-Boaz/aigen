@@ -68,6 +68,7 @@ from aigen.runtime_profiles import (
     keyframe_profile_for_name,
     keyframe_refine_profile_for_name,
 )
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_keyframe_commands(subparsers: Any) -> None:
@@ -440,6 +441,7 @@ def run_keyframe_command(
         KeyframeControlAuditError,
         KeyframeRefineError,
         KeyframePolishError,
+        QwenVlmError,
         ManifestIOError,
     ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)

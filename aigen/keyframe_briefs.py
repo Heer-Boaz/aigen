@@ -6,7 +6,7 @@ from typing import Any
 from aigen import keyframe_brief_planner
 from aigen.character_view_models import load_character_view_bank
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
-from aigen.keyframe_judge import KeyframeJudgeConfig, judge_keyframe_run
+from aigen.keyframe_judge import judge_keyframe_run
 from aigen.keyframe_brief_models import (
     BriefControlPlanSpec,
     KeyframeBriefError,
@@ -46,6 +46,7 @@ from aigen.manifest_io import (
 )
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import keyframe_profile_for_name, keyframe_refine_profile_for_name
+from aigen.vlm_qwen import QwenVlmConfig
 
 
 def write_lora_dataset_spec_from_brief(
@@ -68,7 +69,6 @@ def write_lora_dataset_spec_from_brief(
     view_bank_path = resolve_existing_path(spec.character.view_bank.path, brief_path.parent)
     accepted_views = _accepted_view_names(view_bank_path)
     selected_views = _selected_view_names(accepted_views, views)
-    run_dir = resolve_output_path(spec.generation.output_directory, brief_path.parent)
     output_spec = LoraDatasetSpec(
         **{
             "$schema": schema_reference(output_spec_path, project_root / "schemas/lora-dataset.schema.json"),
@@ -83,15 +83,6 @@ def write_lora_dataset_spec_from_brief(
                     "caption_source": {
                         "plan": relative_path(plan_path, output_spec_path.parent),
                         "field": "view_bank",
-                    },
-                },
-                {
-                    "type": "keyframe_run",
-                    "run_dir": relative_path(run_dir, output_spec_path.parent),
-                    "selection_path": relative_path(run_dir / "selected.json", output_spec_path.parent),
-                    "caption_source": {
-                        "plan": relative_path(plan_path, output_spec_path.parent),
-                        "field": "keyframe_run",
                     },
                 },
             ],
@@ -110,7 +101,7 @@ def write_lora_dataset_spec_from_brief(
         "brief_id": spec.id,
         "plan_path": plan_path.as_posix(),
         "dataset_spec": output_spec_path.as_posix(),
-        "captions": plan.lora_captions.model_dump(mode="json"),
+        "caption": plan.lora_captions.view_bank,
         "views": selected_views,
     }
 
@@ -187,7 +178,7 @@ def run_keyframe_brief(
 
 def execute_keyframe_brief(
     brief_path: Path,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     *,
     project_root: Path,
     pose_device: str = "cuda",
@@ -226,7 +217,7 @@ def execute_keyframe_brief(
 
 def _polish_selected_candidates(
     brief_path: Path,
-    config: KeyframeJudgeConfig,
+    config: QwenVlmConfig,
     *,
     project_root: Path,
     selected: list[str],

@@ -3,14 +3,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from aigen.keyframe_judge import (
+from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
     DEFAULT_MAX_PIXELS,
     DEFAULT_MIN_PIXELS,
-    KeyframeJudgeConfig,
+    QwenVlmConfig,
 )
 from aigen.runtime_profiles import MODELS_ROOT
 
@@ -37,8 +37,8 @@ def add_judge_runtime_args(parser: argparse.ArgumentParser, *, role: str, max_ne
     parser.add_argument("--temperature", type=float, default=0.0, help=f"{role.capitalize()} sampling temperature")
 
 
-def judge_config_from_args(args: argparse.Namespace) -> KeyframeJudgeConfig:
-    return KeyframeJudgeConfig(
+def judge_config_from_args(args: argparse.Namespace) -> QwenVlmConfig:
+    return QwenVlmConfig(
         judge_id=args.judge,
         model=args.model,
         repo_id=DEFAULT_JUDGE_REPO_ID,

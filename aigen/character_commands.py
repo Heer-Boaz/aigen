@@ -16,10 +16,13 @@ from aigen.character_views import (
     run_character_view_job,
     validate_character_view_job,
 )
+from aigen.character_view_training_validation import validate_view_bank_entry_for_lora_training
 from aigen.command_io import command_error_payload, dump_json
+from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_character_commands(subparsers: Any) -> None:
@@ -52,6 +55,15 @@ def add_character_commands(subparsers: Any) -> None:
     view_accept.add_argument("--run-dir", type=Path, required=True, help="Completed character-view run directory")
     view_accept.add_argument("--candidate", required=True, help="Candidate name to accept")
     view_accept.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    view_lora_validate = character_subparsers.add_parser(
+        "view-lora-validate",
+        help="Use the local VLM to mark a canonical view as safe for LoRA identity training",
+    )
+    view_lora_validate.add_argument("bank", type=Path, help="Character view-bank JSON")
+    view_lora_validate.add_argument("--view", required=True, help="View-bank entry to validate")
+    add_judge_runtime_args(view_lora_validate, role="view validator", max_new_tokens=900)
+    view_lora_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def run_character_command(
@@ -94,17 +106,29 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
-        dump_json(
-            stdout,
-            accept_character_view(
-                args.job,
-                run_dir=args.run_dir,
-                candidate=args.candidate,
-                project_root=PROJECT_ROOT,
-            ),
-            pretty=not args.compact,
-        )
-        return 0
-    except (CharacterViewError, ManifestIOError) as error:
+        if args.characters_command == "view-accept":
+            dump_json(
+                stdout,
+                accept_character_view(
+                    args.job,
+                    run_dir=args.run_dir,
+                    candidate=args.candidate,
+                    project_root=PROJECT_ROOT,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "view-lora-validate":
+            dump_json(
+                stdout,
+                validate_view_bank_entry_for_lora_training(
+                    args.bank,
+                    args.view,
+                    judge_config_from_args(args),
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+    except (CharacterViewError, QwenVlmError, ManifestIOError) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1

@@ -10,7 +10,6 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
 
-from aigen.keyframe_judge import DEFAULT_JUDGE_ID
 from aigen.keyframe_pose import (
     DWPoseKeypointExtractor,
     PoseKeypoints,
@@ -20,6 +19,7 @@ from aigen.keyframe_pose import (
     score_pose_match,
 )
 from aigen.keyframe_segmentation import SamForegroundSegmenter, SamSegmentationConfig
+from aigen.vlm_qwen import DEFAULT_JUDGE_ID
 from aigen.manifest_io import read_json, sha256_file, write_json
 
 

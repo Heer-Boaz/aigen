@@ -20,6 +20,7 @@ from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_brief_commands(subparsers: Any) -> None:
@@ -135,6 +136,7 @@ def run_brief_command(
         KeyframeJobError,
         KeyframeMemoryError,
         KeyframeJudgeError,
+        QwenVlmError,
         ManifestIOError,
     ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
