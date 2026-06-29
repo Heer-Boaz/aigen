@@ -45,9 +45,17 @@ def resolve_keyframe_job(
     *,
     project_root: Path,
     check_outputs: bool,
+    require_active_conditions: bool = True,
 ) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
-    return resolve_keyframe_spec(spec, job_path, profile, project_root=project_root, check_outputs=check_outputs)
+    return resolve_keyframe_spec(
+        spec,
+        job_path,
+        profile,
+        project_root=project_root,
+        check_outputs=check_outputs,
+        require_active_conditions=require_active_conditions,
+    )
 
 
 def resolve_keyframe_spec(
@@ -57,6 +65,7 @@ def resolve_keyframe_spec(
     *,
     project_root: Path,
     check_outputs: bool,
+    require_active_conditions: bool = True,
 ) -> dict[str, Any]:
     if spec.pipeline.profile != profile.name:
         raise KeyframeJobError(f"Job uses profile {spec.pipeline.profile}, but CLI resolved {profile.name}")
@@ -86,7 +95,7 @@ def resolve_keyframe_spec(
 
     condition_plan = [_condition_plan(condition, spec.sampling.steps) for condition in spec.conditions]
     inactive = [condition["name"] for condition in condition_plan if condition["active_steps"] == 0]
-    if inactive:
+    if require_active_conditions and inactive:
         raise KeyframeJobError(f"Condition has zero active steps: {inactive[0]}")
 
     token_metadata = _planned_token_metadata(spec, assets)
@@ -152,14 +161,33 @@ def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: 
     return run_keyframe_spec(spec, job_path, profile, project_root=project_root)
 
 
+def run_keyframe_audit_variant_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
+    spec = load_keyframe_job(job_path)
+    return run_keyframe_spec(
+        spec,
+        job_path,
+        profile,
+        project_root=project_root,
+        require_active_conditions=False,
+    )
+
+
 def run_keyframe_spec(
     spec: KeyframeJobSpec,
     job_path: Path,
     profile: KeyframeProfile,
     *,
     project_root: Path,
+    require_active_conditions: bool = True,
 ) -> dict[str, Any]:
-    resolved = resolve_keyframe_spec(spec, job_path, profile, project_root=project_root, check_outputs=True)
+    resolved = resolve_keyframe_spec(
+        spec,
+        job_path,
+        profile,
+        project_root=project_root,
+        check_outputs=True,
+        require_active_conditions=require_active_conditions,
+    )
     memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_keyframe_preflight(resolved["vram_plan"]))
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)

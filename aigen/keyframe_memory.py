@@ -117,34 +117,46 @@ def nvidia_smi_preflight() -> dict[str, int]:
 
 def nvidia_smi_keyframe_preflight(vram_plan: dict[str, Any]) -> dict[str, int | dict[str, int]]:
     if not cuda_available():
-        return {
-            "nvidia_smi_preflight_used_mb": 0,
-            "nvidia_smi_device_total_mb": 0,
-            "nvidia_smi_preflight_utilization_gpu": 0,
-            "vram_estimated_required_mb": 0,
-            "vram_estimated_headroom_mb": 0,
-            "vram_clean_available_mb": 0,
-            "vram_max_output_canvas": {
-                "width": vram_plan["canvas_width"],
-                "height": vram_plan["canvas_height"],
-                "generated_tokens": vram_plan["generated_tokens"],
-            },
-        }
+        return _empty_keyframe_memory_report(vram_plan)
 
     snapshot = nvidia_smi_memory_snapshot()
-    extra_framebuffer_mb = max(0, snapshot["nvidia_smi_used_mb"] - vram_plan["baseline_framebuffer_mb"])
-    required_mb = vram_plan["estimated_clean_peak_mb"] + extra_framebuffer_mb + vram_plan["safety_margin_mb"]
-    headroom_mb = snapshot["nvidia_smi_device_total_mb"] - required_mb
-    clean_available_mb = snapshot["nvidia_smi_device_total_mb"] - extra_framebuffer_mb - vram_plan["safety_margin_mb"]
-    max_generated_tokens = _max_generated_tokens_for_clean_peak(vram_plan, clean_available_mb)
-    if headroom_mb < 0:
+    report = _keyframe_memory_report(vram_plan, snapshot)
+    if report["vram_estimated_headroom_mb"] < 0:
         raise KeyframeMemoryError(
             "Estimated VRAM requirement exceeds available framebuffer: "
-            f"need about {required_mb} MB including margin, "
+            f"need about {report['vram_estimated_required_mb']} MB including margin, "
             f"GPU has {snapshot['nvidia_smi_device_total_mb']} MB, "
             f"currently used {snapshot['nvidia_smi_used_mb']} MB. "
             "Close GPU consumers or lower output/reference tokens."
         )
+    return report
+
+
+def _empty_keyframe_memory_report(vram_plan: dict[str, Any]) -> dict[str, int | dict[str, int]]:
+    return {
+        "nvidia_smi_preflight_used_mb": 0,
+        "nvidia_smi_device_total_mb": 0,
+        "nvidia_smi_preflight_utilization_gpu": 0,
+        "vram_estimated_required_mb": 0,
+        "vram_estimated_headroom_mb": 0,
+        "vram_clean_available_mb": 0,
+        "vram_max_output_canvas": {
+            "width": vram_plan["canvas_width"],
+            "height": vram_plan["canvas_height"],
+            "generated_tokens": vram_plan["generated_tokens"],
+        },
+    }
+
+
+def _keyframe_memory_report(
+    vram_plan: dict[str, Any],
+    snapshot: dict[str, int],
+) -> dict[str, int | dict[str, int]]:
+    extra_framebuffer_mb = max(0, snapshot["nvidia_smi_used_mb"] - vram_plan["baseline_framebuffer_mb"])
+    required_mb = vram_plan["estimated_clean_peak_mb"] + extra_framebuffer_mb + vram_plan["safety_margin_mb"]
+    headroom_mb = snapshot["nvidia_smi_device_total_mb"] - required_mb
+    clean_available_mb = snapshot["nvidia_smi_device_total_mb"] - extra_framebuffer_mb - vram_plan["safety_margin_mb"]
+    max_generated_tokens = _max_generated_tokens_for_clean_peak(vram_plan, max(1, clean_available_mb))
     return {
         "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],
         "nvidia_smi_device_total_mb": snapshot["nvidia_smi_device_total_mb"],

@@ -30,7 +30,11 @@ from aigen.keyframes import (
     run_keyframe_job,
     validate_keyframe_job,
 )
-from aigen.keyframe_memory import KeyframeMemoryError, nvidia_smi_keyframe_preflight, nvidia_smi_preflight
+from aigen.keyframe_memory import (
+    KeyframeMemoryError,
+    nvidia_smi_keyframe_preflight,
+    nvidia_smi_preflight,
+)
 from aigen.keyframe_judge import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
@@ -1338,6 +1342,36 @@ class KeyframeTests(unittest.TestCase):
             write_json(score_dir / "scores.json", payload)
             return payload
 
+        def fake_variant_process(job_path: Path, project_root: Path) -> dict[str, object]:
+            job = load_keyframe_job(job_path)
+            output_dir = Path(job.output.directory)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / job.output.filename.format(id=job.id, variant=job.variants[0].name)
+            Image.new("RGB", (job.canvas.width, job.canvas.height), (20, 30, 40)).save(output_path)
+            write_json(
+                output_dir / "result.json",
+                {
+                    "status": "completed",
+                    "job_id": job.id,
+                    "outputs": [
+                        {
+                            "name": job.variants[0].name,
+                            "seed": job.variants[0].seed,
+                            "path": output_path.as_posix(),
+                            "controlnet_active_steps": 1,
+                            "controlnet_step_ms": [],
+                            "transformer_step_ms": [],
+                            "controlnet_metadata": {},
+                            "timings_ms": {"total_ms": 1.0},
+                        }
+                    ],
+                    "token_metadata": {},
+                    "timings_ms": {"total_ms": 1.0},
+                    "memory": {"nvidia_smi_peak_used_mb": 0},
+                },
+            )
+            return {"status": "completed", "log": (output_dir / "process.log").as_posix()}
+
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             job_path = root / "job.json"
@@ -1348,23 +1382,11 @@ class KeyframeTests(unittest.TestCase):
                     return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
                 ),
                 patch("aigen.keyframes.CharacterKontextPoseSession", FakeSession),
-                patch("aigen.keyframe_control_audit.CharacterKontextPoseSession", FakeSession),
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
-                patch("aigen.keyframe_control_audit.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
-                patch("aigen.keyframe_control_audit._generation_environment", return_value={"env": "fake"}),
+                patch("aigen.keyframe_control_audit._run_variant_job_process", fake_variant_process),
                 patch(
                     "aigen.keyframes.nvidia_smi_keyframe_preflight",
-                    return_value={
-                        "nvidia_smi_preflight_used_mb": 0,
-                        "nvidia_smi_device_total_mb": 0,
-                        "nvidia_smi_preflight_utilization_gpu": 0,
-                        "vram_estimated_required_mb": 0,
-                        "vram_estimated_headroom_mb": 0,
-                    },
-                ),
-                patch(
-                    "aigen.keyframe_control_audit.nvidia_smi_keyframe_preflight",
                     return_value={
                         "nvidia_smi_preflight_used_mb": 0,
                         "nvidia_smi_device_total_mb": 0,
@@ -1388,10 +1410,8 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(audit["seed"], 42)
             self.assertTrue((audit_dir / "audit.json").exists())
             self.assertTrue((audit_dir / "contact_sheet.png").exists())
-            self.assertTrue((audit_dir / "control_tensors" / "pose.pt").exists())
-            self.assertTrue((audit_dir / "control_debug" / "softedge_vae_roundtrip.png").exists())
-            audit_calls = FakeSession.instances[-1].pipeline.calls
-            self.assertEqual([call["name"] for call in audit_calls], [
+            output_names = [output["name"] for output in audit["generation_outputs"]]
+            self.assertEqual(output_names, [
                 "control_off",
                 "current_contour_baseline",
                 "pose_only_strong",
@@ -1402,14 +1422,17 @@ class KeyframeTests(unittest.TestCase):
                 "pose_plus_gray",
                 "pose_plus_canny_lineart",
             ])
-            self.assertTrue(all(call["seed"] == 42 for call in audit_calls))
-            self.assertTrue(all(call["collect_control_stats"] for call in audit_calls))
+            control_off_job = load_keyframe_job(audit_dir / "variant_runs" / "control_off" / "job.json")
+            self.assertEqual(control_off_job.variants[0].seed, 42)
             self.assertEqual(
-                [condition.conditioning_scale for condition in audit_calls[0]["control_conditions"]],
-                [0.0, 0.0, 0.0, 0.0],
+                [condition.scale for condition in control_off_job.conditions],
+                [0.0],
+            )
+            last_variant_job = load_keyframe_job(
+                audit_dir / "variant_runs" / "pose_plus_canny_lineart" / "job.json"
             )
             self.assertEqual(
-                [condition.conditioning_scale for condition in audit_calls[-1]["control_conditions"]],
+                [condition.scale for condition in last_variant_job.conditions],
                 [0.80, 0.55],
             )
             self.assertGreater(audit["score_deltas_vs_control_off"]["pose_plus_softedge"]["condition"], 0.05)

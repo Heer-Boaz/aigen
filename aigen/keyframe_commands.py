@@ -57,6 +57,7 @@ from aigen.keyframe_job_models import (
 )
 from aigen.keyframes import (
     plan_keyframe_job,
+    run_keyframe_audit_variant_job,
     run_keyframe_job,
     validate_keyframe_job,
 )
@@ -104,6 +105,13 @@ def add_keyframe_commands(subparsers: Any) -> None:
     run = keyframe_subparsers.add_parser("run", help="Run a resolved keyframe job")
     run.add_argument("job", type=Path, help="Keyframe job JSON")
     run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    run_audit_variant = keyframe_subparsers.add_parser(
+        "run-audit-variant",
+        help="Run one isolated control-audit variant job",
+    )
+    run_audit_variant.add_argument("job", type=Path, help="Control-audit variant job JSON")
+    run_audit_variant.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     extract_example = keyframe_subparsers.add_parser(
         "extract-example",
@@ -391,6 +399,13 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             dump_json(
                 stdout,
                 plan_keyframe_job(args.job, profile, project_root=PROJECT_ROOT),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.keyframes_command == "run-audit-variant":
+            dump_json(
+                stdout,
+                run_keyframe_audit_variant_job(args.job, profile, project_root=PROJECT_ROOT),
                 pretty=not args.compact,
             )
             return 0
