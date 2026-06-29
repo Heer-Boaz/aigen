@@ -17,6 +17,7 @@ from aigen.character_views import (
     validate_character_view_job,
 )
 from aigen.character_view_training_validation import validate_view_bank_entry_for_lora_training
+from aigen.character_training_data import DEFAULT_VIEW_INTENTS, run_character_training_data
 from aigen.command_io import command_error_payload, dump_json
 from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
@@ -64,6 +65,31 @@ def add_character_commands(subparsers: Any) -> None:
     view_lora_validate.add_argument("--view", required=True, help="View-bank entry to validate")
     add_judge_runtime_args(view_lora_validate, role="view validator", max_new_tokens=900)
     view_lora_validate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    training_run = character_subparsers.add_parser(
+        "training-run",
+        help="Generate model-planned neutral character LoRA training images",
+    )
+    training_run.add_argument("bank", type=Path, help="Character view-bank JSON")
+    training_run.add_argument("--output-dir", type=Path, required=True, help="Training-data run directory")
+    training_run.add_argument("--seed-start", type=int, default=1, help="First generated seed")
+    training_run.add_argument("--seeds-per-view", type=int, default=2, help="Candidates per planned view")
+    training_run.add_argument("--width", type=int, default=576, help="Output width")
+    training_run.add_argument("--height", type=int, default=864, help="Output height")
+    training_run.add_argument("--steps", type=int, default=24, help="Generation steps")
+    training_run.add_argument("--guidance-scale", type=float, default=2.5, help="Transformer guidance scale")
+    training_run.add_argument("--reference-max-area", type=int, default=294912, help="Kontext reference max area")
+    training_run.add_argument("--max-sequence-length", type=int, default=128, help="T5 text token budget")
+    training_run.add_argument("--trigger-token", default="ai51char", help="LoRA trigger token for emitted captions")
+    training_run.add_argument(
+        "--view-intent",
+        action="append",
+        default=None,
+        help="Requested neutral training view intent; repeat to override the default sweep",
+    )
+    training_run.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    add_judge_runtime_args(training_run, role="training-data planner and validator", max_new_tokens=4096)
+    training_run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def run_character_command(
@@ -125,6 +151,31 @@ def run_character_command(
                     args.bank,
                     args.view,
                     judge_config_from_args(args),
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "training-run":
+            dump_json(
+                stdout,
+                run_character_training_data(
+                    args.bank,
+                    output_dir=args.output_dir,
+                    profile=keyframe_profile_for_name("nunchaku-kontext-pose-quality"),
+                    judge_config=judge_config_from_args(args),
+                    project_root=PROJECT_ROOT,
+                    progress=progress,
+                    view_intents=args.view_intent or DEFAULT_VIEW_INTENTS,
+                    seeds_per_view=args.seeds_per_view,
+                    seed_start=args.seed_start,
+                    width=args.width,
+                    height=args.height,
+                    steps=args.steps,
+                    guidance_scale=args.guidance_scale,
+                    reference_max_area=args.reference_max_area,
+                    max_sequence_length=args.max_sequence_length,
+                    trigger_token=args.trigger_token,
+                    overwrite=args.overwrite,
                 ),
                 pretty=not args.compact,
             )

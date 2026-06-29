@@ -39,7 +39,11 @@ def validate_view_bank_entry_for_lora_training(
     base_dir = bank_path.parent
     source_path = resolve_existing_path(bank.character.source_reference.path, base_dir)
     image_path = resolve_existing_path(entry.image.path, base_dir)
-    prompt = _training_validation_prompt(bank.character.id, view_name, entry.view.model_dump(mode="json"))
+    prompt = _training_validation_prompt(
+        bank.character.id,
+        view_name,
+        entry.view.model_dump(mode="json") | {"identity_notes": bank.character.identity_notes},
+    )
     with closing(QwenVlm(config)) as judge:
         raw_text = judge.judge_candidate(prompt, [source_path, image_path])
     validation = _training_validation(raw_text, config)
@@ -52,6 +56,20 @@ def validate_view_bank_entry_for_lora_training(
         "bank_path": bank_path.resolve().as_posix(),
         "training_validation": validation.model_dump(mode="json"),
     }
+
+
+def validate_lora_training_image(
+    *,
+    character_id: str,
+    source_path: Path,
+    candidate_path: Path,
+    view_name: str,
+    view: dict[str, Any],
+    judge: QwenVlm,
+) -> ViewBankTrainingValidationSpec:
+    prompt = _training_validation_prompt(character_id, view_name, view)
+    raw_text = judge.judge_candidate(prompt, [source_path, candidate_path])
+    return _training_validation(raw_text, judge.config)
 
 
 def _training_validation(raw_text: str, config: QwenVlmConfig) -> ViewBankTrainingValidationSpec:
@@ -85,15 +103,38 @@ Hard reject if:
 - the candidate looks like a different character than the source reference;
 - hairstyle, clothing, footwear, colors, or art style no longer match the character;
 - the subject is malformed, has broken anatomy, broken hands, broken face, or severe limb errors;
-- the background is busy, colored, leaking control artifacts, or not clean enough for identity training;
+- the background is black, dark, busy, colored, vignetted, atmospheric, leaking control artifacts, or not a plain light neutral background suitable for identity training;
 - the image has obvious artifacts, low quality, blur, pixelated leakage, duplicated body parts, or crop problems;
 - the candidate does not match the required canonical view metadata.
 
-Return valid JSON only. The JSON object must contain:
-- usable_for_lora_training: boolean
-- hard_rejects: object with booleans for identity_mismatch, outfit_mismatch, hairstyle_mismatch, malformed_subject, bad_background, low_image_quality
-- scores: object with numeric 0-to-10 values for identity_preservation, outfit_preservation, hairstyle_preservation, anatomy_quality, background_quality, style_consistency, overall
-- evidence: object with identity string, quality string, concerns string array
+Return valid JSON only with exactly this shape:
+{{
+  "usable_for_lora_training": true,
+  "hard_rejects": {{
+    "identity_mismatch": false,
+    "outfit_mismatch": false,
+    "hairstyle_mismatch": false,
+    "malformed_subject": false,
+    "bad_background": false,
+    "low_image_quality": false
+  }},
+  "scores": {{
+    "identity_preservation": 9,
+    "outfit_preservation": 9,
+    "hairstyle_preservation": 9,
+    "anatomy_quality": 9,
+    "background_quality": 9,
+    "style_consistency": 9,
+    "overall": 9
+  }},
+  "evidence": {{
+    "identity": "short factual identity assessment",
+    "quality": "short factual image-quality assessment",
+    "concerns": []
+  }}
+}}
+
+Use the exact evidence keys "identity", "quality", and "concerns".
 
 Score guidance:
 - 9-10 means excellent training image.

@@ -1605,6 +1605,9 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(validation["usable_for_lora_training"], True)
             self.assertEqual(validation["scores"]["identity_preservation"], 9)
             self.assertNotIn("keyframe", runner.prompt)
+            self.assertIn('"identity"', runner.prompt)
+            self.assertIn('"quality"', runner.prompt)
+            self.assertNotIn("identity string", runner.prompt)
 
     def test_cli_character_view_schema_has_no_embedded_character_prompt(self) -> None:
         stdout = StringIO()
@@ -1901,7 +1904,7 @@ class KeyframeTests(unittest.TestCase):
             ):
                 judge_keyframe_run(run_dir, config, project_root=Path.cwd())
 
-    def test_keyframe_judge_rejects_markdown_wrapped_json(self) -> None:
+    def test_keyframe_judge_accepts_markdown_wrapped_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir = write_keyframe_result(root)
@@ -1921,9 +1924,10 @@ class KeyframeTests(unittest.TestCase):
 
             with (
                 patch("aigen.keyframe_judge.QwenVlm", return_value=MarkdownJudgeRunner()),
-                self.assertRaisesRegex(KeyframeJudgeError, "VLM returned non-JSON output"),
             ):
-                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+                result = judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+
+            self.assertEqual(result["status"], "completed")
 
     def test_keyframe_judge_rejects_coerced_evidence_lists(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

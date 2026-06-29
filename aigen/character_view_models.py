@@ -103,6 +103,7 @@ class AcceptanceSpec(StrictModel):
 class ViewBankCharacterSpec(StrictModel):
     id: str
     source_reference: ImageAssetSpec
+    identity_notes: list[str] = Field(default_factory=list)
 
 
 class ViewBankViewSpec(StrictModel):

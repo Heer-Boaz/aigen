@@ -1,6 +1,10 @@
 {
   "character": {
     "id": "ai51",
+    "identity_notes": [
+      "AI51 wears a brown leather skirt as the waist garment.",
+      "AI51 wears a separate belt at the waist with a silver buckle."
+    ],
     "source_reference": {
       "height": 2048,
       "mode": "RGBA",
@@ -25,6 +29,33 @@
         "path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
         "sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
         "width": 1024
+      },
+      "training_validation": {
+        "evidence": {
+          "concerns": [],
+          "identity": "The character's hairstyle, outfit, and pose match the source reference.",
+          "quality": "The image is clear, with no visible artifacts or blurriness."
+        },
+        "hard_rejects": {
+          "bad_background": false,
+          "hairstyle_mismatch": false,
+          "identity_mismatch": false,
+          "low_image_quality": false,
+          "malformed_subject": false,
+          "outfit_mismatch": false
+        },
+        "model": "/home/boaz/aigen/aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        "scores": {
+          "anatomy_quality": 9.0,
+          "background_quality": 9.0,
+          "hairstyle_preservation": 9.0,
+          "identity_preservation": 9.0,
+          "outfit_preservation": 9.0,
+          "overall": 9.0,
+          "style_consistency": 9.0
+        },
+        "usable_for_lora_training": true,
+        "validator": "qwen2.5-vl-7b"
       },
       "view": {
         "camera": "orthographic-front",
@@ -73,6 +104,33 @@
         "path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
         "sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
         "width": 512
+      },
+      "training_validation": {
+        "evidence": {
+          "concerns": [],
+          "identity": "The character's appearance matches the source reference, including hairstyle, outfit, and accessories.",
+          "quality": "The image is clear, with no visible artifacts or blurring, and the background is clean and uncluttered."
+        },
+        "hard_rejects": {
+          "bad_background": false,
+          "hairstyle_mismatch": false,
+          "identity_mismatch": false,
+          "low_image_quality": false,
+          "malformed_subject": false,
+          "outfit_mismatch": false
+        },
+        "model": "/home/boaz/aigen/aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        "scores": {
+          "anatomy_quality": 9.0,
+          "background_quality": 9.0,
+          "hairstyle_preservation": 9.0,
+          "identity_preservation": 9.0,
+          "outfit_preservation": 9.0,
+          "overall": 9.0,
+          "style_consistency": 9.0
+        },
+        "usable_for_lora_training": true,
+        "validator": "qwen2.5-vl-7b"
       },
       "view": {
         "camera": "orthographic-side",

@@ -655,6 +655,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertIn("--resolution", command)
             self.assertIn("512", command)
             self.assertEqual(command.count("--mixed_precision"), 1)
+            self.assertIn("bf16", command)
             self.assertIn("--rank", command)
             self.assertIn("4", command)
             self.assertIn("--lora_layers", command)
