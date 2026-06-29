@@ -54,6 +54,7 @@ from aigen.keyframe_polish import (
     run_keyframe_polish_job,
     select_keyframe_polish,
 )
+from aigen.keyframe_control_audit import run_keyframe_control_audit
 from aigen.keyframe_score import KeyframeScoreConfig, select_scored_keyframe_run, score_keyframe_run
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.prompt_tokens import PromptTokenCounts
@@ -910,9 +911,28 @@ class FakePipeline:
         if self.free_model_hooks_calls < 1:
             raise AssertionError("prepare-phase models must be released before denoise")
         self.calls.append(kwargs)
+        scale = sum(condition.conditioning_scale for condition in kwargs["control_conditions"])
+        metadata = {"conditions": [condition.name for condition in kwargs["control_conditions"]]}
+        if kwargs.get("collect_control_stats"):
+            metadata["residual_l2_mean_by_step"] = [
+                {
+                    "step_index": 0,
+                    "timestep": 1.0,
+                    "conditions": [
+                        {
+                            "name": condition.name,
+                            "effective_scale": condition.conditioning_scale,
+                            "double": [condition.conditioning_scale],
+                            "single": [],
+                        }
+                        for condition in kwargs["control_conditions"]
+                        if condition.conditioning_scale
+                    ],
+                }
+            ]
         return KontextPoseDenoised(
             name=kwargs["name"],
-            latents=torch.ones((1, 2, 3)),
+            latents=torch.full((1, 2, 3), float(scale)),
             controlnet_conditioning_scale=kwargs["controlnet_conditioning_scale"],
             control_guidance_start=kwargs["control_guidance_start"],
             control_guidance_end=kwargs["control_guidance_end"],
@@ -920,7 +940,7 @@ class FakePipeline:
             transformer_step_ms=[2.0],
             controlnet_step_ms=[1.0],
             controlnet_active_steps=15,
-            controlnet_metadata={"conditions": [condition.name for condition in kwargs["control_conditions"]]},
+            controlnet_metadata=metadata,
             timings_ms={"denoise_ms": 3.0},
         )
 
@@ -935,23 +955,29 @@ class FakeSession:
             cuda=types.SimpleNamespace(
                 is_available=lambda: False,
                 reset_peak_memory_stats=lambda _device: None,
-            )
+            ),
+            save=torch.save,
+            linalg=torch.linalg,
+            bfloat16=torch.bfloat16,
+            int16=torch.int16,
         )
         FakeSession.instances.append(self)
 
     def prepare(self, **kwargs: object) -> object:
         self.prepare_kwargs = kwargs
         return types.SimpleNamespace(
-            control_image="pose-control",
+            control_image=torch.zeros((1, 3, 8, 8)),
             controlnet_blocks_repeat=False,
             token_metadata={"generated_tokens": 1536},
+            image_latents=torch.zeros((1, 2, 3)),
         )
 
-    def prepare_control_condition(self, _prepared: object, *, pose_image: object, seed: int) -> tuple[str, bool, float]:
-        return f"control:{seed}:{pose_image.size}", False, 1.0
+    def prepare_control_condition(self, _prepared: object, *, pose_image: object, seed: int) -> tuple[torch.Tensor, bool, float]:
+        width, height = pose_image.size
+        return torch.full((1, 3, 8, 8), float((seed + width + height) % 11)), False, 1.0
 
-    def prepare_residual_mask(self, _prepared: object, mask_image: object) -> str:
-        return f"mask:{mask_image.size}"
+    def prepare_residual_mask(self, _prepared: object, mask_image: object) -> torch.Tensor:
+        return torch.ones((1, 2, 1))
 
     def decode_many(self, _prepared: object, denoised: list[object], *, chunk_size: int) -> tuple[list[FakeImage], float]:
         if self.pipeline.free_model_hooks_calls < 2:
@@ -1250,6 +1276,114 @@ class KeyframeTests(unittest.TestCase):
                 "Full-body orthographic side-view gameplay keyframe.",
             )
             self.assertEqual(result["memory"]["nvidia_smi_peak_used_mb"], 0)
+
+    def test_control_audit_runs_fixed_seed_ablation_sheet(self) -> None:
+        FakeSession.instances.clear()
+
+        def fake_score_runner(run_dir: Path, config: KeyframeScoreConfig, *, project_root: Path) -> dict[str, object]:
+            score_dir = run_dir / "score" / config.scorer_id
+            score_dir.mkdir(parents=True)
+            outputs = {
+                "scores": (score_dir / "scores.json").as_posix(),
+                "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
+                "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
+                "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix(),
+            }
+            scores = {
+                "control_off": (0.10, 0.10, 0.10),
+                "current_recipe": (0.20, 0.12, 0.19),
+                "pose_strong": (0.28, 0.40, 0.36),
+                "contour_strong": (0.60, 0.20, 0.46),
+                "pose_contour_strong": (0.72, 0.58, 0.63),
+            }
+            candidates = [
+                {
+                    "candidate": name,
+                    "scores": {
+                        "condition": condition,
+                        "contour": condition,
+                        "pose": pose,
+                        "side_profile": condition,
+                        "artifact": 1.0,
+                        "final": final,
+                    },
+                }
+                for name, (condition, pose, final) in scores.items()
+            ]
+            payload = {"outputs": outputs, "candidates": candidates}
+            write_json(score_dir / "scores.json", payload)
+            return payload
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path = root / "job.json"
+            write_json(job_path, job_payload(root))
+            with (
+                patch(
+                    "aigen.keyframes.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
+                ),
+                patch("aigen.keyframes.CharacterKontextPoseSession", FakeSession),
+                patch("aigen.keyframe_control_audit.CharacterKontextPoseSession", FakeSession),
+                patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
+                patch("aigen.keyframe_control_audit.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
+                patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
+                patch("aigen.keyframe_control_audit._generation_environment", return_value={"env": "fake"}),
+                patch(
+                    "aigen.keyframes.nvidia_smi_keyframe_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                        "nvidia_smi_preflight_utilization_gpu": 0,
+                        "vram_estimated_required_mb": 0,
+                        "vram_estimated_headroom_mb": 0,
+                    },
+                ),
+                patch(
+                    "aigen.keyframe_control_audit.nvidia_smi_keyframe_preflight",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 0,
+                        "nvidia_smi_device_total_mb": 0,
+                        "nvidia_smi_preflight_utilization_gpu": 0,
+                        "vram_estimated_required_mb": 0,
+                        "vram_estimated_headroom_mb": 0,
+                    },
+                ),
+            ):
+                run_keyframe_job(job_path, profile(), project_root=Path.cwd())
+                run_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "batch"
+                audit = run_keyframe_control_audit(
+                    run_dir,
+                    project_root=Path.cwd(),
+                    seed=42,
+                    score_runner=fake_score_runner,
+                )
+
+            audit_dir = run_dir / "control_audit"
+            self.assertEqual(audit["status"], "passed")
+            self.assertEqual(audit["seed"], 42)
+            self.assertTrue((audit_dir / "audit.json").exists())
+            self.assertTrue((audit_dir / "contact_sheet.png").exists())
+            self.assertTrue((audit_dir / "control_tensors" / "pose.pt").exists())
+            audit_calls = FakeSession.instances[-1].pipeline.calls
+            self.assertEqual([call["name"] for call in audit_calls], [
+                "control_off",
+                "current_recipe",
+                "pose_strong",
+                "contour_strong",
+                "pose_contour_strong",
+            ])
+            self.assertTrue(all(call["seed"] == 42 for call in audit_calls))
+            self.assertTrue(all(call["collect_control_stats"] for call in audit_calls))
+            self.assertEqual(
+                [condition.conditioning_scale for condition in audit_calls[0]["control_conditions"]],
+                [0.0, 0.0],
+            )
+            self.assertEqual(
+                [condition.conditioning_scale for condition in audit_calls[-1]["control_conditions"]],
+                [0.95, 0.65],
+            )
+            self.assertGreater(audit["score_deltas_vs_control_off"]["pose_contour_strong"]["condition"], 0.05)
 
     def test_character_view_accept_writes_canonical_view_bank_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

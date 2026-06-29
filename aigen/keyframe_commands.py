@@ -15,6 +15,10 @@ from aigen.keyframe_judge import (
     KeyframeJudgeError,
     judge_keyframe_run,
 )
+from aigen.keyframe_control_audit import (
+    KeyframeControlAuditError,
+    run_keyframe_control_audit,
+)
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.keyframe_polish import (
     KeyframePolishError,
@@ -211,6 +215,14 @@ def add_keyframe_commands(subparsers: Any) -> None:
     score_select.add_argument("--top-k", type=int, default=1, help="Number of ranked candidates to select")
     score_select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    control_audit = keyframe_subparsers.add_parser(
+        "control-audit",
+        help="Run fixed-seed control-off/strong-control ablations for a completed keyframe run",
+    )
+    control_audit.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    control_audit.add_argument("--seed", type=int, help="Seed to reuse for every audit variant")
+    control_audit.add_argument("--compact", action="store_true", help="Write compact JSON")
+
 
 def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
@@ -276,6 +288,17 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                     args.run_dir,
                     scorer_id=args.from_scorer,
                     top_k=args.top_k,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.keyframes_command == "control-audit":
+            dump_json(
+                stdout,
+                run_keyframe_control_audit(
+                    args.run_dir,
+                    project_root=PROJECT_ROOT,
+                    seed=args.seed,
                 ),
                 pretty=not args.compact,
             )
@@ -384,6 +407,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
         KeyframeJudgeError,
         KeyframePoseError,
         KeyframeScoreError,
+        KeyframeControlAuditError,
         KeyframeRefineError,
         KeyframePolishError,
         ManifestIOError,

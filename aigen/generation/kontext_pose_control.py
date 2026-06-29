@@ -348,6 +348,16 @@ def residual_suffix_is_zero(samples: Sequence[Any], generated_tokens: int) -> bo
     return all(sample[:, generated_tokens:].count_nonzero().item() == 0 for sample in samples)
 
 
+def residual_l2_means(samples: Sequence[Any] | None) -> list[float]:
+    if samples is None:
+        return []
+    means = [sample.detach().float().square().mean().sqrt() for sample in samples]
+    stacked = means[0].new_empty((len(means),))
+    for index, value in enumerate(means):
+        stacked[index] = value
+    return [float(value) for value in stacked.cpu().tolist()]
+
+
 def _build_kontext_pose_pipeline(
     pipeline_class: Any,
     controlnet_class: Any,
@@ -748,6 +758,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             control_guidance_end: float,
             show_progress: bool = True,
             control_conditions: Sequence[KontextControlCondition] | None = None,
+            collect_control_stats: bool = False,
         ) -> KontextPoseDenoised:
             denoise_start = synchronized_time(torch)
             latents = self.prepare_noise(prepared, seed)
@@ -821,6 +832,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 ],
                 "controlnet_condition_calls": 0,
             }
+            if collect_control_stats:
+                controlnet_metadata["residual_l2_mean_by_step"] = []
 
             self.scheduler.set_begin_index(0)
             generated_token_count = latents.shape[1]
@@ -846,6 +859,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     controlnet_single_block_samples = None
                     step_controlnet_ms = 0.0
                     active_conditions = 0
+                    step_residual_stats = []
                     for condition, keep in zip(control_conditions, controlnet_keep[i], strict=True):
                         cond_scale = condition.conditioning_scale * keep
                         if cond_scale:
@@ -877,6 +891,15 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                 single_block_samples,
                                 condition.residual_mask,
                             )
+                            if collect_control_stats:
+                                step_residual_stats.append(
+                                    {
+                                        "name": condition.name,
+                                        "effective_scale": float(cond_scale),
+                                        "double": residual_l2_means(block_samples),
+                                        "single": residual_l2_means(single_block_samples),
+                                    }
+                                )
                             controlnet_block_samples = add_control_residuals(
                                 controlnet_block_samples,
                                 block_samples,
@@ -895,6 +918,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                             control_zero_suffixes,
                         )
                         if not controlnet_metadata["double_residual_count"]:
+                            residual_l2_mean_by_step = controlnet_metadata.get("residual_l2_mean_by_step")
                             controlnet_metadata = {
                                 "generated_tokens": latents.shape[1],
                                 "reference_tokens": prepared.image_latents.shape[1],
@@ -913,6 +937,8 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                 "conditions": controlnet_metadata["conditions"],
                                 "controlnet_condition_calls": controlnet_condition_calls,
                             }
+                            if residual_l2_mean_by_step is not None:
+                                controlnet_metadata["residual_l2_mean_by_step"] = residual_l2_mean_by_step
                         if controlnet_single_block_samples:
                             controlnet_single_block_samples = extend_control_residuals(
                                 controlnet_single_block_samples,
@@ -929,6 +955,14 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                                     and residual_suffix_is_zero(controlnet_single_block_samples, latents.shape[1])
                                 )
                         controlnet_metadata["controlnet_condition_calls"] = controlnet_condition_calls
+                    if collect_control_stats:
+                        controlnet_metadata["residual_l2_mean_by_step"].append(
+                            {
+                                "step_index": i,
+                                "timestep": float(t.detach().float().cpu().item()),
+                                "conditions": step_residual_stats,
+                            }
+                        )
                     controlnet_step_ms.append(round(step_controlnet_ms, 3))
 
                     transformer_start = synchronized_time(torch)
