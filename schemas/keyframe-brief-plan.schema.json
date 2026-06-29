@@ -16,7 +16,11 @@
         "residual_mask_source": {
           "anyOf": [
             {
-              "const": "example_boundary_mask",
+              "enum": [
+                "example_boundary_mask",
+                "example_full_silhouette_mask",
+                "example_arm_hand_mask"
+              ],
               "type": "string"
             },
             {
@@ -35,7 +39,9 @@
         "source": {
           "enum": [
             "example_pose",
-            "example_contour"
+            "example_canny_lineart",
+            "example_softedge",
+            "example_gray"
           ],
           "title": "Source",
           "type": "string"
@@ -50,7 +56,8 @@
           "enum": [
             "pose",
             "canny",
-            "softedge"
+            "softedge",
+            "gray"
           ],
           "title": "Type",
           "type": "string"

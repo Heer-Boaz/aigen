@@ -83,12 +83,12 @@ class KeyframeBriefSpec(StrictModel):
 
 class BriefControlPlanSpec(StrictModel):
     name: str
-    type: Literal["pose", "canny", "softedge"]
-    source: Literal["example_pose", "example_contour"]
+    type: Literal["pose", "canny", "softedge", "gray"]
+    source: Literal["example_pose", "example_canny_lineart", "example_softedge", "example_gray"]
     scale: float = Field(ge=0.0, le=1.0)
     start: float = Field(ge=0.0, le=1.0)
     end: float = Field(ge=0.0, le=1.0)
-    residual_mask_source: Literal["example_boundary_mask"] | None = None
+    residual_mask_source: Literal["example_boundary_mask", "example_full_silhouette_mask", "example_arm_hand_mask"] | None = None
 
     @model_validator(mode="after")
     def active_window_is_ordered(self) -> BriefControlPlanSpec:
@@ -96,8 +96,13 @@ class BriefControlPlanSpec(StrictModel):
             raise ValueError("control start must be before end")
         if self.source == "example_pose" and self.type != "pose":
             raise ValueError("example_pose controls must use type pose")
-        if self.source == "example_contour" and self.type == "pose":
-            raise ValueError("example_contour controls must use canny or softedge")
+        expected_types = {
+            "example_canny_lineart": "canny",
+            "example_softedge": "softedge",
+            "example_gray": "gray",
+        }
+        if self.source in expected_types and self.type != expected_types[self.source]:
+            raise ValueError(f"{self.source} controls must use type {expected_types[self.source]}")
         if self.source == "example_pose" and self.residual_mask_source is not None:
             raise ValueError("pose controls must not use residual_mask_source")
         return self

@@ -62,23 +62,41 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         det_model=config.det_model,
         pose_model=config.pose_model,
     )
-    contour = _silhouette_contour(normalized_foreground)
+    foreground_image = _clean_foreground_image(normalized, normalized_foreground)
+    gray = _source_gray(foreground_image, normalized_foreground)
+    canny_lineart = _source_canny_lineart(foreground_image, normalized_foreground)
+    softedge = _source_softedge(foreground_image, normalized_foreground)
+    filled_silhouette = _filled_silhouette(normalized_foreground)
     boundary = _boundary_mask(normalized_foreground)
+    arm_hand_mask = _arm_hand_mask(normalized_foreground)
 
     assets = {
         "source": output_dir / f"{config.name}_source.png",
         "normalized_source": output_dir / f"{config.name}_normalized.png",
+        "foreground_clean": output_dir / f"{config.name}_foreground_clean.png",
         "pose": output_dir / f"{config.name}_pose.png",
-        "contour": output_dir / f"{config.name}_contour.png",
+        "contour": output_dir / f"{config.name}_canny_lineart.png",
+        "canny_lineart": output_dir / f"{config.name}_canny_lineart.png",
+        "gray": output_dir / f"{config.name}_gray.png",
+        "softedge": output_dir / f"{config.name}_softedge.png",
+        "filled_silhouette": output_dir / f"{config.name}_filled_silhouette.png",
+        "full_silhouette_mask": output_dir / f"{config.name}_full_silhouette_mask.png",
         "boundary_mask": output_dir / f"{config.name}_boundary.png",
+        "arm_hand_mask": output_dir / f"{config.name}_arm_hand_mask.png",
         "metadata": output_dir / f"{config.name}_extraction.json",
     }
     with Image.open(source) as image:
         image.save(assets["source"])
     normalized.convert("RGB").save(assets["normalized_source"])
+    foreground_image.save(assets["foreground_clean"])
     pose_image.save(assets["pose"])
-    contour.save(assets["contour"])
+    canny_lineart.save(assets["contour"])
+    gray.save(assets["gray"])
+    softedge.save(assets["softedge"])
+    filled_silhouette.save(assets["filled_silhouette"])
+    filled_silhouette.save(assets["full_silhouette_mask"])
     boundary.save(assets["boundary_mask"])
+    arm_hand_mask.save(assets["arm_hand_mask"])
 
     payload = {
         "schema_version": EXAMPLE_EXTRACTION_SCHEMA_VERSION,
@@ -96,9 +114,16 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         "assets": {
             "source": image_asset_json(assets["source"]),
             "normalized_source": image_asset_json(assets["normalized_source"]),
+            "foreground_clean": image_asset_json(assets["foreground_clean"]),
             "pose": image_asset_json(assets["pose"]),
             "contour": image_asset_json(assets["contour"]),
+            "canny_lineart": image_asset_json(assets["canny_lineart"]),
+            "gray": image_asset_json(assets["gray"]),
+            "softedge": image_asset_json(assets["softedge"]),
+            "filled_silhouette": image_asset_json(assets["filled_silhouette"]),
+            "full_silhouette_mask": image_asset_json(assets["full_silhouette_mask"]),
             "boundary_mask": image_asset_json(assets["boundary_mask"]),
+            "arm_hand_mask": image_asset_json(assets["arm_hand_mask"]),
         },
     }
     write_json(assets["metadata"], payload)
@@ -196,10 +221,49 @@ def _dwpose_control_image(
     }
 
 
-def _silhouette_contour(foreground: np.ndarray) -> Image.Image:
-    edge = foreground ^ ndimage.binary_erosion(foreground, structure=np.ones((3, 3), dtype=bool), iterations=1)
-    edge = ndimage.binary_dilation(edge, structure=np.ones((3, 3), dtype=bool), iterations=1)
-    return Image.fromarray((edge.astype(np.uint8) * 255), mode="L")
+def _clean_foreground_image(image: Image.Image, foreground: np.ndarray) -> Image.Image:
+    data = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    clean = np.zeros_like(data)
+    clean[foreground] = data[foreground]
+    return Image.fromarray(clean, mode="RGB")
+
+
+def _source_gray(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
+    gray = np.asarray(foreground_image.convert("L"), dtype=np.uint8)
+    gray = np.where(foreground, gray, 0).astype(np.uint8)
+    return Image.fromarray(gray, mode="L").convert("RGB")
+
+
+def _source_canny_lineart(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
+    luma = np.asarray(foreground_image.convert("L"), dtype=np.float32) / 255.0
+    gradient_x = ndimage.sobel(luma, axis=1)
+    gradient_y = ndimage.sobel(luma, axis=0)
+    gradient = np.hypot(gradient_x, gradient_y)
+    silhouette_edge = foreground ^ ndimage.binary_erosion(
+        foreground,
+        structure=np.ones((3, 3), dtype=bool),
+        iterations=1,
+    )
+    edge = (gradient > 0.08) | ndimage.binary_dilation(
+        silhouette_edge,
+        structure=np.ones((3, 3), dtype=bool),
+        iterations=1,
+    )
+    edge &= ndimage.binary_dilation(foreground, structure=np.ones((3, 3), dtype=bool), iterations=1)
+    return Image.fromarray((edge.astype(np.uint8) * 255), mode="L").convert("RGB")
+
+
+def _source_softedge(foreground_image: Image.Image, foreground: np.ndarray) -> Image.Image:
+    lineart = np.asarray(_source_canny_lineart(foreground_image, foreground).convert("L"), dtype=np.float32) / 255.0
+    silhouette = foreground.astype(np.float32)
+    boundary = np.abs(ndimage.gaussian_filter(silhouette, sigma=1.2) - ndimage.gaussian_filter(silhouette, sigma=3.0))
+    soft = np.maximum(ndimage.gaussian_filter(lineart, sigma=0.7), boundary)
+    soft = soft / max(float(soft.max()), 1e-6)
+    return Image.fromarray((soft * 255.0).astype(np.uint8), mode="L").convert("RGB")
+
+
+def _filled_silhouette(foreground: np.ndarray) -> Image.Image:
+    return Image.fromarray((foreground.astype(np.uint8) * 255), mode="L")
 
 
 def _boundary_mask(foreground: np.ndarray) -> Image.Image:
@@ -221,6 +285,21 @@ def _boundary_mask(foreground: np.ndarray) -> Image.Image:
         iterations=DEFAULT_BOUNDARY_FEATHER_SUPPORT_PX,
     )
     soft = np.where(support, soft, 0.0)
+    soft = soft / max(float(soft.max()), 1e-6)
+    return Image.fromarray((soft * 255.0).astype(np.uint8), mode="L")
+
+
+def _arm_hand_mask(foreground: np.ndarray) -> Image.Image:
+    x1, y1, x2, y2 = _bbox(foreground)
+    ys, xs = np.indices(foreground.shape)
+    width = x2 - x1
+    height = y2 - y1
+    center_x = (x1 + x2) * 0.5
+    upper_body = (ys >= y1 + height * 0.08) & (ys <= y1 + height * 0.68)
+    lateral_extremity = np.abs(xs - center_x) >= width * 0.27
+    mask = foreground & upper_body & lateral_extremity
+    mask = ndimage.binary_dilation(mask, structure=np.ones((3, 3), dtype=bool), iterations=max(4, round(width * 0.035)))
+    soft = ndimage.gaussian_filter(mask.astype(np.float32), sigma=5.0)
     soft = soft / max(float(soft.max()), 1e-6)
     return Image.fromarray((soft * 255.0).astype(np.uint8), mode="L")
 

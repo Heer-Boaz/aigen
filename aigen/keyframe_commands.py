@@ -107,7 +107,7 @@ def add_keyframe_commands(subparsers: Any) -> None:
 
     extract_example = keyframe_subparsers.add_parser(
         "extract-example",
-        help="Extract pose, contour and boundary assets from a source keyframe example",
+        help="Extract source pose, gray, lineart, softedge and mask controls from a keyframe example",
     )
     extract_example.add_argument("--source", type=Path, required=True, help="Source example image")
     extract_example.add_argument("--output-dir", type=Path, required=True, help="Directory for extracted assets")

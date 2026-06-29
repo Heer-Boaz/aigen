@@ -5,13 +5,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from aigen.generation.kontext_pose_control import CharacterKontextPoseSession, KontextControlCondition
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, synchronized_time
 from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.keyframe_job_models import ControlConditionSpec, KeyframeJobSpec, load_keyframe_job
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_keyframe_preflight
 from aigen.keyframe_score import DEFAULT_SCORER_ID, KeyframeScoreConfig, score_keyframe_run
-from aigen.keyframes import _generation_environment, _prepare_control_images, _prepare_masks, resolve_keyframe_spec
+from aigen.keyframes import _generation_environment, resolve_keyframe_spec
 from aigen.manifest_io import read_json, sha256_bytes, write_json
 
 
@@ -96,9 +98,23 @@ def run_keyframe_control_audit(
             guidance_scale=source_spec.sampling.guidance_scale,
             seed=audit_seed,
         )
-        control_images, control_repeats = _prepare_control_images(session, prepared, source_spec, source_resolved)
-        masks = _prepare_masks(session, prepared, source_spec, source_resolved)
+        control_images, control_repeats = _prepare_audit_control_images(
+            session,
+            prepared,
+            source_resolved,
+            audit_seed,
+            variants,
+        )
+        masks = _prepare_audit_masks(session, prepared, source_resolved, variants)
         control_tensor_metadata = _save_control_tensors(torch, control_images, audit_dir / "control_tensors")
+        control_debug_metadata = _save_control_debug_images(
+            session,
+            prepared,
+            source_resolved,
+            control_images,
+            control_repeats,
+            audit_dir / "control_debug",
+        )
         session.pipeline.maybe_free_model_hooks()
 
         denoised = []
@@ -197,6 +213,7 @@ def run_keyframe_control_audit(
         run_result,
         score_result,
         control_tensor_metadata,
+        control_debug_metadata,
         scorer_id,
     )
     write_json(audit_dir / "audit.json", audit_payload)
@@ -235,49 +252,107 @@ def _profile_from_resolved(resolved: dict[str, Any]) -> Any:
 
 def _audit_variants(spec: KeyframeJobSpec) -> list[ControlAuditVariant]:
     return [
-        ControlAuditVariant("control_off", _scaled_conditions(spec, pose_scale=0.0, contour_scale=0.0)),
-        ControlAuditVariant("current_recipe", [condition.model_copy() for condition in spec.conditions]),
-        ControlAuditVariant("pose_strong", _scaled_conditions(spec, pose_scale=1.0, pose_end=0.80, contour_scale=0.0)),
         ControlAuditVariant(
-            "contour_strong",
-            _scaled_conditions(spec, pose_scale=0.0, contour_scale=0.70, contour_end=0.80),
+            "control_off",
+            [
+                _condition("pose", "pose", "pose", 0.0, 0.0, 0.65),
+                _condition("canny_lineart", "canny", "canny_lineart", 0.0, 0.0, 0.80),
+                _condition("softedge", "softedge", "softedge", 0.0, 0.0, 0.80),
+                _condition("gray", "gray", "gray", 0.0, 0.0, 0.80),
+            ],
+        ),
+        ControlAuditVariant("current_contour_baseline", [condition.model_copy() for condition in spec.conditions]),
+        ControlAuditVariant("pose_only_strong", [_condition("pose", "pose", "pose", 0.90, 0.0, 0.65)]),
+        ControlAuditVariant(
+            "canny_lineart_unmasked",
+            [_condition("canny_lineart", "canny", "canny_lineart", 0.70, 0.0, 0.80)],
         ),
         ControlAuditVariant(
-            "pose_contour_strong",
-            _scaled_conditions(spec, pose_scale=0.95, pose_end=0.80, contour_scale=0.65, contour_end=0.80),
+            "softedge_unmasked",
+            [_condition("softedge", "softedge", "softedge", 0.70, 0.0, 0.80)],
+        ),
+        ControlAuditVariant("gray_unmasked", [_condition("gray", "gray", "gray", 0.90, 0.0, 0.80)]),
+        ControlAuditVariant(
+            "pose_plus_softedge",
+            [
+                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
+                _condition("softedge", "softedge", "softedge", 0.55, 0.0, 0.80),
+            ],
+        ),
+        ControlAuditVariant(
+            "pose_plus_gray",
+            [
+                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
+                _condition("gray", "gray", "gray", 0.65, 0.0, 0.80),
+            ],
+        ),
+        ControlAuditVariant(
+            "pose_plus_canny_lineart",
+            [
+                _condition("pose", "pose", "pose", 0.80, 0.0, 0.65),
+                _condition("canny_lineart", "canny", "canny_lineart", 0.55, 0.0, 0.80),
+            ],
         ),
     ]
 
 
-def _scaled_conditions(
-    spec: KeyframeJobSpec,
-    *,
-    pose_scale: float,
-    contour_scale: float,
-    pose_end: float | None = None,
-    contour_end: float | None = None,
-) -> list[ControlConditionSpec]:
-    conditions = []
-    for condition in spec.conditions:
-        if condition.type == "pose":
-            conditions.append(
-                condition.model_copy(
-                    update={
-                        "scale": pose_scale,
-                        "end": condition.end if pose_end is None else pose_end,
-                    }
-                )
-            )
-        else:
-            conditions.append(
-                condition.model_copy(
-                    update={
-                        "scale": contour_scale,
-                        "end": condition.end if contour_end is None else contour_end,
-                    }
-                )
-            )
-    return conditions
+def _condition(
+    name: str,
+    condition_type: str,
+    image: str,
+    scale: float,
+    start: float,
+    end: float,
+) -> ControlConditionSpec:
+    return ControlConditionSpec(name=name, type=condition_type, image=image, scale=scale, start=start, end=end)
+
+
+def _prepare_audit_control_images(
+    session: CharacterKontextPoseSession,
+    prepared: Any,
+    resolved: dict[str, Any],
+    seed: int,
+    variants: list[ControlAuditVariant],
+) -> tuple[dict[str, Any], dict[str, bool]]:
+    control_images = {"pose": prepared.control_image}
+    control_repeats = {"pose": prepared.controlnet_blocks_repeat}
+    for condition in _unique_conditions(variants):
+        if condition.image in control_images:
+            continue
+        with Image.open(resolved["assets"][condition.image]["path"]) as image:
+            control_image = image.convert("RGB")
+        prepared_control, blocks_repeat, _prepare_ms = session.prepare_control_condition(
+            prepared,
+            pose_image=control_image,
+            seed=seed,
+        )
+        control_images[condition.image] = prepared_control
+        control_repeats[condition.image] = blocks_repeat
+    return control_images, control_repeats
+
+
+def _prepare_audit_masks(
+    session: CharacterKontextPoseSession,
+    prepared: Any,
+    resolved: dict[str, Any],
+    variants: list[ControlAuditVariant],
+) -> dict[str, Any]:
+    masks = {}
+    for condition in _unique_conditions(variants):
+        if not condition.residual_mask or condition.residual_mask in masks:
+            continue
+        with Image.open(resolved["assets"][condition.residual_mask]["path"]) as image:
+            mask_image = image.convert("RGB")
+        masks[condition.residual_mask] = session.prepare_residual_mask(prepared, mask_image)
+    return masks
+
+
+def _unique_conditions(variants: list[ControlAuditVariant]) -> list[ControlConditionSpec]:
+    conditions = {}
+    for variant in variants:
+        for condition in variant.conditions:
+            conditions[condition.image, condition.residual_mask] = condition
+    return list(conditions.values())
 
 
 def _variant_json(variant: ControlAuditVariant, steps: int) -> dict[str, Any]:
@@ -312,12 +387,53 @@ def _save_control_tensors(torch: Any, control_images: dict[str, Any], output_dir
     for name, tensor in control_images.items():
         tensor_path = output_dir / f"{name}.pt"
         torch.save(tensor.detach().cpu(), tensor_path)
+        values = tensor.detach().float()
         metadata[name] = {
             "path": tensor_path.as_posix(),
             "sha256": _tensor_sha256(torch, tensor),
             "shape": list(tensor.shape),
             "dtype": str(tensor.dtype),
             "device": str(tensor.device),
+            "min": float(values.min().cpu().item()),
+            "max": float(values.max().cpu().item()),
+            "mean": float(values.mean().cpu().item()),
+            "std": float(values.std(unbiased=False).cpu().item()),
+        }
+    return metadata
+
+
+def _save_control_debug_images(
+    session: CharacterKontextPoseSession,
+    prepared: Any,
+    resolved: dict[str, Any],
+    control_images: dict[str, Any],
+    control_repeats: dict[str, bool],
+    output_dir: Path,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True)
+    metadata = {}
+    for name, tensor in control_images.items():
+        asset = resolved["assets"][name]
+        suffix = Path(asset["path"]).suffix
+        original_path = output_dir / f"{name}_original{suffix}"
+        preprocessed_path = output_dir / f"{name}_preprocessed.png"
+        roundtrip_path = output_dir / f"{name}_vae_roundtrip.png"
+        shutil.copy2(asset["path"], original_path)
+        with Image.open(asset["path"]) as image:
+            image.convert("RGB").resize(
+                (prepared.width, prepared.height),
+                Image.Resampling.LANCZOS,
+            ).save(preprocessed_path)
+        session.decode_control_condition(
+            prepared,
+            tensor,
+            controlnet_blocks_repeat=control_repeats[name],
+        ).save(roundtrip_path)
+        metadata[name] = {
+            "original": original_path.as_posix(),
+            "preprocessed": preprocessed_path.as_posix(),
+            "vae_roundtrip": roundtrip_path.as_posix(),
+            "controlnet_blocks_repeat": control_repeats[name],
         }
     return metadata
 
@@ -349,6 +465,7 @@ def _audit_payload(
     run_result: dict[str, Any],
     score_result: dict[str, Any],
     control_tensor_metadata: dict[str, Any],
+    control_debug_metadata: dict[str, Any],
     scorer_id: str,
 ) -> dict[str, Any]:
     score_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
@@ -369,6 +486,7 @@ def _audit_payload(
         },
         "variants": [_variant_json(variant, source_result["effective_config"]["sampling"]["steps"]) for variant in variants],
         "control_tensors": control_tensor_metadata,
+        "control_debug": control_debug_metadata,
         "score_deltas_vs_control_off": score_deltas,
         "plain_flux_controlnet_strong": {
             "status": "not_run",
@@ -405,7 +523,15 @@ def _audit_pass_status(
     score_by_name: dict[str, Any],
     score_deltas: dict[str, dict[str, float]],
 ) -> dict[str, Any]:
-    strong_names = ("pose_strong", "contour_strong", "pose_contour_strong")
+    strong_names = (
+        "pose_only_strong",
+        "canny_lineart_unmasked",
+        "softedge_unmasked",
+        "gray_unmasked",
+        "pose_plus_softedge",
+        "pose_plus_gray",
+        "pose_plus_canny_lineart",
+    )
     latent_deltas = {
         output["name"]: output["latent_delta_vs_control_off"]["mean_abs"]
         for output in run_result["outputs"]

@@ -302,7 +302,17 @@ def _resolve_assets(spec: KeyframeJobSpec, base_dir: Path) -> dict[str, dict[str
         "identity_primer": image_asset_json(resolve_existing_path(spec.character.identity_primer.path, base_dir)),
         "pose": image_asset_json(resolve_existing_path(spec.assets.pose.path, base_dir)),
     }
-    for name in ("contour", "boundary_mask", "depth", "softedge"):
+    for name in (
+        "contour",
+        "canny_lineart",
+        "boundary_mask",
+        "depth",
+        "softedge",
+        "gray",
+        "filled_silhouette",
+        "full_silhouette_mask",
+        "arm_hand_mask",
+    ):
         asset = getattr(spec.assets, name)
         if asset:
             assets[name] = image_asset_json(resolve_existing_path(asset.path, base_dir))

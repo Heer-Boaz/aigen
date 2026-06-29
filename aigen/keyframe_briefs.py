@@ -222,7 +222,7 @@ def _keyframe_job_from_brief(
     job_path: Path,
     project_root: Path,
 ) -> KeyframeJobSpec:
-    assets = _assets_from_plan(plan, extraction, job_path.parent)
+    assets = _assets_from_extraction(extraction, job_path.parent)
     conditions = [_condition_from_plan(control) for control in plan.controls]
     job = KeyframeJobSpec(
         **{
@@ -266,25 +266,34 @@ def _keyframe_job_from_brief(
     return job
 
 
-def _assets_from_plan(plan: KeyframeBriefPlanSpec, extraction: dict[str, Any], base_dir: Path) -> AssetSpec:
+def _assets_from_extraction(extraction: dict[str, Any], base_dir: Path) -> AssetSpec:
     extracted_assets = extraction["assets"]
-    pose_path = relative_path(Path(extracted_assets["pose"]["path"]), base_dir)
-    contour_path = None
-    boundary_path = None
-    if any(control.source == "example_contour" for control in plan.controls):
-        contour_path = relative_path(Path(extracted_assets["contour"]["path"]), base_dir)
-    if any(control.residual_mask_source == "example_boundary_mask" for control in plan.controls):
-        boundary_path = relative_path(Path(extracted_assets["boundary_mask"]["path"]), base_dir)
     return AssetSpec(
-        pose=PathSpec(path=pose_path),
-        contour=PathSpec(path=contour_path) if contour_path else None,
-        boundary_mask=PathSpec(path=boundary_path) if boundary_path else None,
+        pose=_asset_path_spec(extracted_assets, "pose", base_dir),
+        contour=_asset_path_spec(extracted_assets, "contour", base_dir),
+        canny_lineart=_asset_path_spec(extracted_assets, "canny_lineart", base_dir),
+        boundary_mask=_asset_path_spec(extracted_assets, "boundary_mask", base_dir),
+        softedge=_asset_path_spec(extracted_assets, "softedge", base_dir),
+        gray=_asset_path_spec(extracted_assets, "gray", base_dir),
+        filled_silhouette=_asset_path_spec(extracted_assets, "filled_silhouette", base_dir),
+        full_silhouette_mask=_asset_path_spec(extracted_assets, "full_silhouette_mask", base_dir),
+        arm_hand_mask=_asset_path_spec(extracted_assets, "arm_hand_mask", base_dir),
     )
 
 
 def _condition_from_plan(control: BriefControlPlanSpec) -> ControlConditionSpec:
-    image = "pose" if control.source == "example_pose" else "contour"
-    residual_mask = "boundary_mask" if control.residual_mask_source == "example_boundary_mask" else None
+    image = {
+        "example_pose": "pose",
+        "example_canny_lineart": "canny_lineart",
+        "example_softedge": "softedge",
+        "example_gray": "gray",
+    }[control.source]
+    residual_mask = {
+        None: None,
+        "example_boundary_mask": "boundary_mask",
+        "example_full_silhouette_mask": "full_silhouette_mask",
+        "example_arm_hand_mask": "arm_hand_mask",
+    }[control.residual_mask_source]
     return ControlConditionSpec(
         name=control.name,
         type=control.type,
@@ -294,6 +303,10 @@ def _condition_from_plan(control: BriefControlPlanSpec) -> ControlConditionSpec:
         end=control.end,
         residual_mask=residual_mask,
     )
+
+
+def _asset_path_spec(extracted_assets: dict[str, Any], name: str, base_dir: Path) -> PathSpec:
+    return PathSpec(path=relative_path(Path(extracted_assets[name]["path"]), base_dir))
 
 
 def _seed_name(seed: int) -> str:

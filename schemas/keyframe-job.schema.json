@@ -25,7 +25,29 @@
     "AssetSpec": {
       "additionalProperties": false,
       "properties": {
+        "arm_hand_mask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "boundary_mask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "canny_lineart": {
           "anyOf": [
             {
               "$ref": "#/$defs/PathSpec"
@@ -48,6 +70,39 @@
           "default": null
         },
         "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "filled_silhouette": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "full_silhouette_mask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gray": {
           "anyOf": [
             {
               "$ref": "#/$defs/PathSpec"
@@ -166,7 +221,8 @@
             "pose",
             "canny",
             "softedge",
-            "depth"
+            "depth",
+            "gray"
           ],
           "title": "Type",
           "type": "string"

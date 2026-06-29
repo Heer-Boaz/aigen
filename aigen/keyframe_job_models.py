@@ -46,9 +46,14 @@ class KeyframeSpec(StrictModel):
 class AssetSpec(StrictModel):
     pose: PathSpec
     contour: PathSpec | None = None
+    canny_lineart: PathSpec | None = None
     boundary_mask: PathSpec | None = None
     depth: PathSpec | None = None
     softedge: PathSpec | None = None
+    gray: PathSpec | None = None
+    filled_silhouette: PathSpec | None = None
+    full_silhouette_mask: PathSpec | None = None
+    arm_hand_mask: PathSpec | None = None
 
 
 class PromptSpec(StrictModel):
@@ -72,7 +77,7 @@ class SamplingSpec(StrictModel):
 
 class ControlConditionSpec(StrictModel):
     name: str
-    type: Literal["pose", "canny", "softedge", "depth"]
+    type: Literal["pose", "canny", "softedge", "depth", "gray"]
     image: str
     scale: float
     start: float

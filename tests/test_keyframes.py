@@ -811,10 +811,16 @@ def job_payload(root: Path) -> dict[str, object]:
     reference = root / "assets" / "AI46.png"
     pose = root / "assets" / "pose.png"
     contour = root / "assets" / "contour.png"
+    canny_lineart = root / "assets" / "canny_lineart.png"
+    softedge = root / "assets" / "softedge.png"
+    gray = root / "assets" / "gray.png"
     mask = root / "assets" / "mask.png"
     write_image(reference, (1024, 2048), (255, 255, 255))
     write_image(pose, (512, 768), (0, 255, 0))
     write_image(contour, (512, 768), (255, 255, 255))
+    write_image(canny_lineart, (512, 768), (255, 255, 255))
+    write_image(softedge, (512, 768), (160, 160, 160))
+    write_image(gray, (512, 768), (120, 120, 120))
     write_image(mask, (512, 768), (128, 128, 128))
     return {
         "$schema": "../../schemas/keyframe-job.schema.json",
@@ -835,6 +841,9 @@ def job_payload(root: Path) -> dict[str, object]:
         "assets": {
             "pose": {"path": "assets/pose.png"},
             "contour": {"path": "assets/contour.png"},
+            "canny_lineart": {"path": "assets/canny_lineart.png"},
+            "softedge": {"path": "assets/softedge.png"},
+            "gray": {"path": "assets/gray.png"},
             "boundary_mask": {"path": "assets/mask.png"},
         },
         "prompt": {
@@ -970,6 +979,8 @@ class FakeSession:
             controlnet_blocks_repeat=False,
             token_metadata={"generated_tokens": 1536},
             image_latents=torch.zeros((1, 2, 3)),
+            width=kwargs["width"],
+            height=kwargs["height"],
         )
 
     def prepare_control_condition(self, _prepared: object, *, pose_image: object, seed: int) -> tuple[torch.Tensor, bool, float]:
@@ -978,6 +989,15 @@ class FakeSession:
 
     def prepare_residual_mask(self, _prepared: object, mask_image: object) -> torch.Tensor:
         return torch.ones((1, 2, 1))
+
+    def decode_control_condition(
+        self,
+        _prepared: object,
+        _control_image: torch.Tensor,
+        *,
+        controlnet_blocks_repeat: bool,
+    ) -> FakeImage:
+        return FakeImage("control")
 
     def decode_many(self, _prepared: object, denoised: list[object], *, chunk_size: int) -> tuple[list[FakeImage], float]:
         if self.pipeline.free_model_hooks_calls < 2:
@@ -1291,10 +1311,14 @@ class KeyframeTests(unittest.TestCase):
             }
             scores = {
                 "control_off": (0.10, 0.10, 0.10),
-                "current_recipe": (0.20, 0.12, 0.19),
-                "pose_strong": (0.28, 0.40, 0.36),
-                "contour_strong": (0.60, 0.20, 0.46),
-                "pose_contour_strong": (0.72, 0.58, 0.63),
+                "current_contour_baseline": (0.20, 0.12, 0.19),
+                "pose_only_strong": (0.28, 0.40, 0.36),
+                "canny_lineart_unmasked": (0.42, 0.18, 0.35),
+                "softedge_unmasked": (0.60, 0.20, 0.46),
+                "gray_unmasked": (0.55, 0.22, 0.43),
+                "pose_plus_softedge": (0.72, 0.58, 0.63),
+                "pose_plus_gray": (0.68, 0.55, 0.60),
+                "pose_plus_canny_lineart": (0.62, 0.50, 0.57),
             }
             candidates = [
                 {
@@ -1365,25 +1389,30 @@ class KeyframeTests(unittest.TestCase):
             self.assertTrue((audit_dir / "audit.json").exists())
             self.assertTrue((audit_dir / "contact_sheet.png").exists())
             self.assertTrue((audit_dir / "control_tensors" / "pose.pt").exists())
+            self.assertTrue((audit_dir / "control_debug" / "softedge_vae_roundtrip.png").exists())
             audit_calls = FakeSession.instances[-1].pipeline.calls
             self.assertEqual([call["name"] for call in audit_calls], [
                 "control_off",
-                "current_recipe",
-                "pose_strong",
-                "contour_strong",
-                "pose_contour_strong",
+                "current_contour_baseline",
+                "pose_only_strong",
+                "canny_lineart_unmasked",
+                "softedge_unmasked",
+                "gray_unmasked",
+                "pose_plus_softedge",
+                "pose_plus_gray",
+                "pose_plus_canny_lineart",
             ])
             self.assertTrue(all(call["seed"] == 42 for call in audit_calls))
             self.assertTrue(all(call["collect_control_stats"] for call in audit_calls))
             self.assertEqual(
                 [condition.conditioning_scale for condition in audit_calls[0]["control_conditions"]],
-                [0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
             )
             self.assertEqual(
                 [condition.conditioning_scale for condition in audit_calls[-1]["control_conditions"]],
-                [0.95, 0.65],
+                [0.80, 0.55],
             )
-            self.assertGreater(audit["score_deltas_vs_control_off"]["pose_contour_strong"]["condition"], 0.05)
+            self.assertGreater(audit["score_deltas_vs_control_off"]["pose_plus_softedge"]["condition"], 0.05)
 
     def test_character_view_accept_writes_canonical_view_bank_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1469,6 +1498,11 @@ class KeyframeTests(unittest.TestCase):
             assets = result["assets"]
             self.assertTrue(Path(assets["pose"]["path"]).exists())
             self.assertTrue(Path(assets["contour"]["path"]).exists())
+            self.assertTrue(Path(assets["gray"]["path"]).exists())
+            self.assertTrue(Path(assets["softedge"]["path"]).exists())
+            self.assertTrue(Path(assets["canny_lineart"]["path"]).exists())
+            self.assertTrue(Path(assets["filled_silhouette"]["path"]).exists())
+            self.assertTrue(Path(assets["arm_hand_mask"]["path"]).exists())
             self.assertTrue(Path(assets["boundary_mask"]["path"]).exists())
             self.assertEqual(assets["pose"]["width"], 160)
             self.assertEqual(assets["contour"]["height"], 240)

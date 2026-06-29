@@ -229,6 +229,19 @@ class CharacterKontextPoseSession:
             dtype=prepared.dtype,
         )
 
+    def decode_control_condition(
+        self,
+        prepared: KontextPosePrepared,
+        control_image: Any,
+        *,
+        controlnet_blocks_repeat: bool,
+    ) -> Any:
+        return self.pipeline.decode_control_condition(
+            prepared,
+            control_image,
+            controlnet_blocks_repeat=controlnet_blocks_repeat,
+        )
+
     def denoise_many(
         self,
         prepared: KontextPosePrepared,
@@ -541,6 +554,24 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             repeat_by = batch_size if mask.shape[0] == 1 else num_images_per_prompt
             mask = mask.repeat_interleave(repeat_by, dim=0)
             return mask.flatten(2).transpose(1, 2).to(device=device, dtype=dtype)
+
+        @torch.no_grad()
+        def decode_control_condition(
+            self,
+            prepared: KontextPosePrepared,
+            control_image: Any,
+            *,
+            controlnet_blocks_repeat: bool,
+            output_type: str = "pil",
+        ) -> Any:
+            if controlnet_blocks_repeat:
+                return self.image_processor.postprocess(control_image, output_type=output_type)[0]
+
+            latents = control_image.to(device=prepared.device, dtype=prepared.dtype)
+            latents = self._unpack_latents(latents, prepared.height, prepared.width, self.vae_scale_factor)
+            latents = (latents / self.vae.config.scaling_factor) + self.vae.config.shift_factor
+            output = self.vae.decode(latents, return_dict=False)[0]
+            return self.image_processor.postprocess(output, output_type=output_type)[0]
 
         @torch.no_grad()
         def prepare_conditioning(

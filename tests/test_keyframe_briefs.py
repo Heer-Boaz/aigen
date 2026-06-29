@@ -109,9 +109,9 @@ class FakeBriefPlanner:
                 "controls": [
                     {"name": "source_pose", "type": "pose", "source": "example_pose", "scale": 0.72, "start": 0.0, "end": 0.65},
                     {
-                        "name": "source_contour",
-                        "type": "canny",
-                        "source": "example_contour",
+                        "name": "source_softedge",
+                        "type": "softedge",
+                        "source": "example_softedge",
                         "scale": 0.25,
                         "start": 0.0,
                         "end": 0.35,
@@ -221,7 +221,7 @@ class KeyframeBriefTests(unittest.TestCase):
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
             self.assertEqual(result["status"], "planned")
             self.assertEqual(plan["identity_primer"]["view"], "left_profile")
-            self.assertEqual(plan["controls"][1]["source"], "example_contour")
+            self.assertEqual(plan["controls"][1]["source"], "example_softedge")
             self.assertEqual(plan["polish"]["profile"], "kontext-inpaint-local")
             self.assertEqual(plan["polish"]["strength_offsets"], [-0.06, 0.0, 0.06])
             self.assertNotIn("policy", plan["polish"])
@@ -274,7 +274,7 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(result["status"], "materialized")
             self.assertEqual(job["character"]["identity_primer"]["view"], "left_profile")
             self.assertEqual(job["conditions"][0]["image"], "pose")
-            self.assertEqual(job["conditions"][1]["image"], "contour")
+            self.assertEqual(job["conditions"][1]["image"], "softedge")
             self.assertEqual(job["conditions"][1]["residual_mask"], "boundary_mask")
             self.assertEqual(job["variants"][0], {"name": "seed_060", "seed": 60})
             self.assertEqual(job["variants"][-1], {"name": "seed_063", "seed": 63})
