@@ -155,7 +155,8 @@ def select_scored_keyframe_run(
 ) -> dict[str, Any]:
     if top_k < 1:
         raise KeyframeScoreError("top_k must be at least 1")
-    score_dir = run_dir.resolve() / "score" / scorer_id
+    resolved_run_dir = run_dir.resolve()
+    score_dir = resolved_run_dir / "score" / scorer_id
     score_result = read_json(score_dir / "scores.json", label="keyframe score result")
     selection = score_result["selection"]
     if not selection["usable_for_auto_select"]:
@@ -164,7 +165,7 @@ def select_scored_keyframe_run(
             f"({', '.join(selection['blockers'])})."
         )
 
-    semantic_gate = _load_semantic_selection_gate(run_dir.resolve(), score_result)
+    semantic_gate = _load_semantic_selection_gate(resolved_run_dir, score_result)
     candidates_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
     eligible_names = [
         name
@@ -183,7 +184,7 @@ def select_scored_keyframe_run(
     ]
     selected_path = score_dir / "selected.json"
     rejected_path = score_dir / "rejected.json"
-    selected_contact_sheet_path = score_dir / "selected_contact_sheet.png"
+    selected_contact_sheet_path = resolved_run_dir / "selected_contact_sheet.png"
     _save_ranked_sheet(selected, selected_contact_sheet_path, image_key="image")
     selected_payload = {
         "schema_version": 1,
@@ -208,7 +209,7 @@ def select_scored_keyframe_run(
         "schema_version": 1,
         "status": "completed",
         "scorer": scorer_id,
-        "run_dir": run_dir.resolve().as_posix(),
+        "run_dir": resolved_run_dir.as_posix(),
         "selection": selection,
         "semantic_gate": semantic_gate,
         "best": selected[0]["candidate"],
