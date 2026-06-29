@@ -73,6 +73,7 @@ class KontextInpaintRefiner:
         pipeline_kwargs["transformer"] = transformer
 
         self.pipeline = pipeline_class.from_pretrained(profile.model, **pipeline_kwargs)
+        self.pipeline.set_progress_bar_config(disable=True)
         if profile.vae_tiling:
             self.pipeline.vae.enable_tiling()
         else:
@@ -274,8 +275,9 @@ def run_keyframe_refine_job(
     try:
         total_start = perf_counter()
         variant_results = []
+        progress.begin(len(spec.variants), "refine variants")
         if len(spec.variants) == 1:
-            progress.step(f"refine {spec.variants[0].name}")
+            progress.phase(f"refine {spec.variants[0].name} (1/1)")
             variant_results.append(
                 run_keyframe_refine_variant(
                     job_path,
@@ -286,7 +288,7 @@ def run_keyframe_refine_job(
                     progress=progress,
                 )
             )
-            progress.step("collect refine output")
+            progress.step(f"refined {spec.variants[0].name} (1/1)")
         else:
             variant_results = _run_refine_variants_in_subprocesses(
                 job_path,
@@ -620,8 +622,10 @@ def _load_kontext_inpaint() -> tuple[Any, Any]:
     try:
         import torch
         from diffusers import FluxKontextInpaintPipeline
+        from diffusers.utils import logging as diffusers_logging
     except ImportError as exc:
         raise KeyframeRefineError("keyframe refine requires `pip install -e .[generation]`") from exc
+    diffusers_logging.disable_progress_bar()
     return torch, FluxKontextInpaintPipeline
 
 

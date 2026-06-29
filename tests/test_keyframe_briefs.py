@@ -427,7 +427,12 @@ class KeyframeBriefTests(unittest.TestCase):
             plan_mock.assert_called_once()
             run_mock.assert_called_once()
             score_mock.assert_called_once_with(run_dir, ANY, project_root=Path.cwd())
-            judge_mock.assert_called_once_with(run_dir, judge_config(), project_root=Path.cwd())
+            judge_mock.assert_called_once_with(
+                run_dir,
+                judge_config(),
+                project_root=Path.cwd(),
+                progress=SILENT_STATUS,
+            )
             select_mock.assert_called_once_with(run_dir, top_k=2)
             polish_mock.assert_called_once()
 

@@ -1839,6 +1839,7 @@ class KeyframeTests(unittest.TestCase):
                     run_dir,
                     config,
                     project_root=Path.cwd(),
+                    progress=SILENT_STATUS,
                 )
             judge_dir = run_dir / "judge" / DEFAULT_JUDGE_ID
             overlay_exists = Path(judge_result["candidates"][0]["overlay"]).exists()
@@ -1876,6 +1877,7 @@ class KeyframeTests(unittest.TestCase):
                         temperature=0.0,
                     ),
                     project_root=Path.cwd(),
+                    progress=SILENT_STATUS,
                 )
 
         self.assertTrue(runner.closed)
@@ -1902,7 +1904,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframe_judge.QwenVlm", return_value=PassesFieldJudgeRunner()),
                 self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
             ):
-                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+                judge_keyframe_run(run_dir, config, project_root=Path.cwd(), progress=SILENT_STATUS)
 
     def test_keyframe_judge_accepts_markdown_wrapped_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1925,7 +1927,7 @@ class KeyframeTests(unittest.TestCase):
             with (
                 patch("aigen.keyframe_judge.QwenVlm", return_value=MarkdownJudgeRunner()),
             ):
-                result = judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+                result = judge_keyframe_run(run_dir, config, project_root=Path.cwd(), progress=SILENT_STATUS)
 
             self.assertEqual(result["status"], "completed")
 
@@ -1951,7 +1953,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframe_judge.QwenVlm", return_value=EvidenceListJudgeRunner()),
                 self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
             ):
-                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+                judge_keyframe_run(run_dir, config, project_root=Path.cwd(), progress=SILENT_STATUS)
 
     def test_keyframe_score_ranks_condition_match_from_saved_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

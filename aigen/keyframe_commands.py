@@ -280,6 +280,7 @@ def run_keyframe_command(
                     args.run_dir,
                     judge_config_from_args(args),
                     project_root=PROJECT_ROOT,
+                    progress=progress,
                 ),
                 pretty=not args.compact,
             )

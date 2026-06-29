@@ -73,6 +73,7 @@ def run_keyframe_control_audit(
     total_start = perf_counter()
     outputs = []
     variant_results = []
+    progress.begin(len(variants), "audit variants")
     for index, variant in enumerate(variants, start=1):
         progress.phase(f"audit {variant.name} ({index}/{len(variants)})")
         _release_cuda_cache()

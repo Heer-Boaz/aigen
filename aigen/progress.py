@@ -20,6 +20,8 @@ class RuntimeStatusSnapshot:
     label: str
     phase: str
     events: int
+    completed: int
+    total: int
     elapsed_seconds: float
     frame: int
     final: bool
@@ -33,6 +35,8 @@ class StatusReporter(Protocol):
     def __enter__(self) -> StatusReporter: ...
 
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None: ...
+
+    def begin(self, total: int, phase: str) -> None: ...
 
     def phase(self, text: str) -> None: ...
 
@@ -56,6 +60,8 @@ class RuntimeStatus:
         self._telemetry = telemetry
         self._phase = "starting"
         self._events = 0
+        self._completed = 0
+        self._total = 0
         self._started_at = time.monotonic()
         self._frame = 0
         self._done = Event()
@@ -100,9 +106,18 @@ class RuntimeStatus:
         with self._lock:
             self._phase = text
 
+    def begin(self, total: int, phase: str) -> None:
+        if total < 0:
+            raise ValueError("progress total must be non-negative")
+        with self._lock:
+            self._total = total
+            self._completed = 0
+            self._phase = phase
+
     def step(self, text: str) -> None:
         with self._lock:
             self._events += 1
+            self._completed += 1
             self._phase = text
 
     def finish(self, status: str) -> None:
@@ -128,10 +143,14 @@ class RuntimeStatus:
         with self._lock:
             phase = self._phase
             events = self._events
+            completed = self._completed
+            total = self._total
         snapshot = RuntimeStatusSnapshot(
             label=self._label,
             phase=phase,
             events=events,
+            completed=completed,
+            total=total,
             elapsed_seconds=time.monotonic() - self._started_at,
             frame=self._frame,
             final=final,
@@ -180,6 +199,9 @@ class SilentRuntimeStatus:
     def phase(self, text: str) -> None:
         pass
 
+    def begin(self, total: int, phase: str) -> None:
+        pass
+
     def step(self, text: str) -> None:
         pass
 
@@ -191,6 +213,7 @@ SILENT_STATUS = SilentRuntimeStatus()
 
 
 def open_cli_progress(args: argparse.Namespace) -> StatusReporter:
+    _claim_progress_ownership()
     label = _command_label(args)
     stream = _open_terminal_stream()
     if stream is None:
@@ -219,6 +242,10 @@ def _command_label(args: argparse.Namespace) -> str:
     raise RuntimeError("unsupported command")
 
 
+def _claim_progress_ownership() -> None:
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+
+
 def _open_terminal_stream() -> TextIO | None:
     if os.environ.get("AIGEN_PROGRESS") == "0":
         return None
@@ -238,9 +265,9 @@ def _progress_interval_seconds() -> float:
 def _format_line(snapshot: RuntimeStatusSnapshot) -> str:
     return " | ".join(
         [
-            f"{_activity(snapshot.frame, final=snapshot.final)} {snapshot.label}",
+            f"{_activity(snapshot, width=ACTIVITY_WIDTH)} {snapshot.label}",
             snapshot.phase,
-            f"events {snapshot.events}",
+            _progress_text(snapshot),
             _elapsed_text(snapshot.elapsed_seconds),
             _cpu_text(snapshot.telemetry),
             _gpu_text(snapshot.telemetry),
@@ -248,15 +275,28 @@ def _format_line(snapshot: RuntimeStatusSnapshot) -> str:
     )
 
 
-def _activity(frame: int, *, final: bool) -> str:
-    if final:
-        return "[" + "=" * ACTIVITY_WIDTH + "]"
-    position = frame % (ACTIVITY_WIDTH * 2 - 2)
-    if position >= ACTIVITY_WIDTH:
-        position = ACTIVITY_WIDTH * 2 - 2 - position
-    chars = [" "] * ACTIVITY_WIDTH
+def _activity(snapshot: RuntimeStatusSnapshot, *, width: int) -> str:
+    if snapshot.total:
+        ratio = min(1.0, snapshot.completed / snapshot.total)
+        filled = int(width * ratio)
+        chars = ["="] * filled + [" "] * (width - filled)
+        if not snapshot.final and snapshot.completed < snapshot.total:
+            chars[min(width - 1, filled)] = ">"
+        return "[" + "".join(chars) + "]"
+    if snapshot.final:
+        return "[" + "=" * width + "]"
+    position = snapshot.frame % (width * 2 - 2)
+    if position >= width:
+        position = width * 2 - 2 - position
+    chars = [" "] * width
     chars[position] = "="
     return "[" + "".join(chars) + "]"
+
+
+def _progress_text(snapshot: RuntimeStatusSnapshot) -> str:
+    if snapshot.total:
+        return f"{snapshot.completed}/{snapshot.total}"
+    return f"events {snapshot.events}"
 
 
 def _cpu_text(telemetry: SystemTelemetry) -> str:

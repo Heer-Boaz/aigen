@@ -191,7 +191,7 @@ def execute_keyframe_brief(
     progress.phase("score generated candidates")
     score = score_keyframe_run(run_dir, KeyframeScoreConfig(), project_root=project_root)
     progress.phase("judge generated candidates")
-    judge = judge_keyframe_run(run_dir, config, project_root=project_root)
+    judge = judge_keyframe_run(run_dir, config, project_root=project_root, progress=progress)
     progress.phase("select generated candidates")
     selection = select_scored_keyframe_run(run_dir, top_k=planned["scoring"]["top_k"])
     polish = _polish_selected_candidates(

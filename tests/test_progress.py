@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import unittest
 from unittest.mock import patch
 
@@ -43,8 +44,30 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(output.count("\n"), 1)
         self.assertTrue(output.endswith("\n"))
 
+    def test_terminal_status_renders_phase_progress(self) -> None:
+        stream = io.StringIO()
+
+        status = RuntimeStatus.terminal(
+            label="characters training-run",
+            interval_seconds=60.0,
+            stream=stream,
+            telemetry=FakeTelemetrySampler(),
+        )
+        with status:
+            status.begin(3, "validate candidates")
+            status.step("validated seed_001")
+            status.step("validated seed_002")
+            status.step("validated seed_003")
+            status.finish("completed")
+
+        output = stream.getvalue()
+        self.assertIn("characters training-run", output)
+        self.assertIn("3/3", output)
+        self.assertIn("[==================]", output)
+
     def test_quiet_status_keeps_same_runtime_contract(self) -> None:
         with SILENT_STATUS:
+            SILENT_STATUS.begin(1, "load models")
             SILENT_STATUS.phase("load models")
             SILENT_STATUS.step("denoise")
             SILENT_STATUS.finish("completed")
@@ -54,6 +77,13 @@ class ProgressTests(unittest.TestCase):
 
         with patch.dict("os.environ", {"AIGEN_PROGRESS": "0"}):
             self.assertFalse(open_cli_progress(args).renders_live)
+
+    def test_cli_progress_claims_huggingface_progress_ownership(self) -> None:
+        args = argparse.Namespace(command="keyframes", keyframes_command="run")
+
+        with patch.dict("os.environ", {"AIGEN_PROGRESS": "0"}, clear=True):
+            open_cli_progress(args)
+            self.assertEqual("1", os.environ["HF_HUB_DISABLE_PROGRESS_BARS"])
 
     def test_cli_progress_rejects_unknown_command_contract(self) -> None:
         args = argparse.Namespace(command="nonsense")

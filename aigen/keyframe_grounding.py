@@ -95,12 +95,14 @@ class GroundingDinoRegionGrounder:
         try:
             import torch
             from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+            from transformers.utils import logging as transformers_logging
         except ImportError as error:
             raise KeyframeGroundingError("GroundingDINO polish grounding requires torch and transformers.") from error
 
         if not config.dino_model.is_dir():
             raise KeyframeGroundingError(f"Missing GroundingDINO model: {config.dino_model.as_posix()}")
 
+        transformers_logging.disable_progress_bar()
         self._torch = torch
         self._processor = AutoProcessor.from_pretrained(config.dino_model, local_files_only=True)
         self._model = AutoModelForZeroShotObjectDetection.from_pretrained(config.dino_model, local_files_only=True)
@@ -147,12 +149,14 @@ class Florence2RegionGrounder:
         try:
             import torch
             from transformers import AutoProcessor, Florence2ForConditionalGeneration
+            from transformers.utils import logging as transformers_logging
         except ImportError as error:
             raise KeyframeGroundingError("Florence-2 polish grounding requires torch and transformers.") from error
 
         if not config.florence_model.is_dir():
             raise KeyframeGroundingError(f"Missing Florence-2 model: {config.florence_model.as_posix()}")
 
+        transformers_logging.disable_progress_bar()
         self._torch = torch
         dtype = torch.float16 if config.device.startswith("cuda") else torch.float32
         self._processor = AutoProcessor.from_pretrained(config.florence_model, local_files_only=True)

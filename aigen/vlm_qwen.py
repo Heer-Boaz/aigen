@@ -42,7 +42,9 @@ class QwenVlm:
         import torch
         from qwen_vl_utils import process_vision_info
         from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        from transformers.utils import logging as transformers_logging
 
+        transformers_logging.disable_progress_bar()
         dtype = _torch_dtype(torch, config.dtype)
         quantization_config = _quantization_config(torch, config)
         device_map = qwen_vlm_device_map(torch)

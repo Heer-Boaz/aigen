@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -247,7 +248,7 @@ class CharacterKontextPoseSession:
         prepared: KontextPosePrepared,
         variants: Sequence[KontextPoseVariant],
         *,
-        show_progress: bool = True,
+        show_progress: bool = False,
     ) -> list[KontextPoseDenoised]:
         return [
             self.pipeline.denoise_prepared(
@@ -417,6 +418,7 @@ def _build_kontext_pose_pipeline(
             pipeline_kwargs["transformer"].set_attention_impl(attention_impl)
 
     pipeline = pipeline_class.from_pretrained(model, **pipeline_kwargs)
+    pipeline.set_progress_bar_config(disable=True)
     if vae_tiling:
         pipeline.vae.enable_tiling()
     else:
@@ -441,11 +443,14 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             calculate_shift,
             retrieve_timesteps,
         )
+        from diffusers.utils import logging as diffusers_logging
         from diffusers.utils import load_image
     except ImportError as exc:
         raise CharacterKontextPoseDependencyError(
             "Kontext pose generation requires `pip install -e .[generation]`"
         ) from exc
+
+    diffusers_logging.disable_progress_bar()
 
     class FluxKontextControlNetPipeline(FluxKontextPipeline):
         model_cpu_offload_seq = "text_encoder->text_encoder_2->image_encoder->transformer->vae"
@@ -788,7 +793,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
             controlnet_conditioning_scale: float,
             control_guidance_start: float,
             control_guidance_end: float,
-            show_progress: bool = True,
+            show_progress: bool = False,
             control_conditions: Sequence[KontextControlCondition] | None = None,
             collect_control_stats: bool = False,
         ) -> KontextPoseDenoised:
@@ -878,7 +883,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 )
             )
             latent_model_input[:, generated_token_count:].copy_(prepared.image_latents)
-            progress_bar_context = self.progress_bar(total=num_inference_steps)
+            progress_bar_context = self.progress_bar(total=num_inference_steps) if show_progress else nullcontext(None)
             with progress_bar_context as progress_bar:
                 for i, t in enumerate(timesteps):
                     if self.interrupt:
@@ -1045,7 +1050,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                     if latents.dtype != latents_dtype and torch.backends.mps.is_available():
                         latents = latents.to(latents_dtype)
 
-                    if show_progress and (
+                    if progress_bar is not None and (
                         i == len(timesteps) - 1
                         or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0)
                     ):

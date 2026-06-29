@@ -159,6 +159,7 @@ def run_character_training_data(
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats("cuda")
             total_start = synchronized_time(torch)
+            progress.begin(len(plan.views) * seeds_per_view, "generate candidates")
             for view_index, planned_view in enumerate(plan.views, start=1):
                 progress.phase(f"prepare {planned_view.name} ({view_index}/{len(plan.views)})")
                 primer = _view_entry(bank, planned_view.identity_primer_view)
@@ -192,10 +193,10 @@ def run_character_training_data(
                         control_guidance_start=0.0,
                         control_guidance_end=0.0,
                         control_conditions=[],
-                        show_progress=progress.renders_live,
                     )
                     denoised.append(replace(result, latents=result.latents.detach().cpu()))
                     del result
+                    progress.step(f"denoised {name}")
                 session.pipeline.maybe_free_model_hooks()
                 progress.phase(f"decode {planned_view.name}")
                 images, decode_ms = session.decode_many(prepared, denoised, chunk_size=1)
@@ -538,6 +539,7 @@ def _validate_training_candidates(
     )
     view_by_name = {view.name: view for view in plan.views}
     validator_config = _training_validation_config(config)
+    progress.begin(len(candidates), "validate candidates")
     with closing(QwenVlm(validator_config)) as judge:
         for index, candidate in enumerate(candidates, start=1):
             progress.phase(f"validate candidate {index}/{len(candidates)}")
@@ -578,6 +580,7 @@ def _validate_training_candidates(
                 )
             else:
                 rejected.append(record)
+            progress.step(f"validated candidate {index}/{len(candidates)}")
 
     view_bank_path = output_dir / "accepted_view_bank.json"
     write_json(view_bank_path, accepted_bank.model_dump(mode="json", exclude_none=True))

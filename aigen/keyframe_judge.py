@@ -11,6 +11,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aigen.manifest_io import read_json, sha256_file, write_json
+from aigen.progress import StatusReporter
 from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
 from aigen.vlm_qwen import QwenVlm, QwenVlmConfig, qwen_vlm_config_json
 
@@ -66,6 +67,7 @@ def judge_keyframe_run(
     config: QwenVlmConfig,
     *,
     project_root: Path,
+    progress: StatusReporter,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
     result = read_json(resolved_run_dir / "result.json", label="keyframe run result")
@@ -83,6 +85,7 @@ def judge_keyframe_run(
 
     with closing(QwenVlm(config)) as active_runner:
         candidate_results = []
+        progress.begin(len(result["outputs"]), "judge candidates")
         for output in result["outputs"]:
             candidate_name = output["name"]
             candidate_path = Path(output["path"]).resolve()
@@ -109,6 +112,7 @@ def judge_keyframe_run(
                     "judgment": judgment.model_dump(mode="json", by_alias=True),
                 }
             )
+            progress.step(f"judged {candidate_name}")
 
         payload = {
             "status": "completed",

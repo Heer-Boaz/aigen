@@ -318,6 +318,7 @@ def run_keyframe_polish_job(
             outputs = []
             variant_total = sum(len(polish_region_variants(spec, mask_plan)) for mask_plan in mask_plans)
             variant_index = 0
+            progress.begin(variant_total, "polish variants")
             for mask_index, mask_plan in enumerate(mask_plans, start=1):
                 region_dir = output_dir / "regions" / mask_plan.region_id
                 region_dir.mkdir(parents=True, exist_ok=True)

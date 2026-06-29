@@ -244,7 +244,7 @@ def run_keyframe_spec(
             control_images, control_repeats = _prepare_control_images(session, prepared, spec, resolved)
             masks = _prepare_masks(session, prepared, spec, resolved)
             session.pipeline.maybe_free_model_hooks()
-            progress.step("denoise variants")
+            progress.begin(len(spec.variants), "denoise variants")
             denoised = []
             for index, variant in enumerate(spec.variants, start=1):
                 progress.phase(f"denoise {variant.name} ({index}/{len(spec.variants)})")
