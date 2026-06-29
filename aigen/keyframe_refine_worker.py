@@ -34,7 +34,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_json_line(
             sys.stderr,
             {
-                "schema_version": 1,
                 "status": "error",
                 "error": error.__class__.__name__,
                 "message": str(error),

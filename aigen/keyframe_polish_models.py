@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 POLISH_OPERATIONS = (
@@ -118,7 +118,7 @@ class PolishBaseSpec(StrictModel):
 
 
 class PolishIdentityPrimerSpec(StrictModel):
-    view: Literal["front", "left_profile", "right_profile", "back"]
+    view: str
     path: str
 
 
@@ -153,7 +153,6 @@ class PolishAcceptanceSpec(StrictModel):
 
 class KeyframePolishJobSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["keyframe-polish"]
     id: str
     pipeline: PolishPipelineSpec
@@ -200,16 +199,8 @@ class PlannedPolishRegion(StrictModel):
     must_not_change: list[str]
     acceptance_checks: list[str]
 
-    @field_validator("reference_crop_requirements", mode="before")
-    @classmethod
-    def _listify_reference_crop_requirements(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [value]
-        return value
-
 
 class KeyframePolishPlan(StrictModel):
-    schema_version: Literal[1]
     kind: Literal["keyframe-polish-plan"]
     job_id: str
     base_candidate: str

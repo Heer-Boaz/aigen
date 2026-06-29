@@ -24,7 +24,6 @@ def write_json(path: Path, payload: object, *, pretty: bool) -> None:
 
 def command_error_payload(error: Exception) -> dict[str, object]:
     return {
-        "schema_version": 1,
         "status": "error",
         "error": error.__class__.__name__,
         "message": str(error),

@@ -18,6 +18,7 @@ from aigen.character_views import (
 )
 from aigen.command_io import command_error_payload, dump_json
 from aigen.manifest_io import ManifestIOError
+from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
 
 
@@ -53,7 +54,13 @@ def add_character_commands(subparsers: Any) -> None:
     view_accept.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
-def run_character_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
+def run_character_command(
+    args: argparse.Namespace,
+    stdout: TextIO,
+    stderr: TextIO,
+    *,
+    progress: StatusReporter,
+) -> int:
     try:
         if args.characters_command == "view-schema":
             dump_json(stdout, character_view_job_schema(), pretty=not args.compact)
@@ -82,6 +89,7 @@ def run_character_command(args: argparse.Namespace, stdout: TextIO, stderr: Text
                     args.job,
                     keyframe_profile_for_name(load_character_view_job(args.job).pipeline.profile),
                     project_root=PROJECT_ROOT,
+                    progress=progress,
                 ),
                 pretty=not args.compact,
             )

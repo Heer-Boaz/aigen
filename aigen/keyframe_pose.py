@@ -55,7 +55,7 @@ class PoseScoreConfig:
     min_common_keypoints: int = 6
     target_color_tolerance: float = 120.0
     detector_score_threshold: float = 0.30
-    device: str = "cpu"
+    device: str = "cuda"
     det_model: Path = DEFAULT_DWPOSE_DET_MODEL
     pose_model: Path = DEFAULT_DWPOSE_POSE_MODEL
 

@@ -62,6 +62,7 @@ from aigen.keyframes import (
     validate_keyframe_job,
 )
 from aigen.manifest_io import ManifestIOError
+from aigen.progress import StatusReporter
 from aigen.runtime_profiles import (
     PROJECT_ROOT,
     keyframe_profile_for_name,
@@ -127,7 +128,7 @@ def add_keyframe_commands(subparsers: Any) -> None:
         action="store_true",
         help="Mirror the example horizontally before extracting conditions",
     )
-    extract_example.add_argument("--pose-device", default="cpu", help="DWPose device")
+    extract_example.add_argument("--pose-device", default="cuda", help="DWPose device")
     extract_example.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     refine_validate = keyframe_subparsers.add_parser(
@@ -232,7 +233,13 @@ def add_keyframe_commands(subparsers: Any) -> None:
     control_audit.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
-def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
+def run_keyframe_command(
+    args: argparse.Namespace,
+    stdout: TextIO,
+    stderr: TextIO,
+    *,
+    progress: StatusReporter,
+) -> int:
     try:
         if args.keyframes_command == "schema":
             dump_json(stdout, keyframe_job_schema(), pretty=not args.compact)
@@ -247,6 +254,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             dump_json(stdout, keyframe_polish_plan_schema(), pretty=not args.compact)
             return 0
         if args.keyframes_command == "extract-example":
+            progress.phase("extract controls")
             dump_json(
                 stdout,
                 extract_keyframe_example(
@@ -264,6 +272,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "judge":
+            progress.phase("judge outputs")
             dump_json(
                 stdout,
                 judge_keyframe_run(
@@ -275,6 +284,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "score":
+            progress.phase("score outputs")
             dump_json(
                 stdout,
                 score_keyframe_run(
@@ -290,6 +300,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "score-select":
+            progress.phase("select scored outputs")
             dump_json(
                 stdout,
                 select_scored_keyframe_run(
@@ -301,12 +312,14 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "control-audit":
+            progress.phase("control audit")
             dump_json(
                 stdout,
                 run_keyframe_control_audit(
                     args.run_dir,
                     project_root=PROJECT_ROOT,
                     seed=args.seed,
+                    progress=progress,
                 ),
                 pretty=not args.compact,
             )
@@ -322,6 +335,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "polish-diagnose":
+            progress.phase("plan polish regions")
             dump_json(
                 stdout,
                 diagnose_keyframe_polish(
@@ -333,6 +347,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
             )
             return 0
         if args.keyframes_command == "polish-select":
+            progress.phase("select polish variants")
             dump_json(
                 stdout,
                 select_keyframe_polish(
@@ -361,7 +376,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                 return 0
             dump_json(
                 stdout,
-                run_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT),
+                run_keyframe_polish_job(args.job, profile, project_root=PROJECT_ROOT, progress=progress),
                 pretty=not args.compact,
             )
             return 0
@@ -383,7 +398,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                 return 0
             dump_json(
                 stdout,
-                run_keyframe_refine_job(args.job, profile, project_root=PROJECT_ROOT),
+                run_keyframe_refine_job(args.job, profile, project_root=PROJECT_ROOT, progress=progress),
                 pretty=not args.compact,
             )
             return 0
@@ -405,13 +420,13 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
         if args.keyframes_command == "run-audit-variant":
             dump_json(
                 stdout,
-                run_keyframe_audit_variant_job(args.job, profile, project_root=PROJECT_ROOT),
+                run_keyframe_audit_variant_job(args.job, profile, project_root=PROJECT_ROOT, progress=progress),
                 pretty=not args.compact,
             )
             return 0
         dump_json(
             stdout,
-            run_keyframe_job(args.job, profile, project_root=PROJECT_ROOT),
+            run_keyframe_job(args.job, profile, project_root=PROJECT_ROOT, progress=progress),
             pretty=not args.compact,
         )
         return 0

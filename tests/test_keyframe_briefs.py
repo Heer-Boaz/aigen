@@ -16,6 +16,7 @@ from aigen.keyframe_brief_planner import plan_keyframe_brief
 from aigen.keyframe_briefs import (
     execute_keyframe_brief,
     materialize_keyframe_brief,
+    write_lora_dataset_spec_from_brief,
 )
 from aigen.keyframe_judge import (
     DEFAULT_JUDGE_ID,
@@ -25,6 +26,7 @@ from aigen.keyframe_judge import (
     KeyframeJudgeConfig,
 )
 from aigen.prompt_tokens import PromptTokenCounts
+from aigen.progress import SILENT_STATUS
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -129,9 +131,22 @@ class FakeBriefPlanner:
                     "strength_offsets": [-0.06, 0.0, 0.06],
                     "seed_offsets": [0, 1],
                 },
+                "lora_captions": {
+                    "view_bank": (
+                        "AI51 anime girl character sheet, short pink bob, glossy brown jacket, white shirt, "
+                        "blue tie, brown leather skirt, blue thigh-high socks and brown boots"
+                    ),
+                    "keyframe_run": (
+                        "AI51 anime girl platformer attack keyframe, same short pink bob and glossy brown "
+                        "leather outfit, readable left-facing side-view punch-start pose"
+                    ),
+                },
                 "rationale": ["left_profile primer reduces camera-yaw negotiation"],
             }
         )
+
+    def close(self) -> None:
+        return None
 
 
 class ClosingFakeBriefPlanner(FakeBriefPlanner):
@@ -168,6 +183,9 @@ class InvalidBriefPlanner:
             }
         )
 
+    def close(self) -> None:
+        return None
+
 
 class PlaceholderBriefPlanner(FakeBriefPlanner):
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
@@ -180,7 +198,7 @@ class PlaceholderBriefPlanner(FakeBriefPlanner):
         return json.dumps(data)
 
 
-class RepairingBriefPlanner(FakeBriefPlanner):
+class MissingTrueCfgBriefPlanner(FakeBriefPlanner):
     def __init__(self, identity_primer: Path) -> None:
         super().__init__(identity_primer)
         self.calls = 0
@@ -210,12 +228,12 @@ class KeyframeBriefTests(unittest.TestCase):
             brief_path, left_profile = write_brief_fixture(root)
             planner = FakeBriefPlanner(left_profile)
 
-            result = plan_keyframe_brief(
-                brief_path,
-                judge_config(),
-                project_root=Path.cwd(),
-                runner=planner,
-            )
+            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+                result = plan_keyframe_brief(
+                    brief_path,
+                    judge_config(),
+                    project_root=Path.cwd(),
+                )
 
             plan_path = root / "plans" / "punch_plan.json"
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
@@ -226,6 +244,8 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(plan["polish"]["strength_offsets"], [-0.06, 0.0, 0.06])
             self.assertNotIn("policy", plan["polish"])
             self.assertEqual(plan["identity_details"]["waist_garment"], "brown leather skirt")
+            self.assertIn("short pink bob", plan["lora_captions"]["view_bank"])
+            self.assertIn("platformer attack keyframe", plan["lora_captions"]["keyframe_run"])
             self.assertIn("Platformer side-view animation may cheat", planner.prompt)
             self.assertIn("hair, clothing, colors and style", planner.prompt)
             self.assertIn("Choose control strengths from the image evidence", planner.prompt)
@@ -236,9 +256,13 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertIn("Describe the character's lower body in separate parts", planner.prompt)
             self.assertIn("This is a full-body gameplay keyframe", planner.prompt)
             self.assertIn("Build prompt.clip and prompt.t5 from every identity_details slot", planner.prompt)
+            self.assertIn("Build lora_captions from the supplied images", planner.prompt)
             self.assertIn("The example sprite may depict a different character", planner.prompt)
             self.assertNotIn('"scale": 0.72', planner.prompt)
             self.assertNotIn('"scale": 0.25', planner.prompt)
+            self.assertNotIn('"scale":', planner.prompt)
+            self.assertNotIn("294912", planner.prompt)
+            self.assertNotIn("[-0.06, 0.0, 0.06]", planner.prompt)
             self.assertEqual(planner.image_paths[0], root / "assets" / "characters" / "ai51" / "views" / "front.png")
             self.assertEqual(planner.image_paths[-1], root / "examples" / "punch.png")
 
@@ -258,7 +282,8 @@ class KeyframeBriefTests(unittest.TestCase):
             root = Path(temp_dir)
             brief_path, left_profile = write_brief_fixture(root)
             planner = FakeBriefPlanner(left_profile)
-            plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd(), runner=planner)
+            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+                plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
 
             with (
                 patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image),
@@ -267,7 +292,7 @@ class KeyframeBriefTests(unittest.TestCase):
                     return_value=PromptTokenCounts(clip=12, clip_limit=77, t5=24),
                 ),
             ):
-                result = materialize_keyframe_brief(brief_path, project_root=Path.cwd())
+                result = materialize_keyframe_brief(brief_path, project_root=Path.cwd(), progress=SILENT_STATUS)
 
             job_path = Path(result["job_path"])
             job = json.loads(job_path.read_text(encoding="utf-8"))
@@ -280,17 +305,56 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(job["variants"][-1], {"name": "seed_063", "seed": 63})
             self.assertTrue((root / "assets" / "extracted" / "platform_punch_pose.png").exists())
 
+    def test_writes_lora_dataset_spec_from_model_planned_captions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            brief_path, left_profile = write_brief_fixture(root)
+            planner = FakeBriefPlanner(left_profile)
+            with patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner):
+                plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
+
+            result = write_lora_dataset_spec_from_brief(
+                brief_path,
+                trigger_token="ai51char",
+                spec_path=Path("../datasets/ai51_lora.json"),
+                dataset_dir=Path("../datasets/ai51_lora"),
+                project_root=Path.cwd(),
+                views=None,
+                validation_ratio=0.2,
+                overwrite=True,
+                progress=SILENT_STATUS,
+            )
+
+            dataset_spec = json.loads((root / "datasets" / "ai51_lora.json").read_text(encoding="utf-8"))
+            self.assertEqual(result["status"], "written")
+            self.assertEqual(dataset_spec["kind"], "lora-dataset")
+            self.assertEqual(dataset_spec["character"]["trigger_token"], "ai51char")
+            self.assertEqual(dataset_spec["sources"][0]["type"], "view_bank")
+            self.assertEqual(dataset_spec["sources"][0]["views"], ["front", "left_profile"])
+            self.assertEqual(dataset_spec["sources"][0]["caption_source"], {"plan": "../plans/punch_plan.json", "field": "view_bank"})
+            self.assertEqual(dataset_spec["sources"][1]["type"], "keyframe_run")
+            self.assertEqual(
+                dataset_spec["sources"][1]["caption_source"],
+                {"plan": "../plans/punch_plan.json", "field": "keyframe_run"},
+            )
+            self.assertIn("short pink bob", result["captions"]["view_bank"])
+            self.assertIn("punch-start pose", result["captions"]["keyframe_run"])
+            self.assertEqual(dataset_spec["output"]["validation_ratio"], 0.2)
+            self.assertEqual(dataset_spec["output"]["save_contact_sheet"], True)
+
     def test_invalid_generated_plan_keeps_raw_response(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             brief_path, _left_profile = write_brief_fixture(root)
 
-            with self.assertRaisesRegex(KeyframeBriefError, "Invalid generated brief plan"):
+            with (
+                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=InvalidBriefPlanner()),
+                self.assertRaisesRegex(KeyframeBriefError, "Invalid generated brief plan"),
+            ):
                 plan_keyframe_brief(
                     brief_path,
                     judge_config(),
                     project_root=Path.cwd(),
-                    runner=InvalidBriefPlanner(),
                 )
 
             self.assertTrue((root / "plans" / "punch_plan.raw.txt").exists())
@@ -300,32 +364,36 @@ class KeyframeBriefTests(unittest.TestCase):
             root = Path(temp_dir)
             brief_path, left_profile = write_brief_fixture(root)
 
-            with self.assertRaisesRegex(KeyframeBriefError, "scoring priorities and checks must be concrete"):
+            with (
+                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=PlaceholderBriefPlanner(left_profile)),
+                self.assertRaisesRegex(KeyframeBriefError, "scoring priorities and checks must be concrete"),
+            ):
                 plan_keyframe_brief(
                     brief_path,
                     judge_config(),
                     project_root=Path.cwd(),
-                    runner=PlaceholderBriefPlanner(left_profile),
                 )
 
-    def test_repairs_single_schema_error_without_discarding_plan(self) -> None:
+    def test_invalid_single_schema_error_fails_without_repair(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             brief_path, left_profile = write_brief_fixture(root)
-            planner = RepairingBriefPlanner(left_profile)
+            planner = MissingTrueCfgBriefPlanner(left_profile)
 
-            result = plan_keyframe_brief(
-                brief_path,
-                judge_config(),
-                project_root=Path.cwd(),
-                runner=planner,
-            )
+            with (
+                patch("aigen.keyframe_brief_planner.QwenKeyframeJudge", return_value=planner),
+                self.assertRaisesRegex(KeyframeBriefError, "Invalid generated brief plan"),
+            ):
+                plan_keyframe_brief(
+                    brief_path,
+                    judge_config(),
+                    project_root=Path.cwd(),
+                )
 
-            plan = json.loads((root / "plans" / "punch_plan.json").read_text(encoding="utf-8"))
-            self.assertEqual(result["status"], "planned")
-            self.assertEqual(planner.calls, 2)
-            self.assertEqual(plan["prompt"]["true_cfg_scale"], 1.0)
-            self.assertTrue((root / "plans" / "punch_plan.repair.raw.txt").exists())
+            self.assertEqual(planner.calls, 1)
+            self.assertFalse((root / "plans" / "punch_plan.json").exists())
+            self.assertFalse((root / "plans" / "punch_plan.repair.raw.txt").exists())
+            self.assertTrue((root / "plans" / "punch_plan.raw.txt").exists())
 
     def test_execute_brief_scores_selects_and_polishes_top_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -361,7 +429,7 @@ class KeyframeBriefTests(unittest.TestCase):
                     return_value=[{"candidate": "seed_060"}, {"candidate": "seed_061"}],
                 ) as polish_mock,
             ):
-                result = execute_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
+                result = execute_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd(), progress=SILENT_STATUS)
 
             self.assertEqual(result["selection"]["selected"], ["seed_060", "seed_061"])
             self.assertEqual(result["judge"], {"status": "completed"})
@@ -390,7 +458,6 @@ def write_brief_fixture(root: Path) -> tuple[Path, Path]:
     write_json(
         view_bank,
         {
-            "schema_version": 1,
             "kind": "character-view-bank",
             "character": {"id": "ai51", "source_reference": image_asset(front, (160, 240))},
             "views": {
@@ -413,7 +480,6 @@ def write_brief_fixture(root: Path) -> tuple[Path, Path]:
         brief_path,
         {
             "$schema": "../schemas/keyframe-brief.schema.json",
-            "schema_version": 1,
             "kind": "keyframe-brief",
             "id": "ai51.punch.platformer.left",
             "pipeline": {"profile": "nunchaku-kontext-pose-quality"},

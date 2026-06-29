@@ -8,13 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 CHARACTER_VIEW_JOB_SCHEMA = "schemas/character-view-job.schema.json"
 CHARACTER_VIEW_BANK_SCHEMA = "schemas/character-view-bank.schema.json"
-CHARACTER_VIEW_SCHEMA_VERSION = 1
 VIEW_BANK_KIND = "character-view-bank"
-VIEW_BANK_SCHEMA_VERSION = 1
-ProfileViewName = Literal["left_profile", "right_profile"]
-ViewBankViewName = Literal["front", "left_profile", "right_profile", "back"]
-ViewBankCamera = Literal["orthographic-front", "orthographic-side", "orthographic-back"]
-
 
 class CharacterViewError(RuntimeError):
     pass
@@ -46,8 +40,8 @@ class SourceCharacterSpec(StrictModel):
 
 
 class CharacterViewSpec(StrictModel):
-    name: ProfileViewName
-    camera: Literal["orthographic-side"]
+    name: str
+    camera: str
     pose: str
 
 
@@ -112,8 +106,8 @@ class ViewBankCharacterSpec(StrictModel):
 
 
 class ViewBankViewSpec(StrictModel):
-    name: ViewBankViewName
-    camera: ViewBankCamera
+    name: str
+    camera: str
     pose: str
 
 
@@ -140,7 +134,6 @@ class ViewBankEntrySpec(StrictModel):
 
 
 class CharacterViewBankSpec(StrictModel):
-    schema_version: Literal[1]
     kind: Literal["character-view-bank"]
     character: ViewBankCharacterSpec
     views: dict[str, ViewBankEntrySpec]
@@ -148,7 +141,6 @@ class CharacterViewBankSpec(StrictModel):
 
 class CharacterViewJobSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["character-view"]
     id: str
     pipeline: PipelineSpec

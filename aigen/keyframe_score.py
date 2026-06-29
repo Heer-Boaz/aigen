@@ -24,7 +24,6 @@ from aigen.manifest_io import read_json, sha256_file, write_json
 
 
 DEFAULT_SCORER_ID = "condition"
-SCORE_SCHEMA_VERSION = 1
 DEGENERATE_POSE_SCORE_THRESHOLD = 0.05
 SEMANTIC_SCORE_FLOOR = 8.5
 ARTIFACT_SCORE_FLOOR = 0.60
@@ -54,8 +53,6 @@ def score_keyframe_run(
     config: KeyframeScoreConfig,
     *,
     project_root: Path,
-    pose_extractor: Any | None = None,
-    segmenter: Any | None = None,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
     result = read_json(resolved_run_dir / "result.json", label="keyframe run result")
@@ -73,10 +70,8 @@ def score_keyframe_run(
     target = _load_target(assets)
     pose_target_source = _pose_target_source(assets)
     with ExitStack() as resources:
-        if pose_extractor is None:
-            pose_extractor = resources.enter_context(closing(DWPoseKeypointExtractor(config.pose)))
-        if segmenter is None:
-            segmenter = resources.enter_context(closing(SamForegroundSegmenter(config.segmentation)))
+        pose_extractor = resources.enter_context(closing(DWPoseKeypointExtractor(config.pose)))
+        segmenter = resources.enter_context(closing(SamForegroundSegmenter(config.segmentation)))
         pose_target = _load_pose_target(assets, config, pose_extractor, pose_target_source)
 
         candidates = [
@@ -101,7 +96,6 @@ def score_keyframe_run(
         _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
 
         payload = {
-            "schema_version": SCORE_SCHEMA_VERSION,
             "status": "completed",
             "run_dir": resolved_run_dir.as_posix(),
             "job_id": result["job_id"],
@@ -188,7 +182,6 @@ def select_scored_keyframe_run(
     selected_contact_sheet_path = resolved_run_dir / "selected_contact_sheet.png"
     _save_ranked_sheet(selected, selected_contact_sheet_path, image_key="image")
     selected_payload = {
-        "schema_version": 1,
         "selection_mode": "condition_score_with_semantic_gate",
         "scorer": scorer_id,
         "semantic_gate": semantic_gate,
@@ -198,7 +191,6 @@ def select_scored_keyframe_run(
         "selected": selected,
     }
     rejected_payload = {
-        "schema_version": 1,
         "selection_mode": "condition_score_with_semantic_gate",
         "scorer": scorer_id,
         "semantic_gate": semantic_gate,
@@ -207,7 +199,6 @@ def select_scored_keyframe_run(
     write_json(selected_path, selected_payload)
     write_json(rejected_path, rejected_payload)
     return {
-        "schema_version": 1,
         "status": "completed",
         "scorer": scorer_id,
         "run_dir": resolved_run_dir.as_posix(),
@@ -266,6 +257,8 @@ def _load_semantic_selection_gate(run_dir: Path, score_result: dict[str, Any]) -
         raise KeyframeScoreError("Refusing automatic score selection: semantic gate passed no candidates.")
     return {
         "judge": DEFAULT_JUDGE_ID,
+        "selection_owner": "condition_score",
+        "usable_for_auto_select": True,
         "score_floor": SEMANTIC_SCORE_FLOOR,
         "score_keys": list(SEMANTIC_SELECTION_SCORE_KEYS),
         "passed": passed,

@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 KEYFRAME_REFINE_JOB_SCHEMA = "schemas/keyframe-refine-job.schema.json"
-KEYFRAME_REFINE_SCHEMA_VERSION = 1
 
 
 class KeyframeRefineError(RuntimeError):
@@ -32,7 +31,7 @@ class PathSpec(StrictModel):
 
 
 class IdentityPrimerSpec(StrictModel):
-    view: Literal["front", "left_profile", "right_profile", "back"]
+    view: str
     path: str
 
 
@@ -89,7 +88,6 @@ class RefineAcceptanceSpec(StrictModel):
 
 class KeyframeRefineJobSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["keyframe-refine"]
     id: str
     pipeline: RefinePipelineSpec

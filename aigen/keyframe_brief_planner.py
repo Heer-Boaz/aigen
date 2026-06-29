@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from contextlib import closing, nullcontext
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,7 +12,6 @@ from aigen.character_view_models import CharacterViewBankSpec, load_character_vi
 from aigen.keyframe_brief_models import (
     KEYFRAME_BRIEF_PLAN_KIND,
     KEYFRAME_BRIEF_PLAN_SCHEMA,
-    KEYFRAME_BRIEF_PLAN_SCHEMA_VERSION,
     KeyframeBriefError,
     KeyframeBriefPlanSpec,
     KeyframeBriefSpec,
@@ -36,7 +34,6 @@ def plan_keyframe_brief(
     config: KeyframeJudgeConfig,
     *,
     project_root: Path,
-    runner: Any | None = None,
 ) -> dict[str, Any]:
     spec = load_keyframe_brief(brief_path)
     view_bank_path = resolve_existing_path(spec.character.view_bank.path, brief_path.parent)
@@ -48,7 +45,7 @@ def plan_keyframe_brief(
     prompt = _planner_prompt(spec, view_options, evidence.order_lines)
     raw_path = plan_path.with_suffix(".raw.txt")
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(QwenKeyframeJudge(config)) if runner is None else nullcontext(runner) as active_runner:
+    with closing(QwenKeyframeJudge(config)) as active_runner:
         raw_text = active_runner.judge_candidate(
             prompt,
             evidence.image_paths,
@@ -57,13 +54,7 @@ def plan_keyframe_brief(
         try:
             plan = _validate_generated_plan(raw_text, spec, config, brief_path, prompt, view_options, plan_path, project_root)
         except ValidationError as error:
-            repair_prompt = _planner_repair_prompt(raw_text, error)
-            repair_text = active_runner.judge_candidate(repair_prompt, evidence.image_paths)
-            plan_path.with_suffix(".repair.raw.txt").write_text(repair_text + "\n", encoding="utf-8")
-            try:
-                plan = _validate_generated_plan(repair_text, spec, config, brief_path, prompt, view_options, plan_path, project_root)
-            except ValidationError as repair_error:
-                raise KeyframeBriefError(f"Invalid generated brief plan {plan_path}: {repair_error}") from repair_error
+            raise KeyframeBriefError(f"Invalid generated brief plan {plan_path}: {error}") from error
     write_json(plan_path, plan.model_dump(mode="json", by_alias=True, exclude_none=True))
     return {
         "status": "planned",
@@ -74,6 +65,7 @@ def plan_keyframe_brief(
         "controls": [control.model_dump(mode="json", exclude_none=True) for control in plan.controls],
         "scoring": plan.scoring.model_dump(mode="json"),
         "polish": plan.polish.model_dump(mode="json"),
+        "lora_captions": plan.lora_captions.model_dump(mode="json"),
     }
 
 
@@ -90,7 +82,6 @@ def _validate_generated_plan(
     generated = _json_object(raw_text)
     payload = {
         "$schema": schema_reference(plan_path, project_root / KEYFRAME_BRIEF_PLAN_SCHEMA),
-        "schema_version": KEYFRAME_BRIEF_PLAN_SCHEMA_VERSION,
         "kind": KEYFRAME_BRIEF_PLAN_KIND,
         "brief_id": spec.id,
         "planner_id": config.judge_id,
@@ -112,80 +103,6 @@ class PlannerEvidence:
 def _planner_prompt(spec: KeyframeBriefSpec, view_options: list[dict[str, Any]], image_order_lines: list[str]) -> str:
     view_lines = "\n".join(_view_option_line(option) for option in view_options)
     image_order = "\n".join(f"{index}. {line}" for index, line in enumerate(image_order_lines, start=1))
-    contract = {
-        "identity_details": {
-            "subject": "visible subject type",
-            "hair": "hair color, length and shape",
-            "face": "visible face and expression details",
-            "upper_clothing": "upper-body clothing",
-            "neckwear": "tie, scarf, collar item or no visible neckwear",
-            "waist_garment": "skirt, shorts, belt, pants waist or no visible waist garment",
-            "legwear": "socks, stockings, pants legs or bare legs",
-            "footwear": "boots, shoes or no visible footwear",
-            "style": "art style, lineart, rendering and palette",
-        },
-        "identity_description": "caption from identity images",
-        "pose_description": "caption from example sprite",
-        "platformer_camera_description": "camera/readability interpretation",
-        "identity_primer": {
-            "view": "one available view name",
-            "path": "the exact matching available view path",
-        },
-        "prompt": {
-            "clip": "short prompt built from the supplied images",
-            "t5": "detailed prompt built from the supplied images",
-            "true_cfg_scale": 1.0,
-        },
-        "canvas": {
-            "width": spec.example.width,
-            "height": spec.example.height,
-            "reference_max_area": 294912,
-            "max_sequence_length": 128,
-        },
-        "sampling": {
-            "steps": 28,
-            "guidance_scale": 2.6,
-        },
-        "controls": [
-            {
-                "name": "pose",
-                "type": "pose",
-                "source": "example_pose",
-                "scale": 0.7,
-                "start": 0.0,
-                "end": 0.65,
-            },
-            {
-                "name": "silhouette",
-                "type": "softedge",
-                "source": "example_softedge",
-                "scale": 0.7,
-                "start": 0.0,
-                "end": 0.8,
-                "residual_mask_source": "example_boundary_mask",
-            },
-        ],
-        "scoring": {
-            "top_k": min(3, spec.generation.seed_count),
-            "priorities": [
-                "target pose and source contour match",
-                "requested action reads clearly",
-                "approved identity primer is preserved",
-            ],
-            "checks": [
-                "whole character and feet remain visible",
-                "requested action phase is readable",
-                "hair, clothing, legwear and footwear match the identity primer",
-            ],
-        },
-        "polish": {
-            "profile": "kontext-inpaint-local",
-            "max_regions": 4,
-            "strength_offsets": [-0.06, 0.0, 0.06],
-            "seed_offsets": [0, 1],
-        },
-        "rationale": ["one concrete reason"],
-    }
     return f"""You are planning a production AI keyframe-generation job.
 
 The user supplies an identity view bank and one example platformer sprite. Plan the generation job.
@@ -216,11 +133,13 @@ Request:
 Available identity-primer views:
 {view_lines}
 
-Return JSON only. The JSON must use this exact structure and data types; replace the descriptive string values with what you see in the supplied images:
-{json.dumps(contract, indent=2)}
+Return JSON only. The JSON object must contain exactly these top-level keys:
+identity_details, identity_description, pose_description, platformer_camera_description,
+identity_primer, prompt, canvas, sampling, controls, scoring, polish, lora_captions, rationale.
 
 Contract details:
 - identity_details: structured visual slots from the identity images. Fill every slot with concrete image evidence. Use "no visible ..." only when that garment class is genuinely absent.
+- identity_details must contain exactly: subject, hair, face, upper_clothing, neckwear, waist_garment, legwear, footwear, style.
 - identity_description: visual caption from the identity images, including subject type, hair, clothing, colors and style.
 - pose_description: visual caption from the example sprite, including action phase, arms, hands, legs, feet and silhouette.
 - platformer_camera_description: visual camera/readability interpretation from the example sprite and selected identity view.
@@ -240,48 +159,21 @@ Contract details:
 - scoring.priorities and scoring.checks must be concrete visual criteria for this request. Do not copy schema-descriptive phrases.
 - polish: object with profile, max_regions, strength_offsets and seed_offsets for local model-planned polish.
 - polish.profile must be exactly "kontext-inpaint-local".
-- polish.strength_offsets must be numeric offsets such as [-0.06, 0.0, 0.06].
-- polish.seed_offsets must be integer offsets such as [0, 1], not floats.
+- polish.strength_offsets must be numeric offsets around the selected local inpaint strength, including zero and at least one nearby exploration value.
+- polish.seed_offsets must be integer offsets for local polish variants, not floats.
+- lora_captions: object with view_bank and keyframe_run.
+- lora_captions.view_bank is an identity-only training caption for the approved view-bank images. Describe the character, outfit, colors, style and canonical views. Do not include the trigger token.
+- lora_captions.keyframe_run is a training caption for generated selected keyframes. Describe the same identity plus the requested action, direction, camera/readability and pose phase. Do not include the trigger token.
 - rationale must be an array of concrete strings.
 
 Keep prompts specific to the approved identity primer and the example action. Use separate CLIP and T5 prompt text. Do not mention internal filenames in prompts.
 Build prompt.clip and prompt.t5 from every identity_details slot plus the example action. Do not omit the waist garment, legwear or footwear.
+Build lora_captions from the supplied images too; the human should not write these captions manually, and dataset-build must not derive them later from generation prompts.
 Build the prompt text from what you see in the supplied identity images and example sprite. Do not reuse generic placeholder identity text.
 Choose control strengths from the image evidence. Strong pose control is useful when limb placement matters. Clean softedge or canny geometry control is useful when the source sprite silhouette must have structure authority. Do not request dense gray/source-image control for production keyframes. Do not blindly copy fixed numeric examples.
 Never return placeholder strings such as "...".
 prompt.true_cfg_scale is required.
 Omit prompt.negative when true_cfg_scale is 1.0."""
-
-
-def _planner_repair_prompt(raw_text: str, error: ValidationError) -> str:
-    original = _json_object(raw_text)
-    prompt = dict(original.get("prompt", {}))
-    if "true_cfg_scale" not in prompt and "negative" not in prompt:
-        prompt["true_cfg_scale"] = 1.0
-    return f"""Repair this generated keyframe brief plan JSON so it satisfies the schema.
-
-Do not reinterpret the images.
-Do not change the visual decisions, identity details, prompt wording, controls, scoring, polish settings or rationale unless a validation error explicitly requires it.
-Preserve every original key and value that is not named by the validation error.
-Return JSON only.
-
-Validation error:
-{error}
-
-Rules:
-- prompt.true_cfg_scale is required. If prompt.negative is absent, set prompt.true_cfg_scale to 1.0.
-- Copy prompt.clip and prompt.t5 exactly from the original JSON.
-- Do not add prompt.negative unless the original JSON already had prompt.negative.
-- controls[].type must be "pose", "canny" or "softedge".
-- polish.profile must be "kontext-inpaint-local".
-- polish.seed_offsets must contain integers.
-- rationale must be an array of strings.
-
-For this repair, the prompt object must be:
-{json.dumps(prompt, indent=2)}
-
-Original JSON:
-{raw_text}"""
 
 
 def _validate_plan_against_brief(

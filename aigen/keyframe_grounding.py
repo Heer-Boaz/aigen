@@ -85,8 +85,8 @@ class KeyframeRegionGrounder:
                 grounder.close()
 
         return [
-            _best_grounded_region(boxes, prior, self._config)
-            for boxes, prior in zip(boxes_by_request, priors, strict=True)
+            _best_grounded_region(boxes, prior, request, self._config)
+            for boxes, prior, request in zip(boxes_by_request, priors, requests, strict=True)
         ]
 
 
@@ -182,7 +182,11 @@ class Florence2RegionGrounder:
             task=FLORENCE_PHRASE_GROUNDING_TASK,
             image_size=image.size,
         )
-        result = parsed.get(FLORENCE_PHRASE_GROUNDING_TASK, {})
+        if FLORENCE_PHRASE_GROUNDING_TASK not in parsed:
+            raise KeyframeGroundingError(
+                f"Florence-2 did not return {FLORENCE_PHRASE_GROUNDING_TASK} grounding output"
+            )
+        result = parsed[FLORENCE_PHRASE_GROUNDING_TASK]
         return [
             GroundedRegionBox(
                 box=_clip_box(tuple(round(float(value)) for value in raw_box), image.width, image.height),
@@ -191,7 +195,7 @@ class Florence2RegionGrounder:
                 source="florence2",
                 prior_iou=0.0,
             )
-            for raw_box, raw_label in zip(result.get("bboxes", ()), result.get("labels", ()), strict=True)
+            for raw_box, raw_label in zip(result["bboxes"], result["labels"], strict=True)
         ]
 
     def close(self) -> None:
@@ -215,6 +219,7 @@ def _florence_phrase(prompt: str) -> str:
 def _best_grounded_region(
     boxes: list[GroundedRegionBox],
     prior: tuple[int, int, int, int],
+    request: GroundingRequest,
     config: GroundingConfig,
 ) -> GroundedRegionBox:
     candidates = [
@@ -225,12 +230,9 @@ def _best_grounded_region(
     ]
     if candidates:
         return max(candidates, key=lambda box: (box.prior_iou, box.score))
-    return GroundedRegionBox(
-        box=prior,
-        label="polish planner region",
-        score=1.0,
-        source="polish-plan",
-        prior_iou=1.0,
+    raise KeyframeGroundingError(
+        "Grounding produced no region compatible with "
+        f"'{request.prompt}' near planner box {prior}"
     )
 
 

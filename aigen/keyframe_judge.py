@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from contextlib import closing, nullcontext
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,7 +12,9 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aigen.generation.runtime_diagnostics import module_device_report
+from aigen.generation.runtime_types import resolve_torch_dtype
 from aigen.manifest_io import read_json, sha256_file, write_json
+from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
 
 
 DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
@@ -21,7 +23,6 @@ DEFAULT_JUDGE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
 DEFAULT_JUDGE_QUANTIZATION = "bitsandbytes-8bit"
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
 DEFAULT_MIN_PIXELS = 256 * 28 * 28
-JUDGE_SCHEMA_VERSION = 1
 
 
 class KeyframeJudgeError(RuntimeError):
@@ -29,7 +30,7 @@ class KeyframeJudgeError(RuntimeError):
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
 
 class HardRejects(StrictModel):
@@ -178,7 +179,6 @@ def judge_keyframe_run(
     config: KeyframeJudgeConfig,
     *,
     project_root: Path,
-    runner: Any | None = None,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
     result = read_json(resolved_run_dir / "result.json", label="keyframe run result")
@@ -194,7 +194,7 @@ def judge_keyframe_run(
     raw_dir.mkdir(parents=True, exist_ok=True)
     overlay_dir.mkdir(parents=True, exist_ok=True)
 
-    with closing(QwenKeyframeJudge(config)) if runner is None else nullcontext(runner) as active_runner:
+    with closing(QwenKeyframeJudge(config)) as active_runner:
         candidate_results = []
         for output in result["outputs"]:
             candidate_name = output["name"]
@@ -224,13 +224,12 @@ def judge_keyframe_run(
             )
 
         payload = {
-            "schema_version": JUDGE_SCHEMA_VERSION,
             "status": "completed",
             "run_dir": resolved_run_dir.as_posix(),
             "job_id": result["job_id"],
             "git_commit": _git_commit(project_root),
             "source_result_sha256": sha256_file(resolved_run_dir / "result.json"),
-            "judge": _judge_config_json(config) | {"device_report": _runner_device_report(active_runner)},
+            "judge": _judge_config_json(config) | {"device_report": active_runner.device_report},
             "candidates": candidate_results,
             "semantic_gate": _semantic_gate(candidate_results),
         }
@@ -333,7 +332,6 @@ The evidence.condition_match and evidence.identity_match fields must be strings,
 
 def _parse_candidate_judgment(raw_text: str) -> CandidateJudgment:
     data = _json_from_vlm_response(raw_text)
-    _canonicalize_evidence(data)
     try:
         return CandidateJudgment.model_validate(data)
     except ValidationError as error:
@@ -341,29 +339,10 @@ def _parse_candidate_judgment(raw_text: str) -> CandidateJudgment:
 
 
 def _json_from_vlm_response(raw_text: str) -> dict[str, Any]:
-    text = raw_text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines[-1].strip() != "```":
-            raise KeyframeJudgeError("Judge returned an unterminated Markdown JSON block")
-        text = "\n".join(lines[1:-1]).strip()
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise KeyframeJudgeError(f"Judge returned non-JSON output: {error}") from error
-    if not isinstance(data, dict):
-        raise KeyframeJudgeError("Judge returned JSON that is not an object")
-    return data
-
-
-def _canonicalize_evidence(data: dict[str, Any]) -> None:
-    evidence = data.get("evidence")
-    if not isinstance(evidence, dict):
-        return
-    for key in ("condition_match", "identity_match"):
-        value = evidence.get(key)
-        if isinstance(value, list):
-            evidence[key] = " ".join(str(item) for item in value)
+        return json_object_from_vlm_response(raw_text)
+    except VlmJsonError as error:
+        raise KeyframeJudgeError(str(error)) from error
 
 
 def _save_contour_overlay(candidate_path: Path, contour_path: Path, output_path: Path) -> None:
@@ -422,13 +401,6 @@ def _semantic_gate(candidate_results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _runner_device_report(runner: Any) -> dict[str, Any]:
-    report = getattr(runner, "device_report", {})
-    if isinstance(report, dict):
-        return report
-    return {"value": str(report)}
-
-
 def _validate_local_qwen_model(config: KeyframeJudgeConfig) -> None:
     if not config.model.exists():
         raise KeyframeJudgeError(
@@ -448,30 +420,21 @@ def _validate_local_qwen_model(config: KeyframeJudgeConfig) -> None:
 def _quantization_config(torch: Any, config: KeyframeJudgeConfig) -> Any | None:
     if config.quantization == "none":
         return None
+    if config.quantization != "bitsandbytes-8bit":
+        raise KeyframeJudgeError(f"Unknown judge quantization: {config.quantization}")
     from transformers import BitsAndBytesConfig
 
-    if config.quantization == "bitsandbytes-8bit":
-        return BitsAndBytesConfig(load_in_8bit=True)
-    if config.quantization != "bitsandbytes-4bit":
-        raise KeyframeJudgeError(f"Unknown judge quantization: {config.quantization}")
-    return BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=_torch_dtype(torch, config.dtype),
-    )
+    return BitsAndBytesConfig(load_in_8bit=True)
 
 
 def _judge_device_map(torch: Any) -> dict[str, int | str]:
-    if torch.cuda.is_available():
-        return {"": 0}
-    return {"": "cpu"}
+    if not torch.cuda.is_available():
+        raise KeyframeJudgeError("Qwen keyframe judge requires CUDA; CPU inference is not a supported pipeline path")
+    return {"": 0}
 
 
 def _torch_dtype(torch: Any, dtype: str) -> Any:
-    if dtype == "auto":
-        return "auto"
-    return getattr(torch, dtype)
+    return resolve_torch_dtype(torch, dtype, auto_value="auto")
 
 
 def _sha256_text(value: str) -> str:

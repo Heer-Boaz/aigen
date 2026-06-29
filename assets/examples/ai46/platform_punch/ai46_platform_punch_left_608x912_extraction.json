@@ -62,7 +62,6 @@
     "mean_body_score": 0.7195056080818176,
     "visible_body_keypoints": 18
   },
-  "schema_version": 1,
   "source": {
     "height": 120,
     "mode": "RGBA",

@@ -14,7 +14,6 @@ from aigen.keyframe_segmentation import foreground_box_mask
 from aigen.manifest_io import file_manifest, write_json
 
 
-EXAMPLE_EXTRACTION_SCHEMA_VERSION = 1
 DEFAULT_FOREGROUND_HEIGHT_RATIO = 0.84
 DEFAULT_FOREGROUND_WIDTH_RATIO = 0.88
 DEFAULT_BOTTOM_MARGIN_RATIO = 0.055
@@ -39,7 +38,7 @@ class KeyframeExampleExtractionConfig:
     width: int
     height: int
     mirror_x: bool
-    pose_device: str = "cpu"
+    pose_device: str = "cuda"
     det_model: Path = DEFAULT_DWPOSE_DET_MODEL
     pose_model: Path = DEFAULT_DWPOSE_POSE_MODEL
 
@@ -103,7 +102,6 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
     arm_hand_mask.save(assets["arm_hand_mask"])
 
     payload = {
-        "schema_version": EXAMPLE_EXTRACTION_SCHEMA_VERSION,
         "kind": "keyframe-example-extraction",
         "source": image_asset_json(source),
         "canvas": {"width": config.width, "height": config.height},

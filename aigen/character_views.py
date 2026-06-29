@@ -3,17 +3,14 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from aigen.character_view_models import (
     CHARACTER_VIEW_JOB_SCHEMA,
-    CHARACTER_VIEW_SCHEMA_VERSION,
     VIEW_BANK_KIND,
-    VIEW_BANK_SCHEMA_VERSION,
     CharacterViewError,
     CharacterViewBankSpec,
     CharacterViewJobSpec,
-    ProfileViewName,
     ViewBankCharacterSpec,
     ViewBankEntryAcceptanceSpec,
     ViewBankEntryAssetsSpec,
@@ -51,6 +48,7 @@ from aigen.keyframe_profiles import KeyframeProfile
 from aigen.keyframes import (
     run_keyframe_spec,
 )
+from aigen.progress import StatusReporter
 
 
 def validate_character_view_job(job_path: Path, *, project_root: Path) -> dict[str, Any]:
@@ -69,10 +67,16 @@ def plan_character_view_job(job_path: Path, *, project_root: Path) -> dict[str, 
     return resolve_character_view_job(job_path, project_root=project_root, check_outputs=True)
 
 
-def run_character_view_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
+def run_character_view_job(
+    job_path: Path,
+    profile: KeyframeProfile,
+    *,
+    project_root: Path,
+    progress: StatusReporter,
+) -> dict[str, Any]:
     spec = load_character_view_job(job_path)
     keyframe_spec = _keyframe_spec_for_view(spec)
-    return run_keyframe_spec(keyframe_spec, job_path, profile, project_root=project_root)
+    return run_keyframe_spec(keyframe_spec, job_path, profile, project_root=project_root, progress=progress)
 
 
 def resolve_character_view_job(
@@ -109,7 +113,6 @@ def resolve_character_view_job(
             raise CharacterViewError(f"Output exists and overwrite=false: {existing[0].as_posix()}")
 
     return {
-        "schema_version": CHARACTER_VIEW_SCHEMA_VERSION,
         "kind": "resolved-character-view",
         "job_path": job_path.resolve().as_posix(),
         "job_id": spec.id,
@@ -169,7 +172,6 @@ def accept_character_view(
     bank.views[resolved["view"]["name"]] = entry
     write_json(bank_path, bank.model_dump(mode="json", exclude_none=True))
     return {
-        "schema_version": CHARACTER_VIEW_SCHEMA_VERSION,
         "status": "accepted",
         "character": resolved["character"]["id"],
         "view": resolved["view"]["name"],
@@ -183,7 +185,6 @@ def _load_or_create_bank(path: Path, resolved: dict[str, Any]) -> CharacterViewB
     if path.exists():
         return load_character_view_bank(path)
     return CharacterViewBankSpec(
-        schema_version=VIEW_BANK_SCHEMA_VERSION,
         kind=VIEW_BANK_KIND,
         character=ViewBankCharacterSpec(
             id=resolved["character"]["id"],
@@ -201,11 +202,9 @@ def _candidate_output(result: dict[str, Any], candidate: str) -> dict[str, Any]:
 
 
 def _keyframe_spec_for_view(spec: CharacterViewJobSpec) -> KeyframeJobSpec:
-    direction = _direction_for_view(spec.view.name)
     return KeyframeJobSpec(
         **{
             "$schema": CHARACTER_VIEW_JOB_SCHEMA,
-            "schema_version": CHARACTER_VIEW_SCHEMA_VERSION,
             "kind": "character-keyframe",
             "id": spec.id,
             "pipeline": KeyframePipelineSpec(profile=spec.pipeline.profile).model_dump(mode="json"),
@@ -219,8 +218,8 @@ def _keyframe_spec_for_view(spec: CharacterViewJobSpec) -> KeyframeJobSpec:
             "keyframe": KeyframeSpec(
                 action="turnaround",
                 phase=spec.view.pose,
-                direction=direction,
-                camera="orthographic-side",
+                direction=spec.view.name,
+                camera=spec.view.camera,
             ).model_dump(mode="json"),
             "assets": AssetSpec(
                 pose=KeyframePathSpec(path=spec.assets.pose.path),
@@ -254,12 +253,6 @@ def _keyframe_spec_for_view(spec: CharacterViewJobSpec) -> KeyframeJobSpec:
             "acceptance": KeyframeAcceptanceSpec(**spec.acceptance.model_dump(mode="json")).model_dump(mode="json"),
         }
     )
-
-
-def _direction_for_view(view: ProfileViewName) -> Literal["left", "right"]:
-    if view == "left_profile":
-        return "left"
-    return "right"
 
 
 def _planned_outputs(spec: CharacterViewJobSpec, output_dir: Path) -> list[dict[str, str | int]]:

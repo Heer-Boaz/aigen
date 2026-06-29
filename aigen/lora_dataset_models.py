@@ -19,44 +19,46 @@ class StrictModel(BaseModel):
 
 class LoraDatasetCharacterSpec(StrictModel):
     id: str
-    trigger_token: str
+    trigger_token: str = Field(min_length=1)
+
+
+class LoraCaptionSourceSpec(StrictModel):
+    plan: str
+    field: Literal["view_bank", "keyframe_run"]
 
 
 class ViewBankLoraSourceSpec(StrictModel):
     type: Literal["view_bank"]
     path: str
-    views: list[str] | None = None
-    caption: str | None = None
+    views: list[str] = Field(min_length=1)
+    caption_source: LoraCaptionSourceSpec
     tags: list[str] = Field(default_factory=list)
     split: Literal["train", "val"] | None = None
+
+    @model_validator(mode="after")
+    def caption_source_matches_view_bank(self) -> ViewBankLoraSourceSpec:
+        if self.caption_source.field != "view_bank":
+            raise ValueError("view_bank LoRA sources require caption_source.field=view_bank")
+        return self
 
 
 class KeyframeRunLoraSourceSpec(StrictModel):
     type: Literal["keyframe_run"]
     run_dir: str
-    selection_path: str | None = None
-    candidates: list[str] | None = None
-    caption: str | None = None
+    selection_path: str
+    caption_source: LoraCaptionSourceSpec
     tags: list[str] = Field(default_factory=list)
     split: Literal["train", "val"] | None = None
 
     @model_validator(mode="after")
-    def require_explicit_selection(self) -> KeyframeRunLoraSourceSpec:
-        if not self.selection_path and not self.candidates:
-            raise ValueError("keyframe_run sources require selection_path or candidates")
+    def caption_source_matches_keyframe_run(self) -> KeyframeRunLoraSourceSpec:
+        if self.caption_source.field != "keyframe_run":
+            raise ValueError("keyframe_run LoRA sources require caption_source.field=keyframe_run")
         return self
 
 
-class ImageLoraSourceSpec(StrictModel):
-    type: Literal["image"]
-    path: str
-    caption: str
-    tags: list[str] = Field(default_factory=list)
-    split: Literal["train", "val"] | None = None
-
-
 LoraDatasetSourceSpec = Annotated[
-    ViewBankLoraSourceSpec | KeyframeRunLoraSourceSpec | ImageLoraSourceSpec,
+    ViewBankLoraSourceSpec | KeyframeRunLoraSourceSpec,
     Field(discriminator="type"),
 ]
 

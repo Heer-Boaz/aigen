@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-from aigen.cli import main
+from aigen.cli import build_parser, main
 from aigen.character_views import (
     accept_character_view,
     plan_character_view_job,
@@ -41,11 +41,19 @@ from aigen.keyframe_judge import (
     DEFAULT_JUDGE_REPO_ID,
     DEFAULT_JUDGE_REVISION,
     KeyframeJudgeConfig,
+    KeyframeJudgeError,
     QwenKeyframeJudge,
+    _judge_device_map,
     judge_keyframe_run,
 )
-from aigen.keyframe_grounding import GroundedRegionBox, GroundingConfig, GroundingRequest, KeyframeRegionGrounder
-from aigen.keyframe_pose import OPENPOSE_BODY_COLORS, PoseKeypoints
+from aigen.keyframe_grounding import (
+    GroundedRegionBox,
+    GroundingConfig,
+    GroundingRequest,
+    KeyframeGroundingError,
+    KeyframeRegionGrounder,
+)
+from aigen.keyframe_pose import OPENPOSE_BODY_COLORS, PoseKeypoints, PoseScoreConfig
 from aigen.keyframe_refine import (
     plan_keyframe_refine_job,
     run_keyframe_refine_job,
@@ -58,10 +66,12 @@ from aigen.keyframe_polish import (
     run_keyframe_polish_job,
     select_keyframe_polish,
 )
+from aigen.keyframe_polish_planner import parse_polish_plan
 from aigen.keyframe_control_audit import run_keyframe_control_audit
 from aigen.keyframe_score import KeyframeScoreConfig, select_scored_keyframe_run, score_keyframe_run
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.prompt_tokens import PromptTokenCounts
+from aigen.progress import SILENT_STATUS
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -119,6 +129,9 @@ class FakePoseExtractor:
     def extract(self, image_path: Path) -> PoseKeypoints:
         return self.poses[image_path.name]
 
+    def close(self) -> None:
+        return None
+
 
 class ClosingFakePoseExtractor(FakePoseExtractor):
     def __init__(self, poses: dict[str, PoseKeypoints]):
@@ -145,6 +158,9 @@ class FakeSegmenter:
     def segment_image_boxes(self, image: np.ndarray, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
         return [self.segment_image_box(image, box) for box in boxes]
 
+    def close(self) -> None:
+        return None
+
 
 class ClosingFakeSegmenter(FakeSegmenter):
     def __init__(self) -> None:
@@ -157,6 +173,18 @@ class ClosingFakeSegmenter(FakeSegmenter):
 
     def close(self) -> None:
         self.closed = True
+
+
+def score_run_with_fake_models(
+    run_dir: Path,
+    config: KeyframeScoreConfig,
+    poses: dict[str, PoseKeypoints],
+) -> dict[str, object]:
+    with (
+        patch("aigen.keyframe_score.DWPoseKeypointExtractor", return_value=FakePoseExtractor(poses)),
+        patch("aigen.keyframe_score.SamForegroundSegmenter", return_value=FakeSegmenter()),
+    ):
+        return score_keyframe_run(run_dir, config, project_root=Path.cwd())
 
 
 class FakeGrounder:
@@ -220,6 +248,23 @@ class ClosingDinoBackend(ClosingGroundingBackend):
 class ClosingFlorenceBackend(ClosingGroundingBackend):
     instances: list[ClosingGroundingBackend] = []
     source = "florence2"
+
+
+class OffTargetGroundingBackend(ClosingGroundingBackend):
+    instances: list[ClosingGroundingBackend] = []
+    source = "off-target"
+
+    def ground_boxes(self, _image: Image.Image, prompt: str) -> list[GroundedRegionBox]:
+        self.prompts.append(prompt)
+        return [
+            GroundedRegionBox(
+                box=(0, 0, 8, 8),
+                label=prompt,
+                score=1.0,
+                source=self.source,
+                prior_iou=0.0,
+            )
+        ]
 
 
 def fake_dwpose_control_image(image: Image.Image, **_kwargs: object) -> tuple[Image.Image, dict[str, object]]:
@@ -342,18 +387,17 @@ def write_pose_score_fixture(root: Path) -> tuple[Path, dict[str, PoseKeypoints]
 
 def write_semantic_judge_fixture(
     run_dir: Path,
-    scores_by_candidate: dict[str, float] | None = None,
-    hard_rejects_by_candidate: dict[str, dict[str, bool]] | None = None,
+    *,
+    scores_by_candidate: dict[str, float],
+    hard_rejects_by_candidate: dict[str, dict[str, bool]],
 ) -> Path:
     result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
     judge_path = run_dir / "judge" / DEFAULT_JUDGE_ID / "judge.json"
     judge_path.parent.mkdir(parents=True, exist_ok=True)
-    scores_by_candidate = scores_by_candidate or {}
-    hard_rejects_by_candidate = hard_rejects_by_candidate or {}
     candidates = []
     for output in result["outputs"]:
         name = output["name"]
-        score = scores_by_candidate.get(name, 9.0)
+        score = scores_by_candidate[name] if name in scores_by_candidate else 9.0
         rejects = {
             "front_or_three_quarter_view": False,
             "two_eyes_visible": False,
@@ -364,7 +408,10 @@ def write_semantic_judge_fixture(
             "outfit_changed": False,
             "pose_not_requested_action": False,
             "severe_limb_error": False,
-        } | hard_rejects_by_candidate.get(name, {})
+        }
+        reject_overrides = hard_rejects_by_candidate.get(name)
+        if reject_overrides:
+            rejects |= reject_overrides
         candidates.append(
             {
                 "candidate": name,
@@ -398,7 +445,6 @@ def write_semantic_judge_fixture(
     write_json(
         judge_path,
         {
-            "schema_version": 1,
             "status": "completed",
             "run_dir": run_dir.as_posix(),
             "job_id": result["job_id"],
@@ -486,7 +532,6 @@ def write_character_view_fixture(root: Path) -> tuple[Path, Path]:
         job_path,
         {
             "$schema": "../../schemas/character-view-job.schema.json",
-            "schema_version": 1,
             "kind": "character-view",
             "id": "ai46.left_profile.neutral",
             "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
@@ -585,7 +630,6 @@ def write_refine_fixture(root: Path) -> Path:
         job_path,
         {
             "$schema": "../../schemas/keyframe-refine-job.schema.json",
-            "schema_version": 1,
             "kind": "keyframe-refine",
             "id": "ai46.punch.straight.fist.refine",
             "pipeline": {"profile": "kontext-inpaint-local"},
@@ -685,12 +729,10 @@ def write_polish_fixture(root: Path) -> tuple[Path, Path]:
     write_json(
         plan,
         {
-            "schema_version": 1,
             "status": "completed",
             "run_dir": run_dir.as_posix(),
             "candidate": "seed_060",
             "polish_plan": {
-                "schema_version": 1,
                 "kind": "keyframe-polish-plan",
                 "job_id": "ai51.punch.seed060.polish",
                 "base_candidate": "seed_060",
@@ -752,7 +794,6 @@ def write_polish_fixture(root: Path) -> tuple[Path, Path]:
         job_path,
         {
             "$schema": "../../schemas/keyframe-polish-job.schema.json",
-            "schema_version": 1,
             "kind": "keyframe-polish",
             "id": "ai51.punch.seed060.polish",
             "pipeline": {"profile": "kontext-inpaint-local"},
@@ -828,7 +869,6 @@ def job_payload(root: Path) -> dict[str, object]:
     write_image(mask, (512, 768), (128, 128, 128))
     return {
         "$schema": "../../schemas/keyframe-job.schema.json",
-        "schema_version": 1,
         "kind": "character-keyframe",
         "id": "ai46.walk.contact.left",
         "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
@@ -1038,6 +1078,8 @@ class FakeRefiner:
 
 
 class FakeJudgeRunner:
+    device_report = {"components": {"judge": {"parameter_tensors_by_device": {"cuda:0": 1}}}}
+
     scores = {
         "seed_002": (8.0, 8.0, True, {}),
         "seed_003": (9.0, 9.0, True, {}),
@@ -1087,6 +1129,9 @@ class FakeJudgeRunner:
             }
         )
 
+    def close(self) -> None:
+        return None
+
 
 class ClosingFakeJudgeRunner(FakeJudgeRunner):
     def __init__(self) -> None:
@@ -1096,7 +1141,28 @@ class ClosingFakeJudgeRunner(FakeJudgeRunner):
         self.closed = True
 
 
+class PassesFieldJudgeRunner(FakeJudgeRunner):
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        payload = json.loads(super().judge_candidate(prompt, image_paths))
+        payload["passes"] = payload.pop("pass")
+        return json.dumps(payload)
+
+
+class MarkdownJudgeRunner(FakeJudgeRunner):
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        return f"```json\n{super().judge_candidate(prompt, image_paths)}\n```"
+
+
+class EvidenceListJudgeRunner(FakeJudgeRunner):
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        payload = json.loads(super().judge_candidate(prompt, image_paths))
+        payload["evidence"]["condition_match"] = ["condition evidence"]
+        return json.dumps(payload)
+
+
 class FakePolishPlanner:
+    device_report = {"components": {"planner": {"parameter_tensors_by_device": {"cuda:0": 1}}}}
+
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         if len(image_paths) < 7:
             raise AssertionError(f"Expected planner evidence images, got {len(image_paths)}")
@@ -1106,7 +1172,6 @@ class FakePolishPlanner:
             raise AssertionError("Polish planner prompt does not expose protected condition evidence")
         return json.dumps(
             {
-                "schema_version": 1,
                 "kind": "keyframe-polish-plan",
                 "job_id": "ai51.punch.seed060.polish",
                 "base_candidate": "seed_060",
@@ -1140,6 +1205,9 @@ class FakePolishPlanner:
             }
         )
 
+    def close(self) -> None:
+        return None
+
 
 class ScoreEvidencePolishPlanner(FakePolishPlanner):
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
@@ -1157,6 +1225,8 @@ class ClosingFakePolishPlanner(FakePolishPlanner):
 
 
 class FakePolishSelector:
+    device_report = {"components": {"selector": {"parameter_tensors_by_device": {"cuda:0": 1}}}}
+
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         if "candidate crops" not in prompt:
             raise AssertionError("Polish selector prompt does not expose local candidates")
@@ -1177,6 +1247,9 @@ class FakePolishSelector:
                 "reason": "local detail is clearer",
             }
         )
+
+    def close(self) -> None:
+        return None
 
 
 class ClosingFakePolishSelector(FakePolishSelector):
@@ -1280,7 +1353,7 @@ class KeyframeTests(unittest.TestCase):
                     },
                 ),
             ):
-                result = run_keyframe_job(job_path, profile(), project_root=Path.cwd())
+                result = run_keyframe_job(job_path, profile(), project_root=Path.cwd(), progress=SILENT_STATUS)
 
             output_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "batch"
             result_path = output_dir / "result.json"
@@ -1304,7 +1377,7 @@ class KeyframeTests(unittest.TestCase):
     def test_control_audit_runs_fixed_seed_ablation_sheet(self) -> None:
         FakeSession.instances.clear()
 
-        def fake_score_runner(run_dir: Path, config: KeyframeScoreConfig, *, project_root: Path) -> dict[str, object]:
+        def fake_score_keyframe_run(run_dir: Path, config: KeyframeScoreConfig, *, project_root: Path) -> dict[str, object]:
             score_dir = run_dir / "score" / config.scorer_id
             score_dir.mkdir(parents=True)
             outputs = {
@@ -1390,6 +1463,7 @@ class KeyframeTests(unittest.TestCase):
                 patch("aigen.keyframes.cuda_memory_stats", return_value={"max_allocated_mb": 1}),
                 patch("aigen.keyframes._generation_environment", return_value={"env": "fake"}),
                 patch("aigen.keyframe_control_audit._run_variant_job_process", fake_variant_process),
+                patch("aigen.keyframe_control_audit.score_keyframe_run", fake_score_keyframe_run),
                 patch(
                     "aigen.keyframes.nvidia_smi_keyframe_preflight",
                     return_value={
@@ -1401,7 +1475,7 @@ class KeyframeTests(unittest.TestCase):
                     },
                 ),
             ):
-                run_keyframe_job(job_path, profile(), project_root=Path.cwd())
+                run_keyframe_job(job_path, profile(), project_root=Path.cwd(), progress=SILENT_STATUS)
                 run_dir = root / "runs" / "keyframes" / "ai46" / "walk_contact" / "batch"
                 audit_dir = run_dir / "control_audit"
                 audit_dir.mkdir(parents=True)
@@ -1411,7 +1485,7 @@ class KeyframeTests(unittest.TestCase):
                     run_dir,
                     project_root=Path.cwd(),
                     seed=42,
-                    score_runner=fake_score_runner,
+                    progress=SILENT_STATUS,
                 )
 
             self.assertEqual(audit["status"], "passed")
@@ -1495,7 +1569,7 @@ class KeyframeTests(unittest.TestCase):
                     },
                 ),
             ):
-                result = run_character_view_job(job_path, profile(), project_root=Path.cwd())
+                result = run_character_view_job(job_path, profile(), project_root=Path.cwd(), progress=SILENT_STATUS)
 
             output_dir = root / "runs" / "views"
             self.assertTrue((output_dir / "result.json").exists())
@@ -1550,6 +1624,19 @@ class KeyframeTests(unittest.TestCase):
                 self.assertFalse(np.any(np.all(gray == (120, 80, 60), axis=2)))
                 self.assertFalse(np.any(np.all(gray == (0, 255, 0), axis=2)))
 
+    def test_pose_models_default_to_cuda(self) -> None:
+        config = KeyframeExampleExtractionConfig(
+            source=Path("source.png"),
+            output_dir=Path("assets"),
+            name="sprite",
+            width=160,
+            height=240,
+            mirror_x=False,
+        )
+
+        self.assertEqual(config.pose_device, "cuda")
+        self.assertEqual(PoseScoreConfig().device, "cuda")
+
     def test_cli_extract_example_outputs_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1559,8 +1646,14 @@ class KeyframeTests(unittest.TestCase):
             draw.rectangle((9, 5, 20, 40), fill=(120, 80, 60, 255))
             image.save(source)
             stdout = StringIO()
+            recorded_device = None
 
-            with patch("aigen.keyframe_examples._dwpose_control_image", fake_dwpose_control_image), redirect_stdout(stdout):
+            def recording_dwpose_control_image(image: Image.Image, **kwargs: object) -> tuple[Image.Image, dict[str, object]]:
+                nonlocal recorded_device
+                recorded_device = kwargs["device"]
+                return fake_dwpose_control_image(image, **kwargs)
+
+            with patch("aigen.keyframe_examples._dwpose_control_image", recording_dwpose_control_image), redirect_stdout(stdout):
                 exit_code = main(
                     [
                         "keyframes",
@@ -1583,33 +1676,28 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["kind"], "keyframe-example-extraction")
             self.assertEqual(payload["assets"]["metadata"]["path"], (root / "assets" / "sprite_extraction.json").as_posix())
+            self.assertEqual(recorded_device, "cuda")
 
     def test_preflight_rejects_dirty_framebuffer(self) -> None:
-        with (
-            patch("aigen.keyframe_memory.cuda_available", return_value=True),
-            patch(
-                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
-                return_value={
-                    "nvidia_smi_used_mb": 1801,
-                    "nvidia_smi_device_total_mb": 16303,
-                    "nvidia_smi_utilization_gpu": 0,
-                },
-            ),
+        with patch(
+            "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
+            return_value={
+                "nvidia_smi_used_mb": 1801,
+                "nvidia_smi_device_total_mb": 16303,
+                "nvidia_smi_utilization_gpu": 0,
+            },
         ):
             with self.assertRaisesRegex(KeyframeMemoryError, "1801 MB used before model load"):
                 nvidia_smi_preflight()
 
     def test_keyframe_preflight_rejects_estimated_oom(self) -> None:
-        with (
-            patch("aigen.keyframe_memory.cuda_available", return_value=True),
-            patch(
-                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
-                return_value={
-                    "nvidia_smi_used_mb": 999,
-                    "nvidia_smi_device_total_mb": 16303,
-                    "nvidia_smi_utilization_gpu": 0,
-                },
-            ),
+        with patch(
+            "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
+            return_value={
+                "nvidia_smi_used_mb": 999,
+                "nvidia_smi_device_total_mb": 16303,
+                "nvidia_smi_utilization_gpu": 0,
+            },
         ):
             with self.assertRaisesRegex(KeyframeMemoryError, "Estimated VRAM requirement exceeds"):
                 nvidia_smi_keyframe_preflight(
@@ -1627,16 +1715,13 @@ class KeyframeTests(unittest.TestCase):
                 )
 
     def test_keyframe_preflight_reports_max_output_canvas(self) -> None:
-        with (
-            patch("aigen.keyframe_memory.cuda_available", return_value=True),
-            patch(
-                "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
-                return_value={
-                    "nvidia_smi_used_mb": 700,
-                    "nvidia_smi_device_total_mb": 16303,
-                    "nvidia_smi_utilization_gpu": 0,
-                },
-            ),
+        with patch(
+            "aigen.keyframe_memory.nvidia_smi_memory_snapshot",
+            return_value={
+                "nvidia_smi_used_mb": 700,
+                "nvidia_smi_device_total_mb": 16303,
+                "nvidia_smi_utilization_gpu": 0,
+            },
         ):
             result = nvidia_smi_keyframe_preflight(
                 {
@@ -1675,12 +1760,12 @@ class KeyframeTests(unittest.TestCase):
                 temperature=0.0,
             )
 
-            judge_result = judge_keyframe_run(
-                run_dir,
-                config,
-                project_root=Path.cwd(),
-                runner=FakeJudgeRunner(),
-            )
+            with patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=FakeJudgeRunner()):
+                judge_result = judge_keyframe_run(
+                    run_dir,
+                    config,
+                    project_root=Path.cwd(),
+                )
             judge_dir = run_dir / "judge" / DEFAULT_JUDGE_ID
             overlay_exists = Path(judge_result["candidates"][0]["overlay"]).exists()
             prompt_exists = (judge_dir / "prompts" / "seed_002.txt").exists()
@@ -1721,17 +1806,87 @@ class KeyframeTests(unittest.TestCase):
 
         self.assertTrue(runner.closed)
 
+    def test_keyframe_judge_rejects_internal_passes_field(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_keyframe_result(root)
+            config = KeyframeJudgeConfig(
+                judge_id=DEFAULT_JUDGE_ID,
+                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                repo_id=DEFAULT_JUDGE_REPO_ID,
+                revision=DEFAULT_JUDGE_REVISION,
+                dtype="bfloat16",
+                attention_impl="sdpa",
+                quantization=DEFAULT_JUDGE_QUANTIZATION,
+                min_pixels=1,
+                max_pixels=2,
+                max_new_tokens=512,
+                temperature=0.0,
+            )
+
+            with (
+                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=PassesFieldJudgeRunner()),
+                self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
+            ):
+                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+
+    def test_keyframe_judge_rejects_markdown_wrapped_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_keyframe_result(root)
+            config = KeyframeJudgeConfig(
+                judge_id=DEFAULT_JUDGE_ID,
+                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                repo_id=DEFAULT_JUDGE_REPO_ID,
+                revision=DEFAULT_JUDGE_REVISION,
+                dtype="bfloat16",
+                attention_impl="sdpa",
+                quantization=DEFAULT_JUDGE_QUANTIZATION,
+                min_pixels=1,
+                max_pixels=2,
+                max_new_tokens=512,
+                temperature=0.0,
+            )
+
+            with (
+                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=MarkdownJudgeRunner()),
+                self.assertRaisesRegex(KeyframeJudgeError, "VLM returned non-JSON output"),
+            ):
+                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+
+    def test_keyframe_judge_rejects_coerced_evidence_lists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = write_keyframe_result(root)
+            config = KeyframeJudgeConfig(
+                judge_id=DEFAULT_JUDGE_ID,
+                model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                repo_id=DEFAULT_JUDGE_REPO_ID,
+                revision=DEFAULT_JUDGE_REVISION,
+                dtype="bfloat16",
+                attention_impl="sdpa",
+                quantization=DEFAULT_JUDGE_QUANTIZATION,
+                min_pixels=1,
+                max_pixels=2,
+                max_new_tokens=512,
+                temperature=0.0,
+            )
+
+            with (
+                patch("aigen.keyframe_judge.QwenKeyframeJudge", return_value=EvidenceListJudgeRunner()),
+                self.assertRaisesRegex(KeyframeJudgeError, "Judge returned invalid candidate JSON"),
+            ):
+                judge_keyframe_run(run_dir, config, project_root=Path.cwd())
+
     def test_keyframe_score_ranks_condition_match_from_saved_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             run_dir, poses = write_score_fixture(root)
 
-            result = score_keyframe_run(
+            result = score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="condition-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1769,12 +1924,10 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             run_dir, poses = write_pose_score_fixture(root)
 
-            result = score_keyframe_run(
+            result = score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="pose-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1797,12 +1950,10 @@ class KeyframeTests(unittest.TestCase):
             )
             poses[normalized_source.name] = poses["seed_002.png"]
 
-            result = score_keyframe_run(
+            result = score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="source-pose-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
             candidates = {candidate["candidate"]: candidate for candidate in result["candidates"]}
 
@@ -1829,12 +1980,10 @@ class KeyframeTests(unittest.TestCase):
             )
             poses = {name: bad_pose for name in poses}
 
-            result = score_keyframe_run(
+            result = score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="pose-degenerate-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
 
             self.assertFalse(result["selection"]["usable_for_auto_select"])
@@ -1851,12 +2000,10 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             run_dir, poses = write_score_fixture(root)
 
-            score_keyframe_run(
+            score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="missing-semantic-gate-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
 
             with self.assertRaisesRegex(RuntimeError, "missing semantic judge evidence"):
@@ -1867,14 +2014,16 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             run_dir, poses = write_pose_score_fixture(root)
 
-            score_keyframe_run(
+            score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="pose-select-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
-            write_semantic_judge_fixture(run_dir, scores_by_candidate={"seed_002": 8.0, "seed_003": 9.0})
+            write_semantic_judge_fixture(
+                run_dir,
+                scores_by_candidate={"seed_002": 8.0, "seed_003": 9.0},
+                hard_rejects_by_candidate={},
+            )
             selection = select_scored_keyframe_run(run_dir, scorer_id="pose-select-test")
 
             self.assertEqual(selection["best"], "seed_003")
@@ -1891,16 +2040,15 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             run_dir, poses = write_score_fixture(root)
 
-            score_keyframe_run(
+            score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="semantic-gate-select-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
             write_semantic_judge_fixture(
                 run_dir,
                 scores_by_candidate={"seed_002": 9.0, "seed_003": 8.0, "seed_005": 9.0},
+                hard_rejects_by_candidate={},
             )
             selection = select_scored_keyframe_run(run_dir, scorer_id="semantic-gate-select-test")
 
@@ -1914,14 +2062,12 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             run_dir, poses = write_score_fixture(root)
 
-            score_keyframe_run(
+            score_run_with_fake_models(
                 run_dir,
                 KeyframeScoreConfig(scorer_id="top-k-test"),
-                project_root=Path.cwd(),
-                pose_extractor=FakePoseExtractor(poses),
-                segmenter=FakeSegmenter(),
+                poses,
             )
-            write_semantic_judge_fixture(run_dir)
+            write_semantic_judge_fixture(run_dir, scores_by_candidate={}, hard_rejects_by_candidate={})
             selection = select_scored_keyframe_run(run_dir, scorer_id="top-k-test", top_k=2)
 
             self.assertEqual(selection["best"], "seed_003")
@@ -1988,6 +2134,23 @@ class KeyframeTests(unittest.TestCase):
         self.assertTrue(ClosingDinoBackend.instances[0].closed)
         self.assertTrue(ClosingFlorenceBackend.instances[0].closed)
 
+    def test_keyframe_region_grounder_rejects_off_target_model_boxes(self) -> None:
+        OffTargetGroundingBackend.instances.clear()
+        image = Image.new("RGB", (120, 120), "white")
+        requests = [
+            GroundingRequest(prompt="face detail", prior_box=(80, 80, 112, 112)),
+        ]
+
+        with (
+            patch("aigen.keyframe_grounding.GroundingDinoRegionGrounder", OffTargetGroundingBackend),
+            patch("aigen.keyframe_grounding.Florence2RegionGrounder", OffTargetGroundingBackend),
+            self.assertRaisesRegex(KeyframeGroundingError, "no region compatible"),
+        ):
+            KeyframeRegionGrounder(GroundingConfig(device="cpu")).ground_regions(image, requests)
+
+        self.assertEqual(len(OffTargetGroundingBackend.instances), 2)
+        self.assertTrue(all(instance.closed for instance in OffTargetGroundingBackend.instances))
+
     def test_keyframe_refine_run_writes_mask_crop_and_preserves_outside_pixels(self) -> None:
         FakeRefiner.instances.clear()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2009,7 +2172,7 @@ class KeyframeTests(unittest.TestCase):
                     },
                 ),
             ):
-                result = run_keyframe_refine_job(job_path, refine_profile(), project_root=Path.cwd())
+                result = run_keyframe_refine_job(job_path, refine_profile(), project_root=Path.cwd(), progress=SILENT_STATUS)
 
             output_dir = root / "runs" / "punch_refine"
             output_path = Path(result["outputs"][0]["path"])
@@ -2041,24 +2204,24 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             job_path, _plan_path = write_polish_fixture(root)
 
-            result = diagnose_keyframe_polish(
-                job_path,
-                config=KeyframeJudgeConfig(
-                    judge_id=DEFAULT_JUDGE_ID,
-                    model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
-                    repo_id=DEFAULT_JUDGE_REPO_ID,
-                    revision=DEFAULT_JUDGE_REVISION,
-                    dtype="bfloat16",
-                    attention_impl="sdpa",
-                    quantization=DEFAULT_JUDGE_QUANTIZATION,
-                    min_pixels=1,
-                    max_pixels=2,
-                    max_new_tokens=512,
-                    temperature=0.0,
-                ),
-                project_root=Path.cwd(),
-                runner=FakePolishPlanner(),
-            )
+            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakePolishPlanner()):
+                result = diagnose_keyframe_polish(
+                    job_path,
+                    config=KeyframeJudgeConfig(
+                        judge_id=DEFAULT_JUDGE_ID,
+                        model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                        repo_id=DEFAULT_JUDGE_REPO_ID,
+                        revision=DEFAULT_JUDGE_REVISION,
+                        dtype="bfloat16",
+                        attention_impl="sdpa",
+                        quantization=DEFAULT_JUDGE_QUANTIZATION,
+                        min_pixels=1,
+                        max_pixels=2,
+                        max_new_tokens=512,
+                        temperature=0.0,
+                    ),
+                    project_root=Path.cwd(),
+                )
 
         self.assertEqual([region["id"] for region in result["polish_plan"]["regions"]], ["region_01"])
         self.assertEqual(result["polish_plan"]["regions"][0]["operation"], "expression_refine")
@@ -2076,24 +2239,24 @@ class KeyframeTests(unittest.TestCase):
             write_json(run_dir / "result.json", result)
             write_rectangle_contour(run_dir / "score" / "seed_060__condition_diff.png", (20, 20, 80, 80))
 
-            result = diagnose_keyframe_polish(
-                job_path,
-                config=KeyframeJudgeConfig(
-                    judge_id=DEFAULT_JUDGE_ID,
-                    model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
-                    repo_id=DEFAULT_JUDGE_REPO_ID,
-                    revision=DEFAULT_JUDGE_REVISION,
-                    dtype="bfloat16",
-                    attention_impl="sdpa",
-                    quantization=DEFAULT_JUDGE_QUANTIZATION,
-                    min_pixels=1,
-                    max_pixels=2,
-                    max_new_tokens=512,
-                    temperature=0.0,
-                ),
-                project_root=Path.cwd(),
-                runner=ScoreEvidencePolishPlanner(),
-            )
+            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=ScoreEvidencePolishPlanner()):
+                result = diagnose_keyframe_polish(
+                    job_path,
+                    config=KeyframeJudgeConfig(
+                        judge_id=DEFAULT_JUDGE_ID,
+                        model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                        repo_id=DEFAULT_JUDGE_REPO_ID,
+                        revision=DEFAULT_JUDGE_REVISION,
+                        dtype="bfloat16",
+                        attention_impl="sdpa",
+                        quantization=DEFAULT_JUDGE_QUANTIZATION,
+                        min_pixels=1,
+                        max_pixels=2,
+                        max_new_tokens=512,
+                        temperature=0.0,
+                    ),
+                    project_root=Path.cwd(),
+                )
 
         self.assertIn("model score evidence: condition_diff", result["evidence_order"])
 
@@ -2129,16 +2292,18 @@ class KeyframeTests(unittest.TestCase):
             root = Path(temp_dir)
             job_path, _plan_path = write_polish_fixture(root)
 
-            with patch(
-                "aigen.keyframe_polish_masks.count_kontext_prompt_tokens",
-                return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+            with (
+                patch(
+                    "aigen.keyframe_polish_masks.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+                ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 resolved = preview_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
                 )
 
         self.assertEqual([region["id"] for region in resolved["polish_plan"]["regions"]], ["region_01", "region_02"])
@@ -2170,6 +2335,64 @@ class KeyframeTests(unittest.TestCase):
         self.assertTrue(segmenter.closed)
         self.assertEqual(segmenter.batch_sizes, [2])
         self.assertEqual(grounder.request_count, 2)
+
+    def test_keyframe_polish_rejects_out_of_bounds_planner_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            job_path, plan_path = write_polish_fixture(root)
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+            payload["polish_plan"]["regions"][0]["parameters"]["strength"] = 0.90
+            write_json(plan_path, payload)
+
+            with (
+                patch(
+                    "aigen.keyframe_polish_masks.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+                ),
+                self.assertRaisesRegex(KeyframePolishError, "outside"),
+            ):
+                preview_keyframe_polish_job(
+                    job_path,
+                    refine_profile(),
+                    project_root=Path.cwd(),
+                )
+
+    def test_polish_plan_parser_rejects_coerced_reference_crop_requirements(self) -> None:
+        payload = {
+            "kind": "keyframe-polish-plan",
+            "job_id": "ai51.punch.seed060.polish",
+            "base_candidate": "seed_060",
+            "needs_polish": True,
+            "regions": [
+                {
+                    "id": "region_01",
+                    "label": "face expression",
+                    "bbox": [48, 28, 105, 92],
+                    "mask_prompt": "visible face, eye, mouth and cheek",
+                    "operation": "expression_refine",
+                    "reason": "expression is weak",
+                    "reference_crop_requirements": "matching face region from identity primer",
+                    "parameters": {
+                        "strength": 0.36,
+                        "steps": 18,
+                        "guidance_scale": 2.2,
+                        "true_cfg_scale": 1.25,
+                        "feather_px": 3,
+                        "crop_padding_px": 16,
+                        "crop_upsample_factor": 1.0,
+                        "max_sequence_length": 128,
+                    },
+                    "prompt": "Refine the local face expression while preserving the side-profile head shape.",
+                    "negative_prompt": "changed hair length, front view, changed pose",
+                    "must_not_change": ["pose", "hair length"],
+                    "acceptance_checks": ["expression clearer", "outside mask unchanged"],
+                }
+            ],
+            "summary": "face needs local expression polish",
+        }
+
+        with self.assertRaisesRegex(KeyframePolishError, "invalid JSON"):
+            parse_polish_plan(json.dumps(payload))
 
     def test_keyframe_polish_empty_plan_skips_mask_models(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2219,6 +2442,7 @@ class KeyframeTests(unittest.TestCase):
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
+                    progress=SILENT_STATUS,
                 )
 
         self.assertEqual(result["outputs"], [])
@@ -2233,16 +2457,18 @@ class KeyframeTests(unittest.TestCase):
             payload["polish_plan"]["regions"][1]["id"] = "waist_detail"
             write_json(plan_path, payload)
 
-            with patch(
-                "aigen.keyframe_polish_masks.count_kontext_prompt_tokens",
-                return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+            with (
+                patch(
+                    "aigen.keyframe_polish_masks.count_kontext_prompt_tokens",
+                    return_value=PromptTokenCounts(clip=8, clip_limit=77, t5=18),
+                ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 resolved = preview_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
                 )
 
         self.assertEqual(resolved["output"]["files"][0]["name"], "face_detail_s0p36_seed1101")
@@ -2268,13 +2494,14 @@ class KeyframeTests(unittest.TestCase):
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 result = run_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
+                    progress=SILENT_STATUS,
                 )
 
             output_dir = root / "runs" / "punch_polish"
@@ -2309,32 +2536,33 @@ class KeyframeTests(unittest.TestCase):
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 run_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
+                    progress=SILENT_STATUS,
                 )
-            result = select_keyframe_polish(
-                job_path,
-                config=KeyframeJudgeConfig(
-                    judge_id=DEFAULT_JUDGE_ID,
-                    model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
-                    repo_id=DEFAULT_JUDGE_REPO_ID,
-                    revision=DEFAULT_JUDGE_REVISION,
-                    dtype="bfloat16",
-                    attention_impl="sdpa",
-                    quantization=DEFAULT_JUDGE_QUANTIZATION,
-                    min_pixels=1,
-                    max_pixels=2,
-                    max_new_tokens=512,
-                    temperature=0.0,
-                ),
-                project_root=Path.cwd(),
-                runner=FakePolishSelector(),
-            )
+            with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakePolishSelector()):
+                result = select_keyframe_polish(
+                    job_path,
+                    config=KeyframeJudgeConfig(
+                        judge_id=DEFAULT_JUDGE_ID,
+                        model=Path("/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct"),
+                        repo_id=DEFAULT_JUDGE_REPO_ID,
+                        revision=DEFAULT_JUDGE_REVISION,
+                        dtype="bfloat16",
+                        attention_impl="sdpa",
+                        quantization=DEFAULT_JUDGE_QUANTIZATION,
+                        min_pixels=1,
+                        max_pixels=2,
+                        max_new_tokens=512,
+                        temperature=0.0,
+                    ),
+                    project_root=Path.cwd(),
+                )
 
             self.assertTrue(Path(result["final_composite"]["path"]).exists())
             self.assertEqual(result["regions"][0]["region_id"], "region_01")
@@ -2359,13 +2587,14 @@ class KeyframeTests(unittest.TestCase):
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 run_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
+                    progress=SILENT_STATUS,
                 )
             runner = ClosingFakePolishSelector()
             with patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=runner):
@@ -2409,16 +2638,20 @@ class KeyframeTests(unittest.TestCase):
                         "nvidia_smi_device_total_mb": 0,
                     },
                 ),
+                patch("aigen.keyframe_polish_masks.SamForegroundSegmenter", return_value=FakeSegmenter()),
+                patch("aigen.keyframe_polish_masks.KeyframeRegionGrounder", return_value=FakeGrounder()),
             ):
                 run_keyframe_polish_job(
                     job_path,
                     refine_profile(),
                     project_root=Path.cwd(),
-                    segmenter=FakeSegmenter(),
-                    grounder=FakeGrounder(),
+                    progress=SILENT_STATUS,
                 )
 
-            with self.assertRaisesRegex(KeyframePolishError, "unrestored detail"):
+            with (
+                patch("aigen.keyframe_polish.QwenKeyframeJudge", return_value=FakeUnrestoredPolishSelector()),
+                self.assertRaisesRegex(KeyframePolishError, "unrestored detail"),
+            ):
                 select_keyframe_polish(
                     job_path,
                     config=KeyframeJudgeConfig(
@@ -2435,7 +2668,6 @@ class KeyframeTests(unittest.TestCase):
                         temperature=0.0,
                     ),
                     project_root=Path.cwd(),
-                    runner=FakeUnrestoredPolishSelector(),
                 )
 
     def test_qwen_judge_reports_missing_local_model_before_loading_dependencies(self) -> None:
@@ -2456,6 +2688,28 @@ class KeyframeTests(unittest.TestCase):
                         temperature=0.0,
                     )
                 )
+
+    def test_qwen_judge_requires_cuda_device_map(self) -> None:
+        cuda_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: True))
+        cpu_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False))
+
+        self.assertEqual(_judge_device_map(cuda_torch), {"": 0})
+        with self.assertRaisesRegex(KeyframeJudgeError, "requires CUDA"):
+            _judge_device_map(cpu_torch)
+
+    def test_qwen_judge_cli_rejects_unsupported_4bit_quantization(self) -> None:
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "keyframes",
+                    "judge",
+                    "runs/keyframes/example",
+                    "--quantization",
+                    "bitsandbytes-4bit",
+                ]
+            )
 
 
 if __name__ == "__main__":

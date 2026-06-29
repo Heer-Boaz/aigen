@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 KEYFRAME_JOB_SCHEMA = "schemas/keyframe-job.schema.json"
-KEYFRAME_SCHEMA_VERSION = 1
 
 
 class KeyframeJobError(RuntimeError):
@@ -27,7 +26,7 @@ class PathSpec(StrictModel):
 
 
 class IdentityPrimerSpec(StrictModel):
-    view: Literal["front", "left_profile", "right_profile", "back"]
+    view: str
     path: str
 
 
@@ -39,8 +38,8 @@ class CharacterSpec(StrictModel):
 class KeyframeSpec(StrictModel):
     action: str
     phase: str
-    direction: Literal["left", "right"]
-    camera: Literal["orthographic-side"]
+    direction: str
+    camera: str
 
 
 class AssetSpec(StrictModel):
@@ -105,7 +104,6 @@ class AcceptanceSpec(StrictModel):
 
 class KeyframeJobSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["character-keyframe"]
     id: str
     pipeline: PipelineSpec

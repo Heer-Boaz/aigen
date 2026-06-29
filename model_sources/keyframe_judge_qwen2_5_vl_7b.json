@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "target_hardware": {
     "gpu": "RTX 5070 Ti",
     "vram_gb": 16,

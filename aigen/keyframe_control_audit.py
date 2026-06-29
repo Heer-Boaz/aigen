@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -20,9 +21,9 @@ from aigen.keyframe_job_models import (
 from aigen.keyframe_score import DEFAULT_SCORER_ID, KeyframeScoreConfig, score_keyframe_run
 from aigen.keyframes import resolve_keyframe_spec
 from aigen.manifest_io import read_json, write_json
+from aigen.progress import StatusReporter
 
 
-CONTROL_AUDIT_SCHEMA_VERSION = 1
 CONTROL_AUDIT_SCORER_ID = "control-audit"
 CONTROL_AUDIT_MINIMAL_PROMPT = (
     "Same character, full body, clean neutral background, preserve outfit and side-view character design."
@@ -48,8 +49,9 @@ def run_keyframe_control_audit(
     project_root: Path,
     seed: int | None = None,
     scorer_id: str = CONTROL_AUDIT_SCORER_ID,
-    score_runner: Any | None = None,
+    progress: StatusReporter,
 ) -> dict[str, Any]:
+    progress.phase("load control audit source run")
     resolved_run_dir = run_dir.resolve()
     source_result = read_json(resolved_run_dir / "result.json", label="source keyframe result")
     source_config = source_result["effective_config"]
@@ -71,7 +73,8 @@ def run_keyframe_control_audit(
     total_start = perf_counter()
     outputs = []
     variant_results = []
-    for variant in variants:
+    for index, variant in enumerate(variants, start=1):
+        progress.phase(f"audit {variant.name} ({index}/{len(variants)})")
         _release_cuda_cache()
         variant_result = _run_audit_variant(
             source_spec,
@@ -88,11 +91,13 @@ def run_keyframe_control_audit(
             output_path = audit_dir / f"{variant.name}.png"
             shutil.copy2(variant_output["path"], output_path)
             outputs.append({**variant_output, "name": variant.name, "path": output_path.as_posix()})
+        progress.step(f"audited {variant.name} ({index}/{len(variants)})")
 
     completed_results = [result for result in variant_results if result["status"] == "completed"]
     if not completed_results:
         raise KeyframeControlAuditError("Control audit produced no completed variants")
     save_contact_sheet(outputs, audit_dir / "contact_sheet.png", thumb_width=256, label_x=8)
+    progress.step("score control audit")
     run_result = {
         "status": "completed" if len(completed_results) == len(variant_results) else "partial",
         "job_id": f"{source_result['job_id']}.control-audit",
@@ -115,7 +120,7 @@ def run_keyframe_control_audit(
         "timings_ms": {
             "total_ms": (perf_counter() - total_start) * 1000,
             "variant_total_ms": {
-                variant.name: result.get("timings_ms", {}).get("total_ms")
+                variant.name: result["timings_ms"]["total_ms"]
                 for variant, result in zip(variants, variant_results, strict=True)
             },
         },
@@ -129,15 +134,13 @@ def run_keyframe_control_audit(
             for variant, result in zip(variants, variant_results, strict=True)
         },
         "variant_results": {
-            variant.name: result.get("result_path")
+            variant.name: result["result_path"]
             for variant, result in zip(variants, variant_results, strict=True)
         },
     }
     write_json(audit_dir / "result.json", run_result)
 
-    if score_runner is None:
-        score_runner = score_keyframe_run
-    score_result = score_runner(
+    score_result = score_keyframe_run(
         audit_dir,
         KeyframeScoreConfig(scorer_id=scorer_id),
         project_root=project_root,
@@ -151,6 +154,7 @@ def run_keyframe_control_audit(
         score_result,
         scorer_id,
     )
+    progress.step("write control audit result")
     write_json(audit_dir / "audit.json", audit_payload)
     return audit_payload
 
@@ -276,6 +280,7 @@ def _run_variant_job_process(job_path: Path, project_root: Path) -> dict[str, An
                 check=True,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                env={**environ, "AIGEN_PROGRESS": "0"},
                 timeout=CONTROL_AUDIT_VARIANT_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired:
@@ -309,14 +314,14 @@ def _has_completed_variant_output(
     variant_spec: KeyframeJobSpec,
     seed: int,
 ) -> bool:
-    if result.get("status") != "completed":
+    if result["status"] != "completed":
         return False
-    if result.get("job_id") != variant_spec.id:
+    if result["job_id"] != variant_spec.id:
         return False
-    outputs = result.get("outputs", [])
+    outputs = result["outputs"]
     if len(outputs) != 1:
         return False
-    if outputs[0].get("seed") != seed:
+    if outputs[0]["seed"] != seed:
         return False
     return Path(outputs[0]["path"]).exists()
 
@@ -331,7 +336,9 @@ def _prepare_audit_dir(audit_dir: Path, variants: list[ControlAuditVariant]) -> 
         path.unlink(missing_ok=True)
     for stale_image in audit_dir.glob("*.png"):
         stale_image.unlink()
-    shutil.rmtree(audit_dir / "score", ignore_errors=True)
+    score_dir = audit_dir / "score"
+    if score_dir.exists():
+        shutil.rmtree(score_dir)
     active_variant_names = {variant.name for variant in variants}
     variant_runs_dir = audit_dir / "variant_runs"
     if variant_runs_dir.exists():
@@ -347,12 +354,12 @@ def _aggregate_variant_memory(
     variant_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     peaks = [
-        result["memory"].get("nvidia_smi_peak_used_mb", 0)
+        result["memory"]["nvidia_smi_peak_used_mb"]
         for result in variant_results
         if result["status"] == "completed"
     ]
     return {
-        "nvidia_smi_peak_used_mb": max(peaks) if peaks else 0,
+        "nvidia_smi_peak_used_mb": max(peaks),
         "variants": {
             variant.name: result["memory"]
             for variant, result in zip(variants, variant_results, strict=True)
@@ -463,7 +470,6 @@ def _audit_payload(
     score_deltas = _score_deltas(score_by_name)
     pass_status = _audit_pass_status(run_result, score_by_name, score_deltas)
     return {
-        "schema_version": CONTROL_AUDIT_SCHEMA_VERSION,
         "status": "passed" if pass_status["passed"] else "failed",
         "passed": pass_status["passed"],
         "blockers": pass_status["blockers"],
@@ -533,7 +539,7 @@ def _audit_pass_status(
     blockers = []
     failed_variants = [
         name
-        for name, status in run_result.get("variant_status", {}).items()
+        for name, status in run_result["variant_status"].items()
         if status["status"] != "completed"
     ]
     if failed_variants:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import subprocess
-from contextlib import closing, nullcontext
+from contextlib import closing
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -53,11 +53,11 @@ from aigen.keyframe_polish_selection import (
 from aigen.keyframe_profiles import KeyframeRefineProfile
 from aigen.keyframe_refine import KontextInpaintRefiner
 from aigen.manifest_io import read_json, resolve_existing_path, resolve_output_path, sha256_bytes, write_json
+from aigen.progress import StatusReporter
 
 
 KEYFRAME_POLISH_JOB_SCHEMA = "schemas/keyframe-polish-job.schema.json"
 KEYFRAME_POLISH_PLAN_SCHEMA = "schemas/keyframe-polish-plan.schema.json"
-KEYFRAME_POLISH_SCHEMA_VERSION = 1
 
 
 def keyframe_polish_job_schema() -> dict[str, Any]:
@@ -96,7 +96,6 @@ def plan_keyframe_polish(
     plan_path = resolve_output_path(spec.plan.path, job_path.parent)
     output_dir = resolve_output_path(spec.output.directory, job_path.parent)
     return {
-        "schema_version": KEYFRAME_POLISH_SCHEMA_VERSION,
         "status": "planned",
         "job_path": job_path.resolve().as_posix(),
         "job_id": spec.id,
@@ -132,7 +131,6 @@ def diagnose_keyframe_polish(
     *,
     config: KeyframeJudgeConfig,
     project_root: Path,
-    runner: Any | None = None,
 ) -> dict[str, Any]:
     spec = load_keyframe_polish_job(job_path)
     context = load_polish_context(spec, job_path)
@@ -140,12 +138,11 @@ def diagnose_keyframe_polish(
     evidence_dir = plan_path.with_suffix("")
     evidence = save_polish_planner_evidence(context, evidence_dir)
     prompt = polish_planner_prompt(spec, context, evidence.prompt_order)
-    with closing(QwenKeyframeJudge(config)) if runner is None else nullcontext(runner) as active_runner:
+    with closing(QwenKeyframeJudge(config)) as active_runner:
         raw_text = active_runner.judge_candidate(prompt, evidence.image_paths)
         plan = parse_polish_plan(raw_text)
         validate_polish_plan(spec, plan, context.base_image.size)
         payload = {
-            "schema_version": 1,
             "status": "completed",
             "job_path": job_path.resolve().as_posix(),
             "run_dir": context.base_dir.as_posix(),
@@ -159,7 +156,7 @@ def diagnose_keyframe_polish(
                 "min_pixels": config.min_pixels,
                 "max_pixels": config.max_pixels,
                 "temperature": config.temperature,
-                "device_report": _runner_device_report(active_runner),
+                "device_report": active_runner.device_report,
             },
             "evidence_images": [path.as_posix() for path in evidence.image_paths],
             "evidence_order": evidence.prompt_order,
@@ -194,7 +191,6 @@ def resolve_keyframe_polish_job(
             raise KeyframePolishError(f"Output exists and overwrite=false: {existing[0]['path']}")
     token_metadata = polish_region_token_metadata(profile.model, plan)
     return {
-        "schema_version": KEYFRAME_POLISH_SCHEMA_VERSION,
         "kind": "resolved-keyframe-polish",
         "job_path": job_path.resolve().as_posix(),
         "job_id": spec.id,
@@ -249,8 +245,6 @@ def preview_keyframe_polish_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
-    segmenter: Any | None = None,
-    grounder: Any | None = None,
 ) -> dict[str, Any]:
     resolved = resolve_keyframe_polish_job(job_path, profile, project_root=project_root, check_outputs=True)
     context = load_polish_context(load_keyframe_polish_job(job_path), job_path)
@@ -258,8 +252,6 @@ def preview_keyframe_polish_job(
         context.base_image,
         context.identity_primer,
         resolved,
-        segmenter=segmenter,
-        grounder=grounder,
     )
     return {
         **resolved,
@@ -272,25 +264,25 @@ def run_keyframe_polish_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
-    segmenter: Any | None = None,
-    grounder: Any | None = None,
+    progress: StatusReporter,
 ) -> dict[str, Any]:
+    progress.phase("resolve polish job")
     spec = load_keyframe_polish_job(job_path)
     resolved = resolve_keyframe_polish_job(job_path, profile, project_root=project_root, check_outputs=True)
     context = load_polish_context(spec, job_path)
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
+    progress.step("build polish masks")
     mask_plans = build_polish_mask_plans(
         context.base_image,
         context.identity_primer,
         resolved,
-        segmenter=segmenter,
-        grounder=grounder,
     )
     _save_mask_artifacts(mask_plans, output_dir)
     resolved = {**resolved, "mask_plan": [mask_plan_json(plan, output_dir) for plan in mask_plans]}
     write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_debug_images:
+        progress.phase("save polish debug images")
         _save_debug_images(context.base_image, mask_plans, output_dir)
     if not mask_plans:
         result = {
@@ -320,13 +312,21 @@ def run_keyframe_polish_job(
     memory_sampler.start()
     try:
         total_start = perf_counter()
+        progress.step("load polish refiner")
         with closing(KontextInpaintRefiner(profile)) as refiner:
             torch_module = refiner.torch
             outputs = []
-            for mask_plan in mask_plans:
+            variant_total = sum(len(polish_region_variants(spec, mask_plan)) for mask_plan in mask_plans)
+            variant_index = 0
+            for mask_index, mask_plan in enumerate(mask_plans, start=1):
                 region_dir = output_dir / "regions" / mask_plan.region_id
                 region_dir.mkdir(parents=True, exist_ok=True)
                 for variant in polish_region_variants(spec, mask_plan):
+                    variant_index += 1
+                    progress.phase(
+                        f"polish {mask_plan.region_id} ({mask_index}/{len(mask_plans)}), "
+                        f"{variant['name']} ({variant_index}/{variant_total})"
+                    )
                     variant_start = synchronized_time(torch_module)
                     base_crop = context.base_image.crop(mask_plan.crop_box)
                     mask_crop = mask_plan.feather_mask.crop(mask_plan.crop_box)
@@ -371,9 +371,12 @@ def run_keyframe_polish_job(
                             "mask_change": outside_mask_change(context.base_image, polished, mask_plan.feather_mask),
                         }
                     )
+                    progress.step(f"polished {variant['name']} ({variant_index}/{variant_total})")
             if spec.output.save_contact_sheet:
+                progress.phase("write polish contact sheet")
                 save_contact_sheet(outputs, output_dir / "contact_sheet.png", thumb_width=192, max_label_chars=28)
             memory = cuda_memory_stats(torch_module, "cuda") | memory_sampler.stop()
+            progress.step("write polish result")
             result = {
                 "status": "completed",
                 "job_id": spec.id,
@@ -405,7 +408,6 @@ def select_keyframe_polish(
     *,
     config: KeyframeJudgeConfig,
     project_root: Path,
-    runner: Any | None = None,
 ) -> dict[str, Any]:
     spec = load_keyframe_polish_job(job_path)
     context = load_polish_context(spec, job_path)
@@ -415,7 +417,7 @@ def select_keyframe_polish(
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
     mask_plans = load_polish_mask_plans(context.base_image, context.identity_primer, resolved["mask_plan"])
     outputs_by_region = _outputs_by_region(result["outputs"])
-    with closing(QwenKeyframeJudge(config)) if runner is None else nullcontext(runner) as active_runner:
+    with closing(QwenKeyframeJudge(config)) as active_runner:
         composite = context.base_image.copy()
         selections = []
         for mask_plan in mask_plans:
@@ -457,7 +459,6 @@ def select_keyframe_polish(
     final_path = output_dir / "final_composite.png"
     composite.save(final_path)
     payload = {
-        "schema_version": 1,
         "status": "completed",
         "job_id": spec.id,
         "git_commit": _git_commit(project_root),
@@ -471,7 +472,7 @@ def select_keyframe_polish(
             "min_pixels": config.min_pixels,
             "max_pixels": config.max_pixels,
             "temperature": config.temperature,
-            "device_report": _runner_device_report(active_runner),
+            "device_report": active_runner.device_report,
         },
     }
     write_json(output_dir / "polish_selection.json", payload)
@@ -543,10 +544,3 @@ def _generation_environment(torch_module: Any) -> dict[str, Any]:
         environment["gpu_name"] = torch_module.cuda.get_device_name(0)
         environment["compute_capability"] = list(torch_module.cuda.get_device_capability(0))
     return environment
-
-
-def _runner_device_report(runner: Any) -> dict[str, Any]:
-    report = getattr(runner, "device_report", {})
-    if isinstance(report, dict):
-        return report
-    return {"value": str(report)}

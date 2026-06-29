@@ -27,7 +27,7 @@ def add_judge_runtime_args(parser: argparse.ArgumentParser, *, role: str, max_ne
     parser.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
     parser.add_argument(
         "--quantization",
-        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
+        choices=("bitsandbytes-8bit", "none"),
         default=DEFAULT_JUDGE_QUANTIZATION,
         help=f"Local inference quantization for the {role}",
     )

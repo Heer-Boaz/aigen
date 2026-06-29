@@ -10,11 +10,6 @@ class VlmJsonError(RuntimeError):
 
 def json_object_from_vlm_response(raw_text: str) -> dict[str, Any]:
     text = raw_text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines[-1].strip() != "```":
-            raise VlmJsonError("VLM returned an unterminated Markdown JSON block")
-        text = "\n".join(lines[1:-1]).strip()
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:

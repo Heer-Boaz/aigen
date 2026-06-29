@@ -15,5 +15,4 @@ def kontext_inpaint_text_kwargs(
     }
     if negative_prompt:
         kwargs["negative_prompt"] = negative_prompt
-        kwargs["negative_prompt_2"] = negative_prompt
     return kwargs

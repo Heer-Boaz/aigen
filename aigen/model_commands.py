@@ -10,6 +10,7 @@ from aigen.models.downloads import (
     download_models,
     load_download_manifest,
 )
+from aigen.progress import StatusReporter
 
 
 def add_model_commands(subparsers: Any) -> None:
@@ -49,12 +50,19 @@ def add_model_commands(subparsers: Any) -> None:
     )
 
 
-def run_model_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
+def run_model_command(
+    args: argparse.Namespace,
+    stdout: TextIO,
+    stderr: TextIO,
+    *,
+    progress: StatusReporter,
+) -> int:
     try:
         result = download_models(
             load_download_manifest(args.manifest),
             args.models_root,
             dry_run=args.dry_run,
+            progress=progress,
         )
     except ModelDownloadError as error:
         dump_json(stderr, error.to_json(), pretty=not args.compact)

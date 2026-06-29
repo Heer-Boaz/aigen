@@ -11,12 +11,14 @@ from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.keyframe_briefs import (
     execute_keyframe_brief,
     materialize_keyframe_brief,
+    write_lora_dataset_spec_from_brief,
 )
 from aigen.keyframe_judge import KeyframeJudgeError
 from aigen.keyframe_examples import KeyframeExampleError
 from aigen.keyframe_job_models import KeyframeJobError
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.manifest_io import ManifestIOError
+from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
 
 
@@ -40,17 +42,36 @@ def add_brief_commands(subparsers: Any) -> None:
         help="Extract example controls and write the planned keyframe job",
     )
     materialize.add_argument("brief", type=Path, help="Keyframe brief JSON")
-    materialize.add_argument("--pose-device", default="cpu", help="DWPose device")
+    materialize.add_argument("--pose-device", default="cuda", help="DWPose device")
     materialize.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    lora_dataset = brief_subparsers.add_parser(
+        "lora-dataset",
+        help="Write a LoRA dataset spec from a generated brief plan",
+    )
+    lora_dataset.add_argument("brief", type=Path, help="Keyframe brief JSON")
+    lora_dataset.add_argument("--trigger-token", required=True, help="LoRA trigger token")
+    lora_dataset.add_argument("--spec", required=True, type=Path, help="Output LoRA dataset spec JSON")
+    lora_dataset.add_argument("--dataset-dir", required=True, type=Path, help="Output dataset directory")
+    lora_dataset.add_argument("--view", action="append", dest="views", help="Accepted view-bank view to include")
+    lora_dataset.add_argument("--validation-ratio", type=float, default=0.1)
+    lora_dataset.add_argument("--overwrite", action="store_true", help="Allow dataset-build to replace the dataset output")
+    lora_dataset.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     run = brief_subparsers.add_parser("run", help="Plan, materialize and run a keyframe brief")
     run.add_argument("brief", type=Path, help="Keyframe brief JSON")
     add_judge_runtime_args(run, role="planner", max_new_tokens=1400)
-    run.add_argument("--pose-device", default="cpu", help="DWPose device")
+    run.add_argument("--pose-device", default="cuda", help="DWPose device")
     run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
-def run_brief_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
+def run_brief_command(
+    args: argparse.Namespace,
+    stdout: TextIO,
+    stderr: TextIO,
+    *,
+    progress: StatusReporter,
+) -> int:
     try:
         if args.briefs_command == "schema":
             dump_json(stdout, keyframe_brief_schema(), pretty=not args.compact)
@@ -59,6 +80,7 @@ def run_brief_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) 
             dump_json(stdout, keyframe_brief_plan_schema(), pretty=not args.compact)
             return 0
         if args.briefs_command == "plan":
+            progress.phase("plan brief")
             dump_json(
                 stdout,
                 plan_keyframe_brief(args.brief, judge_config_from_args(args), project_root=PROJECT_ROOT),
@@ -66,9 +88,32 @@ def run_brief_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) 
             )
             return 0
         if args.briefs_command == "materialize":
+            progress.phase("materialize brief")
             dump_json(
                 stdout,
-                materialize_keyframe_brief(args.brief, project_root=PROJECT_ROOT, pose_device=args.pose_device),
+                materialize_keyframe_brief(
+                    args.brief,
+                    project_root=PROJECT_ROOT,
+                    pose_device=args.pose_device,
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.briefs_command == "lora-dataset":
+            dump_json(
+                stdout,
+                write_lora_dataset_spec_from_brief(
+                    args.brief,
+                    trigger_token=args.trigger_token,
+                    spec_path=args.spec,
+                    dataset_dir=args.dataset_dir,
+                    project_root=PROJECT_ROOT,
+                    views=args.views,
+                    validation_ratio=args.validation_ratio,
+                    overwrite=args.overwrite,
+                    progress=progress,
+                ),
                 pretty=not args.compact,
             )
             return 0
@@ -79,6 +124,7 @@ def run_brief_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) 
                 judge_config_from_args(args),
                 project_root=PROJECT_ROOT,
                 pose_device=args.pose_device,
+                progress=progress,
             ),
             pretty=not args.compact,
         )

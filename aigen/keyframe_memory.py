@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from threading import Event, Thread
 from typing import Any
 
 from aigen.flux_geometry import canvas_for_token_budget, fit_size_to_area, flux_token_count
+from aigen.gpu_status import GpuStatusError, nvidia_smi_memory_snapshot
 
 
 NVIDIA_SMI_PREFLIGHT_LIMIT_MB = 1800
@@ -29,17 +29,19 @@ class NvidiaSmiMemorySampler:
         self.preflight = preflight
         self.peak_used_mb = preflight["nvidia_smi_preflight_used_mb"]
         self.device_total_mb = preflight["nvidia_smi_device_total_mb"]
+        self._error: GpuStatusError | None = None
         self._stop = Event()
         self._thread = Thread(target=self._sample_loop, daemon=True)
 
     def start(self) -> None:
-        if self.device_total_mb:
-            self._thread.start()
+        self._thread.start()
 
     def stop(self) -> dict[str, Any]:
         if self._thread.is_alive():
             self._stop.set()
             self._thread.join()
+        if self._error is not None:
+            raise KeyframeMemoryError("nvidia-smi failed during VRAM sampling") from self._error
         return {
             **self.preflight,
             "nvidia_smi_peak_used_mb": self.peak_used_mb,
@@ -47,7 +49,12 @@ class NvidiaSmiMemorySampler:
 
     def _sample_loop(self) -> None:
         while not self._stop.wait(NVIDIA_SMI_SAMPLE_SECONDS):
-            snapshot = nvidia_smi_memory_snapshot()
+            try:
+                snapshot = nvidia_smi_memory_snapshot()
+            except GpuStatusError as error:
+                self._error = error
+                self._stop.set()
+                return
             self.peak_used_mb = max(self.peak_used_mb, snapshot["nvidia_smi_used_mb"])
 
 
@@ -116,10 +123,10 @@ def nvidia_smi_preflight() -> dict[str, int]:
 
 
 def nvidia_smi_keyframe_preflight(vram_plan: dict[str, Any]) -> dict[str, int | dict[str, int]]:
-    if not cuda_available():
-        return _empty_keyframe_memory_report(vram_plan)
-
-    snapshot = nvidia_smi_memory_snapshot()
+    try:
+        snapshot = nvidia_smi_memory_snapshot()
+    except GpuStatusError as error:
+        raise KeyframeMemoryError("Keyframe generation requires nvidia-smi VRAM telemetry") from error
     report = _keyframe_memory_report(vram_plan, snapshot)
     if report["vram_estimated_headroom_mb"] < 0:
         raise KeyframeMemoryError(
@@ -130,22 +137,6 @@ def nvidia_smi_keyframe_preflight(vram_plan: dict[str, Any]) -> dict[str, int | 
             "Close GPU consumers or lower output/reference tokens."
         )
     return report
-
-
-def _empty_keyframe_memory_report(vram_plan: dict[str, Any]) -> dict[str, int | dict[str, int]]:
-    return {
-        "nvidia_smi_preflight_used_mb": 0,
-        "nvidia_smi_device_total_mb": 0,
-        "nvidia_smi_preflight_utilization_gpu": 0,
-        "vram_estimated_required_mb": 0,
-        "vram_estimated_headroom_mb": 0,
-        "vram_clean_available_mb": 0,
-        "vram_max_output_canvas": {
-            "width": vram_plan["canvas_width"],
-            "height": vram_plan["canvas_height"],
-            "generated_tokens": vram_plan["generated_tokens"],
-        },
-    }
 
 
 def _keyframe_memory_report(
@@ -173,13 +164,10 @@ def _keyframe_memory_report(
 
 
 def nvidia_smi_preflight_limit(limit_mb: int) -> dict[str, int]:
-    if not cuda_available():
-        return {
-            "nvidia_smi_preflight_used_mb": 0,
-            "nvidia_smi_device_total_mb": 0,
-            "nvidia_smi_preflight_utilization_gpu": 0,
-        }
-    snapshot = nvidia_smi_memory_snapshot()
+    try:
+        snapshot = nvidia_smi_memory_snapshot()
+    except GpuStatusError as error:
+        raise KeyframeMemoryError("Keyframe generation requires nvidia-smi VRAM telemetry") from error
     limit_mb = int(os.environ.get("AIGEN_NVIDIA_SMI_PREFLIGHT_LIMIT_MB", limit_mb))
     if snapshot["nvidia_smi_used_mb"] > limit_mb:
         raise KeyframeMemoryError(
@@ -190,31 +178,6 @@ def nvidia_smi_preflight_limit(limit_mb: int) -> dict[str, int]:
         "nvidia_smi_preflight_used_mb": snapshot["nvidia_smi_used_mb"],
         "nvidia_smi_device_total_mb": snapshot["nvidia_smi_device_total_mb"],
         "nvidia_smi_preflight_utilization_gpu": snapshot["nvidia_smi_utilization_gpu"],
-    }
-
-
-def cuda_available() -> bool:
-    try:
-        import torch
-    except ImportError:
-        return False
-    return bool(torch.cuda.is_available())
-
-
-def nvidia_smi_memory_snapshot() -> dict[str, int]:
-    output = subprocess.check_output(
-        [
-            "nvidia-smi",
-            "--query-gpu=memory.used,memory.total,utilization.gpu",
-            "--format=csv,noheader,nounits",
-        ],
-        text=True,
-    ).strip()
-    values = output.splitlines()[0].split(",")
-    return {
-        "nvidia_smi_used_mb": int(values[0].strip()),
-        "nvidia_smi_device_total_mb": int(values[1].strip()),
-        "nvidia_smi_utilization_gpu": int(values[2].strip()),
     }
 
 

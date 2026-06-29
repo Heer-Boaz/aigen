@@ -87,7 +87,6 @@ Manual acceptance criteria:
 {json.dumps(acceptance, ensure_ascii=False)}
 
 Return JSON only. The JSON object must match:
-- schema_version: 1
 - kind: "keyframe-polish-plan"
 - job_id: "{spec.id}"
 - base_candidate: "{spec.base.candidate}"

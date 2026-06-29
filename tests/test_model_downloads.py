@@ -11,6 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from aigen.cli import main
+from aigen.progress import SILENT_STATUS
+
 from aigen.models.downloads import (
     ModelDownloadDependencyError,
     ModelDownloadProcessError,
@@ -26,7 +28,6 @@ def write_json(path: Path, payload: object) -> None:
 
 def download_manifest_payload() -> dict[str, object]:
     return {
-        "schema_version": 1,
         "target_hardware": {
             "gpu": "RTX 5070 Ti",
             "vram_gb": 16,
@@ -133,6 +134,7 @@ class ModelDownloadTests(unittest.TestCase):
                     load_download_manifest(manifest_path),
                     models_root,
                     dry_run=True,
+                    progress=SILENT_STATUS,
                 ).to_json()
 
         self.assertTrue(Path(result["models_root"]).is_absolute())
@@ -166,6 +168,7 @@ class ModelDownloadTests(unittest.TestCase):
                 result = download_models(
                     load_download_manifest(manifest_path),
                     models_root,
+                    progress=SILENT_STATUS,
                 ).to_json()
 
         self.assertEqual(len(calls), 1)
@@ -197,6 +200,7 @@ class ModelDownloadTests(unittest.TestCase):
                     download_models(
                         load_download_manifest(manifest_path),
                         root / "models",
+                        progress=SILENT_STATUS,
                     )
 
     def test_reports_hub_download_failure(self) -> None:
@@ -217,6 +221,7 @@ class ModelDownloadTests(unittest.TestCase):
                     download_models(
                         load_download_manifest(manifest_path),
                         root / "models",
+                        progress=SILENT_STATUS,
                     )
 
         payload = error.exception.to_json()
@@ -291,6 +296,7 @@ class ModelDownloadTests(unittest.TestCase):
                 result = download_models(
                     load_download_manifest(manifest_path),
                     root / "models",
+                    progress=SILENT_STATUS,
                 ).to_json()
 
         self.assertEqual(result["downloads"][0]["name"], "flux-kontext-4bit-fp4")
@@ -307,6 +313,7 @@ class ModelDownloadTests(unittest.TestCase):
                 load_download_manifest(manifest_path),
                 root / "models",
                 dry_run=True,
+                progress=SILENT_STATUS,
             ).to_json()
 
         self.assertEqual(result["models_root"], str((root / "models").resolve()))

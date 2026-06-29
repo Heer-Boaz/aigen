@@ -173,7 +173,6 @@
       "guidance_scale": 2.5,
       "steps": 28
     },
-    "schema_version": 1,
     "spec_sha256": "c744df4cbdce117366bf2bae0f8a0be75eadae20526aa49e80edc92e1bcca67b",
     "tokens": {
       "clip": 69,

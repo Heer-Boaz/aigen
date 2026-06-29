@@ -10,7 +10,6 @@
     }
   },
   "kind": "character-view-bank",
-  "schema_version": 1,
   "views": {
     "front": {
       "acceptance": {

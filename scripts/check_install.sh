@@ -15,6 +15,10 @@ required = [
     "torch",
     "torchvision",
     "diffusers",
+    "datasets",
+    "ftfy",
+    "jinja2",
+    "tensorboard",
     "transformers",
     "controlnet_aux",
     "segment_anything",
@@ -38,7 +42,7 @@ import onnxruntime as ort
 
 providers = ort.get_available_providers()
 if "CUDAExecutionProvider" not in providers:
-    raise SystemExit(f"onnxruntime CUDAExecutionProvider is unavailable: {providers}")
+    raise SystemExit(f"onnxruntime CUDAExecutionProvider is missing: {providers}")
 PY
 
 run "$venv_python" -m aigen.cli --help
@@ -50,5 +54,12 @@ run "$venv_python" -m aigen.cli keyframes schema --compact
 run "$venv_python" -m aigen.cli keyframes refine-schema --compact
 run "$venv_python" -m aigen.cli keyframes polish-schema --compact
 run "$venv_python" -m aigen.cli keyframes polish-plan-schema --compact
+[[ -f "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py" ]] || {
+  echo "missing LoRA trainer; run scripts/download_lora_trainer.sh" >&2
+  exit 1
+}
+grep -Fq 'check_min_version("0.38.0")' "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
+grep -Fq "move_training_module" "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
+grep -Fq "Skipping save-time transformer dtype cast for quantized local LoRA training." "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
 
 log "install check passed"

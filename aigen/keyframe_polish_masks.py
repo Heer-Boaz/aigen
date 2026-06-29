@@ -56,24 +56,19 @@ def build_polish_mask_plans(
     base: Image.Image,
     identity_primer: Image.Image,
     resolved: dict[str, Any],
-    *,
-    segmenter: Any | None = None,
-    grounder: Any | None = None,
 ) -> list[PolishMaskPlan]:
     plan = KeyframePolishPlan.model_validate(resolved["polish_plan"])
     if not plan.regions:
         return []
     base_array = np.asarray(base.convert("RGB"), dtype=np.uint8)
-    if grounder is None:
-        grounder = KeyframeRegionGrounder(GroundingConfig())
+    grounder = KeyframeRegionGrounder(GroundingConfig())
     grounded_regions = grounder.ground_regions(
         base,
         [GroundingRequest(prompt=region.mask_prompt, prior_box=region.bbox) for region in plan.regions],
     )
 
     with ExitStack() as resources:
-        if segmenter is None:
-            segmenter = resources.enter_context(closing(SamForegroundSegmenter(SamSegmentationConfig())))
+        segmenter = resources.enter_context(closing(SamForegroundSegmenter(SamSegmentationConfig())))
         hard_masks = segmenter.segment_image_boxes(
             base_array,
             [grounding.box for grounding in grounded_regions],
@@ -125,17 +120,35 @@ def load_polish_mask_plans(
     return plans
 
 
-def bound_polish_parameters(operation: str, parameters: PlannedPolishParameters) -> BoundedPolishParameters:
+def validated_polish_parameters(operation: str, parameters: PlannedPolishParameters) -> BoundedPolishParameters:
     profile = POLISH_OPERATION_PROFILES[operation]
+    _validate_polish_parameter_range("strength", parameters.strength, profile["strength_min"], profile["strength_max"])
+    _validate_polish_parameter_range("steps", parameters.steps, profile["steps_min"], profile["steps_max"])
+    _validate_polish_parameter_range(
+        "guidance_scale",
+        parameters.guidance_scale,
+        profile["guidance_min"],
+        profile["guidance_max"],
+    )
+    _validate_polish_parameter_range(
+        "true_cfg_scale",
+        parameters.true_cfg_scale,
+        profile["true_cfg_min"],
+        profile["true_cfg_max"],
+    )
+    _validate_polish_parameter_range("feather_px", parameters.feather_px, 1, 32)
+    _validate_polish_parameter_range("crop_padding_px", parameters.crop_padding_px, 16, 192)
+    _validate_polish_parameter_range("crop_upsample_factor", parameters.crop_upsample_factor, 1.0, 2.0)
+    _validate_polish_parameter_range("max_sequence_length", parameters.max_sequence_length, 64, 256)
     return BoundedPolishParameters(
-        strength=_clamp_float(parameters.strength, profile["strength_min"], profile["strength_max"]),
-        steps=_clamp_int(parameters.steps, profile["steps_min"], profile["steps_max"]),
-        guidance_scale=_clamp_float(parameters.guidance_scale, profile["guidance_min"], profile["guidance_max"]),
-        true_cfg_scale=_clamp_float(parameters.true_cfg_scale, profile["true_cfg_min"], profile["true_cfg_max"]),
-        feather_px=max(1, min(32, parameters.feather_px)),
-        crop_padding_px=max(16, min(192, parameters.crop_padding_px)),
-        crop_upsample_factor=_clamp_float(parameters.crop_upsample_factor, 1.0, 2.0),
-        max_sequence_length=max(64, min(256, parameters.max_sequence_length)),
+        strength=parameters.strength,
+        steps=parameters.steps,
+        guidance_scale=parameters.guidance_scale,
+        true_cfg_scale=parameters.true_cfg_scale,
+        feather_px=parameters.feather_px,
+        crop_padding_px=parameters.crop_padding_px,
+        crop_upsample_factor=parameters.crop_upsample_factor,
+        max_sequence_length=parameters.max_sequence_length,
     )
 
 
@@ -171,7 +184,7 @@ def polish_region_variants(spec: KeyframePolishJobSpec, mask_plan: PolishMaskPla
 def polish_region_token_metadata(model_path: str, plan: KeyframePolishPlan) -> dict[str, dict[str, int]]:
     metadata = {}
     for region in plan.regions:
-        bounded = bound_polish_parameters(region.operation, region.parameters)
+        bounded = validated_polish_parameters(region.operation, region.parameters)
         tokens = count_kontext_prompt_tokens(model_path, region.label, region.prompt)
         if tokens.clip > tokens.clip_limit:
             raise KeyframePolishError(f"{region.id} CLIP prompt has {tokens.clip} tokens, limit is {tokens.clip_limit}")
@@ -192,7 +205,7 @@ def polish_region_token_metadata(model_path: str, plan: KeyframePolishPlan) -> d
 def planned_polish_outputs(spec: KeyframePolishJobSpec, plan: KeyframePolishPlan, output_dir: Path) -> list[dict[str, Any]]:
     files = []
     for index, region in enumerate(plan.regions, start=1):
-        bounded = bound_polish_parameters(region.operation, region.parameters)
+        bounded = validated_polish_parameters(region.operation, region.parameters)
         seen: set[tuple[int, float]] = set()
         for seed_offset in spec.micro_sweep.seed_offsets:
             for strength_offset in spec.micro_sweep.strength_offsets:
@@ -293,7 +306,7 @@ def _build_region_mask(
     hard_array &= bbox_mask_array(base.size, grounding.box)
     if not hard_array.any():
         raise KeyframePolishError(f"Segmentation produced no usable mask for polish region {region.id}")
-    parameters = bound_polish_parameters(region.operation, region.parameters)
+    parameters = validated_polish_parameters(region.operation, region.parameters)
     hard_array = ndimage.binary_dilation(hard_array, iterations=max(1, round(width * 0.006)))
     hard = Image.fromarray((hard_array.astype(np.uint8) * 255), mode="L")
     feather = hard.filter(ImageFilter.GaussianBlur(radius=parameters.feather_px))
@@ -318,5 +331,6 @@ def _clamp_float(value: float, lower: float | int, upper: float | int) -> float:
     return float(max(float(lower), min(float(upper), value)))
 
 
-def _clamp_int(value: int, lower: float | int, upper: float | int) -> int:
-    return int(max(int(lower), min(int(upper), value)))
+def _validate_polish_parameter_range(name: str, value: float | int, lower: float | int, upper: float | int) -> None:
+    if not lower <= value <= upper:
+        raise KeyframePolishError(f"Polish parameter {name}={value} is outside [{lower}, {upper}]")

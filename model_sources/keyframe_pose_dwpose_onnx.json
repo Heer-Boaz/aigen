@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "target_hardware": {
     "phase": "post-generation keyframe pose scoring",
     "runtime": "ONNX Runtime DWPose"

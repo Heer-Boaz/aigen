@@ -14,7 +14,7 @@ from scipy import ndimage
 
 from aigen.diffusers_kontext_adapter import kontext_inpaint_text_kwargs
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, module_device_report, synchronized_time
-from aigen.generation.runtime_types import DTYPES
+from aigen.generation.runtime_types import resolve_torch_dtype
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import (
     expanded_aligned_box,
@@ -27,7 +27,6 @@ from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight
 from aigen.keyframe_pose import PoseScoreConfig, extract_target_pose_map_keypoints
 from aigen.keyframe_profiles import KeyframeRefineProfile
 from aigen.keyframe_refine_models import (
-    KEYFRAME_REFINE_SCHEMA_VERSION,
     KeyframeRefineError,
     KeyframeRefineJobSpec,
     load_keyframe_refine_job,
@@ -40,6 +39,7 @@ from aigen.manifest_io import (
     sha256_bytes,
     write_json,
 )
+from aigen.progress import StatusReporter
 from aigen.prompt_tokens import count_kontext_prompt_tokens
 
 
@@ -173,7 +173,6 @@ def resolve_keyframe_refine_job(
         raise KeyframeRefineError("true_cfg_scale > 1.0 requires prompt.negative")
 
     return {
-        "schema_version": KEYFRAME_REFINE_SCHEMA_VERSION,
         "kind": "resolved-keyframe-refine",
         "job_path": job_path.resolve().as_posix(),
         "job_id": spec.id,
@@ -237,10 +236,9 @@ def plan_keyframe_refine_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
-    segmenter: Any | None = None,
 ) -> dict[str, Any]:
     resolved = resolve_keyframe_refine_job(job_path, profile, project_root=project_root, check_outputs=True)
-    mask_plan = build_refine_mask_plan(resolved, segmenter=segmenter)
+    mask_plan = build_refine_mask_plan(resolved)
     return {
         **resolved,
         "mask_plan": _mask_plan_json(mask_plan),
@@ -252,13 +250,15 @@ def run_keyframe_refine_job(
     profile: KeyframeRefineProfile,
     *,
     project_root: Path,
-    segmenter: Any | None = None,
+    progress: StatusReporter,
 ) -> dict[str, Any]:
+    progress.phase("resolve refine job")
     spec = load_keyframe_refine_job(job_path)
     resolved = resolve_keyframe_refine_job(job_path, profile, project_root=project_root, check_outputs=True)
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    mask_plan = build_refine_mask_plan(resolved, segmenter=segmenter)
+    progress.step("build refine mask")
+    mask_plan = build_refine_mask_plan(resolved)
     _save_mask_artifacts(mask_plan, output_dir)
     resolved = {
         **resolved,
@@ -266,6 +266,7 @@ def run_keyframe_refine_job(
     }
     write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_debug_images:
+        progress.phase("save refine debug images")
         _save_debug_images(resolved, mask_plan, output_dir)
 
     memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_preflight())
@@ -274,6 +275,7 @@ def run_keyframe_refine_job(
         total_start = perf_counter()
         variant_results = []
         if len(spec.variants) == 1:
+            progress.step(f"refine {spec.variants[0].name}")
             variant_results.append(
                 run_keyframe_refine_variant(
                     job_path,
@@ -281,24 +283,29 @@ def run_keyframe_refine_job(
                     variant_name=spec.variants[0].name,
                     project_root=project_root,
                     resolved=resolved,
+                    progress=progress,
                 )
             )
+            progress.step("collect refine output")
         else:
             variant_results = _run_refine_variants_in_subprocesses(
                 job_path,
                 spec,
                 project_root,
                 output_dir / "resolved.json",
+                progress=progress,
             )
 
         outputs = [result["output"] for result in variant_results]
+        progress.step("write refine contact sheet")
         if spec.output.save_contact_sheet:
             save_contact_sheet(outputs, output_dir / "contact_sheet.png", thumb_width=256, label_x=8)
+        progress.step("write refine result")
         memory = memory_sampler.stop()
         for variant_result in variant_results:
             memory["nvidia_smi_peak_used_mb"] = max(
                 memory["nvidia_smi_peak_used_mb"],
-                variant_result["memory"].get("nvidia_smi_peak_used_mb", 0),
+                variant_result["memory"]["nvidia_smi_peak_used_mb"],
             )
         result = {
             "status": "completed",
@@ -335,6 +342,7 @@ def run_keyframe_refine_variant(
     variant_name: str,
     project_root: Path,
     resolved: dict[str, Any],
+    progress: StatusReporter,
 ) -> dict[str, Any]:
     spec = load_keyframe_refine_job(job_path)
     output_dir = Path(resolved["output"]["directory"])
@@ -349,6 +357,7 @@ def run_keyframe_refine_variant(
     memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_preflight())
     memory_sampler.start()
     try:
+        progress.phase(f"load refiner {variant_name}")
         with closing(KontextInpaintRefiner(profile)) as refiner:
             torch_module = refiner.torch
             variant_start = synchronized_time(torch_module)
@@ -358,6 +367,7 @@ def run_keyframe_refine_variant(
                 identity_primer = image.convert("RGB")
             base_crop = base.crop(mask_plan.crop_box)
             mask_crop = mask_plan.feather_mask.crop(mask_plan.crop_box)
+            progress.phase(f"inpaint {variant_name}")
             refined_crop = refiner.refine(
                 base_crop=base_crop,
                 mask_crop=mask_crop,
@@ -406,10 +416,12 @@ def _run_refine_variants_in_subprocesses(
     spec: KeyframeRefineJobSpec,
     project_root: Path,
     resolved_path: Path,
+    progress: StatusReporter,
 ) -> list[dict[str, Any]]:
     results = []
     output_dir = resolve_output_path(spec.output.directory, job_path.parent)
-    for variant in spec.variants:
+    for index, variant in enumerate(spec.variants, start=1):
+        progress.phase(f"refine {variant.name} ({index}/{len(spec.variants)})")
         completed = subprocess.run(
             [
                 sys.executable,
@@ -428,6 +440,7 @@ def _run_refine_variants_in_subprocesses(
         if completed.returncode != 0:
             raise KeyframeRefineError(f"Refine variant failed: {variant.name}")
         results.append(read_json(_variant_result_path(output_dir, variant.name), label="keyframe refine variant result"))
+        progress.step(f"refined {variant.name} ({index}/{len(spec.variants)})")
     return results
 
 
@@ -435,7 +448,7 @@ def _variant_result_path(output_dir: Path, variant_name: str) -> Path:
     return output_dir / "variant_results" / f"{variant_name}.json"
 
 
-def build_refine_mask_plan(resolved: dict[str, Any], *, segmenter: Any | None = None) -> RefineMaskPlan:
+def build_refine_mask_plan(resolved: dict[str, Any]) -> RefineMaskPlan:
     pose = extract_target_pose_map_keypoints(Path(resolved["assets"]["pose"]["path"]), PoseScoreConfig(min_common_keypoints=5))
     width, height = pose.image_size
     direction = _direction_from_resolved(resolved)
@@ -458,8 +471,7 @@ def build_refine_mask_plan(resolved: dict[str, Any], *, segmenter: Any | None = 
     hard = arm_band | contour_near_arm
     if resolved["region"]["mask_source"]["candidate_foreground"]:
         with ExitStack() as resources:
-            if segmenter is None:
-                segmenter = resources.enter_context(closing(SamForegroundSegmenter(SamSegmentationConfig())))
+            segmenter = resources.enter_context(closing(SamForegroundSegmenter(SamSegmentationConfig())))
             foreground = segmenter.segment(Path(resolved["base"]["image"]["path"]))
         if foreground.shape != hard.shape:
             raise KeyframeRefineError(
@@ -601,10 +613,7 @@ def _git_commit(project_root: Path) -> str:
 
 
 def _torch_dtype(torch_module: Any, dtype: str) -> Any:
-    dtype_name = DTYPES[dtype]
-    if dtype == "auto":
-        return None
-    return getattr(torch_module, dtype_name)
+    return resolve_torch_dtype(torch_module, dtype, auto_value=None)
 
 
 def _load_kontext_inpaint() -> tuple[Any, Any]:
@@ -631,13 +640,13 @@ def _generation_environment(torch_module: Any) -> dict[str, Any]:
 
 
 def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
-    components = {}
-    for name in ("transformer", "vae", "text_encoder", "text_encoder_2"):
-        component = getattr(pipeline, name, None)
-        if component:
-            components[name] = module_device_report(component)
     return {
         "pipeline_class": type(pipeline).__qualname__,
-        "model_cpu_offload_seq": getattr(pipeline, "model_cpu_offload_seq", ""),
-        "components": components,
+        "model_cpu_offload_seq": pipeline.model_cpu_offload_seq,
+        "components": {
+            "transformer": module_device_report(pipeline.transformer),
+            "vae": module_device_report(pipeline.vae),
+            "text_encoder": module_device_report(pipeline.text_encoder),
+            "text_encoder_2": module_device_report(pipeline.text_encoder_2),
+        },
     }

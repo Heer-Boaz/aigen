@@ -21,13 +21,7 @@ from aigen.keyframe_memory import (
     nvidia_smi_keyframe_preflight,
     planned_token_metadata,
 )
-from aigen.keyframe_job_models import (
-    KEYFRAME_SCHEMA_VERSION,
-    ControlConditionSpec,
-    KeyframeJobError,
-    KeyframeJobSpec,
-    load_keyframe_job,
-)
+from aigen.keyframe_job_models import ControlConditionSpec, KeyframeJobError, KeyframeJobSpec, load_keyframe_job
 from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.keyframe_profiles import KeyframeProfile
 from aigen.manifest_io import (
@@ -36,6 +30,7 @@ from aigen.manifest_io import (
     sha256_bytes,
     write_json,
 )
+from aigen.progress import StatusReporter
 from aigen.prompt_tokens import count_kontext_prompt_tokens
 
 
@@ -101,7 +96,6 @@ def resolve_keyframe_spec(
     token_metadata = _planned_token_metadata(spec, assets)
     vram_plan = _vram_plan(spec, token_metadata)
     return {
-        "schema_version": KEYFRAME_SCHEMA_VERSION,
         "kind": "resolved-character-keyframe",
         "job_path": job_path.resolve().as_posix(),
         "job_id": spec.id,
@@ -156,12 +150,24 @@ def plan_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root:
     return resolve_keyframe_job(job_path, profile, project_root=project_root, check_outputs=True)
 
 
-def run_keyframe_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
+def run_keyframe_job(
+    job_path: Path,
+    profile: KeyframeProfile,
+    *,
+    project_root: Path,
+    progress: StatusReporter,
+) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
-    return run_keyframe_spec(spec, job_path, profile, project_root=project_root)
+    return run_keyframe_spec(spec, job_path, profile, project_root=project_root, progress=progress)
 
 
-def run_keyframe_audit_variant_job(job_path: Path, profile: KeyframeProfile, *, project_root: Path) -> dict[str, Any]:
+def run_keyframe_audit_variant_job(
+    job_path: Path,
+    profile: KeyframeProfile,
+    *,
+    project_root: Path,
+    progress: StatusReporter,
+) -> dict[str, Any]:
     spec = load_keyframe_job(job_path)
     return run_keyframe_spec(
         spec,
@@ -169,6 +175,7 @@ def run_keyframe_audit_variant_job(job_path: Path, profile: KeyframeProfile, *, 
         profile,
         project_root=project_root,
         require_active_conditions=False,
+        progress=progress,
     )
 
 
@@ -179,7 +186,9 @@ def run_keyframe_spec(
     *,
     project_root: Path,
     require_active_conditions: bool = True,
+    progress: StatusReporter,
 ) -> dict[str, Any]:
+    progress.phase("resolve job")
     resolved = resolve_keyframe_spec(
         spec,
         job_path,
@@ -188,15 +197,19 @@ def run_keyframe_spec(
         check_outputs=True,
         require_active_conditions=require_active_conditions,
     )
+    progress.phase("vram preflight")
     memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_keyframe_preflight(resolved["vram_plan"]))
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
+    progress.step("write resolved manifest")
     write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_conditions:
+        progress.phase("save condition images")
         _save_conditions(resolved, output_dir)
 
     memory_sampler.start()
     try:
+        progress.step("load generation models")
         session = CharacterKontextPoseSession(
             profile.model,
             profile.controlnet_model,
@@ -212,6 +225,7 @@ def run_keyframe_spec(
             if torch.cuda.is_available():
                 torch.cuda.reset_peak_memory_stats("cuda")
             total_start = synchronized_time(torch)
+            progress.step("prepare conditioning")
             prepared = session.prepare(
                 reference_image=Path(resolved["character"]["identity_primer"]["path"]),
                 pose_image=Path(resolved["assets"]["pose"]["path"]),
@@ -230,8 +244,10 @@ def run_keyframe_spec(
             control_images, control_repeats = _prepare_control_images(session, prepared, spec, resolved)
             masks = _prepare_masks(session, prepared, spec, resolved)
             session.pipeline.maybe_free_model_hooks()
+            progress.step("denoise variants")
             denoised = []
-            for variant in spec.variants:
+            for index, variant in enumerate(spec.variants, start=1):
+                progress.phase(f"denoise {variant.name} ({index}/{len(spec.variants)})")
                 result = session.pipeline.denoise_prepared(
                     prepared,
                     name=variant.name,
@@ -254,8 +270,11 @@ def run_keyframe_spec(
                 )
                 denoised.append(replace(result, latents=result.latents.detach().cpu()))
                 del result
+                progress.step(f"denoised {variant.name} ({index}/{len(spec.variants)})")
             session.pipeline.maybe_free_model_hooks()
+            progress.step("decode latents")
             images, decode_ms = session.decode_many(prepared, denoised, chunk_size=1)
+            progress.step("write outputs")
             outputs = []
             for image, result, planned in zip(images, denoised, resolved["output"]["files"], strict=True):
                 output_path = Path(planned["path"])
@@ -273,6 +292,7 @@ def run_keyframe_spec(
             )
             if spec.output.save_contact_sheet:
                 save_contact_sheet(outputs, output_dir / "contact_sheet.png", thumb_width=256, label_x=8)
+            progress.step("write result manifest")
             result_json = {
                 "status": "completed",
                 "job_id": spec.id,
@@ -330,18 +350,17 @@ def _resolve_assets(spec: KeyframeJobSpec, base_dir: Path) -> dict[str, dict[str
         "identity_primer": image_asset_json(resolve_existing_path(spec.character.identity_primer.path, base_dir)),
         "pose": image_asset_json(resolve_existing_path(spec.assets.pose.path, base_dir)),
     }
-    for name in (
-        "contour",
-        "canny_lineart",
-        "boundary_mask",
-        "depth",
-        "softedge",
-        "gray",
-        "filled_silhouette",
-        "full_silhouette_mask",
-        "arm_hand_mask",
+    for name, asset in (
+        ("contour", spec.assets.contour),
+        ("canny_lineart", spec.assets.canny_lineart),
+        ("boundary_mask", spec.assets.boundary_mask),
+        ("depth", spec.assets.depth),
+        ("softedge", spec.assets.softedge),
+        ("gray", spec.assets.gray),
+        ("filled_silhouette", spec.assets.filled_silhouette),
+        ("full_silhouette_mask", spec.assets.full_silhouette_mask),
+        ("arm_hand_mask", spec.assets.arm_hand_mask),
     ):
-        asset = getattr(spec.assets, name)
         if asset:
             assets[name] = image_asset_json(resolve_existing_path(asset.path, base_dir))
     return assets

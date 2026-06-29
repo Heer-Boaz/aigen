@@ -11,7 +11,7 @@ from aigen.generation.runtime_diagnostics import (
     module_device_report,
     synchronized_time,
 )
-from aigen.generation.runtime_types import DTYPES
+from aigen.generation.runtime_types import resolve_torch_dtype
 
 @dataclass(frozen=True)
 class KontextPosePrepared:
@@ -294,15 +294,16 @@ def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
 
 
 def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
-    components = {}
-    for name in ("controlnet", "transformer", "vae", "text_encoder", "text_encoder_2"):
-        component = getattr(pipeline, name, None)
-        if component:
-            components[name] = module_device_report(component)
     return {
         "pipeline_class": type(pipeline).__qualname__,
-        "model_cpu_offload_seq": getattr(pipeline, "model_cpu_offload_seq", ""),
-        "components": components,
+        "model_cpu_offload_seq": pipeline.model_cpu_offload_seq,
+        "components": {
+            "controlnet": module_device_report(pipeline.controlnet),
+            "transformer": module_device_report(pipeline.transformer),
+            "vae": module_device_report(pipeline.vae),
+            "text_encoder": module_device_report(pipeline.text_encoder),
+            "text_encoder_2": module_device_report(pipeline.text_encoder_2),
+        },
     }
 
 
@@ -1171,7 +1172,4 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
 
 def _torch_dtype(torch_module: Any, dtype: str) -> Any:
-    dtype_name = DTYPES[dtype]
-    if dtype == "auto":
-        return None
-    return getattr(torch_module, dtype_name)
+    return resolve_torch_dtype(torch_module, dtype, auto_value=None)

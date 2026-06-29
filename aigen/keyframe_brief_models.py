@@ -19,8 +19,6 @@ KEYFRAME_BRIEF_SCHEMA = "schemas/keyframe-brief.schema.json"
 KEYFRAME_BRIEF_PLAN_SCHEMA = "schemas/keyframe-brief-plan.schema.json"
 KEYFRAME_BRIEF_KIND = "keyframe-brief"
 KEYFRAME_BRIEF_PLAN_KIND = "keyframe-brief-plan"
-KEYFRAME_BRIEF_SCHEMA_VERSION = 1
-KEYFRAME_BRIEF_PLAN_SCHEMA_VERSION = 1
 
 
 class KeyframeBriefError(RuntimeError):
@@ -39,8 +37,8 @@ class BriefCharacterSpec(StrictModel):
 class BriefRequestSpec(StrictModel):
     action: str
     phase: str
-    direction: Literal["left", "right"]
-    camera: Literal["platformer-side-view"]
+    direction: str
+    camera: str
     description: str
 
 
@@ -70,7 +68,6 @@ class BriefOutputSpec(StrictModel):
 
 class KeyframeBriefSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["keyframe-brief"]
     id: str
     pipeline: PipelineSpec
@@ -170,9 +167,21 @@ class BriefPolishPlanSpec(StrictModel):
     seed_offsets: list[int] = Field(min_length=1)
 
 
+class BriefLoraCaptionPlanSpec(StrictModel):
+    view_bank: str = Field(min_length=1)
+    keyframe_run: str = Field(min_length=1)
+
+    @field_validator("view_bank", "keyframe_run")
+    @classmethod
+    def concrete_caption(cls, value: str) -> str:
+        placeholders = {"", ".", "...", "caption", "training caption", "lora caption"}
+        if value.strip().lower() in placeholders:
+            raise ValueError("LoRA training captions must be concrete visual descriptions")
+        return value
+
+
 class KeyframeBriefPlanSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
     kind: Literal["keyframe-brief-plan"]
     brief_id: str
     planner_id: str
@@ -189,6 +198,7 @@ class KeyframeBriefPlanSpec(StrictModel):
     controls: list[BriefControlPlanSpec]
     scoring: BriefScoringPlanSpec
     polish: BriefPolishPlanSpec
+    lora_captions: BriefLoraCaptionPlanSpec
     rationale: list[str]
 
     @model_validator(mode="after")
