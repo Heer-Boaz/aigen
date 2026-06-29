@@ -79,6 +79,11 @@ class TrainingViewPlan(StrictModel):
     views: list[PlannedTrainingView] = Field(min_length=1)
 
 
+class TrainingIdentityPlan(StrictModel):
+    identity_caption: str = Field(min_length=1)
+    identity_details: dict[str, str]
+
+
 IDENTITY_DETAIL_SLOTS = [
     "subject",
     "proportions",
@@ -97,6 +102,9 @@ IDENTITY_DETAIL_SLOTS = [
 TRAINING_VALIDATION_MIN_PIXELS = 128 * 28 * 28
 TRAINING_VALIDATION_MAX_PIXELS = 256 * 28 * 28
 TRAINING_VALIDATION_MAX_NEW_TOKENS = 320
+TRAINING_PLANNING_MIN_PIXELS = 128 * 28 * 28
+TRAINING_PLANNING_MAX_PIXELS = 192 * 28 * 28
+TRAINING_PLANNING_MAX_NEW_TOKENS = 768
 
 
 def run_character_training_data(
@@ -130,7 +138,7 @@ def run_character_training_data(
     bank_dir = bank_path.parent
     intents = view_intents or DEFAULT_VIEW_INTENTS
     progress.phase("plan training views")
-    plan = _plan_training_views(bank, bank_dir, intents, judge_config, output_dir)
+    plan = _plan_training_views(bank, bank_dir, intents, judge_config, output_dir, progress)
     write_json(output_dir / "training_plan.json", plan.model_dump(mode="json"))
 
     progress.phase("write blank control")
@@ -288,48 +296,50 @@ def _plan_training_views(
     intents: list[str],
     config: QwenVlmConfig,
     output_dir: Path,
+    progress: StatusReporter,
 ) -> TrainingViewPlan:
     evidence_dir = output_dir / "planner_evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     source_reference = resolve_existing_path(bank.character.source_reference.path, bank_dir)
-    evidence_paths = [_white_background_copy(source_reference, evidence_dir / "source_reference.png")]
+    source_evidence_path = _white_background_copy(source_reference, evidence_dir / "source_reference.png")
+    identity_evidence_paths = [source_evidence_path]
     for name, entry in bank.views.items():
         view_path = resolve_existing_path(entry.image.path, bank_dir)
         if name != "front":
-            evidence_paths.append(_white_background_copy(view_path, evidence_dir / f"{_slug(name)}.png"))
-        evidence_paths.extend(_identity_detail_crops(view_path, evidence_dir, name).values())
-    prompt = _training_plan_prompt(bank, intents, evidence_paths)
-    raw_path = output_dir / "training_plan.raw.txt"
-    with closing(QwenVlm(config)) as planner:
-        raw_text = planner.judge_candidate(prompt, evidence_paths)
-    raw_path.write_text(raw_text + "\n", encoding="utf-8")
-    try:
-        payload = json_object_from_vlm_response(raw_text)
-        plan = TrainingViewPlan.model_validate(payload)
-    except (VlmJsonError, ValidationError) as error:
-        raise CharacterViewError(f"Invalid character training-data plan: {error}") from error
+            view_evidence_path = _white_background_copy(view_path, evidence_dir / f"{_slug(name)}.png")
+            identity_evidence_paths.append(view_evidence_path)
+        identity_evidence_paths.extend(_identity_detail_crops(view_path, evidence_dir, name).values())
+    progress.begin(1, "plan training identity")
+    with closing(QwenVlm(_training_planning_config(config))) as planner:
+        raw_identity = planner.judge_candidate(
+            _training_identity_prompt(bank, identity_evidence_paths),
+            identity_evidence_paths,
+        )
+        (output_dir / "training_identity.raw.txt").write_text(raw_identity + "\n", encoding="utf-8")
+        identity_plan = _parse_training_identity_plan(raw_identity)
+        progress.step("planned identity")
+    plan = TrainingViewPlan(
+        identity_caption=identity_plan.identity_caption,
+        identity_details=identity_plan.identity_details,
+        views=[_compile_training_view(bank, identity_plan, intent) for intent in intents],
+    )
     _validate_training_plan(bank, plan, intents)
     return plan
 
 
-def _training_plan_prompt(bank: CharacterViewBankSpec, intents: list[str], image_paths: list[Path]) -> str:
+def _training_identity_prompt(bank: CharacterViewBankSpec, image_paths: list[Path]) -> str:
     view_lines = "\n".join(f"- {name}: {entry.image.path}" for name, entry in bank.views.items())
-    intent_lines = "\n".join(f"- {intent}" for intent in intents)
     image_lines = "\n".join(f"{index}. {path}" for index, path in enumerate(image_paths, start=1))
     identity_note_lines = "\n".join(f"- {note}" for note in bank.character.identity_notes) or "- none"
     identity_slot_lines = ", ".join(IDENTITY_DETAIL_SLOTS)
-    return f"""You are planning neutral character identity training images for a FLUX LoRA.
+    return f"""You are extracting a reusable character identity description for FLUX LoRA training.
 
 Images are supplied in this order:
 {image_lines}
 
 The images are the source of truth for character identity, proportions, clothing, colors and art style.
-The output images must teach the same character, not an action pose.
 Inspect the images yourself and build all prompts from visible evidence.
 Do not invent a different outfit, hairstyle, body type, art style or background.
-Keep every planned image full-body, clean, neutral, high quality and suitable for character identity LoRA training.
-Every generated view must use a plain light neutral studio background; never plan black, dark, colored, vignetted or atmospheric backgrounds.
-Hidden views such as back, top-down and bottom-up are design extrapolations; keep them conservative and consistent with the visible character.
 
 Character id: {bank.character.id}
 Accepted identity views:
@@ -338,11 +348,8 @@ Accepted identity views:
 Human-approved identity notes:
 {identity_note_lines}
 
-Requested view intents:
-{intent_lines}
-
 Return JSON only with exactly these top-level keys:
-identity_caption, identity_details, views.
+identity_caption, identity_details.
 
 identity_caption:
 - one identity-only caption for LoRA training;
@@ -359,28 +366,99 @@ identity_details:
 - a belt is an accessory and belongs in accessories. It must not replace waist_garment when a waist garment is visible.
 - if human-approved identity notes mention a waist garment or accessory, the matching identity_details slot must preserve it literally.
 
-views:
-- array with exactly one object for every requested view intent and in the same order;
-- each object has exactly these keys:
-  name, intent, identity_primer_view, camera, pose, clip, t5, acceptance_checks.
-
-For each view object:
-- name is a stable snake_case name derived from the intent;
-- intent is the original requested intent string;
-- identity_primer_view must be one of the accepted identity view names. Use an accepted profile view for requested profile or quarter views when one exists; do not default to front for side/profile requests.
-- camera and pose describe the requested neutral view and must explicitly include the directional view words from the intent;
-- clip is a short prompt built from the observed identity plus the requested view;
-- t5 is a detailed prompt built from the observed identity plus the requested view;
-- acceptance_checks lists concrete checks for identity, proportions, outfit, background, quality and requested view.
-- clip and t5 must explicitly include the requested camera/view, such as right profile, back view, top-down view, low-angle view or three-quarter view.
-- clip and t5 must explicitly require a plain light neutral background.
-- clip and t5 must preserve each visible garment category from identity_details.
-- clip, t5 and acceptance_checks must include every human-approved identity note as concrete visible identity criteria.
-
 Do not return generic placeholder identity text.
 Do not mention internal filenames.
 Do not add action, punch, jump, combat, walk cycle or dynamic motion.
 Do not wrap the JSON in Markdown code fences."""
+
+
+def _compile_training_view(
+    bank: CharacterViewBankSpec,
+    identity_plan: TrainingIdentityPlan,
+    intent: str,
+) -> PlannedTrainingView:
+    compact_identity = _compact_identity_text(identity_plan)
+    primer = _identity_primer_for_intent(bank, intent)
+    name = _slug(intent).replace("-", "_")
+    clip = (
+        f"{bank.character.id}, {intent}, neutral full-body character model sheet, "
+        f"{compact_identity}, plain light neutral studio background."
+    )
+    t5 = (
+        f"{bank.character.id}, {intent}, high-quality neutral full-body anime model sheet. "
+        f"Preserve {compact_identity}. Plain light neutral studio background. "
+        f"No action pose, combat, props, extra characters or stylized scene."
+    )
+    checks = [
+        f"requested view is {intent}",
+        "full-body neutral character model-sheet pose",
+        "plain light neutral studio background",
+        "high image quality suitable for character identity LoRA training",
+    ]
+    checks.extend(f"preserve {slot}: {identity_plan.identity_details[slot]}" for slot in IDENTITY_DETAIL_SLOTS)
+    checks.extend(bank.character.identity_notes)
+    return PlannedTrainingView(
+        name=name,
+        intent=intent,
+        identity_primer_view=primer,
+        camera=f"{intent} camera",
+        pose=f"neutral full-body model-sheet pose for {intent}",
+        clip=clip,
+        t5=t5,
+        acceptance_checks=checks,
+    )
+
+
+def _compact_identity_text(identity_plan: TrainingIdentityPlan) -> str:
+    slots = (
+        "hair",
+        "face",
+        "upper_clothing",
+        "waist_garment",
+        "accessories",
+        "legwear",
+        "footwear",
+        "style",
+    )
+    return "; ".join(f"{_words(slot)}: {identity_plan.identity_details[slot]}" for slot in slots)
+
+
+def _parse_training_identity_plan(raw_text: str) -> TrainingIdentityPlan:
+    try:
+        payload = json_object_from_vlm_response(raw_text)
+        return TrainingIdentityPlan.model_validate(payload)
+    except (VlmJsonError, ValidationError) as error:
+        raise CharacterViewError(f"Invalid character training identity plan: {error}") from error
+
+
+def _identity_primer_for_intent(bank: CharacterViewBankSpec, intent: str) -> str:
+    names = tuple(bank.views.keys())
+    text = intent.lower()
+    preferred: list[str] = []
+    if "left" in text:
+        preferred.extend(["left_profile", "left_3quarter"])
+    if "right" in text:
+        preferred.extend(["right_profile", "right_3quarter"])
+    if "back" in text or "rear" in text:
+        preferred.extend(["back", "rear_left_3quarter", "rear_right_3quarter"])
+    if "front" in text:
+        preferred.append("front")
+    for name in preferred:
+        if name in bank.views:
+            return name
+    if any(word in text for word in ("profile", "side", "quarter")):
+        for name in names:
+            if "profile" in name:
+                return name
+        for name in names:
+            if "quarter" in name or "3quarter" in name:
+                return name
+    for word in ("left", "right", "back", "rear", "front"):
+        if word in text:
+            for name in names:
+                if word in name:
+                    return name
+    return names[0]
 
 
 def _validate_training_plan(bank: CharacterViewBankSpec, plan: TrainingViewPlan, intents: list[str]) -> None:
@@ -615,6 +693,16 @@ def _training_validation_config(config: QwenVlmConfig) -> QwenVlmConfig:
         min_pixels=min(config.min_pixels, max_pixels, TRAINING_VALIDATION_MIN_PIXELS),
         max_pixels=max_pixels,
         max_new_tokens=min(config.max_new_tokens, TRAINING_VALIDATION_MAX_NEW_TOKENS),
+    )
+
+
+def _training_planning_config(config: QwenVlmConfig) -> QwenVlmConfig:
+    max_pixels = min(config.max_pixels, TRAINING_PLANNING_MAX_PIXELS)
+    return replace(
+        config,
+        min_pixels=min(config.min_pixels, max_pixels, TRAINING_PLANNING_MIN_PIXELS),
+        max_pixels=max_pixels,
+        max_new_tokens=min(config.max_new_tokens, TRAINING_PLANNING_MAX_NEW_TOKENS),
     )
 
 

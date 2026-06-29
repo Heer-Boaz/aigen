@@ -8,8 +8,14 @@ from aigen.character_training_data import (
     TRAINING_VALIDATION_MAX_NEW_TOKENS,
     TRAINING_VALIDATION_MAX_PIXELS,
     TRAINING_VALIDATION_MIN_PIXELS,
+    TRAINING_PLANNING_MAX_NEW_TOKENS,
+    TRAINING_PLANNING_MAX_PIXELS,
+    TRAINING_PLANNING_MIN_PIXELS,
     PlannedTrainingView,
+    TrainingIdentityPlan,
     TrainingViewPlan,
+    _training_planning_config,
+    _compile_training_view,
     _training_validation_config,
     _validate_training_plan,
 )
@@ -145,6 +151,59 @@ class CharacterTrainingDataTests(unittest.TestCase):
         self.assertEqual(bounded.min_pixels, TRAINING_VALIDATION_MIN_PIXELS)
         self.assertEqual(bounded.max_pixels, TRAINING_VALIDATION_MAX_PIXELS)
         self.assertEqual(bounded.max_new_tokens, TRAINING_VALIDATION_MAX_NEW_TOKENS)
+
+    def test_training_planning_uses_bounded_qwen_budget(self) -> None:
+        config = QwenVlmConfig(
+            judge_id="qwen",
+            model=Path("models/qwen"),
+            repo_id="repo",
+            revision="rev",
+            dtype="bfloat16",
+            attention_impl="sdpa",
+            quantization="bitsandbytes-8bit",
+            min_pixels=512 * 28 * 28,
+            max_pixels=512 * 28 * 28,
+            max_new_tokens=4096,
+            temperature=0.0,
+        )
+
+        bounded = _training_planning_config(config)
+
+        self.assertEqual(bounded.min_pixels, TRAINING_PLANNING_MIN_PIXELS)
+        self.assertEqual(bounded.max_pixels, TRAINING_PLANNING_MAX_PIXELS)
+        self.assertEqual(bounded.max_new_tokens, TRAINING_PLANNING_MAX_NEW_TOKENS)
+
+    def test_compile_training_view_uses_model_extracted_identity_details(self) -> None:
+        identity = TrainingIdentityPlan(
+            identity_caption="ai51char anime girl with brown leather skirt and separate belt",
+            identity_details=good_identity_details(),
+        )
+
+        view = _compile_training_view(
+            view_bank(),
+            identity,
+            "back neutral full-body view",
+        )
+
+        self.assertEqual(view.intent, "back neutral full-body view")
+        self.assertIn("brown leather skirt", view.t5)
+        self.assertIn("separate belt at the waist with silver buckle", view.t5)
+        self.assertIn("back neutral full-body view", view.clip)
+        self.assertLess(len(view.t5.split()), 90)
+
+    def test_compile_training_view_uses_available_profile_primer_for_opposite_profile(self) -> None:
+        identity = TrainingIdentityPlan(
+            identity_caption="ai51char anime girl with brown leather skirt and separate belt",
+            identity_details=good_identity_details(),
+        )
+
+        view = _compile_training_view(
+            view_bank(),
+            identity,
+            "right profile neutral full-body view",
+        )
+
+        self.assertEqual(view.identity_primer_view, "left_profile")
 
 
 if __name__ == "__main__":
