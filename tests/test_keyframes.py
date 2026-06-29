@@ -1674,6 +1674,7 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(selection["semantic_gate"]["blocked"][0]["candidate"], "seed_002")
             self.assertTrue(Path(selection["outputs"]["selected"]).exists())
             self.assertTrue(Path(selection["outputs"]["rejected"]).exists())
+            self.assertTrue(Path(selection["outputs"]["selected_contact_sheet"]).exists())
 
     def test_keyframe_score_select_filters_semantic_gate_failures(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1716,6 +1717,7 @@ class KeyframeTests(unittest.TestCase):
             self.assertEqual(selection["best"], "seed_003")
             self.assertEqual(selection["selected"], ["seed_003", "seed_002"])
             self.assertEqual(selection["rejected"], ["seed_005"])
+            self.assertTrue(Path(selection["outputs"]["selected_contact_sheet"]).exists())
 
     def test_keyframe_refine_plans_arm_mask_from_target_pose(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

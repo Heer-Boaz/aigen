@@ -183,11 +183,16 @@ def select_scored_keyframe_run(
     ]
     selected_path = score_dir / "selected.json"
     rejected_path = score_dir / "rejected.json"
+    selected_contact_sheet_path = score_dir / "selected_contact_sheet.png"
+    _save_ranked_sheet(selected, selected_contact_sheet_path, image_key="image")
     selected_payload = {
         "schema_version": 1,
         "selection_mode": "condition_score_with_semantic_gate",
         "scorer": scorer_id,
         "semantic_gate": semantic_gate,
+        "outputs": {
+            "selected_contact_sheet": selected_contact_sheet_path.as_posix(),
+        },
         "selected": selected,
     }
     rejected_payload = {
@@ -212,6 +217,7 @@ def select_scored_keyframe_run(
         "outputs": {
             "selected": selected_path.as_posix(),
             "rejected": rejected_path.as_posix(),
+            "selected_contact_sheet": selected_contact_sheet_path.as_posix(),
             "ranked_contact_sheet": score_result["outputs"]["ranked_contact_sheet"],
             "condition_evidence_ranked": score_result["outputs"]["condition_evidence_ranked"],
             "pose_evidence_ranked": score_result["outputs"]["pose_evidence_ranked"],
