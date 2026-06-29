@@ -15,7 +15,7 @@
     "front": {
       "acceptance": {
         "manual": [
-          "original approved AI46 concept art used as canonical front primer"
+          "human approved canonical front primer"
         ]
       },
       "accepted_candidate": "source_reference",
@@ -36,10 +36,8 @@
       "acceptance": {
         "manual": [
           "neutral standing pose",
-          "strict left profile",
-          "exactly one visible eye",
-          "short bob preserved",
-          "jacket, tie, shorts, socks and boots preserved",
+          "approved side-profile identity primer",
+          "identity matches the canonical front primer",
           "feet fully visible",
           "no action pose bias"
         ],
@@ -76,12 +74,6 @@
         "path": "/home/boaz/aigen/assets/characters/ai46/views/left_profile.png",
         "sha256": "cbf595b57e0948919797770432d0ff7c1edca04526f28458f764f5aa21d93a8c",
         "width": 512
-      },
-      "prompt": {
-        "clip": "Same anime girl, neutral standing model sheet, strict left-facing side profile, exactly one eye visible, short light-brown bob, brown leather jacket, white shirt, blue tie, brown shorts, blue thigh-high socks, brown boots.",
-        "negative": "walking pose, action pose, punch, open hand gesture, front view, three-quarter view, long hair, ponytail, cropped feet",
-        "t5": "Full-body neutral-standing character turnaround view. Generate the approved left-profile identity primer for the same anime girl. Strict orthographic side view, relaxed neutral standing pose, arms down, feet grounded, one visible eye, profile nose and chin, short light-brown bob, white shirt, blue tie, brown leather jacket, brown shorts, gloves, blue thigh-high socks and brown boots. Clean neutral background.",
-        "true_cfg_scale": 1.25
       },
       "view": {
         "camera": "orthographic-side",

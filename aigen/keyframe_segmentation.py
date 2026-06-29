@@ -40,6 +40,8 @@ class SamForegroundSegmenter:
         model = sam_model_registry[config.model_type](checkpoint=config.checkpoint.as_posix())
         model.to(device=config.device)
         self._predictor = SamPredictor(model)
+        self._model = model
+        self._device = config.device
         self._threshold = config.prompt_threshold
 
     def segment(self, image_path: Path) -> np.ndarray:
@@ -48,15 +50,29 @@ class SamForegroundSegmenter:
         return self.segment_image_box(image, box)
 
     def segment_image_box(self, image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+        return self.segment_image_boxes(image, [box])[0]
+
+    def segment_image_boxes(self, image: np.ndarray, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
         self._predictor.set_image(image)
-        masks, scores, _ = self._predictor.predict(
-            box=np.asarray(box, dtype=np.float32),
-            multimask_output=True,
-        )
-        mask = masks[int(np.asarray(scores).argmax())].astype(bool)
-        if not mask.any():
-            raise KeyframeSegmentationError(f"SAM returned an empty mask for box {box}")
-        return mask
+        outputs = []
+        for box in boxes:
+            masks, scores, _ = self._predictor.predict(
+                box=np.asarray(box, dtype=np.float32),
+                multimask_output=True,
+            )
+            mask = masks[int(np.asarray(scores).argmax())].astype(bool)
+            if not mask.any():
+                raise KeyframeSegmentationError(f"SAM returned an empty mask for box {box}")
+            outputs.append(mask)
+        return outputs
+
+    def close(self) -> None:
+        del self._predictor
+        del self._model
+        if self._device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
 
 
 def foreground_box_mask(image: np.ndarray, threshold: float = 28.0) -> np.ndarray:

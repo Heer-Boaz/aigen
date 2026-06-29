@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from aigen.keyframe_profiles import KeyframeRefineProfile
 from aigen.keyframe_refine import (
-    KeyframeRefineError,
-    KeyframeRefineProfile,
     run_keyframe_refine_variant,
 )
+from aigen.keyframe_refine_models import KeyframeRefineError
+from aigen.manifest_io import ManifestIOError, read_json, write_json_line
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -22,7 +22,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        resolved = _read_json(args.resolved)
+        resolved = read_json(args.resolved, label="refine worker artifact")
         result = run_keyframe_refine_variant(
             args.job,
             _profile_from_resolved(resolved),
@@ -30,8 +30,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             project_root=args.project_root,
             resolved=resolved,
         )
-    except KeyframeRefineError as error:
-        _write_json(
+    except (KeyframeRefineError, ManifestIOError) as error:
+        write_json_line(
             sys.stderr,
             {
                 "schema_version": 1,
@@ -41,7 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             },
         )
         return 1
-    _write_json(sys.stdout, result)
+    write_json_line(sys.stdout, result)
     return 0
 
 
@@ -67,19 +67,6 @@ def _model_revision(model: dict[str, Any]) -> dict[str, str]:
         "repo_id": model["repo_id"],
         "revision": model["revision"],
     }
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except OSError as error:
-        raise KeyframeRefineError(f"Missing refine worker artifact: {path.as_posix()}") from error
-    except json.JSONDecodeError as error:
-        raise KeyframeRefineError(f"Invalid refine worker JSON: {path.as_posix()}: {error}") from error
-
-
-def _write_json(stream: Any, payload: dict[str, Any]) -> None:
-    stream.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
 
 
 if __name__ == "__main__":

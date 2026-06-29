@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import shutil
+from contextlib import ExitStack, closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
 
+from aigen.keyframe_judge import DEFAULT_JUDGE_ID
 from aigen.keyframe_pose import (
     DWPoseKeypointExtractor,
     PoseKeypoints,
@@ -20,11 +20,19 @@ from aigen.keyframe_pose import (
     score_pose_match,
 )
 from aigen.keyframe_segmentation import SamForegroundSegmenter, SamSegmentationConfig
+from aigen.manifest_io import read_json, sha256_file, write_json
 
 
 DEFAULT_SCORER_ID = "condition"
 SCORE_SCHEMA_VERSION = 1
 DEGENERATE_POSE_SCORE_THRESHOLD = 0.05
+SEMANTIC_SCORE_FLOOR = 8.5
+SEMANTIC_SELECTION_SCORE_KEYS = (
+    "condition_adherence",
+    "pose_match",
+    "contour_match",
+    "side_profile",
+)
 
 
 class KeyframeScoreError(RuntimeError):
@@ -49,7 +57,7 @@ def score_keyframe_run(
     segmenter: Any | None = None,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
-    result = _read_json(resolved_run_dir / "result.json")
+    result = read_json(resolved_run_dir / "result.json", label="keyframe run result")
     assets = result["assets"]
     score_dir = resolved_run_dir / "score" / config.scorer_id
     masks_dir = score_dir / "masks"
@@ -63,79 +71,80 @@ def score_keyframe_run(
 
     target = _load_target(assets)
     pose_target_source = _pose_target_source(assets)
-    if pose_extractor is None:
-        pose_extractor = DWPoseKeypointExtractor(config.pose)
-    if segmenter is None:
-        segmenter = SamForegroundSegmenter(config.segmentation)
-    pose_target = _load_pose_target(assets, config, pose_extractor, pose_target_source)
+    with ExitStack() as resources:
+        if pose_extractor is None:
+            pose_extractor = resources.enter_context(closing(DWPoseKeypointExtractor(config.pose)))
+        if segmenter is None:
+            segmenter = resources.enter_context(closing(SamForegroundSegmenter(config.segmentation)))
+        pose_target = _load_pose_target(assets, config, pose_extractor, pose_target_source)
 
-    candidates = [
-        _score_candidate(
-            output,
-            target,
-            pose_target,
-            pose_extractor,
-            segmenter,
-            config,
-            masks_dir=masks_dir,
-            evidence_dir=evidence_dir,
-            pose_evidence_dir=pose_evidence_dir,
-        )
-        for output in result["outputs"]
-    ]
-    ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
-    ordered = {candidate["candidate"]: candidate for candidate in candidates}
-    ranked_candidates = [ordered[name] for name in ranking]
-    _save_ranked_sheet(ranked_candidates, score_dir / "ranked_contact_sheet.png", image_key="image")
-    _save_ranked_sheet(ranked_candidates, score_dir / "condition_evidence_ranked.png", image_key="condition_evidence")
-    _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
+        candidates = [
+            _score_candidate(
+                output,
+                target,
+                pose_target,
+                pose_extractor,
+                segmenter,
+                config,
+                masks_dir=masks_dir,
+                evidence_dir=evidence_dir,
+                pose_evidence_dir=pose_evidence_dir,
+            )
+            for output in result["outputs"]
+        ]
+        ranking = [candidate["candidate"] for candidate in sorted(candidates, key=_score_ranking_key)]
+        ordered = {candidate["candidate"]: candidate for candidate in candidates}
+        ranked_candidates = [ordered[name] for name in ranking]
+        _save_ranked_sheet(ranked_candidates, score_dir / "ranked_contact_sheet.png", image_key="image")
+        _save_ranked_sheet(ranked_candidates, score_dir / "condition_evidence_ranked.png", image_key="condition_evidence")
+        _save_ranked_sheet(ranked_candidates, score_dir / "pose_evidence_ranked.png", image_key="pose_evidence")
 
-    payload = {
-        "schema_version": SCORE_SCHEMA_VERSION,
-        "status": "completed",
-        "run_dir": resolved_run_dir.as_posix(),
-        "job_id": result["job_id"],
-        "git_commit": _git_commit(project_root),
-        "source_result_sha256": _sha256_file(resolved_run_dir / "result.json"),
-        "scorer": {
-            "id": config.scorer_id,
-            "method": "sam-box-prompted-foreground-boundary-to-target-contour",
-            "contour_radius": config.contour_radius,
-            "distance_scale_px": config.distance_scale_px,
-            "pose": {
-                "distance_scale": config.pose.distance_scale,
-                "min_common_keypoints": config.pose.min_common_keypoints,
-                "det_model": config.pose.det_model.as_posix(),
-                "pose_model": config.pose.pose_model.as_posix(),
+        payload = {
+            "schema_version": SCORE_SCHEMA_VERSION,
+            "status": "completed",
+            "run_dir": resolved_run_dir.as_posix(),
+            "job_id": result["job_id"],
+            "git_commit": _git_commit(project_root),
+            "source_result_sha256": sha256_file(resolved_run_dir / "result.json"),
+            "scorer": {
+                "id": config.scorer_id,
+                "method": "sam-box-prompted-foreground-boundary-to-target-contour",
+                "contour_radius": config.contour_radius,
+                "distance_scale_px": config.distance_scale_px,
+                "pose": {
+                    "distance_scale": config.pose.distance_scale,
+                    "min_common_keypoints": config.pose.min_common_keypoints,
+                    "det_model": config.pose.det_model.as_posix(),
+                    "pose_model": config.pose.pose_model.as_posix(),
+                },
+                "segmentation": {
+                    "model": "segment-anything",
+                    "model_type": config.segmentation.model_type,
+                    "checkpoint": config.segmentation.checkpoint.as_posix(),
+                    "device": config.segmentation.device,
+                },
+                "weights": SCORE_WEIGHTS,
             },
-            "segmentation": {
-                "model": "segment-anything",
-                "model_type": config.segmentation.model_type,
-                "checkpoint": config.segmentation.checkpoint.as_posix(),
-                "device": config.segmentation.device,
+            "assets": {
+                "contour": assets["contour"],
+                "boundary_mask": assets["boundary_mask"],
+                "pose": assets["pose"],
             },
-            "weights": SCORE_WEIGHTS,
-        },
-        "assets": {
-            "contour": assets["contour"],
-            "boundary_mask": assets["boundary_mask"],
-            "pose": assets["pose"],
-        },
-        "candidates": candidates,
-        "ranking": {
-            "final": ranking,
-            "best": ranking[0],
-        },
-        "selection": _selection_status(candidates),
-        "outputs": {
-            "scores": (score_dir / "scores.json").as_posix(),
-            "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
-            "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
-            "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix(),
-        },
-    }
-    _write_json(score_dir / "scores.json", payload)
-    return payload
+            "candidates": candidates,
+            "ranking": {
+                "final": ranking,
+                "best": ranking[0],
+            },
+            "selection": _selection_status(candidates),
+            "outputs": {
+                "scores": (score_dir / "scores.json").as_posix(),
+                "ranked_contact_sheet": (score_dir / "ranked_contact_sheet.png").as_posix(),
+                "condition_evidence_ranked": (score_dir / "condition_evidence_ranked.png").as_posix(),
+                "pose_evidence_ranked": (score_dir / "pose_evidence_ranked.png").as_posix(),
+            },
+        }
+        write_json(score_dir / "scores.json", payload)
+        return payload
 
 
 def select_scored_keyframe_run(
@@ -147,7 +156,7 @@ def select_scored_keyframe_run(
     if top_k < 1:
         raise KeyframeScoreError("top_k must be at least 1")
     score_dir = run_dir.resolve() / "score" / scorer_id
-    score_result = _read_json(score_dir / "scores.json")
+    score_result = read_json(score_dir / "scores.json", label="keyframe score result")
     selection = score_result["selection"]
     if not selection["usable_for_auto_select"]:
         raise KeyframeScoreError(
@@ -155,24 +164,48 @@ def select_scored_keyframe_run(
             f"({', '.join(selection['blockers'])})."
         )
 
+    semantic_gate = _load_semantic_selection_gate(run_dir.resolve(), score_result)
     candidates_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
-    selected_names = score_result["ranking"]["final"][:top_k]
+    eligible_names = [
+        name
+        for name in score_result["ranking"]["final"]
+        if _score_candidate_selectable(candidates_by_name[name]) and name in semantic_gate["passed"]
+    ]
+    if not eligible_names:
+        raise KeyframeScoreError("Refusing automatic score selection: no candidate passed score and semantic gates.")
+    selected_names = eligible_names[:top_k]
+    selected_names_set = set(selected_names)
     selected = [candidates_by_name[name] for name in selected_names]
     rejected = [
         candidates_by_name[name]
         for name in score_result["ranking"]["final"]
-        if name not in set(selected_names)
+        if name not in selected_names_set
     ]
     selected_path = score_dir / "selected.json"
     rejected_path = score_dir / "rejected.json"
-    _write_json(selected_path, {"schema_version": 1, "selected": selected})
-    _write_json(rejected_path, {"schema_version": 1, "rejected": rejected})
+    selected_payload = {
+        "schema_version": 1,
+        "selection_mode": "condition_score_with_semantic_gate",
+        "scorer": scorer_id,
+        "semantic_gate": semantic_gate,
+        "selected": selected,
+    }
+    rejected_payload = {
+        "schema_version": 1,
+        "selection_mode": "condition_score_with_semantic_gate",
+        "scorer": scorer_id,
+        "semantic_gate": semantic_gate,
+        "rejected": rejected,
+    }
+    write_json(selected_path, selected_payload)
+    write_json(rejected_path, rejected_payload)
     return {
         "schema_version": 1,
         "status": "completed",
         "scorer": scorer_id,
         "run_dir": run_dir.resolve().as_posix(),
         "selection": selection,
+        "semantic_gate": semantic_gate,
         "best": selected[0]["candidate"],
         "selected": [candidate["candidate"] for candidate in selected],
         "rejected": [candidate["candidate"] for candidate in rejected],
@@ -184,6 +217,56 @@ def select_scored_keyframe_run(
             "pose_evidence_ranked": score_result["outputs"]["pose_evidence_ranked"],
         },
     }
+
+
+def _load_semantic_selection_gate(run_dir: Path, score_result: dict[str, Any]) -> dict[str, Any]:
+    judge_path = run_dir / "judge" / DEFAULT_JUDGE_ID / "judge.json"
+    if not judge_path.exists():
+        raise KeyframeScoreError(
+            f"Refusing automatic score selection: missing semantic judge evidence at {judge_path.as_posix()}."
+        )
+    judge_result = read_json(judge_path, label="keyframe judge result")
+    judged = {candidate["candidate"]: candidate["judgment"] for candidate in judge_result["candidates"]}
+    score_candidates = [candidate["candidate"] for candidate in score_result["candidates"]]
+    missing = [name for name in score_candidates if name not in judged]
+    if missing:
+        raise KeyframeScoreError(f"Semantic judge evidence is missing candidates: {', '.join(missing)}")
+
+    passed = []
+    blocked = []
+    for name in score_candidates:
+        judgment = judged[name]
+        hard_rejects = [key for key, rejected in judgment["hard_rejects"].items() if rejected]
+        floor_score = min(float(judgment["scores"][key]) for key in SEMANTIC_SELECTION_SCORE_KEYS)
+        blockers = []
+        if not judgment["pass"]:
+            blockers.append("semantic_pass_false")
+        blockers.extend(hard_rejects)
+        if floor_score < SEMANTIC_SCORE_FLOOR:
+            blockers.append("semantic_score_floor")
+        if blockers:
+            blocked.append(
+                {
+                    "candidate": name,
+                    "blockers": blockers,
+                    "score_floor": floor_score,
+                }
+            )
+        else:
+            passed.append(name)
+    if not passed:
+        raise KeyframeScoreError("Refusing automatic score selection: semantic gate passed no candidates.")
+    return {
+        "judge": DEFAULT_JUDGE_ID,
+        "score_floor": SEMANTIC_SCORE_FLOOR,
+        "score_keys": list(SEMANTIC_SELECTION_SCORE_KEYS),
+        "passed": passed,
+        "blocked": blocked,
+    }
+
+
+def _score_candidate_selectable(candidate: dict[str, Any]) -> bool:
+    return not any(candidate["hard_rejects"].values())
 
 
 def _selection_status(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -233,7 +316,7 @@ def _pose_target_source(assets: dict[str, Any]) -> Path | None:
     metadata_path = pose_path.with_name(f"{pose_path.stem.removesuffix('_pose')}_extraction.json")
     if not metadata_path.is_file():
         return None
-    metadata = _read_json(metadata_path)
+    metadata = read_json(metadata_path, label="pose extraction metadata")
     return Path(metadata["assets"]["normalized_source"]["path"])
 
 
@@ -340,10 +423,10 @@ def _score_candidate(
 
 
 SCORE_WEIGHTS = {
-    "condition": 0.50,
+    "condition": 0.30,
     "contour": 0.05,
-    "pose": 0.25,
-    "side_profile": 0.15,
+    "pose": 0.40,
+    "side_profile": 0.20,
     "artifact": 0.05,
 }
 
@@ -450,21 +533,6 @@ def _save_ranked_sheet(candidates: list[dict[str, Any]], output_path: Path, *, i
         draw.text((x + 8, 40), f"condition {candidate['scores']['condition']:.3f}", fill="black")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(output_path)
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise KeyframeScoreError(f"Cannot read keyframe score input {path.as_posix()}: {error}") from error
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _git_commit(project_root: Path) -> str:

@@ -11,5 +11,6 @@ fi
 
 run "$venv_python" -m pip install --upgrade pip "setuptools<82" wheel
 run "$venv_python" -m pip install -e "${repo_root}[generation]"
+run "$venv_python" -m pip install --force-reinstall onnxruntime-gpu==1.26.0
 
 log "venv ready: $venv_dir"

@@ -4,6 +4,8 @@
       "additionalProperties": false,
       "properties": {
         "end": {
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "End",
           "type": "number"
         },
@@ -25,6 +27,8 @@
           "title": "Residual Mask Source"
         },
         "scale": {
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "Scale",
           "type": "number"
         },
@@ -37,6 +41,8 @@
           "type": "string"
         },
         "start": {
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "Start",
           "type": "number"
         },
@@ -44,8 +50,7 @@
           "enum": [
             "pose",
             "canny",
-            "softedge",
-            "depth"
+            "softedge"
           ],
           "title": "Type",
           "type": "string"
@@ -62,26 +67,95 @@
       "title": "BriefControlPlanSpec",
       "type": "object"
     },
-    "BriefPolishPlanSpec": {
+    "BriefIdentityDetailsSpec": {
       "additionalProperties": false,
       "properties": {
-        "enabled": {
-          "title": "Enabled",
-          "type": "boolean"
+        "face": {
+          "title": "Face",
+          "type": "string"
         },
-        "max_regions": {
-          "title": "Max Regions",
-          "type": "integer"
+        "footwear": {
+          "title": "Footwear",
+          "type": "string"
         },
-        "policy": {
-          "title": "Policy",
+        "hair": {
+          "title": "Hair",
+          "type": "string"
+        },
+        "legwear": {
+          "title": "Legwear",
+          "type": "string"
+        },
+        "neckwear": {
+          "title": "Neckwear",
+          "type": "string"
+        },
+        "style": {
+          "title": "Style",
+          "type": "string"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "upper_clothing": {
+          "title": "Upper Clothing",
+          "type": "string"
+        },
+        "waist_garment": {
+          "title": "Waist Garment",
           "type": "string"
         }
       },
       "required": [
-        "enabled",
-        "policy",
-        "max_regions"
+        "subject",
+        "hair",
+        "face",
+        "upper_clothing",
+        "neckwear",
+        "waist_garment",
+        "legwear",
+        "footwear",
+        "style"
+      ],
+      "title": "BriefIdentityDetailsSpec",
+      "type": "object"
+    },
+    "BriefPolishPlanSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "max_regions": {
+          "minimum": 1,
+          "title": "Max Regions",
+          "type": "integer"
+        },
+        "profile": {
+          "const": "kontext-inpaint-local",
+          "title": "Profile",
+          "type": "string"
+        },
+        "seed_offsets": {
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Seed Offsets",
+          "type": "array"
+        },
+        "strength_offsets": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Strength Offsets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "profile",
+        "max_regions",
+        "strength_offsets",
+        "seed_offsets"
       ],
       "title": "BriefPolishPlanSpec",
       "type": "object"
@@ -251,6 +325,9 @@
       "title": "Identity Description",
       "type": "string"
     },
+    "identity_details": {
+      "$ref": "#/$defs/BriefIdentityDetailsSpec"
+    },
     "identity_primer": {
       "$ref": "#/$defs/IdentityPrimerSpec"
     },
@@ -312,6 +389,7 @@
     "planner_id",
     "source_brief_sha256",
     "planner_prompt_sha256",
+    "identity_details",
     "identity_description",
     "pose_description",
     "platformer_camera_description",

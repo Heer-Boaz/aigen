@@ -25,6 +25,7 @@ generation = [
   "controlnet-dwpose==0.1.5",
   "controlnet-aux==0.0.10",
   "diffusers[torch]>=0.38",
+  "onnxruntime-gpu==1.26.0",
   "peft>=0.17",
   "protobuf",
   "qwen-vl-utils==0.0.8",

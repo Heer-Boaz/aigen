@@ -5,19 +5,13 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.keyframe_examples import (
     KeyframeExampleError,
     KeyframeExampleExtractionConfig,
     extract_keyframe_example,
 )
 from aigen.keyframe_judge import (
-    DEFAULT_JUDGE_ID,
-    DEFAULT_JUDGE_QUANTIZATION,
-    DEFAULT_JUDGE_REPO_ID,
-    DEFAULT_JUDGE_REVISION,
-    DEFAULT_MAX_PIXELS,
-    DEFAULT_MIN_PIXELS,
-    KeyframeJudgeConfig,
     KeyframeJudgeError,
     judge_keyframe_run,
 )
@@ -35,10 +29,12 @@ from aigen.keyframe_polish import (
     validate_keyframe_polish_job,
 )
 from aigen.keyframe_pose import KeyframePoseError
-from aigen.keyframe_refine import (
+from aigen.keyframe_refine_models import (
     KeyframeRefineError,
     keyframe_refine_job_schema,
     load_keyframe_refine_job,
+)
+from aigen.keyframe_refine import (
     plan_keyframe_refine_job,
     run_keyframe_refine_job,
     validate_keyframe_refine_job,
@@ -50,17 +46,18 @@ from aigen.keyframe_score import (
     score_keyframe_run,
     select_scored_keyframe_run,
 )
-from aigen.keyframes import (
+from aigen.keyframe_job_models import (
     KeyframeJobError,
-    c2_profile_template,
     keyframe_job_schema,
     load_keyframe_job,
+)
+from aigen.keyframes import (
     plan_keyframe_job,
     run_keyframe_job,
     validate_keyframe_job,
 )
+from aigen.manifest_io import ManifestIOError
 from aigen.runtime_profiles import (
-    MODELS_ROOT,
     PROJECT_ROOT,
     keyframe_profile_for_name,
     keyframe_refine_profile_for_name,
@@ -70,15 +67,6 @@ from aigen.runtime_profiles import (
 def add_keyframe_commands(subparsers: Any) -> None:
     keyframes = subparsers.add_parser("keyframes", help="JSON-first character keyframe jobs")
     keyframe_subparsers = keyframes.add_subparsers(dest="keyframes_command", required=True)
-
-    init = keyframe_subparsers.add_parser("init", help="Write a keyframe job template to stdout")
-    init.add_argument(
-        "--template",
-        choices=("c2-profile",),
-        required=True,
-        help="Template keyframe job to emit",
-    )
-    init.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     schema = keyframe_subparsers.add_parser("schema", help="Write the keyframe JSON schema to stdout")
     schema.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -160,25 +148,7 @@ def add_keyframe_commands(subparsers: Any) -> None:
         help="Use the local VLM to plan model-discovered local polish regions",
     )
     polish_diagnose.add_argument("job", type=Path, help="Keyframe polish job JSON")
-    polish_diagnose.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Planner id recorded in polish plan")
-    polish_diagnose.add_argument(
-        "--model",
-        type=Path,
-        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
-        help="Local Qwen2.5-VL-7B-Instruct model directory",
-    )
-    polish_diagnose.add_argument("--dtype", default="bfloat16", help="Torch dtype for planner model weights")
-    polish_diagnose.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
-    polish_diagnose.add_argument(
-        "--quantization",
-        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
-        default=DEFAULT_JUDGE_QUANTIZATION,
-        help="Local inference quantization for polish planning",
-    )
-    polish_diagnose.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
-    polish_diagnose.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
-    polish_diagnose.add_argument("--max-new-tokens", type=int, default=1200, help="Planner response token budget")
-    polish_diagnose.add_argument("--temperature", type=float, default=0.0, help="Planner sampling temperature")
+    add_judge_runtime_args(polish_diagnose, role="planner", max_new_tokens=1200)
     polish_diagnose.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     polish_validate = keyframe_subparsers.add_parser(
@@ -207,52 +177,12 @@ def add_keyframe_commands(subparsers: Any) -> None:
         help="Use the local VLM to select local polish variants and write final_composite.png",
     )
     polish_select.add_argument("job", type=Path, help="Keyframe polish job JSON")
-    polish_select.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Selector id recorded in polish selection")
-    polish_select.add_argument(
-        "--model",
-        type=Path,
-        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
-        help="Local Qwen2.5-VL-7B-Instruct model directory",
-    )
-    polish_select.add_argument("--dtype", default="bfloat16", help="Torch dtype for selector model weights")
-    polish_select.add_argument("--attention-impl", default="sdpa", help="Transformers attention implementation")
-    polish_select.add_argument(
-        "--quantization",
-        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
-        default=DEFAULT_JUDGE_QUANTIZATION,
-        help="Local inference quantization for polish selection",
-    )
-    polish_select.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
-    polish_select.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
-    polish_select.add_argument("--max-new-tokens", type=int, default=700, help="Selector response token budget")
-    polish_select.add_argument("--temperature", type=float, default=0.0, help="Selector sampling temperature")
+    add_judge_runtime_args(polish_select, role="selector", max_new_tokens=700)
     polish_select.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     judge = keyframe_subparsers.add_parser("judge", help="Judge a completed keyframe run with a local VLM")
     judge.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
-    judge.add_argument("--judge", default=DEFAULT_JUDGE_ID, help="Judge id used for output directory naming")
-    judge.add_argument(
-        "--model",
-        type=Path,
-        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
-        help="Local Qwen2.5-VL-7B-Instruct model directory",
-    )
-    judge.add_argument("--dtype", default="bfloat16", help="Torch dtype for judge model weights")
-    judge.add_argument(
-        "--attention-impl",
-        default="sdpa",
-        help="Transformers attention implementation for the judge model",
-    )
-    judge.add_argument(
-        "--quantization",
-        choices=("bitsandbytes-8bit", "bitsandbytes-4bit", "none"),
-        default=DEFAULT_JUDGE_QUANTIZATION,
-        help="Local inference quantization for the 7B judge",
-    )
-    judge.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
-    judge.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
-    judge.add_argument("--max-new-tokens", type=int, default=900, help="Judge response token budget")
-    judge.add_argument("--temperature", type=float, default=0.0, help="Judge sampling temperature")
+    add_judge_runtime_args(judge, role="judge", max_new_tokens=900)
     judge.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     score = keyframe_subparsers.add_parser("score", help="Score a completed keyframe run against its conditions")
@@ -284,9 +214,6 @@ def add_keyframe_commands(subparsers: Any) -> None:
 
 def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
-        if args.keyframes_command == "init":
-            dump_json(stdout, c2_profile_template(), pretty=not args.compact)
-            return 0
         if args.keyframes_command == "schema":
             dump_json(stdout, keyframe_job_schema(), pretty=not args.compact)
             return 0
@@ -321,7 +248,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                 stdout,
                 judge_keyframe_run(
                     args.run_dir,
-                    _judge_config(args),
+                    judge_config_from_args(args),
                     project_root=PROJECT_ROOT,
                 ),
                 pretty=not args.compact,
@@ -368,7 +295,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                 stdout,
                 diagnose_keyframe_polish(
                     args.job,
-                    config=_judge_config(args),
+                    config=judge_config_from_args(args),
                     project_root=PROJECT_ROOT,
                 ),
                 pretty=not args.compact,
@@ -379,7 +306,7 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
                 stdout,
                 select_keyframe_polish(
                     args.job,
-                    config=_judge_config(args),
+                    config=judge_config_from_args(args),
                     project_root=PROJECT_ROOT,
                 ),
                 pretty=not args.compact,
@@ -459,25 +386,10 @@ def run_keyframe_command(args: argparse.Namespace, stdout: TextIO, stderr: TextI
         KeyframeScoreError,
         KeyframeRefineError,
         KeyframePolishError,
+        ManifestIOError,
     ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1
-
-
-def _judge_config(args: argparse.Namespace) -> KeyframeJudgeConfig:
-    return KeyframeJudgeConfig(
-        judge_id=args.judge,
-        model=args.model,
-        repo_id=DEFAULT_JUDGE_REPO_ID,
-        revision=DEFAULT_JUDGE_REVISION,
-        dtype=args.dtype,
-        attention_impl=args.attention_impl,
-        quantization=args.quantization,
-        min_pixels=args.min_pixels,
-        max_pixels=args.max_pixels,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-    )
 
 
 def _keyframe_profile_for_job(job_path: Path):

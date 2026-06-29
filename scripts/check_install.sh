@@ -33,14 +33,22 @@ if importlib.util.find_spec("nunchaku") is None:
 PY
 fi
 
+"$venv_python" - <<'PY'
+import onnxruntime as ort
+
+providers = ort.get_available_providers()
+if "CUDAExecutionProvider" not in providers:
+    raise SystemExit(f"onnxruntime CUDAExecutionProvider is unavailable: {providers}")
+PY
+
 run "$venv_python" -m aigen.cli --help
 run "$venv_python" -m aigen.cli briefs schema --compact
+run "$venv_python" -m aigen.cli briefs plan-schema --compact
+run "$venv_python" -m aigen.cli characters view-schema --compact
+run "$venv_python" -m aigen.cli characters view-bank-schema --compact
 run "$venv_python" -m aigen.cli keyframes schema --compact
-
-if [[ "${AIGEN_SKIP_MODEL_CHECK:-0}" == "1" ]]; then
-  log "model-backed keyframe validation skipped"
-else
-  run "$venv_python" -m aigen.cli keyframes validate "$repo_root/jobs/ai46/walk_contact.json" --compact
-fi
+run "$venv_python" -m aigen.cli keyframes refine-schema --compact
+run "$venv_python" -m aigen.cli keyframes polish-schema --compact
+run "$venv_python" -m aigen.cli keyframes polish-plan-schema --compact
 
 log "install check passed"

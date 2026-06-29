@@ -1,115 +1,261 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "character": {
+  "$defs": {
+    "ImageAssetSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "mode": {
+          "title": "Mode",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "mode",
+        "width",
+        "height"
+      ],
+      "title": "ImageAssetSpec",
+      "type": "object"
+    },
+    "ViewBankCharacterSpec": {
       "additionalProperties": false,
       "properties": {
         "id": {
+          "title": "Id",
           "type": "string"
         },
         "source_reference": {
-          "additionalProperties": false,
-          "properties": {
-            "height": {
-              "type": "integer"
-            },
-            "mode": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "sha256": {
-              "type": "string"
-            },
-            "width": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "path",
-            "sha256",
-            "mode",
-            "width",
-            "height"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/ImageAssetSpec"
         }
       },
       "required": [
         "id",
         "source_reference"
       ],
+      "title": "ViewBankCharacterSpec",
       "type": "object"
     },
+    "ViewBankEntryAcceptanceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "manual": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Manual",
+          "type": "array"
+        },
+        "minimum_passing_variants": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Passing Variants"
+        }
+      },
+      "required": [
+        "manual"
+      ],
+      "title": "ViewBankEntryAcceptanceSpec",
+      "type": "object"
+    },
+    "ViewBankEntryAssetsSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "boundary_mask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAssetSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "contour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAssetSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAssetSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAssetSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "softedge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAssetSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ViewBankEntryAssetsSpec",
+      "type": "object"
+    },
+    "ViewBankEntrySpec": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewBankEntryAcceptanceSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "accepted_candidate": {
+          "title": "Accepted Candidate",
+          "type": "string"
+        },
+        "accepted_seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accepted Seed"
+        },
+        "assets": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewBankEntryAssetsSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "image": {
+          "$ref": "#/$defs/ImageAssetSpec"
+        },
+        "view": {
+          "$ref": "#/$defs/ViewBankViewSpec"
+        }
+      },
+      "required": [
+        "view",
+        "image",
+        "accepted_candidate"
+      ],
+      "title": "ViewBankEntrySpec",
+      "type": "object"
+    },
+    "ViewBankViewSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "camera": {
+          "enum": [
+            "orthographic-front",
+            "orthographic-side",
+            "orthographic-back"
+          ],
+          "title": "Camera",
+          "type": "string"
+        },
+        "name": {
+          "enum": [
+            "front",
+            "left_profile",
+            "right_profile",
+            "back"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "pose": {
+          "title": "Pose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "camera",
+        "pose"
+      ],
+      "title": "ViewBankViewSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "character": {
+      "$ref": "#/$defs/ViewBankCharacterSpec"
+    },
     "kind": {
-      "const": "character-view-bank"
+      "const": "character-view-bank",
+      "title": "Kind",
+      "type": "string"
     },
     "schema_version": {
-      "const": 1
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
     },
     "views": {
       "additionalProperties": {
-        "additionalProperties": true,
-        "properties": {
-          "acceptance": {
-            "type": "object"
-          },
-          "accepted_candidate": {
-            "type": "string"
-          },
-          "accepted_seed": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "assets": {
-            "type": "object"
-          },
-          "image": {
-            "additionalProperties": false,
-            "properties": {
-              "height": {
-                "type": "integer"
-              },
-              "mode": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "sha256": {
-                "type": "string"
-              },
-              "width": {
-                "type": "integer"
-              }
-            },
-            "required": [
-              "path",
-              "sha256",
-              "mode",
-              "width",
-              "height"
-            ],
-            "type": "object"
-          },
-          "prompt": {
-            "type": "object"
-          },
-          "view": {
-            "type": "object"
-          }
-        },
-        "required": [
-          "view",
-          "image",
-          "accepted_candidate"
-        ],
-        "type": "object"
+        "$ref": "#/$defs/ViewBankEntrySpec"
       },
+      "title": "Views",
       "type": "object"
     }
   },
@@ -119,5 +265,6 @@
     "character",
     "views"
   ],
+  "title": "CharacterViewBankSpec",
   "type": "object"
 }

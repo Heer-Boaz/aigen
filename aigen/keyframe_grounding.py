@@ -45,35 +45,49 @@ class GroundedRegionBox:
         }
 
 
+@dataclass(frozen=True)
+class GroundingRequest:
+    prompt: str
+    prior_box: tuple[int, int, int, int]
+
+
 class KeyframeRegionGrounder:
     def __init__(self, config: GroundingConfig):
         self._config = config
-        self._grounders = (
-            GroundingDinoRegionGrounder(config),
-            Florence2RegionGrounder(config),
-        )
 
-    def ground_region(
+    def ground_regions(
         self,
         image: Image.Image,
-        prompt: str,
-        prior_box: tuple[int, int, int, int],
-    ) -> GroundedRegionBox:
+        requests: list[GroundingRequest],
+    ) -> list[GroundedRegionBox]:
+        if not requests:
+            return []
+        image = image.convert("RGB")
         width, height = image.size
-        prior = _clip_box(prior_box, width, height)
-        boxes = []
-        for grounder in self._grounders:
-            boxes.extend(
-                GroundedRegionBox(
-                    box=box.box,
-                    label=box.label,
-                    score=box.score,
-                    source=box.source,
-                    prior_iou=_box_iou(box.box, prior),
-                )
-                for box in grounder.ground_boxes(image, prompt)
-            )
-        return _best_grounded_region(boxes, prior, self._config)
+        priors = [_clip_box(request.prior_box, width, height) for request in requests]
+        boxes_by_request: list[list[GroundedRegionBox]] = [[] for _ in requests]
+        for grounder_type in (GroundingDinoRegionGrounder, Florence2RegionGrounder):
+            grounder = grounder_type(self._config)
+            try:
+                for index, request in enumerate(requests):
+                    prior = priors[index]
+                    boxes_by_request[index].extend(
+                        GroundedRegionBox(
+                            box=box.box,
+                            label=box.label,
+                            score=box.score,
+                            source=box.source,
+                            prior_iou=_box_iou(box.box, prior),
+                        )
+                        for box in grounder.ground_boxes(image, request.prompt)
+                    )
+            finally:
+                grounder.close()
+
+        return [
+            _best_grounded_region(boxes, prior, self._config)
+            for boxes, prior in zip(boxes_by_request, priors, strict=True)
+        ]
 
 
 class GroundingDinoRegionGrounder:
@@ -94,28 +108,7 @@ class GroundingDinoRegionGrounder:
         self._model.eval()
         self._config = config
 
-    def ground_region(
-        self,
-        image: Image.Image,
-        prompt: str,
-        prior_box: tuple[int, int, int, int],
-    ) -> GroundedRegionBox:
-        width, height = image.size
-        prior = _clip_box(prior_box, width, height)
-        boxes = [
-            GroundedRegionBox(
-                box=box.box,
-                label=box.label,
-                score=box.score,
-                source=box.source,
-                prior_iou=_box_iou(box.box, prior),
-            )
-            for box in self.ground_boxes(image, prompt)
-        ]
-        return _best_grounded_region(boxes, prior, self._config)
-
     def ground_boxes(self, image: Image.Image, prompt: str) -> list[GroundedRegionBox]:
-        image = image.convert("RGB")
         query = _grounding_query(prompt)
         inputs = self._processor(images=image, text=query, return_tensors="pt").to(self._config.device)
         with self._torch.inference_mode():
@@ -142,6 +135,12 @@ class GroundingDinoRegionGrounder:
             )
         return boxes
 
+    def close(self) -> None:
+        del self._model
+        del self._processor
+        if self._config.device.startswith("cuda"):
+            self._torch.cuda.empty_cache()
+
 
 class Florence2RegionGrounder:
     def __init__(self, config: GroundingConfig):
@@ -166,28 +165,7 @@ class Florence2RegionGrounder:
         self._model.eval()
         self._config = config
 
-    def ground_region(
-        self,
-        image: Image.Image,
-        prompt: str,
-        prior_box: tuple[int, int, int, int],
-    ) -> GroundedRegionBox:
-        width, height = image.size
-        prior = _clip_box(prior_box, width, height)
-        boxes = [
-            GroundedRegionBox(
-                box=box.box,
-                label=box.label,
-                score=box.score,
-                source=box.source,
-                prior_iou=_box_iou(box.box, prior),
-            )
-            for box in self.ground_boxes(image, prompt)
-        ]
-        return _best_grounded_region(boxes, prior, self._config)
-
     def ground_boxes(self, image: Image.Image, prompt: str) -> list[GroundedRegionBox]:
-        image = image.convert("RGB")
         task_prompt = f"{FLORENCE_PHRASE_GROUNDING_TASK}{_florence_phrase(prompt)}"
         inputs = self._processor(text=task_prompt, images=image, return_tensors="pt").to(self._config.device)
         with self._torch.inference_mode():
@@ -215,6 +193,12 @@ class Florence2RegionGrounder:
             )
             for raw_box, raw_label in zip(result.get("bboxes", ()), result.get("labels", ()), strict=True)
         ]
+
+    def close(self) -> None:
+        del self._model
+        del self._processor
+        if self._config.device.startswith("cuda"):
+            self._torch.cuda.empty_cache()
 
 
 def _grounding_query(prompt: str) -> str:

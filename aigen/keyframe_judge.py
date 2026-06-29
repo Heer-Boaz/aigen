@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from contextlib import closing, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aigen.generation.runtime_diagnostics import module_device_report
+from aigen.manifest_io import read_json, sha256_file, write_json
 
 
 DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
@@ -35,10 +37,10 @@ class HardRejects(StrictModel):
     two_eyes_visible: bool
     wrong_direction: bool
     cropped_feet: bool
-    missing_boots: bool
-    long_hair: bool
-    wrong_outfit: bool
-    pose_not_walk_contact: bool
+    footwear_changed: bool
+    hairstyle_changed: bool
+    outfit_changed: bool
+    pose_not_requested_action: bool
     severe_limb_error: bool
 
 
@@ -93,9 +95,15 @@ class QwenKeyframeJudge:
 
         dtype = _torch_dtype(torch, config.dtype)
         quantization_config = _quantization_config(torch, config)
-        device_map = {"": 0} if quantization_config else "auto"
+        device_map = _judge_device_map(torch)
         try:
-            self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            processor = AutoProcessor.from_pretrained(
+                config.model.as_posix(),
+                min_pixels=config.min_pixels,
+                max_pixels=config.max_pixels,
+                local_files_only=True,
+            )
+            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 config.model.as_posix(),
                 torch_dtype=dtype,
                 attn_implementation=config.attention_impl,
@@ -103,14 +111,10 @@ class QwenKeyframeJudge:
                 quantization_config=quantization_config,
                 local_files_only=True,
             )
-            self.processor = AutoProcessor.from_pretrained(
-                config.model.as_posix(),
-                min_pixels=config.min_pixels,
-                max_pixels=config.max_pixels,
-                local_files_only=True,
-            )
         except OSError as error:
             raise KeyframeJudgeError(f"Failed to load local judge model from {config.model.as_posix()}: {error}") from error
+        self.model = model
+        self.processor = processor
         self.process_vision_info = process_vision_info
         self.config = config
         self.torch = torch
@@ -118,6 +122,12 @@ class QwenKeyframeJudge:
 
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         return self._generate(prompt, image_paths)
+
+    def close(self) -> None:
+        del self.model
+        del self.processor
+        if self.torch.cuda.is_available():
+            self.torch.cuda.empty_cache()
 
     def _generate(self, prompt: str, image_paths: list[Path]) -> str:
         messages = [
@@ -171,7 +181,7 @@ def judge_keyframe_run(
     runner: Any | None = None,
 ) -> dict[str, Any]:
     resolved_run_dir = run_dir.resolve()
-    result = _read_json(resolved_run_dir / "result.json")
+    result = read_json(resolved_run_dir / "result.json", label="keyframe run result")
     effective_config = result["effective_config"]
     assets = result["assets"]
     judge_dir = resolved_run_dir / "judge" / config.judge_id
@@ -184,48 +194,48 @@ def judge_keyframe_run(
     raw_dir.mkdir(parents=True, exist_ok=True)
     overlay_dir.mkdir(parents=True, exist_ok=True)
 
-    active_runner = runner if runner else QwenKeyframeJudge(config)
-    candidate_results = []
-    for output in result["outputs"]:
-        candidate_name = output["name"]
-        candidate_path = Path(output["path"]).resolve()
-        overlay_path = overlay_dir / f"{candidate_name}__contour_overlay.png"
-        _save_contour_overlay(candidate_path, Path(assets["contour"]["path"]), overlay_path)
-        prompt = _candidate_prompt(candidate_name, effective_config)
-        prompt_sha256 = _sha256_text(prompt)
-        (prompts_dir / f"{candidate_name}.txt").write_text(prompt, encoding="utf-8")
-        image_paths = _candidate_image_paths(assets, candidate_path, overlay_path)
-        raw_text = active_runner.judge_candidate(prompt, image_paths)
-        (raw_dir / f"{candidate_name}.json").write_text(raw_text + "\n", encoding="utf-8")
-        judgment = _parse_candidate_judgment(raw_text)
-        if judgment.candidate != candidate_name:
-            raise KeyframeJudgeError(
-                f"Judge returned candidate {judgment.candidate}, expected {candidate_name}"
+    with closing(QwenKeyframeJudge(config)) if runner is None else nullcontext(runner) as active_runner:
+        candidate_results = []
+        for output in result["outputs"]:
+            candidate_name = output["name"]
+            candidate_path = Path(output["path"]).resolve()
+            overlay_path = overlay_dir / f"{candidate_name}__contour_overlay.png"
+            _save_contour_overlay(candidate_path, Path(assets["contour"]["path"]), overlay_path)
+            prompt = _candidate_prompt(candidate_name, effective_config)
+            prompt_sha256 = _sha256_text(prompt)
+            (prompts_dir / f"{candidate_name}.txt").write_text(prompt, encoding="utf-8")
+            image_paths = _candidate_image_paths(assets, candidate_path, overlay_path)
+            raw_text = active_runner.judge_candidate(prompt, image_paths)
+            (raw_dir / f"{candidate_name}.json").write_text(raw_text + "\n", encoding="utf-8")
+            judgment = _parse_candidate_judgment(raw_text)
+            if judgment.candidate != candidate_name:
+                raise KeyframeJudgeError(
+                    f"Judge returned candidate {judgment.candidate}, expected {candidate_name}"
+                )
+            candidate_results.append(
+                {
+                    "candidate": candidate_name,
+                    "image": candidate_path.as_posix(),
+                    "overlay": overlay_path.as_posix(),
+                    "prompt_sha256": prompt_sha256,
+                    "raw_response": (raw_dir / f"{candidate_name}.json").as_posix(),
+                    "judgment": judgment.model_dump(mode="json", by_alias=True),
+                }
             )
-        candidate_results.append(
-            {
-                "candidate": candidate_name,
-                "image": candidate_path.as_posix(),
-                "overlay": overlay_path.as_posix(),
-                "prompt_sha256": prompt_sha256,
-                "raw_response": (raw_dir / f"{candidate_name}.json").as_posix(),
-                "judgment": judgment.model_dump(mode="json", by_alias=True),
-            }
-        )
 
-    payload = {
-        "schema_version": JUDGE_SCHEMA_VERSION,
-        "status": "completed",
-        "run_dir": resolved_run_dir.as_posix(),
-        "job_id": result["job_id"],
-        "git_commit": _git_commit(project_root),
-        "source_result_sha256": _sha256_file(resolved_run_dir / "result.json"),
-        "judge": _judge_config_json(config) | {"device_report": _runner_device_report(active_runner)},
-        "candidates": candidate_results,
-        "semantic_gate": _semantic_gate(candidate_results),
-    }
-    _write_json(judge_dir / "judge.json", payload)
-    return payload
+        payload = {
+            "schema_version": JUDGE_SCHEMA_VERSION,
+            "status": "completed",
+            "run_dir": resolved_run_dir.as_posix(),
+            "job_id": result["job_id"],
+            "git_commit": _git_commit(project_root),
+            "source_result_sha256": sha256_file(resolved_run_dir / "result.json"),
+            "judge": _judge_config_json(config) | {"device_report": _runner_device_report(active_runner)},
+            "candidates": candidate_results,
+            "semantic_gate": _semantic_gate(candidate_results),
+        }
+        write_json(judge_dir / "judge.json", payload)
+        return payload
 
 
 def _candidate_image_paths(assets: dict[str, Any], candidate_path: Path, overlay_path: Path) -> list[Path]:
@@ -267,21 +277,22 @@ Priority order:
 
 Hard reject if:
 - The character is front view or three-quarter view.
-- Both eyes are clearly visible.
+- Both eyes are clearly visible when the requested camera is a side/profile view.
 - The character faces or moves in the wrong direction.
 - The feet are cropped.
-- Boots are missing or replaced by different footwear.
-- The short bob becomes long hair or a ponytail.
-- The outfit no longer matches the reference.
+- Distinct footwear from the identity primer is missing or replaced.
+- The hairstyle no longer matches the identity primer.
+- The outfit no longer matches the identity primer.
 - The pose no longer reads as the requested action.
 - There is a severe hand, arm, leg, or boot error that breaks the keyframe.
 
-Strict side-profile definition:
-- The head, torso, hips, legs and boots must read as a left-facing platformer side view.
-- A visible full chest, full shirt front, centered tie, both jacket lapels, both shoulders, or a wide front-facing torso is a three-quarter/front-view failure.
-- Exactly one eye is necessary but not sufficient. A one-eye image can still fail if the torso or outfit faces the camera.
-- The best candidate is the one whose body mass, head, torso, hips, legs and boots follow the red contour overlay most closely while preserving the AI46 outfit.
-- Penalize candidates that are prettier but stand outside the target contour or read less like the target walk-contact pose.
+Camera/readability definition:
+- Judge the camera against the requested keyframe camera and the supplied target contour.
+- Platformer side-view animation may cheat toward the camera when that improves readability, but the candidate must still read as the requested direction and action.
+- A visible full chest, centered outfit details, both shoulders, or a wide front-facing torso is a three-quarter/front-view failure when the requested camera is side-view.
+- Exactly one eye can help a side-view read, but it is not sufficient if the torso, hips, legs or outfit face the camera.
+- The best candidate is the one whose body mass, head, torso, hips, limbs and feet follow the red contour overlay most closely while preserving the identity primer.
+- Penalize candidates that are prettier but stand outside the target contour or read less like the requested action.
 - Do not mark all candidates equal; use the full 0-to-10 score range.
 
 Target keyframe:
@@ -312,7 +323,7 @@ Return valid JSON only. The JSON object must contain:
 - candidate: exactly "{candidate_name}"
 - pass: boolean
 - rank_recommendation: integer 1 to 4
-- hard_rejects: object with booleans for front_or_three_quarter_view, two_eyes_visible, wrong_direction, cropped_feet, missing_boots, long_hair, wrong_outfit, pose_not_walk_contact, severe_limb_error
+- hard_rejects: object with booleans for front_or_three_quarter_view, two_eyes_visible, wrong_direction, cropped_feet, footwear_changed, hairstyle_changed, outfit_changed, pose_not_requested_action, severe_limb_error
 - scores: object with numeric 0-to-10 values for condition_adherence, side_profile, pose_match, contour_match, identity_preservation, outfit_preservation, artifact_quality, overall
 - evidence: object with condition_match string, identity_match string, concerns string array
 Do not wrap the JSON in Markdown code fences.
@@ -451,32 +462,22 @@ def _quantization_config(torch: Any, config: KeyframeJudgeConfig) -> Any | None:
     )
 
 
+def _judge_device_map(torch: Any) -> dict[str, int | str]:
+    if torch.cuda.is_available():
+        return {"": 0}
+    return {"": "cpu"}
+
+
 def _torch_dtype(torch: Any, dtype: str) -> Any:
     if dtype == "auto":
         return "auto"
     return getattr(torch, dtype)
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except OSError as error:
-        raise KeyframeJudgeError(f"Missing keyframe run artifact: {path.as_posix()}") from error
-    except json.JSONDecodeError as error:
-        raise KeyframeJudgeError(f"Invalid JSON artifact: {path.as_posix()}: {error}") from error
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _git_commit(project_root: Path) -> str:

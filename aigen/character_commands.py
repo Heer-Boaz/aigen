@@ -4,28 +4,26 @@ import argparse
 from pathlib import Path
 from typing import Any, TextIO
 
-from aigen.character_views import (
+from aigen.character_view_models import (
     CharacterViewError,
-    accept_character_view,
     character_view_bank_schema,
     character_view_job_schema,
-    left_profile_view_template,
     load_character_view_job,
+)
+from aigen.character_views import (
+    accept_character_view,
     plan_character_view_job,
     run_character_view_job,
     validate_character_view_job,
 )
 from aigen.command_io import command_error_payload, dump_json
+from aigen.manifest_io import ManifestIOError
 from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
 
 
 def add_character_commands(subparsers: Any) -> None:
     characters = subparsers.add_parser("characters", help="Character view bank tools")
     character_subparsers = characters.add_subparsers(dest="characters_command", required=True)
-
-    view_init = character_subparsers.add_parser("view-init", help="Write a character-view job template to stdout")
-    view_init.add_argument("--template", choices=("ai46-left-profile",), required=True)
-    view_init.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     view_schema = character_subparsers.add_parser("view-schema", help="Write the character-view job schema")
     view_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -57,9 +55,6 @@ def add_character_commands(subparsers: Any) -> None:
 
 def run_character_command(args: argparse.Namespace, stdout: TextIO, stderr: TextIO) -> int:
     try:
-        if args.characters_command == "view-init":
-            dump_json(stdout, left_profile_view_template(), pretty=not args.compact)
-            return 0
         if args.characters_command == "view-schema":
             dump_json(stdout, character_view_job_schema(), pretty=not args.compact)
             return 0
@@ -102,6 +97,6 @@ def run_character_command(args: argparse.Namespace, stdout: TextIO, stderr: Text
             pretty=not args.compact,
         )
         return 0
-    except CharacterViewError as error:
+    except (CharacterViewError, ManifestIOError) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1

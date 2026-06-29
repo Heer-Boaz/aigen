@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aigen.keyframe_refine import KeyframeRefineError, KeyframeRefineProfile
-from aigen.keyframes import KeyframeJobError, KeyframeProfile
+from aigen.keyframe_job_models import KeyframeJobError
+from aigen.keyframe_profiles import KeyframeProfile, KeyframeRefineProfile
+from aigen.keyframe_refine_models import KeyframeRefineError
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

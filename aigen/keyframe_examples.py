@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,8 +8,10 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
+from aigen.image_assets import image_asset_json
 from aigen.keyframe_pose import DEFAULT_DWPOSE_DET_MODEL, DEFAULT_DWPOSE_POSE_MODEL
 from aigen.keyframe_segmentation import foreground_box_mask
+from aigen.manifest_io import file_manifest, write_json
 
 
 EXAMPLE_EXTRACTION_SCHEMA_VERSION = 1
@@ -73,7 +73,8 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         "boundary_mask": output_dir / f"{config.name}_boundary.png",
         "metadata": output_dir / f"{config.name}_extraction.json",
     }
-    Image.open(source).save(assets["source"])
+    with Image.open(source) as image:
+        image.save(assets["source"])
     normalized.convert("RGB").save(assets["normalized_source"])
     pose_image.save(assets["pose"])
     contour.save(assets["contour"])
@@ -82,7 +83,7 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
     payload = {
         "schema_version": EXAMPLE_EXTRACTION_SCHEMA_VERSION,
         "kind": "keyframe-example-extraction",
-        "source": _asset_json(source),
+        "source": image_asset_json(source),
         "canvas": {"width": config.width, "height": config.height},
         "mirror_x": config.mirror_x,
         "foreground": {
@@ -93,21 +94,22 @@ def extract_keyframe_example(config: KeyframeExampleExtractionConfig) -> dict[st
         "transform": transform,
         "pose": pose_metadata,
         "assets": {
-            "source": _asset_json(assets["source"]),
-            "normalized_source": _asset_json(assets["normalized_source"]),
-            "pose": _asset_json(assets["pose"]),
-            "contour": _asset_json(assets["contour"]),
-            "boundary_mask": _asset_json(assets["boundary_mask"]),
+            "source": image_asset_json(assets["source"]),
+            "normalized_source": image_asset_json(assets["normalized_source"]),
+            "pose": image_asset_json(assets["pose"]),
+            "contour": image_asset_json(assets["contour"]),
+            "boundary_mask": image_asset_json(assets["boundary_mask"]),
         },
     }
-    _write_json(assets["metadata"], payload)
-    payload["assets"]["metadata"] = _file_json(assets["metadata"])
+    write_json(assets["metadata"], payload)
+    payload["assets"]["metadata"] = file_manifest(assets["metadata"])
     return payload
 
 
 def _load_rgba(path: Path) -> Image.Image:
     try:
-        return Image.open(path).convert("RGBA")
+        with Image.open(path) as image:
+            return image.convert("RGBA")
     except OSError as error:
         raise KeyframeExampleError(f"Cannot read example image {path.as_posix()}: {error}") from error
 
@@ -237,27 +239,3 @@ def _largest_component(mask: np.ndarray) -> np.ndarray:
     sizes = np.bincount(labels.ravel())
     sizes[0] = 0
     return labels == sizes.argmax()
-
-
-def _asset_json(path: Path) -> dict[str, Any]:
-    with Image.open(path) as image:
-        mode = image.mode
-        width, height = image.size
-    return {
-        "path": path.as_posix(),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "mode": mode,
-        "width": width,
-        "height": height,
-    }
-
-
-def _file_json(path: Path) -> dict[str, str]:
-    return {
-        "path": path.as_posix(),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    }
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

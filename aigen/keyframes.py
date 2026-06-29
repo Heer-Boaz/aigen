@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import shutil
 import subprocess
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from PIL import Image, ImageDraw
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from PIL import Image
 
 from aigen.generation.kontext_pose_control import (
     CharacterKontextPoseSession,
@@ -17,252 +14,29 @@ from aigen.generation.kontext_pose_control import (
     _generation_environment,
 )
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, synchronized_time
+from aigen.image_assets import image_asset_json
 from aigen.keyframe_memory import (
     NvidiaSmiMemorySampler,
     keyframe_vram_plan,
     nvidia_smi_keyframe_preflight,
     planned_token_metadata,
 )
+from aigen.keyframe_job_models import (
+    KEYFRAME_SCHEMA_VERSION,
+    ControlConditionSpec,
+    KeyframeJobError,
+    KeyframeJobSpec,
+    load_keyframe_job,
+)
+from aigen.keyframe_image_ops import save_contact_sheet
+from aigen.keyframe_profiles import KeyframeProfile
+from aigen.manifest_io import (
+    resolve_existing_path,
+    resolve_output_path,
+    sha256_bytes,
+    write_json,
+)
 from aigen.prompt_tokens import count_kontext_prompt_tokens
-
-
-KEYFRAME_JOB_SCHEMA = "schemas/keyframe-job.schema.json"
-KEYFRAME_KIND = "character-keyframe"
-KEYFRAME_SCHEMA_VERSION = 1
-
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class PipelineSpec(StrictModel):
-    profile: str
-
-
-class PathSpec(StrictModel):
-    path: str
-
-
-class IdentityPrimerSpec(StrictModel):
-    view: Literal["front", "left_profile", "right_profile", "back"]
-    path: str
-
-
-class CharacterSpec(StrictModel):
-    id: str
-    identity_primer: IdentityPrimerSpec
-
-
-class KeyframeSpec(StrictModel):
-    action: str
-    phase: str
-    direction: Literal["left", "right"]
-    camera: Literal["orthographic-side"]
-
-
-class AssetSpec(StrictModel):
-    pose: PathSpec
-    contour: PathSpec | None = None
-    boundary_mask: PathSpec | None = None
-    depth: PathSpec | None = None
-    softedge: PathSpec | None = None
-
-
-class PromptSpec(StrictModel):
-    clip: str
-    t5: str
-    negative: str | None = None
-    true_cfg_scale: float
-
-
-class CanvasSpec(StrictModel):
-    width: int
-    height: int
-    reference_max_area: int
-    max_sequence_length: int
-
-
-class SamplingSpec(StrictModel):
-    steps: int
-    guidance_scale: float
-
-
-class ControlConditionSpec(StrictModel):
-    name: str
-    type: Literal["pose", "canny", "softedge", "depth"]
-    image: str
-    scale: float
-    start: float
-    end: float
-    residual_mask: str | None = None
-
-
-class VariantSpec(StrictModel):
-    name: str
-    seed: int
-
-
-class OutputSpec(StrictModel):
-    directory: str
-    filename: str
-    overwrite: bool
-    save_conditions: bool
-    save_contact_sheet: bool
-
-
-class AcceptanceSpec(StrictModel):
-    manual: list[str]
-    minimum_passing_variants: int
-
-
-class KeyframeJobSpec(StrictModel):
-    schema_path: str = Field(alias="$schema")
-    schema_version: Literal[1]
-    kind: Literal["character-keyframe"]
-    id: str
-    pipeline: PipelineSpec
-    character: CharacterSpec
-    keyframe: KeyframeSpec
-    assets: AssetSpec
-    prompt: PromptSpec
-    canvas: CanvasSpec
-    sampling: SamplingSpec
-    conditions: list[ControlConditionSpec]
-    variants: list[VariantSpec]
-    output: OutputSpec
-    acceptance: AcceptanceSpec
-
-
-@dataclass(frozen=True)
-class KeyframeProfile:
-    name: str
-    model: str
-    controlnet_model: str
-    nunchaku_transformer_model: Path
-    attention_impl: str
-    dtype: str
-    pipeline_cpu_offload: bool
-    nunchaku_layer_offload: bool
-    vae_tiling: bool
-    model_revisions: dict[str, dict[str, str]]
-
-
-class KeyframeJobError(RuntimeError):
-    pass
-
-
-def keyframe_job_schema() -> dict[str, Any]:
-    schema = KeyframeJobSpec.model_json_schema(by_alias=True)
-    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    return schema
-
-
-def c2_profile_template() -> dict[str, Any]:
-    spec = KeyframeJobSpec(
-        **{
-            "$schema": "../../schemas/keyframe-job.schema.json",
-            "schema_version": KEYFRAME_SCHEMA_VERSION,
-            "kind": KEYFRAME_KIND,
-            "id": "ai46.walk.contact.left",
-            "pipeline": {"profile": "nunchaku-kontext-pose-quality"},
-            "character": {
-                "id": "ai46",
-                "identity_primer": {
-                    "view": "front",
-                    "path": "../../assets/characters/ai46/views/front.png",
-                },
-            },
-            "keyframe": {
-                "action": "walk",
-                "phase": "contact",
-                "direction": "left",
-                "camera": "orthographic-side",
-            },
-            "assets": {
-                "pose": {"path": "../../assets/poses/ai46_walk_contact_pose.png"},
-                "contour": {"path": "../../assets/contours/ai46_walk_contact_canny.png"},
-                "boundary_mask": {"path": "../../assets/masks/ai46_walk_contact_boundary.png"},
-            },
-            "prompt": {
-                "clip": (
-                    "Same anime girl in a strict orthographic left-facing 90-degree side profile, "
-                    "platformer character side-view walking pose, exactly one eye visible, nose "
-                    "and chin in silhouette, short light-brown bob haircut, brown leather jacket, "
-                    "white shirt, blue tie, brown shorts, blue thigh-high socks, brown boots."
-                ),
-                "t5": (
-                    "Same anime girl in a strict orthographic left-facing 90-degree side profile, "
-                    "platformer character side-view walking pose, exactly one eye visible, nose and "
-                    "chin in silhouette, shoulders overlapping in depth, chest facing sideways. Keep "
-                    "the same short light-brown bob haircut, blue eyes, white shirt, blue tie, brown "
-                    "leather jacket, brown shorts, gloves, blue thigh-high socks, and brown boots. "
-                    "Clean plain neutral studio background."
-                ),
-                "true_cfg_scale": 1.0,
-            },
-            "canvas": {
-                "width": 512,
-                "height": 768,
-                "reference_max_area": 524288,
-                "max_sequence_length": 128,
-            },
-            "sampling": {
-                "steps": 28,
-                "guidance_scale": 2.5,
-            },
-            "conditions": [
-                {
-                    "name": "pose",
-                    "type": "pose",
-                    "image": "pose",
-                    "scale": 0.55,
-                    "start": 0.0,
-                    "end": 0.55,
-                },
-                {
-                    "name": "profile_contour",
-                    "type": "canny",
-                    "image": "contour",
-                    "residual_mask": "boundary_mask",
-                    "scale": 0.35,
-                    "start": 0.0,
-                    "end": 0.40,
-                },
-            ],
-            "variants": [
-                {"name": "seed_001", "seed": 1},
-                {"name": "seed_002", "seed": 2},
-                {"name": "seed_003", "seed": 3},
-                {"name": "seed_004", "seed": 4},
-            ],
-            "output": {
-                "directory": "../../runs/keyframes/ai46/walk_contact/batch",
-                "filename": "{id}__{variant}.png",
-                "overwrite": False,
-                "save_conditions": True,
-                "save_contact_sheet": True,
-            },
-            "acceptance": {
-                "manual": [
-                    "exactly one eye visible",
-                    "short bob preserved",
-                    "jacket, tie, shorts, socks and boots preserved",
-                    "feet fully visible",
-                    "strict side profile",
-                    "pose reads as walk contact frame",
-                ],
-                "minimum_passing_variants": 3,
-            },
-        }
-    )
-    return spec.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
-def load_keyframe_job(path: Path) -> KeyframeJobSpec:
-    try:
-        return KeyframeJobSpec.model_validate_json(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, ValidationError) as error:
-        raise KeyframeJobError(f"Invalid keyframe job {path}: {error}") from error
 
 
 def resolve_keyframe_job(
@@ -291,7 +65,7 @@ def resolve_keyframe_spec(
     _validate_conditions(spec, assets)
     _validate_asset_dimensions(spec, assets)
     _validate_masks(spec, assets)
-    output_dir = _resolve_output_dir(spec.output.directory, job_path.parent)
+    output_dir = resolve_output_path(spec.output.directory, job_path.parent)
     outputs = _planned_outputs(spec, output_dir)
     if check_outputs and not spec.output.overwrite:
         existing = [output for output in outputs if Path(output["path"]).exists()]
@@ -353,7 +127,7 @@ def resolve_keyframe_spec(
         "token_metadata": token_metadata,
         "vram_plan": vram_plan,
         "git_commit": _git_commit(project_root),
-        "spec_sha256": _sha256_bytes(job_path.read_bytes()),
+        "spec_sha256": sha256_bytes(job_path.read_bytes()),
     }
 
 
@@ -389,7 +163,7 @@ def run_keyframe_spec(
     memory_sampler = NvidiaSmiMemorySampler(nvidia_smi_keyframe_preflight(resolved["vram_plan"]))
     output_dir = Path(resolved["output"]["directory"])
     output_dir.mkdir(parents=True, exist_ok=True)
-    _write_json(output_dir / "resolved.json", resolved)
+    write_json(output_dir / "resolved.json", resolved)
     if spec.output.save_conditions:
         _save_conditions(resolved, output_dir)
 
@@ -468,9 +242,9 @@ def run_keyframe_spec(
                         "controlnet_metadata": result.controlnet_metadata,
                         "timings_ms": result.timings_ms,
                     }
-                )
+            )
             if spec.output.save_contact_sheet:
-                _save_contact_sheet(outputs, output_dir / "contact_sheet.png")
+                save_contact_sheet(outputs, output_dir / "contact_sheet.png", thumb_width=256, label_x=8)
             result_json = {
                 "status": "completed",
                 "job_id": spec.id,
@@ -489,7 +263,7 @@ def run_keyframe_spec(
                 "memory": cuda_memory_stats(torch, "cuda") | memory_sampler.stop(),
                 "environment": _generation_environment(torch, session.pipeline),
             }
-            _write_json(output_dir / "result.json", result_json)
+            write_json(output_dir / "result.json", result_json)
             return result_json
         finally:
             session.close()
@@ -525,13 +299,13 @@ def _profile_json(profile: KeyframeProfile) -> dict[str, Any]:
 
 def _resolve_assets(spec: KeyframeJobSpec, base_dir: Path) -> dict[str, dict[str, Any]]:
     assets: dict[str, dict[str, Any]] = {
-        "identity_primer": _asset_json(_resolve_path(spec.character.identity_primer.path, base_dir)),
-        "pose": _asset_json(_resolve_path(spec.assets.pose.path, base_dir)),
+        "identity_primer": image_asset_json(resolve_existing_path(spec.character.identity_primer.path, base_dir)),
+        "pose": image_asset_json(resolve_existing_path(spec.assets.pose.path, base_dir)),
     }
     for name in ("contour", "boundary_mask", "depth", "softedge"):
         asset = getattr(spec.assets, name)
         if asset:
-            assets[name] = _asset_json(_resolve_path(asset.path, base_dir))
+            assets[name] = image_asset_json(resolve_existing_path(asset.path, base_dir))
     return assets
 
 
@@ -627,9 +401,11 @@ def _prepare_control_images(
     for condition in spec.conditions:
         if condition.image in control_images:
             continue
+        with Image.open(resolved["assets"][condition.image]["path"]) as image:
+            pose_image = image.convert("RGB")
         control_image, blocks_repeat, _prepare_ms = session.prepare_control_condition(
             prepared,
-            pose_image=Image.open(resolved["assets"][condition.image]["path"]).convert("RGB"),
+            pose_image=pose_image,
             seed=spec.variants[0].seed,
         )
         control_images[condition.image] = control_image
@@ -647,9 +423,11 @@ def _prepare_masks(
     for condition in spec.conditions:
         if not condition.residual_mask or condition.residual_mask in masks:
             continue
+        with Image.open(resolved["assets"][condition.residual_mask]["path"]) as image:
+            residual_mask = image.convert("RGB")
         masks[condition.residual_mask] = session.prepare_residual_mask(
             prepared,
-            Image.open(resolved["assets"][condition.residual_mask]["path"]).convert("RGB"),
+            residual_mask,
         )
     return masks
 
@@ -661,61 +439,9 @@ def _save_conditions(resolved: dict[str, Any], output_dir: Path) -> None:
         shutil.copy2(asset["path"], condition_dir / f"{name}{Path(asset['path']).suffix}")
 
 
-def _save_contact_sheet(outputs: list[dict[str, Any]], output_path: Path) -> None:
-    images = [Image.open(output["path"]).convert("RGB") for output in outputs]
-    thumb_w = 256
-    thumb_h = max(1, int(thumb_w * images[0].height / images[0].width))
-    label_h = 32
-    sheet = Image.new("RGB", (thumb_w * len(images), thumb_h + label_h), "white")
-    draw = ImageDraw.Draw(sheet)
-    for index, (image, output) in enumerate(zip(images, outputs, strict=True)):
-        x = index * thumb_w
-        sheet.paste(image.resize((thumb_w, thumb_h), Image.Resampling.LANCZOS), (x, label_h))
-        draw.text((x + 8, 8), output["name"], fill="black")
-    sheet.save(output_path)
-
-
-def _asset_json(path: Path) -> dict[str, Any]:
-    with Image.open(path) as image:
-        mode = image.mode
-        width, height = image.size
-    return {
-        "path": path.as_posix(),
-        "sha256": _sha256_bytes(path.read_bytes()),
-        "mode": mode,
-        "width": width,
-        "height": height,
-    }
-
-
-def _resolve_path(value: str, base_dir: Path) -> Path:
-    path = Path(value)
-    if not path.is_absolute():
-        path = base_dir / path
-    path = path.resolve()
-    if not path.exists():
-        raise KeyframeJobError(f"Missing path: {path.as_posix()}")
-    return path
-
-
-def _resolve_output_dir(value: str, base_dir: Path) -> Path:
-    path = Path(value)
-    if not path.is_absolute():
-        path = base_dir / path
-    return path.resolve()
-
-
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def _git_commit(project_root: Path) -> str:
     return subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
         cwd=project_root,
         text=True,
     ).strip()
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

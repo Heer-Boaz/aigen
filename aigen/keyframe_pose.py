@@ -111,6 +111,13 @@ class DWPoseKeypointExtractor:
             normalized[body_index] = candidates[candidate_index]
         return PoseKeypoints(points=normalized, scores=person_scores, image_size=(width, height))
 
+    def close(self) -> None:
+        del self._detector
+        if self._config.device.startswith("cuda"):
+            import torch
+
+            torch.cuda.empty_cache()
+
 
 def extract_target_pose_map_keypoints(image_path: Path, config: PoseScoreConfig) -> PoseKeypoints:
     image = _load_rgb(image_path).astype(np.float32)

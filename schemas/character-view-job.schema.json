@@ -55,20 +55,14 @@
       "additionalProperties": false,
       "properties": {
         "camera": {
-          "enum": [
-            "orthographic-front",
-            "orthographic-side",
-            "orthographic-back"
-          ],
+          "const": "orthographic-side",
           "title": "Camera",
           "type": "string"
         },
         "name": {
           "enum": [
-            "front",
             "left_profile",
-            "right_profile",
-            "back"
+            "right_profile"
           ],
           "title": "Name",
           "type": "string"
