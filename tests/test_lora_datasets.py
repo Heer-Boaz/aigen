@@ -787,6 +787,8 @@ class LoraDatasetTests(unittest.TestCase):
                         lora_run.as_posix(),
                         "--case",
                         f"side_idle={control_image.as_posix()}",
+                        "--case-prompt",
+                        "side_idle=full body side idle pose",
                         "--base-model",
                         base_model.as_posix(),
                         "--controlnet-model",
@@ -813,6 +815,7 @@ class LoraDatasetTests(unittest.TestCase):
                 result["missing"],
             )
             self.assertEqual([case["name"] for case in result["audit_cases"]], ["side_idle"])
+            self.assertEqual(result["audit_cases"][0]["prompt"], "full body side idle pose")
             self.assertEqual(result["audit_cases"][0]["control_image"]["path"], control_image.resolve().as_posix())
 
 if __name__ == "__main__":

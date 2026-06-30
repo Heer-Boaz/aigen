@@ -95,6 +95,13 @@ def add_lora_commands(subparsers: Any) -> None:
         metavar="NAME=CONTROL_IMAGE",
         help="Control audit case; repeat for each pose/control image",
     )
+    control_audit_plan.add_argument(
+        "--case-prompt",
+        action="append",
+        required=True,
+        metavar="NAME=PROMPT",
+        help="Curated case prompt; repeat once for each --case",
+    )
     control_audit_plan.add_argument("--output-dir", type=Path, help="Control audit output directory")
     control_audit_plan.add_argument("--lora-weights", type=Path, help="LoRA weights safetensors path")
     control_audit_plan.add_argument(
@@ -124,6 +131,7 @@ def add_lora_commands(subparsers: Any) -> None:
     control_audit_plan.add_argument("--width", type=_positive_int, default=512)
     control_audit_plan.add_argument("--height", type=_positive_int, default=768)
     control_audit_plan.add_argument("--steps", type=_positive_int, default=20)
+    control_audit_plan.add_argument("--max-sequence-length", type=_positive_int, default=128)
     control_audit_plan.add_argument("--guidance-scale", type=_positive_float, default=2.5)
     control_audit_plan.add_argument("--controlnet-conditioning-scale", type=_positive_float, default=0.8)
     control_audit_plan.add_argument("--control-guidance-end", type=_positive_float, default=0.65)
@@ -142,6 +150,13 @@ def add_lora_commands(subparsers: Any) -> None:
         required=True,
         metavar="NAME=CONTROL_IMAGE",
         help="Control audit case; repeat for each pose/control image",
+    )
+    control_audit_run.add_argument(
+        "--case-prompt",
+        action="append",
+        required=True,
+        metavar="NAME=PROMPT",
+        help="Curated case prompt; repeat once for each --case",
     )
     control_audit_run.add_argument("--output-dir", type=Path, help="Control audit output directory")
     control_audit_run.add_argument("--lora-weights", type=Path, help="LoRA weights safetensors path")
@@ -172,6 +187,7 @@ def add_lora_commands(subparsers: Any) -> None:
     control_audit_run.add_argument("--width", type=_positive_int, default=512)
     control_audit_run.add_argument("--height", type=_positive_int, default=768)
     control_audit_run.add_argument("--steps", type=_positive_int, default=20)
+    control_audit_run.add_argument("--max-sequence-length", type=_positive_int, default=128)
     control_audit_run.add_argument("--guidance-scale", type=_positive_float, default=2.5)
     control_audit_run.add_argument("--controlnet-conditioning-scale", type=_positive_float, default=0.8)
     control_audit_run.add_argument("--control-guidance-end", type=_positive_float, default=0.65)
@@ -239,6 +255,7 @@ def run_lora_command(
             payload = build_lora_control_audit_plan(
                 args.lora_run_dir,
                 case_specs=args.case,
+                case_prompt_specs=args.case_prompt,
                 identity_prompt=args.identity_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
@@ -250,6 +267,7 @@ def run_lora_command(
                     width=args.width,
                     height=args.height,
                     steps=args.steps,
+                    max_sequence_length=args.max_sequence_length,
                     guidance_scale=args.guidance_scale,
                     controlnet_conditioning_scale=args.controlnet_conditioning_scale,
                     control_guidance_end=args.control_guidance_end,
@@ -261,6 +279,7 @@ def run_lora_command(
             payload = run_lora_control_audit(
                 args.lora_run_dir,
                 case_specs=args.case,
+                case_prompt_specs=args.case_prompt,
                 identity_prompt=args.identity_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
@@ -272,6 +291,7 @@ def run_lora_command(
                     width=args.width,
                     height=args.height,
                     steps=args.steps,
+                    max_sequence_length=args.max_sequence_length,
                     guidance_scale=args.guidance_scale,
                     controlnet_conditioning_scale=args.controlnet_conditioning_scale,
                     control_guidance_end=args.control_guidance_end,

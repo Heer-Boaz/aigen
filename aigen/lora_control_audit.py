@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ class LoraControlAuditConfig:
     width: int = 512
     height: int = 768
     steps: int = 20
+    max_sequence_length: int = 128
     guidance_scale: float = 2.5
     controlnet_conditioning_scale: float = 0.8
     control_guidance_end: float = 0.65
@@ -57,6 +59,7 @@ def build_lora_control_audit_plan(
     lora_run_dir: Path,
     *,
     case_specs: list[str],
+    case_prompt_specs: list[str],
     identity_prompt: str,
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
@@ -67,7 +70,7 @@ def build_lora_control_audit_plan(
     config: LoraControlAuditConfig = LoraControlAuditConfig(),
 ) -> dict[str, Any]:
     resolved_run_dir = lora_run_dir.resolve()
-    cases = _parse_cases(case_specs, Path.cwd())
+    cases = _parse_cases(case_specs, case_prompt_specs, Path.cwd())
     resolved_output_dir = (output_dir or resolved_run_dir / "control_audit").resolve()
     resolved_lora = (lora_weights or resolved_run_dir / DEFAULT_LORA_WEIGHTS_NAME).resolve()
     resolved_base = base_model.resolve()
@@ -104,6 +107,7 @@ def build_lora_control_audit_plan(
             "transformer": "nunchaku.NunchakuFluxTransformer2dModel",
             "controlnet": "diffusers.FluxControlNetModel",
             "reference_tokens": 0,
+            "prompt_encoding": "precomputed_prompt_embeds",
             "uses_kontext_reference": False,
             "lora_loading": "NunchakuFluxTransformer2dModel.update_lora_params",
         },
@@ -114,6 +118,7 @@ def build_lora_control_audit_plan(
             "width": config.width,
             "height": config.height,
             "steps": config.steps,
+            "max_sequence_length": config.max_sequence_length,
             "guidance_scale": config.guidance_scale,
             "controlnet_conditioning_scale": config.controlnet_conditioning_scale,
             "control_guidance_end": config.control_guidance_end,
@@ -127,6 +132,7 @@ def run_lora_control_audit(
     lora_run_dir: Path,
     *,
     case_specs: list[str],
+    case_prompt_specs: list[str],
     identity_prompt: str,
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
@@ -141,6 +147,7 @@ def run_lora_control_audit(
     plan = build_lora_control_audit_plan(
         lora_run_dir,
         case_specs=case_specs,
+        case_prompt_specs=case_prompt_specs,
         identity_prompt=identity_prompt,
         output_dir=output_dir,
         lora_weights=lora_weights,
@@ -156,6 +163,9 @@ def run_lora_control_audit(
     if plan["missing"]:
         raise LoraControlAuditError(f"LoRA control audit inputs are missing: {', '.join(plan['missing'])}")
 
+    progress.phase("encode LoRA audit prompts")
+    prompt_embeddings, torch, encode_ms = _encode_prompts(plan)
+    _release_cuda(torch)
     progress.phase("load LoRA control audit pipeline")
     pipeline, torch, load_ms = _load_pipeline(plan)
     outputs = []
@@ -163,7 +173,7 @@ def run_lora_control_audit(
     progress.begin(len(plan["audit_cases"]), "LoRA control audit")
     for index, case in enumerate(plan["audit_cases"], start=1):
         progress.phase(f"audit {case['name']} ({index}/{len(plan['audit_cases'])})")
-        image, timing = _generate_case(pipeline, torch, plan, case)
+        image, timing = _generate_case(pipeline, torch, plan, case, prompt_embeddings[case["name"]])
         image_path = output / f"{case['name']}.png"
         image.save(image_path)
         outputs.append(
@@ -189,6 +199,7 @@ def run_lora_control_audit(
             "result": (output / "result.json").as_posix(),
         },
         "timings_ms": {
+            "prompt_encode_ms": encode_ms,
             "model_load_ms": load_ms,
             "total_ms": elapsed_ms(total_start, synchronized_time(torch)),
         },
@@ -213,9 +224,14 @@ def _missing_inputs(
     return missing
 
 
-def _parse_cases(case_specs: list[str], base_dir: Path) -> list[LoraControlAuditCase]:
+def _parse_cases(
+    case_specs: list[str],
+    case_prompt_specs: list[str],
+    base_dir: Path,
+) -> list[LoraControlAuditCase]:
     if not case_specs:
         raise LoraControlAuditError("LoRA control audit requires at least one --case NAME=CONTROL_IMAGE")
+    prompts = _parse_case_prompts(case_prompt_specs)
     cases = []
     seen = set()
     for spec in case_specs:
@@ -226,15 +242,38 @@ def _parse_cases(case_specs: list[str], base_dir: Path) -> list[LoraControlAudit
         if case_name in seen:
             raise LoraControlAuditError(f"Duplicate audit case: {case_name}")
         seen.add(case_name)
+        if case_name not in prompts:
+            raise LoraControlAuditError(f"Missing --case-prompt for case: {case_name}")
         control_image = resolve_existing_path(raw_path.strip(), base_dir)
         cases.append(
             LoraControlAuditCase(
                 name=case_name,
                 control_image=control_image,
-                prompt=" ".join(case_name.replace("-", "_").split("_")),
+                prompt=prompts[case_name],
             )
         )
+    extra_prompts = sorted(set(prompts) - seen)
+    if extra_prompts:
+        raise LoraControlAuditError(f"--case-prompt has no matching --case: {', '.join(extra_prompts)}")
     return cases
+
+
+def _parse_case_prompts(case_prompt_specs: list[str]) -> dict[str, str]:
+    if not case_prompt_specs:
+        raise LoraControlAuditError("LoRA control audit requires one --case-prompt NAME=PROMPT for each --case")
+    prompts = {}
+    for spec in case_prompt_specs:
+        if "=" not in spec:
+            raise LoraControlAuditError(f"Case prompt must use NAME=PROMPT: {spec}")
+        raw_name, raw_prompt = spec.split("=", 1)
+        name = _case_name(raw_name)
+        if name in prompts:
+            raise LoraControlAuditError(f"Duplicate case prompt: {name}")
+        prompt = " ".join(raw_prompt.strip().split())
+        if not prompt:
+            raise LoraControlAuditError(f"Case prompt is empty: {name}")
+        prompts[name] = prompt
+    return prompts
 
 
 def _case_name(value: str) -> str:
@@ -314,6 +353,10 @@ def _load_pipeline(plan: dict[str, Any]) -> tuple[Any, Any, float]:
         plan["models"]["base_model"]["path"],
         transformer=transformer,
         controlnet=controlnet,
+        text_encoder=None,
+        text_encoder_2=None,
+        tokenizer=None,
+        tokenizer_2=None,
         torch_dtype=dtype,
         local_files_only=True,
     )
@@ -322,17 +365,25 @@ def _load_pipeline(plan: dict[str, Any]) -> tuple[Any, Any, float]:
     return pipeline, torch, elapsed_ms(start, synchronized_time(torch))
 
 
-def _generate_case(pipeline: Any, torch: Any, plan: dict[str, Any], case: dict[str, Any]) -> tuple[Any, dict[str, float]]:
+def _generate_case(
+    pipeline: Any,
+    torch: Any,
+    plan: dict[str, Any],
+    case: dict[str, Any],
+    prompt_embeddings: dict[str, Any],
+) -> tuple[Any, dict[str, float]]:
     from PIL import Image
 
     with Image.open(case["control_image"]["path"]) as control_image:
         control = control_image.convert("RGB")
-    prompt = _prompt(plan["identity_prompt"], case["prompt"])
+    device = pipeline._execution_device
+    prompt_embeds = prompt_embeddings["prompt_embeds"].to(device=device)
+    pooled_prompt_embeds = prompt_embeddings["pooled_prompt_embeds"].to(device=device)
     generator = torch.Generator(device="cuda").manual_seed(plan["generation"]["seed"])
     start = synchronized_time(torch)
     result = pipeline(
-        prompt=prompt,
-        prompt_2=prompt,
+        prompt_embeds=prompt_embeds,
+        pooled_prompt_embeds=pooled_prompt_embeds,
         width=plan["generation"]["width"],
         height=plan["generation"]["height"],
         control_image=control,
@@ -344,9 +395,99 @@ def _generate_case(pipeline: Any, torch: Any, plan: dict[str, Any], case: dict[s
         guidance_scale=plan["generation"]["guidance_scale"],
         true_cfg_scale=1.0,
         generator=generator,
-        max_sequence_length=128,
+        max_sequence_length=plan["generation"]["max_sequence_length"],
     )
     return result.images[0], {"total_ms": elapsed_ms(start, synchronized_time(torch))}
+
+
+def _encode_prompts(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], Any, float]:
+    import torch
+    from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
+
+    dtype = resolve_torch_dtype(torch, "bfloat16", auto_value=None)
+    device = torch.device("cuda")
+    base_model = plan["models"]["base_model"]["path"]
+    tokenizer = CLIPTokenizer.from_pretrained(base_model, subfolder="tokenizer", local_files_only=True)
+    tokenizer_2 = T5TokenizerFast.from_pretrained(base_model, subfolder="tokenizer_2", local_files_only=True)
+    text_encoder = CLIPTextModel.from_pretrained(
+        base_model,
+        subfolder="text_encoder",
+        torch_dtype=dtype,
+        local_files_only=True,
+    ).to(device)
+    text_encoder_2 = T5EncoderModel.from_pretrained(
+        base_model,
+        subfolder="text_encoder_2",
+        torch_dtype=dtype,
+        local_files_only=True,
+    ).to(device)
+    start = synchronized_time(torch)
+    embeddings = {}
+    with torch.no_grad():
+        for case in plan["audit_cases"]:
+            prompt = _prompt(plan["identity_prompt"], case["prompt"])
+            pooled_prompt_embeds = _encode_clip_prompt(
+                tokenizer,
+                text_encoder,
+                prompt=prompt,
+                device=device,
+            )
+            prompt_embeds = _encode_t5_prompt(
+                tokenizer_2,
+                text_encoder_2,
+                prompt=prompt,
+                device=device,
+                max_sequence_length=plan["generation"]["max_sequence_length"],
+            )
+            embeddings[case["name"]] = {
+                "prompt": prompt,
+                "prompt_embeds": prompt_embeds.cpu(),
+                "pooled_prompt_embeds": pooled_prompt_embeds.cpu(),
+            }
+    elapsed = elapsed_ms(start, synchronized_time(torch))
+    del text_encoder, text_encoder_2, tokenizer, tokenizer_2
+    return embeddings, torch, elapsed
+
+
+def _encode_clip_prompt(
+    tokenizer: Any,
+    text_encoder: Any,
+    *,
+    prompt: str,
+    device: Any,
+) -> Any:
+    text_inputs = tokenizer(
+        [prompt],
+        padding="max_length",
+        max_length=tokenizer.model_max_length,
+        truncation=True,
+        return_overflowing_tokens=False,
+        return_length=False,
+        return_tensors="pt",
+    )
+    prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False).pooler_output
+    return prompt_embeds.to(dtype=text_encoder.dtype, device=device).view(1, -1)
+
+
+def _encode_t5_prompt(
+    tokenizer: Any,
+    text_encoder: Any,
+    *,
+    prompt: str,
+    device: Any,
+    max_sequence_length: int,
+) -> Any:
+    text_inputs = tokenizer(
+        [prompt],
+        padding="max_length",
+        max_length=max_sequence_length,
+        truncation=True,
+        return_length=False,
+        return_overflowing_tokens=False,
+        return_tensors="pt",
+    )
+    prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False)[0]
+    return prompt_embeds.to(dtype=text_encoder.dtype, device=device)
 
 
 def _validate_identity_prompt(identity_prompt: str, trigger_token: str) -> str:
@@ -369,3 +510,11 @@ def _torch_memory(torch: Any) -> dict[str, int]:
         "torch_max_allocated_mb": round(torch.cuda.max_memory_allocated() / 2**20),
         "torch_max_reserved_mb": round(torch.cuda.max_memory_reserved() / 2**20),
     }
+
+
+def _release_cuda(torch: Any) -> None:
+    gc.collect()
+    if not torch.cuda.is_available():
+        raise LoraControlAuditError("LoRA control audit requires CUDA")
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
