@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from aigen.diffusers_kontext_adapter import kontext_inpaint_text_kwargs
+from aigen.diffusers_kontext_adapter import (
+    DIFFUSERS_CLIP_PROMPT_ARGUMENT,
+    DIFFUSERS_T5_PROMPT_ARGUMENT,
+    kontext_inpaint_text_kwargs,
+)
 
 
 class DiffusersKontextAdapterTests(unittest.TestCase):
@@ -13,10 +17,10 @@ class DiffusersKontextAdapterTests(unittest.TestCase):
             negative_prompt="wrong outfit",
         )
 
-        self.assertEqual(kwargs["prompt"], "short identity prompt")
-        self.assertEqual(kwargs["prompt_2"], "detailed identity and action prompt")
+        self.assertEqual(kwargs[DIFFUSERS_CLIP_PROMPT_ARGUMENT], "short identity prompt")
+        self.assertEqual(kwargs[DIFFUSERS_T5_PROMPT_ARGUMENT], "detailed identity and action prompt")
         self.assertEqual(kwargs["negative_prompt"], "wrong outfit")
-        self.assertNotIn("negative_prompt_2", kwargs)
+        self.assertEqual(set(kwargs), {DIFFUSERS_CLIP_PROMPT_ARGUMENT, DIFFUSERS_T5_PROMPT_ARGUMENT, "negative_prompt"})
 
 
 if __name__ == "__main__":
