@@ -41,6 +41,7 @@ class LoraLocalTrainConfig:
     checkpointing_steps: int = 200
     checkpoints_total_limit: int = 2
     seed: int = 1
+    mixed_precision: str = "fp16"
 
 
 def lora_training_preflight(dataset_dir: Path) -> dict[str, Any]:
@@ -129,9 +130,11 @@ def build_lora_train_plan(
             "checkpointing_steps": config.checkpointing_steps,
             "checkpoints_total_limit": config.checkpoints_total_limit,
             "seed": config.seed,
+            "mixed_precision": config.mixed_precision,
         },
         "memory_strategy": [
             "local 4-bit FLUX base model",
+            "FP16 mixed precision to match bitsandbytes quantized matmul compute",
             "train transformer LoRA only; text encoders are frozen",
             "captioned Hugging Face imagefolder dataset materialized from the train split",
             "per-image prompts are read from metadata.jsonl column prompt",
@@ -173,7 +176,7 @@ def run_lora_training_plan(
     if dry_run:
         return plan | {"run_status": "planned"}
     progress.step("materialize captioned train dataset")
-    _materialize_captioned_train_dataset(Path(plan["dataset"]["directory"]), Path(plan["dataset"]["train_data_dir"]))
+    materialize_captioned_train_dataset(Path(plan["dataset"]["directory"]), Path(plan["dataset"]["train_data_dir"]))
     log_path = Path(plan["output"]["directory"]) / "train.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     memory_sampler = NvidiaSmiMemorySampler(_training_memory_preflight(plan["local_gpu"]))
@@ -217,7 +220,7 @@ def _train_command(
         (PROJECT_ROOT / ".venv" / "bin" / "accelerate").as_posix(),
         "launch",
         "--mixed_precision",
-        "bf16",
+        config.mixed_precision,
         trainer_script.as_posix(),
         "--pretrained_model_name_or_path",
         base_model.as_posix(),
@@ -300,7 +303,7 @@ def _missing_inputs(
     return missing
 
 
-def _materialize_captioned_train_dataset(dataset_dir: Path, target_dir: Path) -> None:
+def materialize_captioned_train_dataset(dataset_dir: Path, target_dir: Path) -> None:
     report = _dataset_report(dataset_dir)
     if target_dir.exists():
         shutil.rmtree(target_dir)

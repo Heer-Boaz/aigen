@@ -7,6 +7,7 @@ from typing import Any, TextIO
 from aigen.command_io import command_error_payload, dump_json
 from aigen.lora_dataset_models import LoraDatasetError, lora_dataset_schema
 from aigen.lora_datasets import build_lora_dataset
+from aigen.lora_smoke import LoraSmokeError, run_lora_smoke
 from aigen.lora_training import (
     DEFAULT_BASE_MODEL,
     DEFAULT_TRAINER_SCRIPT,
@@ -30,6 +31,32 @@ def add_lora_commands(subparsers: Any) -> None:
     dataset_build = lora_subparsers.add_parser("dataset-build", help="Build a curated LoRA training dataset")
     dataset_build.add_argument("spec", type=Path, help="LoRA dataset spec JSON")
     dataset_build.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    smoke = lora_subparsers.add_parser(
+        "smoke",
+        help="Build an anchor-approved identity LoRA smoke dataset and local train plan",
+    )
+    smoke.add_argument("--id", required=True, help="Smoke run id")
+    smoke.add_argument("--character-id", required=True, help="Character id")
+    smoke.add_argument("--trigger-token", required=True, help="LoRA trigger token")
+    smoke.add_argument(
+        "--anchor",
+        action="append",
+        required=True,
+        metavar="NAME=PATH",
+        help="Human-approved anchor image; repeat for multiple anchors",
+    )
+    smoke.add_argument(
+        "--identity-caption",
+        required=True,
+        help="Identity-only caption template; do not include action pose text",
+    )
+    smoke.add_argument("--tag", action="append", default=[], help="Additional caption tag; repeat as needed")
+    smoke.add_argument("--approved-by", default="user", help="Approver recorded in the smoke manifest")
+    smoke.add_argument("--output-dir", required=True, type=Path, help="Smoke output directory")
+    smoke.add_argument("--overwrite", action="store_true", help="Replace an existing smoke output directory")
+    _add_train_runtime_args(smoke)
+    smoke.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     training_preflight = lora_subparsers.add_parser(
         "training-preflight",
@@ -67,7 +94,23 @@ def run_lora_command(
                 pretty=not args.compact,
             )
             return 0
-        if args.lora_command == "training-preflight":
+        if args.lora_command == "smoke":
+            payload = run_lora_smoke(
+                smoke_id=args.id,
+                character_id=args.character_id,
+                trigger_token=args.trigger_token,
+                anchor_specs=args.anchor,
+                identity_caption=args.identity_caption,
+                tags=args.tag,
+                approved_by=args.approved_by,
+                output_dir=args.output_dir,
+                overwrite=args.overwrite,
+                trainer_script=args.trainer_script,
+                base_model=args.base_model,
+                config=_train_config(args),
+                progress=progress,
+            )
+        elif args.lora_command == "training-preflight":
             payload = lora_training_preflight(args.dataset_dir.resolve())
         elif args.lora_command == "train-plan":
             payload = build_lora_train_plan(
@@ -89,7 +132,7 @@ def run_lora_command(
             )
         dump_json(stdout, payload, pretty=not args.compact)
         return 0
-    except (LoraDatasetError, LoraTrainingError, ManifestIOError) as error:
+    except (LoraDatasetError, LoraTrainingError, LoraSmokeError, ManifestIOError) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1
 
@@ -97,6 +140,10 @@ def run_lora_command(
 def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("dataset_dir", type=Path, help="Built LoRA dataset directory")
     parser.add_argument("--output-dir", type=Path, help="LoRA training output directory")
+    _add_train_runtime_args(parser)
+
+
+def _add_train_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--trainer-script",
         type=Path,
@@ -117,6 +164,7 @@ def _add_train_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--learning-rate", type=_positive_float, default=1e-4)
     parser.add_argument("--max-sequence-length", type=_positive_int, default=128)
     parser.add_argument("--seed", type=_non_negative_int, default=1)
+    parser.add_argument("--mixed-precision", choices=("fp16", "bf16"), default="fp16")
 
 
 def _train_config(args: argparse.Namespace) -> LoraLocalTrainConfig:
@@ -129,6 +177,7 @@ def _train_config(args: argparse.Namespace) -> LoraLocalTrainConfig:
         learning_rate=args.learning_rate,
         max_sequence_length=args.max_sequence_length,
         seed=args.seed,
+        mixed_precision=args.mixed_precision,
     )
 
 

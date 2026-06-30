@@ -13,7 +13,7 @@ from aigen.cli import main
 from aigen.image_assets import image_asset_json
 from aigen.lora_dataset_models import LoraDatasetError, load_lora_dataset_spec
 from aigen.lora_datasets import build_lora_dataset
-from aigen.lora_training import _materialize_captioned_train_dataset, build_lora_train_plan
+from aigen.lora_training import materialize_captioned_train_dataset, build_lora_train_plan
 from aigen.manifest_io import write_json
 from aigen.progress import SILENT_STATUS
 
@@ -290,7 +290,7 @@ class LoraDatasetTests(unittest.TestCase):
             dataset_result = build_lora_dataset(spec_path, progress=SILENT_STATUS)
             train_dataset_dir = root / "lora-output" / "train_dataset"
 
-            _materialize_captioned_train_dataset(Path(dataset_result["output"]["directory"]), train_dataset_dir)
+            materialize_captioned_train_dataset(Path(dataset_result["output"]["directory"]), train_dataset_dir)
 
             loaded = load_dataset(train_dataset_dir.as_posix())
             self.assertEqual(loaded["train"].column_names, ["image", "prompt"])
@@ -655,7 +655,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertIn("--resolution", command)
             self.assertIn("512", command)
             self.assertEqual(command.count("--mixed_precision"), 1)
-            self.assertIn("bf16", command)
+            self.assertIn("fp16", command)
             self.assertIn("--rank", command)
             self.assertIn("4", command)
             self.assertIn("--lora_layers", command)
@@ -663,6 +663,87 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertIn("--gradient_checkpointing", command)
             self.assertIn("--use_8bit_adam", command)
             self.assertIn("--cache_latents", command)
+
+    def test_lora_smoke_builds_anchor_dataset_and_train_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "assets" / "front.png"
+            left = root / "assets" / "left_profile.png"
+            write_training_source(front, (180, 50, 60), "F")
+            write_training_source(left, (50, 170, 90), "L")
+            trainer_script = root / "train_dreambooth_lora_flux.py"
+            trainer_script.write_text('check_min_version("0.38.0")\n', encoding="utf-8")
+            base_model = root / "models" / "FLUX.1-dev-bnb-4bit"
+            (base_model / "transformer").mkdir(parents=True)
+            output_dir = root / "smoke"
+            stdout = io.StringIO()
+
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "lora",
+                        "smoke",
+                        "--id",
+                        "ai51_identity_smoke",
+                        "--character-id",
+                        "ai51",
+                        "--trigger-token",
+                        "ai51char",
+                        "--anchor",
+                        f"front={front.as_posix()}",
+                        "--anchor",
+                        f"left_profile={left.as_posix()}",
+                        "--identity-caption",
+                        (
+                            "anime girl, short pink bob, blue eyes, glossy brown leather jacket, "
+                            "white shirt, blue tie, brown leather skirt, blue thigh-high socks, brown boots"
+                        ),
+                        "--tag",
+                        "clean anime lineart",
+                        "--approved-by",
+                        "codex",
+                        "--output-dir",
+                        output_dir.as_posix(),
+                        "--trainer-script",
+                        trainer_script.as_posix(),
+                        "--base-model",
+                        base_model.as_posix(),
+                        "--max-train-steps",
+                        "1",
+                        "--gradient-accumulation-steps",
+                        "1",
+                        "--compact",
+                    ]
+                )
+
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(result["kind"], "lora-smoke-result")
+            self.assertEqual(result["status"], "planned")
+            self.assertEqual(result["dataset"]["dataset_source"], "approved_anchors")
+            self.assertEqual(result["dataset"]["accepted_image_count"], 2)
+            self.assertEqual(result["dataset"]["split_counts"], {"train": 2, "val": 0})
+            self.assertTrue((output_dir / "dataset" / "contact_sheet.png").exists())
+            self.assertTrue((output_dir / "train_plan.json").exists())
+            self.assertTrue((output_dir / "smoke_result.json").exists())
+            self.assertTrue((output_dir / "train_dataset" / "metadata.jsonl").exists())
+            train_metadata = (output_dir / "train_dataset" / "metadata.jsonl").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(train_metadata), 2)
+            prompts = [json.loads(line)["prompt"] for line in train_metadata]
+            self.assertTrue(all(prompt.startswith("ai51char, anime girl, short pink bob") for prompt in prompts))
+            self.assertTrue(any("left profile" in prompt for prompt in prompts))
+            self.assertTrue(all("clean anime lineart" in prompt for prompt in prompts))
+            command = result["train_plan"]["command"]
+            self.assertIn("--mixed_precision", command)
+            self.assertIn("fp16", command)
+            self.assertIn("--rank", command)
+            self.assertIn("4", command)
+            self.assertIn("--gradient_checkpointing", command)
+            self.assertIn("--cache_latents", command)
+            self.assertEqual(
+                result["dataset"]["records"][0]["source_metadata"]["approval"]["mode"],
+                "human_approved_anchor",
+            )
 
     def test_lora_train_cli_rejects_invalid_numeric_parameters(self) -> None:
         stderr = io.StringIO()

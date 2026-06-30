@@ -54,6 +54,16 @@ class LoraDatasetCandidate:
     source_metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ApprovedLoraAnchor:
+    name: str
+    image_path: Path
+    caption_parts: list[str]
+    tags: list[str]
+    split: str | None
+    source_metadata: dict[str, Any]
+
+
 def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str, Any]:
     progress.phase("load dataset spec")
     spec = load_lora_dataset_spec(spec_path)
@@ -70,7 +80,12 @@ def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str
     if not candidates:
         raise LoraDatasetError("LoRA dataset has no accepted images")
     progress.step("write training images")
-    records = _write_dataset_images(spec, candidates, output_dir)
+    records = _write_dataset_images(
+        character_id=spec.character.id,
+        candidates=candidates,
+        output_dir=output_dir,
+        validation_ratio=spec.output.validation_ratio,
+    )
     if not records:
         raise LoraDatasetError("LoRA dataset has no images after deduplication")
     progress.step("write metadata")
@@ -105,6 +120,87 @@ def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str
             "contact_sheet": (output_dir / "contact_sheet.png").as_posix()
             if spec.output.save_contact_sheet
             else None,
+            "report": (output_dir / "dataset_report.json").as_posix(),
+        },
+        "records": records,
+    }
+    progress.step("write dataset report")
+    write_json(output_dir / "dataset_report.json", report)
+    return report
+
+
+def build_lora_anchor_dataset(
+    *,
+    dataset_id: str,
+    character_id: str,
+    trigger_token: str,
+    anchors: list[ApprovedLoraAnchor],
+    output_dir: Path,
+    overwrite: bool,
+    validation_ratio: float,
+    write_contact_sheet: bool,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    progress.phase("prepare approved anchors")
+    if output_dir.exists():
+        if not overwrite:
+            raise LoraDatasetError(f"Output exists and overwrite=false: {output_dir.as_posix()}")
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True)
+    candidates = [
+        LoraDatasetCandidate(
+            source_kind="approved_anchor",
+            name=anchor.name,
+            image_path=anchor.image_path,
+            caption=_caption(trigger_token, "", anchor.caption_parts, anchor.tags),
+            tags=anchor.tags,
+            split=anchor.split,
+            source_metadata=anchor.source_metadata,
+        )
+        for anchor in anchors
+    ]
+    if not candidates:
+        raise LoraDatasetError("LoRA smoke dataset has no approved anchors")
+    progress.step("write approved anchor images")
+    records = _write_dataset_images(
+        character_id=character_id,
+        candidates=candidates,
+        output_dir=output_dir,
+        validation_ratio=validation_ratio,
+    )
+    if not records:
+        raise LoraDatasetError("LoRA smoke dataset has no images after deduplication")
+    progress.step("write metadata")
+    _write_metadata(records, output_dir)
+    if write_contact_sheet:
+        progress.phase("write contact sheet")
+        save_contact_sheet(
+            [
+                {
+                    "name": record["name"],
+                    "path": (output_dir / record["file_name"]).as_posix(),
+                }
+                for record in records
+            ],
+            output_dir / "contact_sheet.png",
+            thumb_width=192,
+            max_label_chars=24,
+        )
+    report = {
+        "status": "completed",
+        "kind": "lora-dataset-result",
+        "dataset_id": dataset_id,
+        "dataset_source": "approved_anchors",
+        "character": {"id": character_id, "trigger_token": trigger_token},
+        "source_count": len(anchors),
+        "accepted_image_count": len(records),
+        "split_counts": _split_counts(records),
+        "output": {
+            "directory": output_dir.as_posix(),
+            "images": (output_dir / "images").as_posix(),
+            "metadata": (output_dir / "metadata.jsonl").as_posix(),
+            "captions": (output_dir / "captions.txt").as_posix(),
+            "contact_sheet": (output_dir / "contact_sheet.png").as_posix() if write_contact_sheet else None,
             "report": (output_dir / "dataset_report.json").as_posix(),
         },
         "records": records,
@@ -204,11 +300,13 @@ def _source_caption(
 
 
 def _write_dataset_images(
-    spec: LoraDatasetSpec,
+    *,
+    character_id: str,
     candidates: list[LoraDatasetCandidate],
     output_dir: Path,
+    validation_ratio: float,
 ) -> list[dict[str, Any]]:
-    splits = _assigned_splits(candidates, spec.output.validation_ratio)
+    splits = _assigned_splits(candidates, validation_ratio)
     records = []
     seen_sha256: set[str] = set()
     for index, (candidate, split) in enumerate(zip(candidates, splits, strict=True), start=1):
@@ -217,7 +315,7 @@ def _write_dataset_images(
         if source_sha256 in seen_sha256:
             continue
         seen_sha256.add(source_sha256)
-        file_name = f"images/{split}/{index:04d}_{_slug(spec.character.id)}_{_slug(candidate.name)}.png"
+        file_name = f"images/{split}/{index:04d}_{_slug(character_id)}_{_slug(candidate.name)}.png"
         output_path = output_dir / file_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         _save_training_image(candidate.image_path, output_path)
