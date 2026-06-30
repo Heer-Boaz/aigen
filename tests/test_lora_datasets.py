@@ -655,7 +655,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertIn("--resolution", command)
             self.assertIn("512", command)
             self.assertEqual(command.count("--mixed_precision"), 1)
-            self.assertIn("fp16", command)
+            self.assertIn("bf16", command)
             self.assertIn("--rank", command)
             self.assertIn("4", command)
             self.assertIn("--lora_layers", command)
@@ -735,7 +735,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertTrue(all("clean anime lineart" in prompt for prompt in prompts))
             command = result["train_plan"]["command"]
             self.assertIn("--mixed_precision", command)
-            self.assertIn("fp16", command)
+            self.assertIn("bf16", command)
             self.assertIn("--rank", command)
             self.assertIn("4", command)
             self.assertIn("--gradient_checkpointing", command)
@@ -754,6 +754,66 @@ class LoraDatasetTests(unittest.TestCase):
 
         self.assertNotEqual(raised.exception.code, 0)
         self.assertIn("must be greater than 0", stderr.getvalue())
+
+    def test_lora_control_audit_plan_requires_trained_weights_and_plain_nunchaku(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lora_run = root / "lora-run"
+            lora_run.mkdir()
+            write_json(
+                lora_run / "dataset" / "dataset_report.json",
+                {
+                    "status": "completed",
+                    "dataset_id": "ai51_identity_smoke",
+                    "accepted_image_count": 2,
+                    "character": {"id": "ai51", "trigger_token": "ai51char"},
+                    "split_counts": {"train": 2, "val": 0},
+                    "records": [],
+                },
+            )
+            base_model = root / "models" / "FLUX.1-dev-bf16"
+            controlnet_model = root / "models" / "ControlNet"
+            control_image = root / "assets" / "side_idle.png"
+            write_training_source(control_image, (10, 10, 10), "P")
+            base_model.mkdir(parents=True)
+            controlnet_model.mkdir()
+            stdout = io.StringIO()
+
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "lora",
+                        "control-audit-plan",
+                        lora_run.as_posix(),
+                        "--case",
+                        f"side_idle={control_image.as_posix()}",
+                        "--base-model",
+                        base_model.as_posix(),
+                        "--controlnet-model",
+                        controlnet_model.as_posix(),
+                        "--nunchaku-transformer",
+                        (root / "models" / "nunchaku" / "svdq-fp4_r32-flux.1-dev.safetensors").as_posix(),
+                        "--identity-prompt",
+                        "ai51char, approved identity prompt",
+                        "--compact",
+                    ]
+                )
+
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(result["kind"], "lora-control-audit-plan")
+            self.assertEqual(result["status"], "missing_local_inputs")
+            self.assertEqual(result["trigger_token"], "ai51char")
+            self.assertEqual(result["identity_prompt"], "ai51char, approved identity prompt")
+            self.assertFalse(result["runtime"]["uses_kontext_reference"])
+            self.assertEqual(result["runtime"]["reference_tokens"], 0)
+            self.assertIn((lora_run / "pytorch_lora_weights.safetensors").as_posix(), result["missing"])
+            self.assertIn(
+                (root / "models" / "nunchaku" / "svdq-fp4_r32-flux.1-dev.safetensors").as_posix(),
+                result["missing"],
+            )
+            self.assertEqual([case["name"] for case in result["audit_cases"]], ["side_idle"])
+            self.assertEqual(result["audit_cases"][0]["control_image"]["path"], control_image.resolve().as_posix())
 
 if __name__ == "__main__":
     unittest.main()

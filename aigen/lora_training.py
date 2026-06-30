@@ -41,7 +41,7 @@ class LoraLocalTrainConfig:
     checkpointing_steps: int = 200
     checkpoints_total_limit: int = 2
     seed: int = 1
-    mixed_precision: str = "fp16"
+    mixed_precision: str = "bf16"
 
 
 def lora_training_preflight(dataset_dir: Path) -> dict[str, Any]:
@@ -134,7 +134,7 @@ def build_lora_train_plan(
         },
         "memory_strategy": [
             "local 4-bit FLUX base model",
-            "FP16 mixed precision to match bitsandbytes quantized matmul compute",
+            "BF16 mixed precision avoids fp16 GradScaler unscale failures with local 4-bit FLUX training",
             "train transformer LoRA only; text encoders are frozen",
             "captioned Hugging Face imagefolder dataset materialized from the train split",
             "per-image prompts are read from metadata.jsonl column prompt",

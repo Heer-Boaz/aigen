@@ -13,6 +13,7 @@ Usage: scripts/download_models.sh
 Downloads the fixed production model set:
 - FLUX Kontext 4-bit model and Union ControlNet
 - Nunchaku FLUX Kontext FP4 transformer
+- Nunchaku FLUX.1-dev FP4 transformer for LoRA ControlNet audits
 - SAM ViT-B checkpoint for keyframe foreground segmentation
 - GroundingDINO base model for polish region grounding
 - Florence-2 large-ft native checkpoint for polish region grounding
@@ -38,6 +39,7 @@ done
 manifest_args=(
   "model_sources/keyframe_generation_kontext_controlnet.json"
   "model_sources/keyframe_generation_nunchaku_transformer.json"
+  "model_sources/lora_control_audit_nunchaku_transformer.json"
   "model_sources/keyframe_segmentation_sam_vit_b.json"
   "model_sources/keyframe_grounding_dino.json"
   "model_sources/keyframe_grounding_florence2.json"

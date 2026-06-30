@@ -5,6 +5,15 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.lora_control_audit import (
+    DEFAULT_CONTROLNET_MODEL as DEFAULT_CONTROL_AUDIT_CONTROLNET_MODEL,
+    DEFAULT_FLUX_BASE_MODEL as DEFAULT_CONTROL_AUDIT_BASE_MODEL,
+    DEFAULT_NUNCHAKU_FLUX_TRANSFORMER as DEFAULT_CONTROL_AUDIT_NUNCHAKU_TRANSFORMER,
+    LoraControlAuditConfig,
+    LoraControlAuditError,
+    build_lora_control_audit_plan,
+    run_lora_control_audit,
+)
 from aigen.lora_dataset_models import LoraDatasetError, lora_dataset_schema
 from aigen.lora_datasets import build_lora_dataset
 from aigen.lora_smoke import LoraSmokeError, run_lora_smoke
@@ -74,6 +83,102 @@ def add_lora_commands(subparsers: Any) -> None:
     train_run.add_argument("--dry-run", action="store_true", help="Write the plan without launching training")
     train_run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    control_audit_plan = lora_subparsers.add_parser(
+        "control-audit-plan",
+        help="Plan a plain FLUX ControlNet audit for a trained character LoRA",
+    )
+    control_audit_plan.add_argument("lora_run_dir", type=Path, help="Completed LoRA training output directory")
+    control_audit_plan.add_argument(
+        "--case",
+        action="append",
+        required=True,
+        metavar="NAME=CONTROL_IMAGE",
+        help="Control audit case; repeat for each pose/control image",
+    )
+    control_audit_plan.add_argument("--output-dir", type=Path, help="Control audit output directory")
+    control_audit_plan.add_argument("--lora-weights", type=Path, help="LoRA weights safetensors path")
+    control_audit_plan.add_argument(
+        "--base-model",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_BASE_MODEL,
+        help="Local FLUX.1-dev base pipeline directory",
+    )
+    control_audit_plan.add_argument(
+        "--controlnet-model",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_CONTROLNET_MODEL,
+        help="Local Union-Pro ControlNet directory",
+    )
+    control_audit_plan.add_argument(
+        "--nunchaku-transformer",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_NUNCHAKU_TRANSFORMER,
+        help="Plain FLUX.1-dev Nunchaku transformer",
+    )
+    control_audit_plan.add_argument("--trigger-token", help="LoRA trigger token")
+    control_audit_plan.add_argument(
+        "--identity-prompt",
+        required=True,
+        help="Curated identity prompt used for LoRA audit inference; must include the trigger token",
+    )
+    control_audit_plan.add_argument("--width", type=_positive_int, default=512)
+    control_audit_plan.add_argument("--height", type=_positive_int, default=768)
+    control_audit_plan.add_argument("--steps", type=_positive_int, default=20)
+    control_audit_plan.add_argument("--guidance-scale", type=_positive_float, default=2.5)
+    control_audit_plan.add_argument("--controlnet-conditioning-scale", type=_positive_float, default=0.8)
+    control_audit_plan.add_argument("--control-guidance-end", type=_positive_float, default=0.65)
+    control_audit_plan.add_argument("--lora-strength", type=_positive_float, default=1.0)
+    control_audit_plan.add_argument("--seed", type=_non_negative_int, default=1)
+    control_audit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    control_audit_run = lora_subparsers.add_parser(
+        "control-audit-run",
+        help="Run a plain FLUX ControlNet audit for a trained character LoRA",
+    )
+    control_audit_run.add_argument("lora_run_dir", type=Path, help="Completed LoRA training output directory")
+    control_audit_run.add_argument(
+        "--case",
+        action="append",
+        required=True,
+        metavar="NAME=CONTROL_IMAGE",
+        help="Control audit case; repeat for each pose/control image",
+    )
+    control_audit_run.add_argument("--output-dir", type=Path, help="Control audit output directory")
+    control_audit_run.add_argument("--lora-weights", type=Path, help="LoRA weights safetensors path")
+    control_audit_run.add_argument(
+        "--base-model",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_BASE_MODEL,
+        help="Local FLUX.1-dev base pipeline directory",
+    )
+    control_audit_run.add_argument(
+        "--controlnet-model",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_CONTROLNET_MODEL,
+        help="Local Union-Pro ControlNet directory",
+    )
+    control_audit_run.add_argument(
+        "--nunchaku-transformer",
+        type=Path,
+        default=DEFAULT_CONTROL_AUDIT_NUNCHAKU_TRANSFORMER,
+        help="Plain FLUX.1-dev Nunchaku transformer",
+    )
+    control_audit_run.add_argument("--trigger-token", help="LoRA trigger token")
+    control_audit_run.add_argument(
+        "--identity-prompt",
+        required=True,
+        help="Curated identity prompt used for LoRA audit inference; must include the trigger token",
+    )
+    control_audit_run.add_argument("--width", type=_positive_int, default=512)
+    control_audit_run.add_argument("--height", type=_positive_int, default=768)
+    control_audit_run.add_argument("--steps", type=_positive_int, default=20)
+    control_audit_run.add_argument("--guidance-scale", type=_positive_float, default=2.5)
+    control_audit_run.add_argument("--controlnet-conditioning-scale", type=_positive_float, default=0.8)
+    control_audit_run.add_argument("--control-guidance-end", type=_positive_float, default=0.65)
+    control_audit_run.add_argument("--lora-strength", type=_positive_float, default=1.0)
+    control_audit_run.add_argument("--seed", type=_non_negative_int, default=1)
+    control_audit_run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
 
 def run_lora_command(
     args: argparse.Namespace,
@@ -120,7 +225,7 @@ def run_lora_command(
                 base_model=args.base_model,
                 config=_train_config(args),
             )
-        else:
+        elif args.lora_command == "train-run":
             payload = run_lora_training_plan(
                 args.dataset_dir.resolve(),
                 output_dir=args.output_dir,
@@ -130,9 +235,54 @@ def run_lora_command(
                 dry_run=args.dry_run,
                 progress=progress,
             )
+        elif args.lora_command == "control-audit-plan":
+            payload = build_lora_control_audit_plan(
+                args.lora_run_dir,
+                case_specs=args.case,
+                identity_prompt=args.identity_prompt,
+                output_dir=args.output_dir,
+                lora_weights=args.lora_weights,
+                base_model=args.base_model,
+                controlnet_model=args.controlnet_model,
+                nunchaku_transformer=args.nunchaku_transformer,
+                trigger_token=args.trigger_token,
+                config=LoraControlAuditConfig(
+                    width=args.width,
+                    height=args.height,
+                    steps=args.steps,
+                    guidance_scale=args.guidance_scale,
+                    controlnet_conditioning_scale=args.controlnet_conditioning_scale,
+                    control_guidance_end=args.control_guidance_end,
+                    lora_strength=args.lora_strength,
+                    seed=args.seed,
+                ),
+            )
+        else:
+            payload = run_lora_control_audit(
+                args.lora_run_dir,
+                case_specs=args.case,
+                identity_prompt=args.identity_prompt,
+                output_dir=args.output_dir,
+                lora_weights=args.lora_weights,
+                base_model=args.base_model,
+                controlnet_model=args.controlnet_model,
+                nunchaku_transformer=args.nunchaku_transformer,
+                trigger_token=args.trigger_token,
+                config=LoraControlAuditConfig(
+                    width=args.width,
+                    height=args.height,
+                    steps=args.steps,
+                    guidance_scale=args.guidance_scale,
+                    controlnet_conditioning_scale=args.controlnet_conditioning_scale,
+                    control_guidance_end=args.control_guidance_end,
+                    lora_strength=args.lora_strength,
+                    seed=args.seed,
+                ),
+                progress=progress,
+            )
         dump_json(stdout, payload, pretty=not args.compact)
         return 0
-    except (LoraDatasetError, LoraTrainingError, LoraSmokeError, ManifestIOError) as error:
+    except (LoraDatasetError, LoraTrainingError, LoraSmokeError, LoraControlAuditError, ManifestIOError) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1
 
@@ -164,7 +314,7 @@ def _add_train_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--learning-rate", type=_positive_float, default=1e-4)
     parser.add_argument("--max-sequence-length", type=_positive_int, default=128)
     parser.add_argument("--seed", type=_non_negative_int, default=1)
-    parser.add_argument("--mixed-precision", choices=("fp16", "bf16"), default="fp16")
+    parser.add_argument("--mixed-precision", choices=("fp16", "bf16"), default="bf16")
 
 
 def _train_config(args: argparse.Namespace) -> LoraLocalTrainConfig:

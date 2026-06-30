@@ -1,0 +1,19 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "strategy": "Nunchaku FP4 FLUX.1-dev transformer for LoRA plus ControlNet audits without Kontext reference tokens"
+  },
+  "downloads": [
+    {
+      "name": "nunchaku-flux1-dev-fp4-blackwell",
+      "repo_id": "nunchaku-ai/nunchaku-flux.1-dev",
+      "revision": "1a3d3f78b545e33a0897da2101150292ebbd158a",
+      "local_path": "nunchaku/nunchaku-ai/nunchaku-flux.1-dev",
+      "include": [
+        "svdq-fp4_r32-flux.1-dev.safetensors",
+        "README.md"
+      ]
+    }
+  ]
+}

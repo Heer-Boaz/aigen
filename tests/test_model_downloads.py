@@ -69,6 +69,16 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "70dff7728491f3016e256137e8f7d87812af0b4f")
         self.assertIn("svdq-fp4_r32-flux.1-kontext-dev.safetensors", download.include)
 
+    def test_lora_control_audit_manifest_downloads_plain_flux_transformer(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/lora_control_audit_nunchaku_transformer.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "nunchaku-flux1-dev-fp4-blackwell")
+        self.assertEqual(download.repo_id, "nunchaku-ai/nunchaku-flux.1-dev")
+        self.assertEqual(download.local_path, "nunchaku/nunchaku-ai/nunchaku-flux.1-dev")
+        self.assertEqual(download.revision, "1a3d3f78b545e33a0897da2101150292ebbd158a")
+        self.assertIn("svdq-fp4_r32-flux.1-dev.safetensors", download.include)
+
     def test_keyframe_judge_manifest_downloads_qwen_vl_7b(self) -> None:
         manifest = load_download_manifest(Path("model_sources/keyframe_judge_qwen2_5_vl_7b.json"))
         download = manifest.downloads[0]
