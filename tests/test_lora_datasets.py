@@ -805,7 +805,9 @@ class LoraDatasetTests(unittest.TestCase):
             base_model = root / "models" / "FLUX.1-dev-bf16"
             controlnet_model = root / "models" / "ControlNet"
             control_image = root / "assets" / "side_idle.png"
+            baseline_image = root / "assets" / "side_idle_baseline.png"
             write_training_source(control_image, (10, 10, 10), "P")
+            write_training_source(baseline_image, (20, 20, 20), "B")
             base_model.mkdir(parents=True)
             controlnet_model.mkdir()
             stdout = io.StringIO()
@@ -818,6 +820,8 @@ class LoraDatasetTests(unittest.TestCase):
                         lora_run.as_posix(),
                         "--case",
                         f"side_idle={control_image.as_posix()}",
+                        "--baseline",
+                        f"side_idle={baseline_image.as_posix()}",
                         "--case-prompt",
                         "side_idle=ai51char, approved identity prompt, full body side idle pose",
                         "--base-model",
@@ -848,8 +852,50 @@ class LoraDatasetTests(unittest.TestCase):
                 "ai51char, approved identity prompt, full body side idle pose",
             )
             self.assertEqual(result["audit_cases"][0]["control_image"]["path"], control_image.resolve().as_posix())
+            self.assertEqual(result["audit_cases"][0]["baseline_image"]["path"], baseline_image.resolve().as_posix())
 
     def test_lora_control_audit_plan_rejects_case_prompt_without_trigger_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lora_run = root / "lora-run"
+            lora_run.mkdir()
+            write_json(
+                lora_run / "dataset" / "dataset_report.json",
+                {
+                    "status": "completed",
+                    "dataset_id": "ai51_identity_smoke",
+                    "accepted_image_count": 1,
+                    "character": {"id": "ai51", "trigger_token": "ai51char"},
+                    "split_counts": {"train": 1, "val": 0},
+                    "records": [],
+                },
+            )
+            control_image = root / "assets" / "side_idle.png"
+            baseline_image = root / "assets" / "side_idle_baseline.png"
+            write_training_source(control_image, (10, 10, 10), "P")
+            write_training_source(baseline_image, (20, 20, 20), "B")
+            stderr = io.StringIO()
+
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "lora",
+                        "control-audit-plan",
+                        lora_run.as_posix(),
+                        "--case",
+                        f"side_idle={control_image.as_posix()}",
+                        "--baseline",
+                        f"side_idle={baseline_image.as_posix()}",
+                        "--case-prompt",
+                        "side_idle=approved identity prompt without trigger",
+                        "--compact",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Case prompt must include the LoRA trigger token", stderr.getvalue())
+
+    def test_lora_control_audit_plan_rejects_missing_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             lora_run = root / "lora-run"
@@ -870,21 +916,22 @@ class LoraDatasetTests(unittest.TestCase):
             stderr = io.StringIO()
 
             with contextlib.redirect_stderr(stderr):
-                exit_code = main(
-                    [
-                        "lora",
-                        "control-audit-plan",
-                        lora_run.as_posix(),
-                        "--case",
-                        f"side_idle={control_image.as_posix()}",
-                        "--case-prompt",
-                        "side_idle=approved identity prompt without trigger",
-                        "--compact",
-                    ]
-                )
+                with self.assertRaises(SystemExit) as raised:
+                    main(
+                        [
+                            "lora",
+                            "control-audit-plan",
+                            lora_run.as_posix(),
+                            "--case",
+                            f"side_idle={control_image.as_posix()}",
+                            "--case-prompt",
+                            "side_idle=ai51char, approved identity prompt",
+                            "--compact",
+                        ]
+                    )
 
-            self.assertEqual(exit_code, 1)
-            self.assertIn("Case prompt must include the LoRA trigger token", stderr.getvalue())
+            self.assertNotEqual(raised.exception.code, 0)
+            self.assertIn("required: --baseline", stderr.getvalue())
 
 if __name__ == "__main__":
     unittest.main()

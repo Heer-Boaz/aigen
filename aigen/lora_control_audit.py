@@ -52,6 +52,7 @@ class LoraControlAuditConfig:
 class LoraControlAuditCase:
     name: str
     control_image: Path
+    baseline_image: Path
     prompt: str
 
 
@@ -59,6 +60,7 @@ def build_lora_control_audit_plan(
     lora_run_dir: Path,
     *,
     case_specs: list[str],
+    baseline_specs: list[str],
     case_prompt_specs: list[str],
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
@@ -82,7 +84,7 @@ def build_lora_control_audit_plan(
         nunchaku_transformer=resolved_nunchaku,
     )
     resolved_trigger = _trigger_token(trigger_token, resolved_run_dir)
-    cases = _parse_cases(case_specs, case_prompt_specs, Path.cwd(), trigger_token=resolved_trigger)
+    cases = _parse_cases(case_specs, baseline_specs, case_prompt_specs, Path.cwd(), trigger_token=resolved_trigger)
     return {
         "status": "ready_to_launch" if not missing else "missing_local_inputs",
         "kind": "lora-control-audit-plan",
@@ -129,6 +131,7 @@ def run_lora_control_audit(
     lora_run_dir: Path,
     *,
     case_specs: list[str],
+    baseline_specs: list[str],
     case_prompt_specs: list[str],
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
@@ -143,6 +146,7 @@ def run_lora_control_audit(
     plan = build_lora_control_audit_plan(
         lora_run_dir,
         case_specs=case_specs,
+        baseline_specs=baseline_specs,
         case_prompt_specs=case_prompt_specs,
         output_dir=output_dir,
         lora_weights=lora_weights,
@@ -181,16 +185,20 @@ def run_lora_control_audit(
         )
         progress.step(f"audited {case['name']}")
     contact_sheet = output / "contact_sheet.png"
-    save_contact_sheet(outputs, contact_sheet, thumb_width=256, label_x=8)
+    lora_contact_sheet = output / "lora_contact_sheet.png"
+    save_contact_sheet(outputs, lora_contact_sheet, thumb_width=256, label_x=8)
+    save_contact_sheet(_comparison_outputs(plan, outputs), contact_sheet, thumb_width=256, label_x=8)
     memory = _torch_memory(torch)
     result = {
         "status": "completed",
         "kind": "lora-control-audit-result",
         "plan": plan,
         "outputs": outputs,
+        "baseline_outputs": _baseline_outputs(plan),
         "output": {
             "directory": output.as_posix(),
             "contact_sheet": contact_sheet.as_posix(),
+            "lora_contact_sheet": lora_contact_sheet.as_posix(),
             "result": (output / "result.json").as_posix(),
         },
         "timings_ms": {
@@ -221,6 +229,7 @@ def _missing_inputs(
 
 def _parse_cases(
     case_specs: list[str],
+    baseline_specs: list[str],
     case_prompt_specs: list[str],
     base_dir: Path,
     *,
@@ -228,6 +237,12 @@ def _parse_cases(
 ) -> list[LoraControlAuditCase]:
     if not case_specs:
         raise LoraControlAuditError("LoRA control audit requires at least one --case NAME=CONTROL_IMAGE")
+    baselines = _parse_named_images(
+        baseline_specs,
+        base_dir,
+        missing_message="LoRA control audit requires one --baseline NAME=BASELINE_IMAGE for each --case",
+        label="baseline",
+    )
     prompts = _parse_case_prompts(case_prompt_specs, trigger_token=trigger_token)
     cases = []
     seen = set()
@@ -241,18 +256,45 @@ def _parse_cases(
         seen.add(case_name)
         if case_name not in prompts:
             raise LoraControlAuditError(f"Missing --case-prompt for case: {case_name}")
+        if case_name not in baselines:
+            raise LoraControlAuditError(f"Missing --baseline for case: {case_name}")
         control_image = resolve_existing_path(raw_path.strip(), base_dir)
         cases.append(
             LoraControlAuditCase(
                 name=case_name,
                 control_image=control_image,
+                baseline_image=baselines[case_name],
                 prompt=prompts[case_name],
             )
         )
     extra_prompts = sorted(set(prompts) - seen)
     if extra_prompts:
         raise LoraControlAuditError(f"--case-prompt has no matching --case: {', '.join(extra_prompts)}")
+    extra_baselines = sorted(set(baselines) - seen)
+    if extra_baselines:
+        raise LoraControlAuditError(f"--baseline has no matching --case: {', '.join(extra_baselines)}")
     return cases
+
+
+def _parse_named_images(
+    specs: list[str],
+    base_dir: Path,
+    *,
+    missing_message: str,
+    label: str,
+) -> dict[str, Path]:
+    if not specs:
+        raise LoraControlAuditError(missing_message)
+    images = {}
+    for spec in specs:
+        if "=" not in spec:
+            raise LoraControlAuditError(f"{label} image must use NAME=IMAGE: {spec}")
+        raw_name, raw_path = spec.split("=", 1)
+        name = _case_name(raw_name)
+        if name in images:
+            raise LoraControlAuditError(f"Duplicate {label} image: {name}")
+        images[name] = resolve_existing_path(raw_path.strip(), base_dir)
+    return images
 
 
 def _parse_case_prompts(case_prompt_specs: list[str], *, trigger_token: str) -> dict[str, str]:
@@ -309,6 +351,7 @@ def _case_json(case: LoraControlAuditCase) -> dict[str, Any]:
         "name": case.name,
         "prompt": case.prompt,
         "control_image": image_asset_json(case.control_image),
+        "baseline_image": image_asset_json(case.baseline_image),
     }
 
 
@@ -448,6 +491,26 @@ def _encode_prompts(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], An
     elapsed = elapsed_ms(start, synchronized_time(torch))
     del text_encoder, text_encoder_2, tokenizer, tokenizer_2
     return embeddings, torch, elapsed
+
+
+def _baseline_outputs(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": case["name"],
+            "path": case["baseline_image"]["path"],
+        }
+        for case in plan["audit_cases"]
+    ]
+
+
+def _comparison_outputs(plan: dict[str, Any], outputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output_by_name = {output["name"]: output for output in outputs}
+    comparison = []
+    for case in plan["audit_cases"]:
+        name = case["name"]
+        comparison.append({"name": f"baseline/{name}", "path": case["baseline_image"]["path"]})
+        comparison.append({"name": f"lora/{name}", "path": output_by_name[name]["path"]})
+    return comparison
 
 
 def _encode_clip_prompt(

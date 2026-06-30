@@ -96,6 +96,13 @@ def add_lora_commands(subparsers: Any) -> None:
         help="Control audit case; repeat for each pose/control image",
     )
     control_audit_plan.add_argument(
+        "--baseline",
+        action="append",
+        required=True,
+        metavar="NAME=BASELINE_IMAGE",
+        help="Kontext-reference baseline image for the same case; repeat once for each --case",
+    )
+    control_audit_plan.add_argument(
         "--case-prompt",
         action="append",
         required=True,
@@ -145,6 +152,13 @@ def add_lora_commands(subparsers: Any) -> None:
         required=True,
         metavar="NAME=CONTROL_IMAGE",
         help="Control audit case; repeat for each pose/control image",
+    )
+    control_audit_run.add_argument(
+        "--baseline",
+        action="append",
+        required=True,
+        metavar="NAME=BASELINE_IMAGE",
+        help="Kontext-reference baseline image for the same case; repeat once for each --case",
     )
     control_audit_run.add_argument(
         "--case-prompt",
@@ -245,6 +259,7 @@ def run_lora_command(
             payload = build_lora_control_audit_plan(
                 args.lora_run_dir,
                 case_specs=args.case,
+                baseline_specs=args.baseline,
                 case_prompt_specs=args.case_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
@@ -268,6 +283,7 @@ def run_lora_command(
             payload = run_lora_control_audit(
                 args.lora_run_dir,
                 case_specs=args.case,
+                baseline_specs=args.baseline,
                 case_prompt_specs=args.case_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
