@@ -60,7 +60,6 @@ def build_lora_control_audit_plan(
     *,
     case_specs: list[str],
     case_prompt_specs: list[str],
-    identity_prompt: str,
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
     base_model: Path = DEFAULT_FLUX_BASE_MODEL,
@@ -70,7 +69,6 @@ def build_lora_control_audit_plan(
     config: LoraControlAuditConfig = LoraControlAuditConfig(),
 ) -> dict[str, Any]:
     resolved_run_dir = lora_run_dir.resolve()
-    cases = _parse_cases(case_specs, case_prompt_specs, Path.cwd())
     resolved_output_dir = (output_dir or resolved_run_dir / "control_audit").resolve()
     resolved_lora = (lora_weights or resolved_run_dir / DEFAULT_LORA_WEIGHTS_NAME).resolve()
     resolved_base = base_model.resolve()
@@ -84,7 +82,7 @@ def build_lora_control_audit_plan(
         nunchaku_transformer=resolved_nunchaku,
     )
     resolved_trigger = _trigger_token(trigger_token, resolved_run_dir)
-    resolved_identity_prompt = _validate_identity_prompt(identity_prompt, resolved_trigger)
+    cases = _parse_cases(case_specs, case_prompt_specs, Path.cwd(), trigger_token=resolved_trigger)
     return {
         "status": "ready_to_launch" if not missing else "missing_local_inputs",
         "kind": "lora-control-audit-plan",
@@ -112,7 +110,6 @@ def build_lora_control_audit_plan(
             "lora_loading": "NunchakuFluxTransformer2dModel.update_lora_params",
         },
         "trigger_token": resolved_trigger,
-        "identity_prompt": resolved_identity_prompt,
         "audit_cases": [_case_json(case) for case in cases],
         "generation": {
             "width": config.width,
@@ -133,7 +130,6 @@ def run_lora_control_audit(
     *,
     case_specs: list[str],
     case_prompt_specs: list[str],
-    identity_prompt: str,
     output_dir: Path | None = None,
     lora_weights: Path | None = None,
     base_model: Path = DEFAULT_FLUX_BASE_MODEL,
@@ -148,7 +144,6 @@ def run_lora_control_audit(
         lora_run_dir,
         case_specs=case_specs,
         case_prompt_specs=case_prompt_specs,
-        identity_prompt=identity_prompt,
         output_dir=output_dir,
         lora_weights=lora_weights,
         base_model=base_model,
@@ -228,10 +223,12 @@ def _parse_cases(
     case_specs: list[str],
     case_prompt_specs: list[str],
     base_dir: Path,
+    *,
+    trigger_token: str,
 ) -> list[LoraControlAuditCase]:
     if not case_specs:
         raise LoraControlAuditError("LoRA control audit requires at least one --case NAME=CONTROL_IMAGE")
-    prompts = _parse_case_prompts(case_prompt_specs)
+    prompts = _parse_case_prompts(case_prompt_specs, trigger_token=trigger_token)
     cases = []
     seen = set()
     for spec in case_specs:
@@ -258,9 +255,11 @@ def _parse_cases(
     return cases
 
 
-def _parse_case_prompts(case_prompt_specs: list[str]) -> dict[str, str]:
+def _parse_case_prompts(case_prompt_specs: list[str], *, trigger_token: str) -> dict[str, str]:
     if not case_prompt_specs:
-        raise LoraControlAuditError("LoRA control audit requires one --case-prompt NAME=PROMPT for each --case")
+        raise LoraControlAuditError(
+            "LoRA control audit requires one complete --case-prompt NAME=PROMPT for each --case"
+        )
     prompts = {}
     for spec in case_prompt_specs:
         if "=" not in spec:
@@ -272,6 +271,8 @@ def _parse_case_prompts(case_prompt_specs: list[str]) -> dict[str, str]:
         prompt = " ".join(raw_prompt.strip().split())
         if not prompt:
             raise LoraControlAuditError(f"Case prompt is empty: {name}")
+        if trigger_token not in prompt:
+            raise LoraControlAuditError(f"Case prompt must include the LoRA trigger token: {name}")
         prompts[name] = prompt
     return prompts
 
@@ -425,7 +426,7 @@ def _encode_prompts(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], An
     embeddings = {}
     with torch.no_grad():
         for case in plan["audit_cases"]:
-            prompt = _prompt(plan["identity_prompt"], case["prompt"])
+            prompt = case["prompt"]
             pooled_prompt_embeds = _encode_clip_prompt(
                 tokenizer,
                 text_encoder,
@@ -488,19 +489,6 @@ def _encode_t5_prompt(
     )
     prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False)[0]
     return prompt_embeds.to(dtype=text_encoder.dtype, device=device)
-
-
-def _validate_identity_prompt(identity_prompt: str, trigger_token: str) -> str:
-    prompt = " ".join(identity_prompt.strip().split())
-    if not prompt:
-        raise LoraControlAuditError("LoRA control audit requires --identity-prompt")
-    if trigger_token not in prompt:
-        raise LoraControlAuditError("--identity-prompt must include the LoRA trigger token")
-    return prompt
-
-
-def _prompt(identity_prompt: str, case_prompt: str) -> str:
-    return f"{identity_prompt}, full body character, {case_prompt}, clean neutral background"
 
 
 def _torch_memory(torch: Any) -> dict[str, int]:

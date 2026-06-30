@@ -45,6 +45,7 @@ def run_lora_smoke(
     progress.phase("collect approved anchors")
     anchors = _approved_anchors(
         anchor_specs=anchor_specs,
+        trigger_token=trigger_token,
         identity_caption=identity_caption,
         tags=tags,
         approved_by=approved_by,
@@ -103,12 +104,15 @@ def run_lora_smoke(
 def _approved_anchors(
     *,
     anchor_specs: list[str],
+    trigger_token: str,
     identity_caption: str,
     tags: list[str],
     approved_by: str,
 ) -> list[ApprovedLoraAnchor]:
     if not anchor_specs:
         raise LoraSmokeError("LoRA smoke requires at least one approved anchor")
+    if trigger_token in identity_caption:
+        raise LoraSmokeError("--identity-caption must not include the trigger token; --trigger-token owns it")
     anchors = []
     for spec in anchor_specs:
         name, image_path = _parse_anchor_spec(spec)

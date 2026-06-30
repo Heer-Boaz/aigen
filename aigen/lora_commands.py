@@ -123,11 +123,6 @@ def add_lora_commands(subparsers: Any) -> None:
         help="Plain FLUX.1-dev Nunchaku transformer",
     )
     control_audit_plan.add_argument("--trigger-token", help="LoRA trigger token")
-    control_audit_plan.add_argument(
-        "--identity-prompt",
-        required=True,
-        help="Curated identity prompt used for LoRA audit inference; must include the trigger token",
-    )
     control_audit_plan.add_argument("--width", type=_positive_int, default=512)
     control_audit_plan.add_argument("--height", type=_positive_int, default=768)
     control_audit_plan.add_argument("--steps", type=_positive_int, default=20)
@@ -179,11 +174,6 @@ def add_lora_commands(subparsers: Any) -> None:
         help="Plain FLUX.1-dev Nunchaku transformer",
     )
     control_audit_run.add_argument("--trigger-token", help="LoRA trigger token")
-    control_audit_run.add_argument(
-        "--identity-prompt",
-        required=True,
-        help="Curated identity prompt used for LoRA audit inference; must include the trigger token",
-    )
     control_audit_run.add_argument("--width", type=_positive_int, default=512)
     control_audit_run.add_argument("--height", type=_positive_int, default=768)
     control_audit_run.add_argument("--steps", type=_positive_int, default=20)
@@ -256,7 +246,6 @@ def run_lora_command(
                 args.lora_run_dir,
                 case_specs=args.case,
                 case_prompt_specs=args.case_prompt,
-                identity_prompt=args.identity_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
                 base_model=args.base_model,
@@ -280,7 +269,6 @@ def run_lora_command(
                 args.lora_run_dir,
                 case_specs=args.case,
                 case_prompt_specs=args.case_prompt,
-                identity_prompt=args.identity_prompt,
                 output_dir=args.output_dir,
                 lora_weights=args.lora_weights,
                 base_model=args.base_model,

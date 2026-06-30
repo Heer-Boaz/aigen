@@ -25,9 +25,6 @@ from aigen.progress import StatusReporter
 
 
 CONTROL_AUDIT_SCORER_ID = "control-audit"
-CONTROL_AUDIT_MINIMAL_PROMPT = (
-    "Same character, full body, clean neutral background, preserve outfit and side-view character design."
-)
 MATERIAL_SCORE_DELTA = 0.05
 AUDIT_ARTIFACT_SCORE_FLOOR = 0.60
 CONTROL_AUDIT_VARIANT_TIMEOUT_SECONDS = 300
@@ -47,6 +44,7 @@ def run_keyframe_control_audit(
     run_dir: Path,
     *,
     project_root: Path,
+    prompt: str,
     seed: int | None = None,
     scorer_id: str = CONTROL_AUDIT_SCORER_ID,
     progress: StatusReporter,
@@ -84,6 +82,7 @@ def run_keyframe_control_audit(
             audit_seed,
             audit_dir,
             project_root,
+            prompt,
         )
         variant_results.append(variant_result)
         _release_cuda_cache()
@@ -111,8 +110,8 @@ def run_keyframe_control_audit(
         "effective_config": {
             **source_resolved,
             "prompt": {
-                "clip": CONTROL_AUDIT_MINIMAL_PROMPT,
-                "t5": CONTROL_AUDIT_MINIMAL_PROMPT,
+                "clip": prompt,
+                "t5": prompt,
                 "true_cfg_scale": 1.0,
             },
             "audit_variants": [_variant_json(variant, source_spec.sampling.steps) for variant in variants],
@@ -154,6 +153,7 @@ def run_keyframe_control_audit(
         run_result,
         score_result,
         scorer_id,
+        prompt,
     )
     progress.step("write control audit result")
     write_json(audit_dir / "audit.json", audit_payload)
@@ -197,6 +197,7 @@ def _run_audit_variant(
     seed: int,
     audit_dir: Path,
     project_root: Path,
+    prompt: str,
 ) -> dict[str, Any]:
     variant_dir = audit_dir / "variant_runs" / variant.name
     variant_spec = source_spec.model_copy(
@@ -204,8 +205,8 @@ def _run_audit_variant(
         update={
             "id": f"{source_spec.id}.control-audit.{variant.name}",
             "prompt": PromptSpec(
-                clip=CONTROL_AUDIT_MINIMAL_PROMPT,
-                t5=CONTROL_AUDIT_MINIMAL_PROMPT,
+                clip=prompt,
+                t5=prompt,
                 negative=None,
                 true_cfg_scale=1.0,
             ),
@@ -466,6 +467,7 @@ def _audit_payload(
     run_result: dict[str, Any],
     score_result: dict[str, Any],
     scorer_id: str,
+    prompt: str,
 ) -> dict[str, Any]:
     score_by_name = {candidate["candidate"]: candidate for candidate in score_result["candidates"]}
     score_deltas = _score_deltas(score_by_name)
@@ -477,9 +479,9 @@ def _audit_payload(
         "source_run_dir": source_result["effective_config"]["output"]["directory"],
         "source_job_id": source_result["job_id"],
         "seed": seed,
-        "minimal_prompt": {
-            "clip": CONTROL_AUDIT_MINIMAL_PROMPT,
-            "t5": CONTROL_AUDIT_MINIMAL_PROMPT,
+        "prompt": {
+            "clip": prompt,
+            "t5": prompt,
             "true_cfg_scale": 1.0,
         },
         "variants": [_variant_json(variant, source_result["effective_config"]["sampling"]["steps"]) for variant in variants],

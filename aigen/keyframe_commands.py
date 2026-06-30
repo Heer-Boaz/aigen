@@ -230,6 +230,7 @@ def add_keyframe_commands(subparsers: Any) -> None:
         help="Run fixed-seed control-off/strong-control ablations for a completed keyframe run",
     )
     control_audit.add_argument("run_dir", type=Path, help="Completed keyframe run directory")
+    control_audit.add_argument("--prompt", required=True, help="Curated full audit prompt")
     control_audit.add_argument("--seed", type=int, help="Seed to reuse for every audit variant")
     control_audit.add_argument("--compact", action="store_true", help="Write compact JSON")
 
@@ -320,6 +321,7 @@ def run_keyframe_command(
                 run_keyframe_control_audit(
                     args.run_dir,
                     project_root=PROJECT_ROOT,
+                    prompt=args.prompt,
                     seed=args.seed,
                     progress=progress,
                 ),

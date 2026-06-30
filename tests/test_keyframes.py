@@ -1522,6 +1522,7 @@ class KeyframeTests(unittest.TestCase):
                 audit = run_keyframe_control_audit(
                     run_dir,
                     project_root=Path.cwd(),
+                    prompt="curated audit prompt",
                     seed=42,
                     progress=SILENT_STATUS,
                 )
@@ -1543,6 +1544,8 @@ class KeyframeTests(unittest.TestCase):
                 "clean_pose_plus_arm_hand",
             ])
             control_off_job = load_keyframe_job(audit_dir / "variant_runs" / "control_off" / "job.json")
+            self.assertEqual(control_off_job.prompt.clip, "curated audit prompt")
+            self.assertEqual(audit["prompt"]["clip"], "curated audit prompt")
             self.assertEqual(control_off_job.variants[0].seed, 42)
             self.assertEqual(
                 [condition.scale for condition in control_off_job.conditions],

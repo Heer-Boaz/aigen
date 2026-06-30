@@ -755,6 +755,37 @@ class LoraDatasetTests(unittest.TestCase):
         self.assertNotEqual(raised.exception.code, 0)
         self.assertIn("must be greater than 0", stderr.getvalue())
 
+    def test_lora_smoke_rejects_identity_caption_with_trigger_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "assets" / "front.png"
+            write_training_source(front, (180, 50, 60), "F")
+            stderr = io.StringIO()
+
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "lora",
+                        "smoke",
+                        "--id",
+                        "ai51_identity_smoke",
+                        "--character-id",
+                        "ai51",
+                        "--trigger-token",
+                        "ai51char",
+                        "--anchor",
+                        f"front={front.as_posix()}",
+                        "--identity-caption",
+                        "ai51char, anime girl, short pink bob",
+                        "--output-dir",
+                        (root / "smoke").as_posix(),
+                        "--compact",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("must not include the trigger token", stderr.getvalue())
+
     def test_lora_control_audit_plan_requires_trained_weights_and_plain_nunchaku(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -788,15 +819,13 @@ class LoraDatasetTests(unittest.TestCase):
                         "--case",
                         f"side_idle={control_image.as_posix()}",
                         "--case-prompt",
-                        "side_idle=full body side idle pose",
+                        "side_idle=ai51char, approved identity prompt, full body side idle pose",
                         "--base-model",
                         base_model.as_posix(),
                         "--controlnet-model",
                         controlnet_model.as_posix(),
                         "--nunchaku-transformer",
                         (root / "models" / "nunchaku" / "svdq-fp4_r32-flux.1-dev.safetensors").as_posix(),
-                        "--identity-prompt",
-                        "ai51char, approved identity prompt",
                         "--compact",
                     ]
                 )
@@ -806,7 +835,6 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(result["kind"], "lora-control-audit-plan")
             self.assertEqual(result["status"], "missing_local_inputs")
             self.assertEqual(result["trigger_token"], "ai51char")
-            self.assertEqual(result["identity_prompt"], "ai51char, approved identity prompt")
             self.assertFalse(result["runtime"]["uses_kontext_reference"])
             self.assertEqual(result["runtime"]["reference_tokens"], 0)
             self.assertIn((lora_run / "pytorch_lora_weights.safetensors").as_posix(), result["missing"])
@@ -815,8 +843,48 @@ class LoraDatasetTests(unittest.TestCase):
                 result["missing"],
             )
             self.assertEqual([case["name"] for case in result["audit_cases"]], ["side_idle"])
-            self.assertEqual(result["audit_cases"][0]["prompt"], "full body side idle pose")
+            self.assertEqual(
+                result["audit_cases"][0]["prompt"],
+                "ai51char, approved identity prompt, full body side idle pose",
+            )
             self.assertEqual(result["audit_cases"][0]["control_image"]["path"], control_image.resolve().as_posix())
+
+    def test_lora_control_audit_plan_rejects_case_prompt_without_trigger_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            lora_run = root / "lora-run"
+            lora_run.mkdir()
+            write_json(
+                lora_run / "dataset" / "dataset_report.json",
+                {
+                    "status": "completed",
+                    "dataset_id": "ai51_identity_smoke",
+                    "accepted_image_count": 1,
+                    "character": {"id": "ai51", "trigger_token": "ai51char"},
+                    "split_counts": {"train": 1, "val": 0},
+                    "records": [],
+                },
+            )
+            control_image = root / "assets" / "side_idle.png"
+            write_training_source(control_image, (10, 10, 10), "P")
+            stderr = io.StringIO()
+
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "lora",
+                        "control-audit-plan",
+                        lora_run.as_posix(),
+                        "--case",
+                        f"side_idle={control_image.as_posix()}",
+                        "--case-prompt",
+                        "side_idle=approved identity prompt without trigger",
+                        "--compact",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Case prompt must include the LoRA trigger token", stderr.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
