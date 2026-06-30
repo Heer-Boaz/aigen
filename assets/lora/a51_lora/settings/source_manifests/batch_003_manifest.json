@@ -1,0 +1,1080 @@
+{
+  "kind": "lora-training-candidate-generation",
+  "character": "ai51",
+  "source_pose_pack": "Kenney Platformer Characters CC0",
+  "source_pose_url": "https://www.kenney.nl/assets/platformer-characters",
+  "purpose": "broader identity candidate generation from external platformer pose sources",
+  "canvas": {
+    "width": 512,
+    "height": 768,
+    "reference_max_area": 294912,
+    "max_sequence_length": 128
+  },
+  "sampling": {
+    "steps": 16,
+    "guidance_scale": 2.5,
+    "controlnet_conditioning_scale": 0.32,
+    "control_guidance_end": 0.45
+  },
+  "outputs": [
+    {
+      "name": "stand_seed_301",
+      "case": "stand",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_stand_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 32877.514,
+        "transformer_ms": 15021.457,
+        "denoise_ms": 47977.335
+      }
+    },
+    {
+      "name": "stand_seed_302",
+      "case": "stand",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_stand_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 254.672,
+        "transformer_ms": 2213.186,
+        "denoise_ms": 2479.772
+      }
+    },
+    {
+      "name": "stand_seed_303",
+      "case": "stand",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_stand_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 254.764,
+        "transformer_ms": 2229.81,
+        "denoise_ms": 2492.706
+      }
+    },
+    {
+      "name": "idle_seed_301",
+      "case": "idle",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_idle_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral idle full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral idle full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 319.194,
+        "transformer_ms": 13537.594,
+        "denoise_ms": 13866.796
+      }
+    },
+    {
+      "name": "idle_seed_302",
+      "case": "idle",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_idle_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral idle full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral idle full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 247.485,
+        "transformer_ms": 2165.314,
+        "denoise_ms": 2421.37
+      }
+    },
+    {
+      "name": "idle_seed_303",
+      "case": "idle",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_idle_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. neutral idle full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. neutral idle full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 261.322,
+        "transformer_ms": 2237.028,
+        "denoise_ms": 2508.077
+      }
+    },
+    {
+      "name": "talk_seed_301",
+      "case": "talk",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_talk_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. casual talk gesture full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. casual talk gesture full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 6574.049,
+        "transformer_ms": 5884.622,
+        "denoise_ms": 12491.572
+      }
+    },
+    {
+      "name": "talk_seed_302",
+      "case": "talk",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_talk_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. casual talk gesture full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. casual talk gesture full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 729.455,
+        "transformer_ms": 2275.567,
+        "denoise_ms": 3014.786
+      }
+    },
+    {
+      "name": "talk_seed_303",
+      "case": "talk",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_talk_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. casual talk gesture full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. casual talk gesture full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 257.689,
+        "transformer_ms": 2245.212,
+        "denoise_ms": 2511.3
+      }
+    },
+    {
+      "name": "cheer1_seed_301",
+      "case": "cheer1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. cheer pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. cheer pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 6512.394,
+        "transformer_ms": 3822.775,
+        "denoise_ms": 10372.629
+      }
+    },
+    {
+      "name": "cheer1_seed_302",
+      "case": "cheer1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. cheer pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. cheer pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 737.355,
+        "transformer_ms": 2256.453,
+        "denoise_ms": 3005.001
+      }
+    },
+    {
+      "name": "cheer1_seed_303",
+      "case": "cheer1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. cheer pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. cheer pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 259.873,
+        "transformer_ms": 2264.179,
+        "denoise_ms": 2532.656
+      }
+    },
+    {
+      "name": "cheer2_seed_301",
+      "case": "cheer2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. raised arm cheer full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. raised arm cheer full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 6586.536,
+        "transformer_ms": 4040.631,
+        "denoise_ms": 10661.48
+      }
+    },
+    {
+      "name": "cheer2_seed_302",
+      "case": "cheer2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. raised arm cheer full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. raised arm cheer full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 250.632,
+        "transformer_ms": 2171.837,
+        "denoise_ms": 2430.422
+      }
+    },
+    {
+      "name": "cheer2_seed_303",
+      "case": "cheer2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_cheer2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. raised arm cheer full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. raised arm cheer full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 249.701,
+        "transformer_ms": 2228.426,
+        "denoise_ms": 2487.215
+      }
+    },
+    {
+      "name": "walk1_seed_301",
+      "case": "walk1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk contact full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk contact full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 318.324,
+        "transformer_ms": 3852.463,
+        "denoise_ms": 4179.78
+      }
+    },
+    {
+      "name": "walk1_seed_302",
+      "case": "walk1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk contact full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk contact full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 257.71,
+        "transformer_ms": 2224.369,
+        "denoise_ms": 2490.354
+      }
+    },
+    {
+      "name": "walk1_seed_303",
+      "case": "walk1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk contact full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk contact full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 257.968,
+        "transformer_ms": 2210.106,
+        "denoise_ms": 2476.756
+      }
+    },
+    {
+      "name": "walk2_seed_301",
+      "case": "walk2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk passing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk passing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 6792.829,
+        "transformer_ms": 3597.943,
+        "denoise_ms": 10416.888
+      }
+    },
+    {
+      "name": "walk2_seed_302",
+      "case": "walk2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk passing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk passing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 255.211,
+        "transformer_ms": 2224.861,
+        "denoise_ms": 2489.825
+      }
+    },
+    {
+      "name": "walk2_seed_303",
+      "case": "walk2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_walk2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing walk passing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing walk passing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 247.27,
+        "transformer_ms": 2178.305,
+        "denoise_ms": 2434.538
+      }
+    },
+    {
+      "name": "skid_seed_301",
+      "case": "skid",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_skid_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing skid stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing skid stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7056.216,
+        "transformer_ms": 3486.419,
+        "denoise_ms": 10581.089
+      }
+    },
+    {
+      "name": "skid_seed_302",
+      "case": "skid",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_skid_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing skid stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing skid stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 258.534,
+        "transformer_ms": 2236.53,
+        "denoise_ms": 2503.902
+      }
+    },
+    {
+      "name": "skid_seed_303",
+      "case": "skid",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_skid_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing skid stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing skid stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 251.677,
+        "transformer_ms": 2182.438,
+        "denoise_ms": 2442.415
+      }
+    },
+    {
+      "name": "slide_seed_301",
+      "case": "slide",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_slide_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing slide stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing slide stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 6910.174,
+        "transformer_ms": 3499.543,
+        "denoise_ms": 10435.054
+      }
+    },
+    {
+      "name": "slide_seed_302",
+      "case": "slide",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_slide_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing slide stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing slide stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 256.928,
+        "transformer_ms": 2231.616,
+        "denoise_ms": 2497.149
+      }
+    },
+    {
+      "name": "slide_seed_303",
+      "case": "slide",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_slide_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing slide stance full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing slide stance full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 254.373,
+        "transformer_ms": 2210.375,
+        "denoise_ms": 2472.796
+      }
+    },
+    {
+      "name": "kick_seed_301",
+      "case": "kick",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_kick_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing kick pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing kick pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 677.263,
+        "transformer_ms": 5575.765,
+        "denoise_ms": 6270.829
+      }
+    },
+    {
+      "name": "kick_seed_302",
+      "case": "kick",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_kick_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing kick pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing kick pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 256.977,
+        "transformer_ms": 2242.183,
+        "denoise_ms": 2508.829
+      }
+    },
+    {
+      "name": "kick_seed_303",
+      "case": "kick",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_kick_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing kick pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing kick pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 262.204,
+        "transformer_ms": 2238.808,
+        "denoise_ms": 2509.507
+      }
+    },
+    {
+      "name": "duck_seed_301",
+      "case": "duck",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_duck_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing crouch full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing crouch full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7758.461,
+        "transformer_ms": 3110.057,
+        "denoise_ms": 10901.7
+      }
+    },
+    {
+      "name": "duck_seed_302",
+      "case": "duck",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_duck_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing crouch full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing crouch full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 256.456,
+        "transformer_ms": 2241.664,
+        "denoise_ms": 2506.395
+      }
+    },
+    {
+      "name": "duck_seed_303",
+      "case": "duck",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_duck_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing crouch full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing crouch full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 257.873,
+        "transformer_ms": 2248.748,
+        "denoise_ms": 2515.196
+      }
+    },
+    {
+      "name": "jump_seed_301",
+      "case": "jump",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_jump_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing compact jump full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing compact jump full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7176.224,
+        "transformer_ms": 8447.228,
+        "denoise_ms": 15656.632
+      }
+    },
+    {
+      "name": "jump_seed_302",
+      "case": "jump",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_jump_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing compact jump full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing compact jump full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 269.757,
+        "transformer_ms": 2322.898,
+        "denoise_ms": 2601.016
+      }
+    },
+    {
+      "name": "jump_seed_303",
+      "case": "jump",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_jump_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing compact jump full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing compact jump full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 283.111,
+        "transformer_ms": 2325.264,
+        "denoise_ms": 2617.262
+      }
+    },
+    {
+      "name": "fall_seed_301",
+      "case": "fall",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_fall_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing fall pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing fall pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7934.643,
+        "transformer_ms": 8174.429,
+        "denoise_ms": 16143.736
+      }
+    },
+    {
+      "name": "fall_seed_302",
+      "case": "fall",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_fall_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing fall pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing fall pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 253.953,
+        "transformer_ms": 2205.818,
+        "denoise_ms": 2467.694
+      }
+    },
+    {
+      "name": "fall_seed_303",
+      "case": "fall",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_fall_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing fall pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing fall pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 261.027,
+        "transformer_ms": 2211.782,
+        "denoise_ms": 2482.375
+      }
+    },
+    {
+      "name": "hurt_seed_301",
+      "case": "hurt",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hurt pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hurt pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 339.461,
+        "transformer_ms": 9304.31,
+        "denoise_ms": 9654.956
+      }
+    },
+    {
+      "name": "hurt_seed_302",
+      "case": "hurt",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hurt pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hurt pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 255.697,
+        "transformer_ms": 2229.442,
+        "denoise_ms": 2493.182
+      }
+    },
+    {
+      "name": "hurt_seed_303",
+      "case": "hurt",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hurt pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hurt pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 253.408,
+        "transformer_ms": 2192.5,
+        "denoise_ms": 2454.007
+      }
+    },
+    {
+      "name": "action1_seed_301",
+      "case": "action1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm raised action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm raised action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7498.463,
+        "transformer_ms": 8155.36,
+        "denoise_ms": 15687.658
+      }
+    },
+    {
+      "name": "action1_seed_302",
+      "case": "action1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm raised action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm raised action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 256.976,
+        "transformer_ms": 2219.872,
+        "denoise_ms": 2487.515
+      }
+    },
+    {
+      "name": "action1_seed_303",
+      "case": "action1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm raised action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm raised action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 254.664,
+        "transformer_ms": 2191.763,
+        "denoise_ms": 2454.155
+      }
+    },
+    {
+      "name": "action2_seed_301",
+      "case": "action2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm forward action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm forward action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7231.407,
+        "transformer_ms": 3307.509,
+        "denoise_ms": 10572.313
+      }
+    },
+    {
+      "name": "action2_seed_302",
+      "case": "action2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm forward action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm forward action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 254.631,
+        "transformer_ms": 2218.887,
+        "denoise_ms": 2481.454
+      }
+    },
+    {
+      "name": "action2_seed_303",
+      "case": "action2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing arm forward action full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing arm forward action full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 251.971,
+        "transformer_ms": 2212.934,
+        "denoise_ms": 2473.097
+      }
+    },
+    {
+      "name": "hold1_seed_301",
+      "case": "hold1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 11661.554,
+        "transformer_ms": 3201.365,
+        "denoise_ms": 14893.798
+      }
+    },
+    {
+      "name": "hold1_seed_302",
+      "case": "hold1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 255.049,
+        "transformer_ms": 2162.979,
+        "denoise_ms": 2426.212
+      }
+    },
+    {
+      "name": "hold1_seed_303",
+      "case": "hold1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 248.517,
+        "transformer_ms": 2169.298,
+        "denoise_ms": 2425.519
+      }
+    },
+    {
+      "name": "hold2_seed_301",
+      "case": "hold2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 276.356,
+        "transformer_ms": 3235.394,
+        "denoise_ms": 3520.618
+      }
+    },
+    {
+      "name": "hold2_seed_302",
+      "case": "hold2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 261.64,
+        "transformer_ms": 2352.56,
+        "denoise_ms": 2622.967
+      }
+    },
+    {
+      "name": "hold2_seed_303",
+      "case": "hold2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hold2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hold pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hold pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 278.747,
+        "transformer_ms": 2422.761,
+        "denoise_ms": 2711.008
+      }
+    },
+    {
+      "name": "hang_seed_301",
+      "case": "hang",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hang_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hanging pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hanging pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7449.062,
+        "transformer_ms": 3007.07,
+        "denoise_ms": 10485.794
+      }
+    },
+    {
+      "name": "hang_seed_302",
+      "case": "hang",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hang_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hanging pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hanging pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 262.835,
+        "transformer_ms": 2258.963,
+        "denoise_ms": 2530.338
+      }
+    },
+    {
+      "name": "hang_seed_303",
+      "case": "hang",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hang_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing hanging pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing hanging pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 262.114,
+        "transformer_ms": 2258.714,
+        "denoise_ms": 2530.388
+      }
+    },
+    {
+      "name": "climb1_seed_301",
+      "case": "climb1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7193.175,
+        "transformer_ms": 3104.382,
+        "denoise_ms": 10322.264
+      }
+    },
+    {
+      "name": "climb1_seed_302",
+      "case": "climb1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 250.954,
+        "transformer_ms": 2163.73,
+        "denoise_ms": 2423.02
+      }
+    },
+    {
+      "name": "climb1_seed_303",
+      "case": "climb1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb1_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 248.92,
+        "transformer_ms": 2170.91,
+        "denoise_ms": 2427.711
+      }
+    },
+    {
+      "name": "climb2_seed_301",
+      "case": "climb2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 7114.171,
+        "transformer_ms": 3070.36,
+        "denoise_ms": 10216.328
+      }
+    },
+    {
+      "name": "climb2_seed_302",
+      "case": "climb2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 251.011,
+        "transformer_ms": 2191.937,
+        "denoise_ms": 2450.399
+      }
+    },
+    {
+      "name": "climb2_seed_303",
+      "case": "climb2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_climb2_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. left facing climbing pose full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. left facing climbing pose full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 253.251,
+        "transformer_ms": 2195.719,
+        "denoise_ms": 2456.471
+      }
+    },
+    {
+      "name": "back_seed_301",
+      "case": "back",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_301.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_back_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. back view neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. back view neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 958.767,
+        "transformer_ms": 7083.379,
+        "denoise_ms": 8069.124
+      }
+    },
+    {
+      "name": "back_seed_302",
+      "case": "back",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_302.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_back_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. back view neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. back view neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 250.606,
+        "transformer_ms": 2197.124,
+        "denoise_ms": 2455.456
+      }
+    },
+    {
+      "name": "back_seed_303",
+      "case": "back",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_303.png",
+      "reference_image": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "control_image": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_back_softedge.png",
+      "clip_prompt": "AI51 anime girl, pink bob, blue eyes, brown leather jacket, white shirt, blue tie, brown leather skirt, belt, blue socks, brown boots. back view neutral standing full body.",
+      "t5_prompt": "AI51 anime girl character with short pink bob haircut, blue eyes, glossy brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt with silver buckle, blue thigh high socks, glossy brown boots, clean anime lineart, solid colors, stable proportions, not chibi, clean plain background. back view neutral standing full body.",
+      "controlnet_active_steps": 7,
+      "timings_ms": {
+        "controlnet_ms": 255.711,
+        "transformer_ms": 2245.064,
+        "denoise_ms": 2509.492
+      }
+    }
+  ],
+  "last_case": "back",
+  "contact_sheet": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/contact_sheet.png",
+  "status": "completed"
+}

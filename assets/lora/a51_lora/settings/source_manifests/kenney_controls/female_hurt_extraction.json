@@ -1,0 +1,152 @@
+{
+  "assets": {
+    "arm_hand_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_arm_hand_mask.png",
+      "sha256": "f8030e77cc1921940f110d38acac9e57fd9b5cf7b28a4e6a30db98ff2bb52868",
+      "width": 512
+    },
+    "boundary_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_boundary.png",
+      "sha256": "7589018a5b7628076261803494435b8273833a7dfae6c2c9c8b2433ff1235b87",
+      "width": 512
+    },
+    "canny_lineart": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_canny_lineart.png",
+      "sha256": "91809d55f79aabe9034fa6aa53f758a208362937eec17424877b566e2f6daaa2",
+      "width": 512
+    },
+    "contour": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_canny_lineart.png",
+      "sha256": "91809d55f79aabe9034fa6aa53f758a208362937eec17424877b566e2f6daaa2",
+      "width": 512
+    },
+    "filled_silhouette": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_filled_silhouette.png",
+      "sha256": "47ea4952366c74ce0c289121b2fbc5fa8899bebb0fe3f33672832342aae90ef8",
+      "width": 512
+    },
+    "foreground_clean": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_foreground_clean.png",
+      "sha256": "fa5ee043416a9a9b539f0c94da18d03348ac6348fb584a6048156a3dc37eb1d7",
+      "width": 512
+    },
+    "full_silhouette_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_full_silhouette_mask.png",
+      "sha256": "47ea4952366c74ce0c289121b2fbc5fa8899bebb0fe3f33672832342aae90ef8",
+      "width": 512
+    },
+    "gray": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_gray.png",
+      "sha256": "0ec52609a8bb8c319cf5660cccad0932f6a46fe657c3a71338394b297907ac27",
+      "width": 512
+    },
+    "normalized_source": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_normalized.png",
+      "sha256": "e333d8d3ddf194f7b10b7fae7e753cc504233d77662bd96d29bb9c3b6f724ee3",
+      "width": 512
+    },
+    "pose": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_pose.png",
+      "sha256": "3e31b7aef4085f32af47d455bc4ada1dd24e978b47e3ec9581d5382538dbd1dc",
+      "width": 512
+    },
+    "softedge": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_softedge.png",
+      "sha256": "29f26e39dbce648aba51577086f95d401835fbe1dd614c74afd10c9ab891e0b2",
+      "width": 512
+    },
+    "source": {
+      "height": 110,
+      "mode": "RGBA",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_hurt_source.png",
+      "sha256": "b980267e97dfbb007f7b73f6b16e427d19cb507db9c2938eafa60589bf8262ec",
+      "width": 80
+    }
+  },
+  "canvas": {
+    "height": 768,
+    "width": 512
+  },
+  "control_policy": {
+    "canny_lineart": "clean anti-aliased geometry outline from foreground silhouette; no sprite texture or colors",
+    "debug_only_controls": [
+      "gray",
+      "foreground_clean",
+      "normalized_source"
+    ],
+    "gray": "flat geometry silhouette control; no sprite texture or colors",
+    "pose": "DWPose whole-body extraction from the normalized example",
+    "production_controls": [
+      "pose",
+      "canny_lineart",
+      "softedge"
+    ],
+    "softedge": "clean anti-aliased geometry softedge from foreground silhouette; no sprite texture or colors"
+  },
+  "foreground": {
+    "coverage": 0.350860595703125,
+    "normalized_bbox": [
+      30,
+      213,
+      481,
+      726
+    ],
+    "source_bbox": [
+      1,
+      17,
+      80,
+      107
+    ]
+  },
+  "kind": "keyframe-example-extraction",
+  "mirror_x": false,
+  "pose": {
+    "body_count": 1,
+    "mean_body_score": 0.38704606890678406,
+    "visible_body_keypoints": 12
+  },
+  "source": {
+    "height": 110,
+    "mode": "RGBA",
+    "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/PNG/Female/Poses/female_hurt.png",
+    "sha256": "69b68896743aca8f03cc53137d2f47a2dcf70413335cd70876b2bcf9b81d651b",
+    "width": 80
+  },
+  "transform": {
+    "canvas_paste": [
+      30,
+      213,
+      481,
+      726
+    ],
+    "scale": 5.703291139240506,
+    "source_crop": [
+      1,
+      17,
+      80,
+      107
+    ]
+  }
+}

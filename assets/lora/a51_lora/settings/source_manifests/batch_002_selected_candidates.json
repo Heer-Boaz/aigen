@@ -1,0 +1,152 @@
+{
+  "kind": "manual-training-candidate-selection",
+  "selection_policy": "Codex visual pass: preserve AI51 identity, clean full-body quality, useful view or pose variation; reject malformed, cropped, transparent/ghosted, wrong garment, dirty background, chibi collapse",
+  "source_manifest": "runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/manifest.json",
+  "selected_count": 24,
+  "selected": [
+    {
+      "name": "stand_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_201.png",
+      "case": "stand",
+      "seed": 201
+    },
+    {
+      "name": "stand_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_202.png",
+      "case": "stand",
+      "seed": 202
+    },
+    {
+      "name": "stand_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_204.png",
+      "case": "stand",
+      "seed": 204
+    },
+    {
+      "name": "idle_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_201.png",
+      "case": "idle",
+      "seed": 201
+    },
+    {
+      "name": "idle_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_202.png",
+      "case": "idle",
+      "seed": 202
+    },
+    {
+      "name": "walk1_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_201.png",
+      "case": "walk1",
+      "seed": 201
+    },
+    {
+      "name": "walk1_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_202.png",
+      "case": "walk1",
+      "seed": 202
+    },
+    {
+      "name": "walk1_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_204.png",
+      "case": "walk1",
+      "seed": 204
+    },
+    {
+      "name": "walk2_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_202.png",
+      "case": "walk2",
+      "seed": 202
+    },
+    {
+      "name": "walk2_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_204.png",
+      "case": "walk2",
+      "seed": 204
+    },
+    {
+      "name": "jump_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_201.png",
+      "case": "jump",
+      "seed": 201
+    },
+    {
+      "name": "jump_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_202.png",
+      "case": "jump",
+      "seed": 202
+    },
+    {
+      "name": "jump_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_204.png",
+      "case": "jump",
+      "seed": 204
+    },
+    {
+      "name": "fall_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_201.png",
+      "case": "fall",
+      "seed": 201
+    },
+    {
+      "name": "fall_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_204.png",
+      "case": "fall",
+      "seed": 204
+    },
+    {
+      "name": "hurt_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/hurt_seed_202.png",
+      "case": "hurt",
+      "seed": 202
+    },
+    {
+      "name": "action1_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_201.png",
+      "case": "action1",
+      "seed": 201
+    },
+    {
+      "name": "action1_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_202.png",
+      "case": "action1",
+      "seed": 202
+    },
+    {
+      "name": "action2_seed_201",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_201.png",
+      "case": "action2",
+      "seed": 201
+    },
+    {
+      "name": "action2_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_202.png",
+      "case": "action2",
+      "seed": 202
+    },
+    {
+      "name": "action2_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_204.png",
+      "case": "action2",
+      "seed": 204
+    },
+    {
+      "name": "back_seed_202",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_202.png",
+      "case": "back",
+      "seed": 202
+    },
+    {
+      "name": "back_seed_203",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_203.png",
+      "case": "back",
+      "seed": 203
+    },
+    {
+      "name": "back_seed_204",
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_204.png",
+      "case": "back",
+      "seed": 204
+    }
+  ]
+}

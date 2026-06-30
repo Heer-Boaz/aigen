@@ -1,0 +1,152 @@
+{
+  "assets": {
+    "arm_hand_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_arm_hand_mask.png",
+      "sha256": "201c67b71fdfb5d3b513dbdff78299e3fd03c47da79226fc912953bdc66bb2e9",
+      "width": 512
+    },
+    "boundary_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_boundary.png",
+      "sha256": "1e479de437782763bf4c770cf269d20eca0d042b63c74d58751b68f48b5d7dc2",
+      "width": 512
+    },
+    "canny_lineart": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_canny_lineart.png",
+      "sha256": "3a1428c2a4b2714e97dd5b59bbb02c7913d288ae3ee56afb5afe761168330615",
+      "width": 512
+    },
+    "contour": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_canny_lineart.png",
+      "sha256": "3a1428c2a4b2714e97dd5b59bbb02c7913d288ae3ee56afb5afe761168330615",
+      "width": 512
+    },
+    "filled_silhouette": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_filled_silhouette.png",
+      "sha256": "fc73dbc3e8b5dab45327c255b722137340dac0bd8a111593ab7f1fdf7fd47983",
+      "width": 512
+    },
+    "foreground_clean": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_foreground_clean.png",
+      "sha256": "b8949e3b6239d7a979c224ed395a2336f071ef2a86dd18f758246edab3fbead3",
+      "width": 512
+    },
+    "full_silhouette_mask": {
+      "height": 768,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_full_silhouette_mask.png",
+      "sha256": "fc73dbc3e8b5dab45327c255b722137340dac0bd8a111593ab7f1fdf7fd47983",
+      "width": 512
+    },
+    "gray": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_gray.png",
+      "sha256": "f171883eaadb92af1af63a03464bc8df7bef785d4df2cd5af504c623069e992f",
+      "width": 512
+    },
+    "normalized_source": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_normalized.png",
+      "sha256": "f95f441d580565487d52368b580d2e8c2ef60b05f2905f8e9addacb3cec83abe",
+      "width": 512
+    },
+    "pose": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_pose.png",
+      "sha256": "83ecf79dd40f12878d586ebb1b5365033acc266077274e39ff916c29d7e90eaa",
+      "width": 512
+    },
+    "softedge": {
+      "height": 768,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_softedge.png",
+      "sha256": "27c4116b259ab3b65481dc5871c66272273bbd8d7c665a6a4b270b11dbe248b4",
+      "width": 512
+    },
+    "source": {
+      "height": 110,
+      "mode": "RGBA",
+      "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/aigen_controls_all/female_action2_source.png",
+      "sha256": "eeb1d6a88f6295ff4fcd9afa830aef617efd247d5b33a49681dbeca6328dba92",
+      "width": 80
+    }
+  },
+  "canvas": {
+    "height": 768,
+    "width": 512
+  },
+  "control_policy": {
+    "canny_lineart": "clean anti-aliased geometry outline from foreground silhouette; no sprite texture or colors",
+    "debug_only_controls": [
+      "gray",
+      "foreground_clean",
+      "normalized_source"
+    ],
+    "gray": "flat geometry silhouette control; no sprite texture or colors",
+    "pose": "DWPose whole-body extraction from the normalized example",
+    "production_controls": [
+      "pose",
+      "canny_lineart",
+      "softedge"
+    ],
+    "softedge": "clean anti-aliased geometry softedge from foreground silhouette; no sprite texture or colors"
+  },
+  "foreground": {
+    "coverage": 0.3564300537109375,
+    "normalized_bbox": [
+      30,
+      206,
+      481,
+      726
+    ],
+    "source_bbox": [
+      0,
+      20,
+      78,
+      110
+    ]
+  },
+  "kind": "keyframe-example-extraction",
+  "mirror_x": false,
+  "pose": {
+    "body_count": 1,
+    "mean_body_score": 0.30032673478126526,
+    "visible_body_keypoints": 7
+  },
+  "source": {
+    "height": 110,
+    "mode": "RGBA",
+    "path": "/home/boaz/aigen/runs/pose_sources/kenney_platformer_characters/PNG/Female/Poses/female_action2.png",
+    "sha256": "d0c282f4815e7749067ca5fe27f810dbe69290bf85bdb09b81b7ab541f6910f9",
+    "width": 80
+  },
+  "transform": {
+    "canvas_paste": [
+      30,
+      206,
+      481,
+      726
+    ],
+    "scale": 5.776410256410257,
+    "source_crop": [
+      0,
+      20,
+      78,
+      110
+    ]
+  }
+}

@@ -1,0 +1,1031 @@
+{
+  "kind": "lora-training-image-review",
+  "character": "ai51",
+  "reviewed_batches": {
+    "b002": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002",
+    "b003": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003"
+  },
+  "review_method": "manual visual review by Codex from batch contact sheets and combined pool contact sheet",
+  "criteria": [
+    "preserve AI51 short pink bob, face, blue eyes and anime style",
+    "preserve brown leather jacket, white shirt, blue tie, brown leather skirt, visible belt, blue socks and brown boots",
+    "reject malformed anatomy, double heads, bad crops, dirty backgrounds, ghosting, transparency, long-coat drift, wrong garment, or severe chibi collapse",
+    "prefer useful view variation: front, side, three-quarter, action, crouch, jump and back views"
+  ],
+  "accepted_count": 77,
+  "rejected_count": 33,
+  "items": [
+    {
+      "batch": "b002",
+      "name": "stand_seed_201",
+      "case": "stand",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "stand_seed_202",
+      "case": "stand",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "stand_seed_203",
+      "case": "stand",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_203.png",
+      "accepted": false,
+      "reason": "transparent/ghosted body and weak outfit fidelity"
+    },
+    {
+      "batch": "b002",
+      "name": "stand_seed_204",
+      "case": "stand",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/stand_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "idle_seed_201",
+      "case": "idle",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "idle_seed_202",
+      "case": "idle",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "idle_seed_203",
+      "case": "idle",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_203.png",
+      "accepted": false,
+      "reason": "cropped/partial lower body and weaker training composition"
+    },
+    {
+      "batch": "b002",
+      "name": "idle_seed_204",
+      "case": "idle",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/idle_seed_204.png",
+      "accepted": false,
+      "reason": "skirt turns into pleated white garment and outfit identity drifts"
+    },
+    {
+      "batch": "b002",
+      "name": "walk1_seed_201",
+      "case": "walk1",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "walk1_seed_202",
+      "case": "walk1",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "walk1_seed_203",
+      "case": "walk1",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_203.png",
+      "accepted": false,
+      "reason": "transparent/washed out body and weak silhouette"
+    },
+    {
+      "batch": "b002",
+      "name": "walk1_seed_204",
+      "case": "walk1",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk1_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "walk2_seed_201",
+      "case": "walk2",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_201.png",
+      "accepted": false,
+      "reason": "busy blue patterned background contaminates training data"
+    },
+    {
+      "batch": "b002",
+      "name": "walk2_seed_202",
+      "case": "walk2",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "walk2_seed_203",
+      "case": "walk2",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_203.png",
+      "accepted": false,
+      "reason": "transparent/washed out body and weak silhouette"
+    },
+    {
+      "batch": "b002",
+      "name": "walk2_seed_204",
+      "case": "walk2",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/walk2_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "duck_seed_201",
+      "case": "duck",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/duck_seed_201.png",
+      "accepted": false,
+      "reason": "large cropped crouch closeup and proportions unsuitable for identity base"
+    },
+    {
+      "batch": "b002",
+      "name": "duck_seed_202",
+      "case": "duck",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/duck_seed_202.png",
+      "accepted": false,
+      "reason": "sitting/crouch shape changes shoes and lower outfit too much"
+    },
+    {
+      "batch": "b002",
+      "name": "duck_seed_203",
+      "case": "duck",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/duck_seed_203.png",
+      "accepted": false,
+      "reason": "sitting pose changes shoes and lower outfit too much"
+    },
+    {
+      "batch": "b002",
+      "name": "duck_seed_204",
+      "case": "duck",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/duck_seed_204.png",
+      "accepted": false,
+      "reason": "sketchy artifacts and outfit/proportion drift"
+    },
+    {
+      "batch": "b002",
+      "name": "jump_seed_201",
+      "case": "jump",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "jump_seed_202",
+      "case": "jump",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "jump_seed_203",
+      "case": "jump",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_203.png",
+      "accepted": false,
+      "reason": "not selected after visual review because identity, outfit, anatomy, background, or composition is weaker than alternatives"
+    },
+    {
+      "batch": "b002",
+      "name": "jump_seed_204",
+      "case": "jump",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/jump_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "fall_seed_201",
+      "case": "fall",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "fall_seed_202",
+      "case": "fall",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_202.png",
+      "accepted": false,
+      "reason": "small running figure with weak identity detail"
+    },
+    {
+      "batch": "b002",
+      "name": "fall_seed_203",
+      "case": "fall",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_203.png",
+      "accepted": false,
+      "reason": "soft/washed out and less faithful outfit detail"
+    },
+    {
+      "batch": "b002",
+      "name": "fall_seed_204",
+      "case": "fall",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/fall_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "hurt_seed_201",
+      "case": "hurt",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/hurt_seed_201.png",
+      "accepted": false,
+      "reason": "double-head artifact"
+    },
+    {
+      "batch": "b002",
+      "name": "hurt_seed_202",
+      "case": "hurt",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/hurt_seed_202.png",
+      "accepted": false,
+      "reason": "late grid review: background text/artifact contaminates clean training background"
+    },
+    {
+      "batch": "b002",
+      "name": "hurt_seed_203",
+      "case": "hurt",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/hurt_seed_203.png",
+      "accepted": false,
+      "reason": "too close/cropped and weaker full-body training value"
+    },
+    {
+      "batch": "b002",
+      "name": "hurt_seed_204",
+      "case": "hurt",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/hurt_seed_204.png",
+      "accepted": false,
+      "reason": "half-body crop and outfit silhouette drift"
+    },
+    {
+      "batch": "b002",
+      "name": "action1_seed_201",
+      "case": "action1",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "action1_seed_202",
+      "case": "action1",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "action1_seed_203",
+      "case": "action1",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_203.png",
+      "accepted": false,
+      "reason": "half-body crop with cat-ear/hair artifact"
+    },
+    {
+      "batch": "b002",
+      "name": "action1_seed_204",
+      "case": "action1",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action1_seed_204.png",
+      "accepted": false,
+      "reason": "half-body crop and background text/artifact"
+    },
+    {
+      "batch": "b002",
+      "name": "action2_seed_201",
+      "case": "action2",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_201.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "action2_seed_202",
+      "case": "action2",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "action2_seed_203",
+      "case": "action2",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_203.png",
+      "accepted": false,
+      "reason": "oversized hand/pose artifact and partial crop"
+    },
+    {
+      "batch": "b002",
+      "name": "action2_seed_204",
+      "case": "action2",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/action2_seed_204.png",
+      "accepted": false,
+      "reason": "heavy shadow/background artifact and lower quality"
+    },
+    {
+      "batch": "b002",
+      "name": "back_seed_201",
+      "case": "back",
+      "seed": 201,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_201.png",
+      "accepted": false,
+      "reason": "back view changes palette/material too strongly"
+    },
+    {
+      "batch": "b002",
+      "name": "back_seed_202",
+      "case": "back",
+      "seed": 202,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_202.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "back_seed_203",
+      "case": "back",
+      "seed": 203,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_203.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b002",
+      "name": "back_seed_204",
+      "case": "back",
+      "seed": 204,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_002/back_seed_204.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "stand_seed_301",
+      "case": "stand",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "stand_seed_302",
+      "case": "stand",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "stand_seed_303",
+      "case": "stand",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/stand_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "idle_seed_301",
+      "case": "idle",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "idle_seed_302",
+      "case": "idle",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "idle_seed_303",
+      "case": "idle",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/idle_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "talk_seed_301",
+      "case": "talk",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "talk_seed_302",
+      "case": "talk",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "talk_seed_303",
+      "case": "talk",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/talk_seed_303.png",
+      "accepted": false,
+      "reason": "washed out semi-transparent body and weak outfit fidelity"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer1_seed_301",
+      "case": "cheer1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer1_seed_302",
+      "case": "cheer1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer1_seed_303",
+      "case": "cheer1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer1_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer2_seed_301",
+      "case": "cheer2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer2_seed_302",
+      "case": "cheer2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "cheer2_seed_303",
+      "case": "cheer2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/cheer2_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk1_seed_301",
+      "case": "walk1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk1_seed_302",
+      "case": "walk1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk1_seed_303",
+      "case": "walk1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk1_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk2_seed_301",
+      "case": "walk2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk2_seed_302",
+      "case": "walk2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "walk2_seed_303",
+      "case": "walk2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/walk2_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "skid_seed_301",
+      "case": "skid",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "skid_seed_302",
+      "case": "skid",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "skid_seed_303",
+      "case": "skid",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/skid_seed_303.png",
+      "accepted": false,
+      "reason": "thin side figure with weak face and outfit detail"
+    },
+    {
+      "batch": "b003",
+      "name": "slide_seed_301",
+      "case": "slide",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "slide_seed_302",
+      "case": "slide",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "slide_seed_303",
+      "case": "slide",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/slide_seed_303.png",
+      "accepted": false,
+      "reason": "thin/cropped side figure and weak outfit detail"
+    },
+    {
+      "batch": "b003",
+      "name": "kick_seed_301",
+      "case": "kick",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "kick_seed_302",
+      "case": "kick",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "kick_seed_303",
+      "case": "kick",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/kick_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "duck_seed_301",
+      "case": "duck",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "duck_seed_302",
+      "case": "duck",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "duck_seed_303",
+      "case": "duck",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/duck_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "jump_seed_301",
+      "case": "jump",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "jump_seed_302",
+      "case": "jump",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "jump_seed_303",
+      "case": "jump",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/jump_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "fall_seed_301",
+      "case": "fall",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "fall_seed_302",
+      "case": "fall",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "fall_seed_303",
+      "case": "fall",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/fall_seed_303.png",
+      "accepted": false,
+      "reason": "small figure with less stable anatomy and outfit detail"
+    },
+    {
+      "batch": "b003",
+      "name": "hurt_seed_301",
+      "case": "hurt",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hurt_seed_302",
+      "case": "hurt",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hurt_seed_303",
+      "case": "hurt",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hurt_seed_303.png",
+      "accepted": false,
+      "reason": "late grid review: seated pose has shoe/color drift and weaker identity fidelity"
+    },
+    {
+      "batch": "b003",
+      "name": "action1_seed_301",
+      "case": "action1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "action1_seed_302",
+      "case": "action1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "action1_seed_303",
+      "case": "action1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action1_seed_303.png",
+      "accepted": false,
+      "reason": "small side figure with weak identity detail"
+    },
+    {
+      "batch": "b003",
+      "name": "action2_seed_301",
+      "case": "action2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "action2_seed_302",
+      "case": "action2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "action2_seed_303",
+      "case": "action2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/action2_seed_303.png",
+      "accepted": false,
+      "reason": "too close/cropped with oversized hand and weak full-body value"
+    },
+    {
+      "batch": "b003",
+      "name": "hold1_seed_301",
+      "case": "hold1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hold1_seed_302",
+      "case": "hold1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_302.png",
+      "accepted": false,
+      "reason": "long coat/outerwear drift changes core outfit identity"
+    },
+    {
+      "batch": "b003",
+      "name": "hold1_seed_303",
+      "case": "hold1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold1_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hold2_seed_301",
+      "case": "hold2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hold2_seed_302",
+      "case": "hold2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_302.png",
+      "accepted": false,
+      "reason": "late grid review: long outerwear drift changes core jacket/skirt identity"
+    },
+    {
+      "batch": "b003",
+      "name": "hold2_seed_303",
+      "case": "hold2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hold2_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hang_seed_301",
+      "case": "hang",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hang_seed_302",
+      "case": "hang",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "hang_seed_303",
+      "case": "hang",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/hang_seed_303.png",
+      "accepted": false,
+      "reason": "muted/washed outfit and less stable identity"
+    },
+    {
+      "batch": "b003",
+      "name": "climb1_seed_301",
+      "case": "climb1",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "climb1_seed_302",
+      "case": "climb1",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "climb1_seed_303",
+      "case": "climb1",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb1_seed_303.png",
+      "accepted": false,
+      "reason": "late grid review: pale/ghosted outfit and weaker identity fidelity"
+    },
+    {
+      "batch": "b003",
+      "name": "climb2_seed_301",
+      "case": "climb2",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "climb2_seed_302",
+      "case": "climb2",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "climb2_seed_303",
+      "case": "climb2",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/climb2_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "back_seed_301",
+      "case": "back",
+      "seed": 301,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_301.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "back_seed_302",
+      "case": "back",
+      "seed": 302,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_302.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    },
+    {
+      "batch": "b003",
+      "name": "back_seed_303",
+      "case": "back",
+      "seed": 303,
+      "path": "/home/boaz/aigen/runs/lora_training_candidates/ai51_kenney_pose_identity_batch_003/back_seed_303.png",
+      "accepted": true,
+      "reason": "preserves AI51 identity/outfit with clean composition and useful view or pose variation"
+    }
+  ],
+  "late_grid_review_rejects": [
+    {
+      "batch": "b002",
+      "name": "hurt_seed_202",
+      "reason": "late grid review: background text/artifact contaminates clean training background"
+    },
+    {
+      "batch": "b003",
+      "name": "hold2_seed_302",
+      "reason": "late grid review: long outerwear drift changes core jacket/skirt identity"
+    },
+    {
+      "batch": "b003",
+      "name": "climb1_seed_303",
+      "reason": "late grid review: pale/ghosted outfit and weaker identity fidelity"
+    },
+    {
+      "batch": "b003",
+      "name": "hurt_seed_303",
+      "reason": "late grid review: seated pose has shoe/color drift and weaker identity fidelity"
+    }
+  ]
+}

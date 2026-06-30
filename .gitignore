@@ -19,3 +19,7 @@ catalogs/
 plans/
 runs/
 tools/diffusers/
+!assets/lora/
+!assets/lora/a51_lora/
+!assets/lora/a51_lora/**
+!assets/lora/a51_lora/weights/*.safetensors
