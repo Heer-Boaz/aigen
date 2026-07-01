@@ -65,7 +65,6 @@ def plan_keyframe_brief(
         "controls": [control.model_dump(mode="json", exclude_none=True) for control in plan.controls],
         "scoring": plan.scoring.model_dump(mode="json"),
         "polish": plan.polish.model_dump(mode="json"),
-        "lora_captions": plan.lora_captions.model_dump(mode="json"),
     }
 
 
@@ -135,7 +134,7 @@ Available identity-primer views:
 
 Return JSON only. The JSON object must contain exactly these top-level keys:
 identity_details, identity_description, pose_description, platformer_camera_description,
-identity_primer, prompt, canvas, sampling, controls, scoring, polish, lora_captions, rationale.
+identity_primer, prompt, canvas, sampling, controls, scoring, polish, rationale.
 
 Contract details:
 - identity_details: structured visual slots from the identity images. Fill every slot with concrete image evidence. Use "no visible ..." only when that garment class is genuinely absent.
@@ -161,13 +160,10 @@ Contract details:
 - polish.profile must be exactly "kontext-inpaint-local".
 - polish.strength_offsets must be numeric offsets around the selected local inpaint strength, including zero and at least one nearby exploration value.
 - polish.seed_offsets must be integer offsets for local polish variants, not floats.
-- lora_captions: object with view_bank.
-- lora_captions.view_bank is an identity-only training caption for the approved view-bank images. Describe the character, outfit, colors, style and canonical views. Do not include action poses or the trigger token.
 - rationale must be an array of concrete strings.
 
 Keep prompts specific to the approved identity primer and the example action. Use separate CLIP and T5 prompt text. Do not mention internal filenames in prompts.
 Build prompt.clip and prompt.t5 from every identity_details slot plus the example action. Do not omit the waist garment, legwear or footwear.
-Build lora_captions.view_bank from the supplied identity images too; the human should not write this caption manually, and dataset-build must not derive it later from generation prompts.
 Build the prompt text from what you see in the supplied identity images and example sprite. Do not reuse generic placeholder identity text.
 Choose control strengths from the image evidence. Strong pose control is useful when limb placement matters. Clean softedge or canny geometry control is useful when the source sprite silhouette must have structure authority. Do not request dense gray/source-image control for production keyframes. Do not blindly copy fixed numeric examples.
 Never return placeholder strings such as "...".

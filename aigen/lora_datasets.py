@@ -9,18 +9,17 @@ import numpy as np
 from PIL import Image
 from scipy.fft import dctn
 
-from aigen.character_view_models import load_character_view_bank
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import save_contact_sheet
-from aigen.keyframe_brief_models import load_keyframe_brief_plan
 from aigen.lora_dataset_models import (
-    LoraCaptionSourceSpec,
+    CandidateReviewLoraSourceSpec,
+    CanonLoraSourceSpec,
     LoraDatasetError,
     LoraDatasetSpec,
-    ViewBankLoraSourceSpec,
     load_lora_dataset_spec,
 )
 from aigen.manifest_io import (
+    read_json,
     resolve_existing_path,
     resolve_output_path,
     sha256_file,
@@ -32,15 +31,6 @@ from aigen.progress import StatusReporter
 
 PHASH_SIZE = 32
 PHASH_LOW_FREQUENCY_SIZE = 8
-LORA_TRAINING_MINIMUM_SCORES = {
-    "identity_preservation": 8.0,
-    "outfit_preservation": 8.0,
-    "hairstyle_preservation": 8.0,
-    "anatomy_quality": 8.0,
-    "background_quality": 8.0,
-    "style_consistency": 8.0,
-    "overall": 8.0,
-}
 
 
 @dataclass(frozen=True)
@@ -49,16 +39,6 @@ class LoraDatasetCandidate:
     name: str
     image_path: Path
     caption: str
-    tags: list[str]
-    split: str | None
-    source_metadata: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class ApprovedLoraAnchor:
-    name: str
-    image_path: Path
-    caption_parts: list[str]
     tags: list[str]
     split: str | None
     source_metadata: dict[str, Any]
@@ -128,176 +108,98 @@ def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str
     write_json(output_dir / "dataset_report.json", report)
     return report
 
-
-def build_lora_anchor_dataset(
-    *,
-    dataset_id: str,
-    character_id: str,
-    trigger_token: str,
-    anchors: list[ApprovedLoraAnchor],
-    output_dir: Path,
-    overwrite: bool,
-    validation_ratio: float,
-    write_contact_sheet: bool,
-    progress: StatusReporter,
-) -> dict[str, Any]:
-    progress.phase("prepare approved anchors")
-    if output_dir.exists():
-        if not overwrite:
-            raise LoraDatasetError(f"Output exists and overwrite=false: {output_dir.as_posix()}")
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True)
-    candidates = [
-        LoraDatasetCandidate(
-            source_kind="approved_anchor",
-            name=anchor.name,
-            image_path=anchor.image_path,
-            caption=_caption(trigger_token, "", anchor.caption_parts, anchor.tags),
-            tags=anchor.tags,
-            split=anchor.split,
-            source_metadata=anchor.source_metadata,
-        )
-        for anchor in anchors
-    ]
-    if not candidates:
-        raise LoraDatasetError("LoRA smoke dataset has no approved anchors")
-    progress.step("write approved anchor images")
-    records = _write_dataset_images(
-        character_id=character_id,
-        candidates=candidates,
-        output_dir=output_dir,
-        validation_ratio=validation_ratio,
-    )
-    if not records:
-        raise LoraDatasetError("LoRA smoke dataset has no images after deduplication")
-    progress.step("write metadata")
-    _write_metadata(records, output_dir)
-    if write_contact_sheet:
-        progress.phase("write contact sheet")
-        save_contact_sheet(
-            [
-                {
-                    "name": record["name"],
-                    "path": (output_dir / record["file_name"]).as_posix(),
-                }
-                for record in records
-            ],
-            output_dir / "contact_sheet.png",
-            thumb_width=192,
-            max_label_chars=24,
-        )
-    report = {
-        "status": "completed",
-        "kind": "lora-dataset-result",
-        "dataset_id": dataset_id,
-        "dataset_source": "approved_anchors",
-        "character": {"id": character_id, "trigger_token": trigger_token},
-        "source_count": len(anchors),
-        "accepted_image_count": len(records),
-        "split_counts": _split_counts(records),
-        "output": {
-            "directory": output_dir.as_posix(),
-            "images": (output_dir / "images").as_posix(),
-            "metadata": (output_dir / "metadata.jsonl").as_posix(),
-            "captions": (output_dir / "captions.txt").as_posix(),
-            "contact_sheet": (output_dir / "contact_sheet.png").as_posix() if write_contact_sheet else None,
-            "report": (output_dir / "dataset_report.json").as_posix(),
-        },
-        "records": records,
-    }
-    progress.step("write dataset report")
-    write_json(output_dir / "dataset_report.json", report)
-    return report
-
-
 def _dataset_candidates(spec: LoraDatasetSpec, base_dir: Path) -> list[LoraDatasetCandidate]:
     candidates: list[LoraDatasetCandidate] = []
-    caption_cache: dict[Path, Any] = {}
     for source in spec.sources:
-        candidates.extend(_view_bank_candidates(spec, source, base_dir, caption_cache))
+        if source.type == "canon":
+            candidates.extend(_canon_candidates(spec, source, base_dir))
+        else:
+            candidates.extend(_candidate_review_candidates(spec, source, base_dir))
     return candidates
 
 
-def _view_bank_candidates(
+def _canon_candidates(
     spec: LoraDatasetSpec,
-    source: ViewBankLoraSourceSpec,
+    source: CanonLoraSourceSpec,
     base_dir: Path,
-    caption_cache: dict[Path, Any],
 ) -> list[LoraDatasetCandidate]:
-    bank_path = resolve_existing_path(source.path, base_dir)
-    bank = load_character_view_bank(bank_path)
-    if bank.character.id != spec.character.id:
-        raise LoraDatasetError(f"View bank character {bank.character.id} does not match {spec.character.id}")
-    source_caption, caption_metadata = _source_caption(source.caption_source, base_dir, caption_cache)
+    canon_path = resolve_existing_path(source.path, base_dir)
+    manifest_path = canon_path / "canon_manifest.json"
+    manifest = read_json(manifest_path, label="LoRA canon manifest")
+    if manifest.get("kind") != "lora-canon":
+        raise LoraDatasetError(f"Not a LoRA canon manifest: {manifest_path.as_posix()}")
+    if manifest.get("status") != "active":
+        raise LoraDatasetError(f"LoRA canon is not active: {manifest_path.as_posix()}")
+    character = manifest["character"]
+    if character["id"] != spec.character.id:
+        raise LoraDatasetError(f"Canon character {character['id']} does not match {spec.character.id}")
+    if character["trigger_token"] != spec.character.trigger_token:
+        raise LoraDatasetError("Canon trigger token does not match dataset character trigger token")
+
+    by_name = {item["name"]: item for item in manifest["images"]}
     candidates = []
-    for view_name in source.views:
-        if view_name not in bank.views:
-            raise LoraDatasetError(f"View bank has no accepted view: {view_name}")
-        entry = bank.views[view_name]
-        training_validation = _lora_training_validation(entry, view_name)
-        manual_acceptance = entry.acceptance.manual if entry.acceptance else []
-        caption = _caption(
-            spec.character.trigger_token,
-            source_caption,
-            [
-                _words(entry.view.name),
-                _words(entry.view.pose),
-                _words(entry.view.camera),
-                *manual_acceptance,
-            ],
-            source.tags,
-        )
+    for image_name in source.images:
+        if image_name not in by_name:
+            raise LoraDatasetError(f"Canon has no image: {image_name}")
+        item = by_name[image_name]
+        image_path = resolve_existing_path(item["file_name"], canon_path)
         candidates.append(
             LoraDatasetCandidate(
-                source_kind="view_bank",
-                name=view_name,
-                image_path=Path(entry.image.path),
-                caption=caption,
+                source_kind="canon",
+                name=image_name,
+                image_path=image_path,
+                caption=_caption_with_tags(item["prompt"], source.tags),
                 tags=source.tags,
                 split=source.split,
                 source_metadata={
-                    "view": entry.view.model_dump(mode="json"),
-                    "accepted_candidate": entry.accepted_candidate,
-                    "accepted_seed": entry.accepted_seed,
-                    "bank": bank_path.as_posix(),
-                    "caption_source": caption_metadata,
-                    "training_validation": training_validation,
+                    "canon": canon_path.as_posix(),
+                    "approval": item["approval"],
+                    "source_sha256": item["source_sha256"],
+                    "quality_contract": manifest["quality_contract"],
                 },
             )
         )
     return candidates
 
 
-def _lora_training_validation(entry: Any, view_name: str) -> dict[str, Any]:
-    validation = entry.training_validation
-    if validation is None:
-        raise LoraDatasetError(f"View {view_name} has no model-backed LoRA training validation")
-    payload = validation.model_dump(mode="json")
-    if not payload["usable_for_lora_training"]:
-        raise LoraDatasetError(f"View {view_name} is not usable for LoRA training")
-    hard_rejects = payload["hard_rejects"]
-    if any(bool(rejected) for rejected in hard_rejects.values()):
-        raise LoraDatasetError(f"View {view_name} has LoRA training hard rejects")
-    scores = payload["scores"]
-    low_scores = [
-        name for name, minimum in LORA_TRAINING_MINIMUM_SCORES.items() if float(scores[name]) < minimum
-    ]
-    if low_scores:
-        raise LoraDatasetError(f"View {view_name} has LoRA training scores below threshold: {', '.join(low_scores)}")
-    return payload
-
-
-def _source_caption(
-    source: LoraCaptionSourceSpec,
+def _candidate_review_candidates(
+    spec: LoraDatasetSpec,
+    source: CandidateReviewLoraSourceSpec,
     base_dir: Path,
-    caption_cache: dict[Path, Any],
-) -> tuple[str, dict[str, str]]:
-    plan_path = resolve_existing_path(source.plan, base_dir)
-    if plan_path not in caption_cache:
-        caption_cache[plan_path] = load_keyframe_brief_plan(plan_path).lora_captions
-    caption = getattr(caption_cache[plan_path], source.field)
-    return caption, {"plan": plan_path.as_posix(), "field": source.field}
+) -> list[LoraDatasetCandidate]:
+    accepted_path = resolve_existing_path(source.path, base_dir)
+    if accepted_path.is_dir():
+        accepted_path = resolve_existing_path("accepted.json", accepted_path)
+    payload = read_json(accepted_path, label="LoRA candidate accepted manifest")
+    if payload.get("kind") != "lora-candidate-accepted":
+        raise LoraDatasetError(f"Not a LoRA candidate accepted manifest: {accepted_path.as_posix()}")
+    if payload.get("status") != "completed":
+        raise LoraDatasetError(f"LoRA candidate review is not completed: {accepted_path.as_posix()}")
 
+    candidates = []
+    for item in payload["items"]:
+        approval = item.get("approval", {})
+        if approval.get("mode") != "human_approved_lora_candidate":
+            raise LoraDatasetError(f"Candidate {item['name']} has no human approval")
+        image_path = resolve_existing_path(item["image"]["path"], accepted_path.parent)
+        candidates.append(
+            LoraDatasetCandidate(
+                source_kind="candidate_review",
+                name=item["name"],
+                image_path=image_path,
+                caption=_caption_with_tags(item["training_caption"], source.tags),
+                tags=source.tags,
+                split=source.split,
+                source_metadata={
+                    "accepted_manifest": accepted_path.as_posix(),
+                    "candidate": item["candidate"],
+                    "seed": item["seed"],
+                    "approval": approval,
+                    "evidence": item.get("evidence", {}),
+                },
+            )
+        )
+    return candidates
 
 def _write_dataset_images(
     *,
@@ -362,8 +264,9 @@ def _assigned_splits(candidates: list[LoraDatasetCandidate], validation_ratio: f
 def _save_training_image(source_path: Path, output_path: Path) -> None:
     with Image.open(source_path) as image:
         rgba = image.convert("RGBA")
-        background = Image.new("RGBA", rgba.size, "white")
-        background.alpha_composite(rgba)
+        side = max(rgba.size)
+        background = Image.new("RGBA", (side, side), "white")
+        background.alpha_composite(rgba, ((side - rgba.width) // 2, (side - rgba.height) // 2))
         background.convert("RGB").save(output_path)
 
 
@@ -377,23 +280,16 @@ def _write_metadata(records: list[dict[str, Any]], output_dir: Path) -> None:
             captions.write(f"{record['file_name']}\t{record['prompt']}\n")
 
 
-def _caption(trigger_token: str, primary: str, parts: list[str], tags: list[str]) -> str:
-    values = [trigger_token]
-    values.append(primary)
-    values.extend(parts)
-    values.extend(tags)
-    return ", ".join(_dedupe_caption_parts(values))
-
-
-def _dedupe_caption_parts(values: list[str]) -> list[str]:
-    result = []
-    seen = set()
-    for value in values:
-        cleaned = " ".join(value.replace("_", " ").replace("-", " ").split())
-        if cleaned and cleaned.lower() not in seen:
-            result.append(cleaned)
-            seen.add(cleaned.lower())
-    return result
+def _caption_with_tags(prompt: str, tags: list[str]) -> str:
+    parts = [prompt]
+    seen = {prompt.strip().lower()}
+    for tag in tags:
+        cleaned = " ".join(tag.split())
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            parts.append(cleaned)
+            seen.add(key)
+    return ", ".join(parts)
 
 
 def _perceptual_hash(path: Path) -> str:
@@ -415,10 +311,6 @@ def _split_counts(records: list[dict[str, Any]]) -> dict[str, int]:
     for record in records:
         counts[record["split"]] += 1
     return counts
-
-
-def _words(value: str) -> str:
-    return value.replace("_", " ").replace("-", " ")
 
 
 def _slug(value: str) -> str:

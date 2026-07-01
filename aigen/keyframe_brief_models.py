@@ -167,18 +167,6 @@ class BriefPolishPlanSpec(StrictModel):
     seed_offsets: list[int] = Field(min_length=1)
 
 
-class BriefLoraCaptionPlanSpec(StrictModel):
-    view_bank: str = Field(min_length=1)
-
-    @field_validator("view_bank")
-    @classmethod
-    def concrete_caption(cls, value: str) -> str:
-        placeholders = {"", ".", "...", "caption", "training caption", "lora caption"}
-        if value.strip().lower() in placeholders:
-            raise ValueError("LoRA training captions must be concrete visual descriptions")
-        return value
-
-
 class KeyframeBriefPlanSpec(StrictModel):
     schema_path: str = Field(alias="$schema")
     kind: Literal["keyframe-brief-plan"]
@@ -197,7 +185,6 @@ class KeyframeBriefPlanSpec(StrictModel):
     controls: list[BriefControlPlanSpec]
     scoring: BriefScoringPlanSpec
     polish: BriefPolishPlanSpec
-    lora_captions: BriefLoraCaptionPlanSpec
     rationale: list[str]
 
     @model_validator(mode="after")

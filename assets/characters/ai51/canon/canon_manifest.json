@@ -1,0 +1,81 @@
+{
+  "character": {
+    "id": "ai51",
+    "identity_prompt": "1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts",
+    "trigger_token": "ai51char"
+  },
+  "images": [
+    {
+      "approval": {
+        "approved_by": "boaz",
+        "mode": "human_approved_canon"
+      },
+      "caption_file": "images/front.txt",
+      "file_name": "images/front.png",
+      "image": {
+        "height": 2048,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/ai51/canon/images/front.png",
+        "sha256": "67cffe122ea90c15d6004b7fe5d7298ee313ec043a43ae0a73e7f6b6601b2b77",
+        "width": 1024
+      },
+      "name": "front",
+      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, front",
+      "source_path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
+      "source_sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f"
+    },
+    {
+      "approval": {
+        "approved_by": "boaz",
+        "mode": "human_approved_canon"
+      },
+      "caption_file": "images/left_profile.txt",
+      "file_name": "images/left_profile.png",
+      "image": {
+        "height": 768,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/ai51/canon/images/left_profile.png",
+        "sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
+        "width": 512
+      },
+      "name": "left_profile",
+      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, left profile",
+      "source_path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
+      "source_sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c"
+    }
+  ],
+  "kind": "lora-canon",
+  "output": {
+    "contact_sheet": "/home/boaz/aigen/assets/characters/ai51/canon/contact_sheet.png",
+    "directory": "/home/boaz/aigen/assets/characters/ai51/canon",
+    "manifest": "/home/boaz/aigen/assets/characters/ai51/canon/canon_manifest.json"
+  },
+  "quality_contract": {
+    "acceptance_rule": "Only canon-worthy images are usable for identity LoRA training.",
+    "crop_regions": [
+      "full",
+      "face",
+      "torso",
+      "waist_lower_body",
+      "legs_feet",
+      "full_silhouette"
+    ],
+    "hard_rejects": [
+      "wrong face",
+      "wrong hair length or color",
+      "wrong outfit",
+      "missing required neckwear or accessory from the identity prompt",
+      "missing required waist or lower-body garment from the identity prompt",
+      "missing required belt or waist detail from the identity prompt",
+      "missing required legwear from the identity prompt",
+      "missing required footwear from the identity prompt",
+      "deformed body",
+      "broken hands or feet",
+      "bad crop",
+      "dirty or distracting background",
+      "style drift",
+      "view label mismatch"
+    ]
+  },
+  "status": "active"
+}

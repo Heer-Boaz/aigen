@@ -177,6 +177,121 @@ the final selector for subtle geometry.
 Human review can still accept a structure winner explicitly by writing selection
 metadata for later scorer fixtures.
 
+## LoRA Canon
+
+LoRA training starts from canon-worthy identity images, not from broad generated
+keyframe pools. Every canon image must be human-approved as the same character
+with the correct face, hair, outfit, proportions, style and background quality.
+
+```bash
+.venv/bin/python -m aigen.cli lora canon-init \
+  --character-id ai51 \
+  --trigger-token ai51char \
+  --identity-prompt "1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts" \
+  --anchor root=assets/characters/ai51/source.png
+
+.venv/bin/python -m aigen.cli lora dataset-audit assets/characters/ai51/canon
+```
+
+Loose image folders audited with `dataset-audit` are marked `needs_human_review`;
+only `lora-canon` manifests created from explicit anchors are accepted as canon.
+
+## LoRA Candidate Factory
+
+The production LoRA path plans many candidates, filters hard and trains only on
+human-approved canon-worthy images. Candidate intent is not hardcoded in Python:
+a local visual planner writes the `lora-candidate-brief` from approved canon
+images. The brief owns candidate names, views, poses, prompts, identity primers,
+seed budget and output directory; `candidate-plan` materializes it into exact
+generation prompts, training captions, seeds and output paths.
+
+```bash
+.venv/bin/python -m aigen.cli lora candidate-brief-plan assets/characters/ai51/canon \
+  --output jobs/ai51/lora_candidates.json \
+  --candidate-output-dir runs/lora_candidates/ai51_identity
+```
+
+```json
+{
+  "$schema": "schemas/lora-candidate-brief.schema.json",
+  "kind": "lora-candidate-brief",
+  "id": "ai51.identity.candidates",
+  "character": {
+    "canon": "assets/characters/ai51/canon"
+  },
+  "generation": {
+    "width": 576,
+    "height": 864,
+    "steps": 24,
+    "seed_start": 1,
+    "seeds_per_candidate": 256
+  },
+  "candidates": [
+    {
+      "name": "front_neutral",
+      "view": "front",
+      "pose": "neutral standing",
+      "identity_primer": "front",
+      "prompt": {
+        "positive": "AI51 anime girl, leather skirt with belt, front view, neutral standing pose, full body, clean anime lineart, clean neutral background"
+      }
+    }
+  ],
+  "output": {
+    "directory": "runs/lora_candidates/ai51_identity",
+    "overwrite": true
+  }
+}
+```
+
+```bash
+.venv/bin/python -m aigen.cli lora candidate-plan jobs/ai51/lora_candidates.json
+
+.venv/bin/python -m aigen.cli lora candidate-run runs/lora_candidates/ai51_identity
+
+.venv/bin/python -m aigen.cli lora candidate-gate runs/lora_candidates/ai51_identity
+
+.venv/bin/python -m aigen.cli lora candidate-review runs/lora_candidates/ai51_identity \
+  --accept front_neutral_seed_0044 \
+  --accept left_profile_neutral_seed_0102 \
+  --approved-by boaz
+```
+
+`candidate-plan` writes generation prompts without the LoRA trigger token,
+training captions with the trigger token, seeds and exact output paths.
+`candidate-run` is the only GPU image executor for those planned candidates and
+uses only `generation_prompt`. Dataset build uses only `training_caption` after
+human approval.
+`candidate-gate` then writes full sheets and crop evidence for face, torso,
+waist/lower body, legs/feet and silhouette. `candidate-review` writes
+`review/accepted.json`, `review/rejected_human.json`, `review/quota_report.json`
+and an accepted contact sheet. LoRA dataset specs use canon manifests and
+human-approved candidate review manifests:
+
+```json
+{
+  "$schema": "schemas/lora-dataset.schema.json",
+  "kind": "lora-dataset",
+  "id": "ai51_identity_from_accepted_candidates",
+  "character": {
+    "id": "ai51",
+    "trigger_token": "ai51char"
+  },
+  "sources": [
+    {
+      "type": "candidate_review",
+      "path": "runs/lora_candidates/ai51_identity/review/accepted.json"
+    }
+  ],
+  "output": {
+    "directory": "runs/lora/ai51_identity",
+    "overwrite": true,
+    "validation_ratio": 0.1,
+    "save_contact_sheet": true
+  }
+}
+```
+
 ## Local Polish
 
 Polish is a separate local inpaint phase. The static plan resolves paths without

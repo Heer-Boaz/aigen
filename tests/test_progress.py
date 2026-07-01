@@ -48,7 +48,7 @@ class ProgressTests(unittest.TestCase):
         stream = io.StringIO()
 
         status = RuntimeStatus.terminal(
-            label="lora smoke",
+            label="lora train",
             interval_seconds=60.0,
             stream=stream,
             telemetry=FakeTelemetrySampler(),
@@ -61,7 +61,7 @@ class ProgressTests(unittest.TestCase):
             status.finish("completed")
 
         output = stream.getvalue()
-        self.assertIn("lora smoke", output)
+        self.assertIn("lora train", output)
         self.assertIn("3/3", output)
         self.assertIn("[==================]", output)
 

@@ -114,6 +114,7 @@
     }
   },
   "quality_notes": [
+    "Rejected after visual review: this package is forensic evidence only, not a valid LoRA training dataset.",
     "The LoRA training completed successfully on the local 16 GB GPU profile.",
     "Final weights at strength 1.0 overfit and are kept only as evidence.",
     "Final weights at strength 0.4 and checkpoint 600 at strength 0.5 were the useful quality-check ranges.",
@@ -976,5 +977,12 @@
       "bytes": 9390344,
       "sha256": "9b3e99e97840f61f7c50d78fbf3543ee53dbb996d2aad9fe5987d1091704fd35"
     }
+  },
+  "status": {
+    "state": "rejected_dataset",
+    "usable_for_training": false,
+    "usable_for_evaluation": false,
+    "reason": "Human review found the selected images inconsistent, deformed and not canon-worthy enough for an AI51 identity LoRA.",
+    "replacement_workflow": "Use assets/characters/ai51/canon via aigen lora canon-init and dataset-audit before training."
   }
 }

@@ -1,0 +1,129 @@
+{
+  "$schema": "../../schemas/lora-candidate-brief.schema.json",
+  "candidates": [
+    {
+      "identity_primer": "front",
+      "name": "front_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "front view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "left_profile_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "left profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "right_profile_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "right profile view"
+    },
+    {
+      "identity_primer": "front",
+      "name": "three_quarter_front_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter front view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "three_quarter_left_profile_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter left profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "three_quarter_right_profile_neutral_standing",
+      "pose": "neutral standing pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter right profile view"
+    },
+    {
+      "identity_primer": "front",
+      "name": "front_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "front view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "left_profile_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "left profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "right_profile_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "right profile view"
+    },
+    {
+      "identity_primer": "front",
+      "name": "three_quarter_front_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter front view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "three_quarter_left_profile_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter left profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "three_quarter_right_profile_mild_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+      },
+      "view": "three-quarter right profile view"
+    }
+  ],
+  "character": {
+    "canon": "../../assets/characters/ai51/canon"
+  },
+  "generation": {
+    "height": 864,
+    "seed_start": 1,
+    "seeds_per_candidate": 64,
+    "steps": 24,
+    "width": 576
+  },
+  "id": "ai51.lora.candidates",
+  "kind": "lora-candidate-brief",
+  "output": {
+    "directory": "../../runs/lora_candidates/ai51_identity",
+    "overwrite": true
+  }
+}

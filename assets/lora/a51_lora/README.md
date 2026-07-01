@@ -1,6 +1,10 @@
 # a51_lora
 
-Portable AI51 LoRA package for the repo.
+Rejected AI51 LoRA package kept for forensics.
+
+This is not a valid training dataset and not a production LoRA. Human review
+found the selected image set inconsistent enough to invalidate the LoRA test as
+evidence against LoRA itself.
 
 Contents:
 
@@ -12,3 +16,6 @@ Contents:
 - `quality/`: small quality-check samples for the packaged weights.
 
 Use trigger token `ai51char` in prompts. The useful tested ranges were final weights at LoRA strength `0.4` and checkpoint 600 at strength `0.5`; full strength `1.0` is kept only as evidence because it overfits.
+
+Future LoRA work should start from `aigen lora canon-init` and
+`aigen lora dataset-audit`, not from this image pool.

@@ -4,12 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from aigen import keyframe_brief_planner
-from aigen.character_view_models import load_character_view_bank
 from aigen.keyframe_examples import KeyframeExampleExtractionConfig, extract_keyframe_example
 from aigen.keyframe_judge import judge_keyframe_run
 from aigen.keyframe_brief_models import (
     BriefControlPlanSpec,
-    KeyframeBriefError,
     KeyframeBriefPlanSpec,
     KeyframeBriefSpec,
     load_keyframe_brief,
@@ -36,7 +34,6 @@ from aigen.keyframe_polish import (
     select_keyframe_polish,
 )
 from aigen.keyframe_score import KeyframeScoreConfig, score_keyframe_run, select_scored_keyframe_run
-from aigen.lora_dataset_models import LoraDatasetSpec
 from aigen.manifest_io import (
     relative_path,
     resolve_existing_path,
@@ -47,63 +44,6 @@ from aigen.manifest_io import (
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import keyframe_profile_for_name, keyframe_refine_profile_for_name
 from aigen.vlm_qwen import QwenVlmConfig
-
-
-def write_lora_dataset_spec_from_brief(
-    brief_path: Path,
-    *,
-    trigger_token: str,
-    spec_path: Path,
-    dataset_dir: Path,
-    project_root: Path,
-    views: list[str] | None,
-    validation_ratio: float,
-    overwrite: bool,
-    progress: StatusReporter,
-) -> dict[str, Any]:
-    progress.phase("load brief plan")
-    spec = load_keyframe_brief(brief_path)
-    plan_path = resolve_existing_path(spec.output.plan_path, brief_path.parent)
-    plan = load_keyframe_brief_plan(plan_path)
-    output_spec_path = resolve_output_path(spec_path, brief_path.parent)
-    view_bank_path = resolve_existing_path(spec.character.view_bank.path, brief_path.parent)
-    accepted_views = _accepted_view_names(view_bank_path)
-    selected_views = _selected_view_names(accepted_views, views)
-    output_spec = LoraDatasetSpec(
-        **{
-            "$schema": schema_reference(output_spec_path, project_root / "schemas/lora-dataset.schema.json"),
-            "kind": "lora-dataset",
-            "id": f"{spec.id}.lora-dataset",
-            "character": {"id": spec.character.id, "trigger_token": trigger_token},
-            "sources": [
-                {
-                    "type": "view_bank",
-                    "path": relative_path(view_bank_path, output_spec_path.parent),
-                    "views": selected_views,
-                    "caption_source": {
-                        "plan": relative_path(plan_path, output_spec_path.parent),
-                        "field": "view_bank",
-                    },
-                },
-            ],
-            "output": {
-                "directory": relative_path(resolve_output_path(dataset_dir, brief_path.parent), output_spec_path.parent),
-                "overwrite": overwrite,
-                "validation_ratio": validation_ratio,
-                "save_contact_sheet": True,
-            },
-        }
-    )
-    progress.step("write LoRA dataset spec")
-    write_json(output_spec_path, output_spec.model_dump(mode="json", by_alias=True, exclude_none=True))
-    return {
-        "status": "written",
-        "brief_id": spec.id,
-        "plan_path": plan_path.as_posix(),
-        "dataset_spec": output_spec_path.as_posix(),
-        "caption": plan.lora_captions.view_bank,
-        "views": selected_views,
-    }
 
 
 def materialize_keyframe_brief(
@@ -386,17 +326,3 @@ def _asset_path_spec(extracted_assets: dict[str, Any], name: str, base_dir: Path
 
 def _seed_name(seed: int) -> str:
     return f"seed_{seed:03d}"
-
-
-def _accepted_view_names(view_bank_path: Path) -> list[str]:
-    bank = load_character_view_bank(view_bank_path)
-    return list(bank.views.keys())
-
-
-def _selected_view_names(accepted_views: list[str], requested_views: list[str] | None) -> list[str]:
-    if requested_views is None:
-        return accepted_views
-    missing = [view for view in requested_views if view not in accepted_views]
-    if missing:
-        raise KeyframeBriefError(f"LoRA dataset view is not accepted in the view bank: {', '.join(missing)}")
-    return requested_views

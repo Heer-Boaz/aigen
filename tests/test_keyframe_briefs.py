@@ -16,7 +16,6 @@ from aigen.keyframe_brief_planner import plan_keyframe_brief
 from aigen.keyframe_briefs import (
     execute_keyframe_brief,
     materialize_keyframe_brief,
-    write_lora_dataset_spec_from_brief,
 )
 from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
@@ -131,12 +130,6 @@ class FakeBriefPlanner:
                     "strength_offsets": [-0.06, 0.0, 0.06],
                     "seed_offsets": [0, 1],
                 },
-                "lora_captions": {
-                    "view_bank": (
-                        "AI51 anime girl character sheet, short pink bob, glossy brown jacket, white shirt, "
-                        "blue tie, brown leather skirt, blue thigh-high socks and brown boots"
-                    )
-                },
                 "rationale": ["left_profile primer reduces camera-yaw negotiation"],
             }
         )
@@ -240,7 +233,6 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(plan["polish"]["strength_offsets"], [-0.06, 0.0, 0.06])
             self.assertNotIn("policy", plan["polish"])
             self.assertEqual(plan["identity_details"]["waist_garment"], "brown leather skirt")
-            self.assertIn("short pink bob", plan["lora_captions"]["view_bank"])
             self.assertIn("Platformer side-view animation may cheat", planner.prompt)
             self.assertIn("hair, clothing, colors and style", planner.prompt)
             self.assertIn("Choose control strengths from the image evidence", planner.prompt)
@@ -251,7 +243,6 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertIn("Describe the character's lower body in separate parts", planner.prompt)
             self.assertIn("This is a full-body gameplay keyframe", planner.prompt)
             self.assertIn("Build prompt.clip and prompt.t5 from every identity_details slot", planner.prompt)
-            self.assertIn("Build lora_captions.view_bank from the supplied identity images", planner.prompt)
             self.assertIn("The example sprite may depict a different character", planner.prompt)
             self.assertNotIn('"scale": 0.72', planner.prompt)
             self.assertNotIn('"scale": 0.25', planner.prompt)
@@ -299,38 +290,6 @@ class KeyframeBriefTests(unittest.TestCase):
             self.assertEqual(job["variants"][0], {"name": "seed_060", "seed": 60})
             self.assertEqual(job["variants"][-1], {"name": "seed_063", "seed": 63})
             self.assertTrue((root / "assets" / "extracted" / "platform_punch_pose.png").exists())
-
-    def test_writes_lora_dataset_spec_from_model_planned_captions(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            brief_path, left_profile = write_brief_fixture(root)
-            planner = FakeBriefPlanner(left_profile)
-            with patch("aigen.keyframe_brief_planner.QwenVlm", return_value=planner):
-                plan_keyframe_brief(brief_path, judge_config(), project_root=Path.cwd())
-
-            result = write_lora_dataset_spec_from_brief(
-                brief_path,
-                trigger_token="ai51char",
-                spec_path=Path("../datasets/ai51_lora.json"),
-                dataset_dir=Path("../datasets/ai51_lora"),
-                project_root=Path.cwd(),
-                views=None,
-                validation_ratio=0.2,
-                overwrite=True,
-                progress=SILENT_STATUS,
-            )
-
-            dataset_spec = json.loads((root / "datasets" / "ai51_lora.json").read_text(encoding="utf-8"))
-            self.assertEqual(result["status"], "written")
-            self.assertEqual(dataset_spec["kind"], "lora-dataset")
-            self.assertEqual(dataset_spec["character"]["trigger_token"], "ai51char")
-            self.assertEqual(dataset_spec["sources"][0]["type"], "view_bank")
-            self.assertEqual(dataset_spec["sources"][0]["views"], ["front", "left_profile"])
-            self.assertEqual(dataset_spec["sources"][0]["caption_source"], {"plan": "../plans/punch_plan.json", "field": "view_bank"})
-            self.assertEqual(len(dataset_spec["sources"]), 1)
-            self.assertIn("short pink bob", result["caption"])
-            self.assertEqual(dataset_spec["output"]["validation_ratio"], 0.2)
-            self.assertEqual(dataset_spec["output"]["save_contact_sheet"], True)
 
     def test_invalid_generated_plan_keeps_raw_response(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

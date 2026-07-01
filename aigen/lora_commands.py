@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.lora_control_audit import (
     DEFAULT_CONTROLNET_MODEL as DEFAULT_CONTROL_AUDIT_CONTROLNET_MODEL,
     DEFAULT_FLUX_BASE_MODEL as DEFAULT_CONTROL_AUDIT_BASE_MODEL,
@@ -14,9 +15,23 @@ from aigen.lora_control_audit import (
     build_lora_control_audit_plan,
     run_lora_control_audit,
 )
+from aigen.lora_candidates import (
+    LoraCandidateError,
+    gate_lora_candidates,
+    plan_lora_candidates,
+    run_lora_candidate_plan,
+    review_lora_candidates,
+)
+from aigen.lora_candidate_models import LoraCandidateBriefError, lora_candidate_brief_schema
+from aigen.lora_candidate_planner import LoraCandidateBriefPlanConfig, plan_lora_candidate_brief
+from aigen.lora_candidate_profiles import (
+    LORA_CANDIDATE_PROFILE,
+    LoraCandidateProfileError,
+    lora_candidate_profile_for_name,
+)
+from aigen.lora_canon import LoraCanonError, audit_lora_dataset_source, init_lora_canon
 from aigen.lora_dataset_models import LoraDatasetError, lora_dataset_schema
 from aigen.lora_datasets import build_lora_dataset
-from aigen.lora_smoke import LoraSmokeError, run_lora_smoke
 from aigen.lora_training import (
     DEFAULT_BASE_MODEL,
     DEFAULT_TRAINER_SCRIPT,
@@ -28,6 +43,8 @@ from aigen.lora_training import (
 )
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
+from aigen.runtime_profiles import PROJECT_ROOT
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_lora_commands(subparsers: Any) -> None:
@@ -37,35 +54,105 @@ def add_lora_commands(subparsers: Any) -> None:
     schema = lora_subparsers.add_parser("dataset-schema", help="Write the LoRA dataset JSON schema")
     schema.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    candidate_brief_schema = lora_subparsers.add_parser(
+        "candidate-brief-schema",
+        help="Write the LoRA candidate brief JSON schema",
+    )
+    candidate_brief_schema.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_brief_plan = lora_subparsers.add_parser(
+        "candidate-brief-plan",
+        help="Use the local VLM to write a LoRA candidate brief from approved canon images",
+    )
+    candidate_brief_plan.add_argument("canon_dir", type=Path, help="Approved LoRA canon directory")
+    candidate_brief_plan.add_argument("--output", type=Path, required=True, help="Generated candidate brief JSON")
+    candidate_brief_plan.add_argument(
+        "--candidate-output-dir",
+        type=Path,
+        required=True,
+        help="Directory where candidate-plan should write the generated batch",
+    )
+    candidate_brief_plan.add_argument("--width", type=_positive_int, default=576)
+    candidate_brief_plan.add_argument("--height", type=_positive_int, default=864)
+    candidate_brief_plan.add_argument("--steps", type=_positive_int, default=24)
+    candidate_brief_plan.add_argument("--seed-start", type=_non_negative_int, default=1)
+    candidate_brief_plan.add_argument("--seeds-per-candidate", type=_positive_int, default=256)
+    candidate_brief_plan.add_argument("--candidate-count", type=_positive_int, default=12)
+    add_judge_runtime_args(candidate_brief_plan, role="candidate planner", max_new_tokens=1800)
+    candidate_brief_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     dataset_build = lora_subparsers.add_parser("dataset-build", help="Build a curated LoRA training dataset")
     dataset_build.add_argument("spec", type=Path, help="LoRA dataset spec JSON")
     dataset_build.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    smoke = lora_subparsers.add_parser(
-        "smoke",
-        help="Build an anchor-approved identity LoRA smoke dataset and local train plan",
-    )
-    smoke.add_argument("--id", required=True, help="Smoke run id")
-    smoke.add_argument("--character-id", required=True, help="Character id")
-    smoke.add_argument("--trigger-token", required=True, help="LoRA trigger token")
-    smoke.add_argument(
+    canon_init = lora_subparsers.add_parser("canon-init", help="Create a human-approved LoRA canon folder")
+    canon_init.add_argument("--character-id", required=True, help="Character id")
+    canon_init.add_argument("--trigger-token", required=True, help="LoRA trigger token")
+    canon_init.add_argument("--identity-prompt", required=True, help="Identity caption without the trigger token")
+    canon_init.add_argument(
         "--anchor",
         action="append",
         required=True,
         metavar="NAME=PATH",
-        help="Human-approved anchor image; repeat for multiple anchors",
+        help="Human-approved canonical image; repeat for multiple anchors",
     )
-    smoke.add_argument(
-        "--identity-caption",
+    canon_init.add_argument("--approved-by", default="user", help="Approver recorded in the canon manifest")
+    canon_init.add_argument("--output-dir", type=Path, help="Canon output directory")
+    canon_init.add_argument("--overwrite", action="store_true", help="Replace an existing canon output directory")
+    canon_init.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    dataset_audit = lora_subparsers.add_parser(
+        "dataset-audit",
+        help="Build contact sheets and audit manifests for a canon folder or candidate pool",
+    )
+    dataset_audit.add_argument("source_dir", type=Path, help="Canon folder or candidate image directory")
+    dataset_audit.add_argument("--output-dir", type=Path, help="Audit output directory")
+    dataset_audit.add_argument("--overwrite", action="store_true", help="Replace an existing audit output directory")
+    dataset_audit.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_plan = lora_subparsers.add_parser(
+        "candidate-plan",
+        help="Plan a high-volume strict-filter LoRA candidate batch from a candidate brief",
+    )
+    candidate_plan.add_argument("brief", type=Path, help="LoRA candidate brief JSON")
+    candidate_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_run = lora_subparsers.add_parser(
+        "candidate-run",
+        help="Generate images for a LoRA candidate batch plan",
+    )
+    candidate_run.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
+    candidate_run.add_argument("--profile", default=LORA_CANDIDATE_PROFILE.name, help="LoRA candidate generation profile")
+    candidate_run.add_argument("--guidance-scale", type=_positive_float, default=2.5)
+    candidate_run.add_argument("--max-sequence-length", type=_positive_int, default=128)
+    candidate_run.add_argument("--overwrite", action="store_true", help="Replace existing candidate images")
+    candidate_run.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_gate = lora_subparsers.add_parser(
+        "candidate-gate",
+        help="Build LoRA candidate crop evidence and deterministic hard rejects",
+    )
+    candidate_gate.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
+    candidate_gate.add_argument("--output-dir", type=Path, help="Gate output directory")
+    candidate_gate.add_argument("--overwrite", action="store_true", help="Replace an existing gate directory")
+    candidate_gate.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_review = lora_subparsers.add_parser(
+        "candidate-review",
+        help="Write human-approved LoRA candidates and quota report",
+    )
+    candidate_review.add_argument("candidate_dir", type=Path, help="Candidate batch directory with gate/shortlist.json")
+    candidate_review.add_argument(
+        "--accept",
+        action="append",
         required=True,
-        help="Identity-only caption template; do not include action pose text",
+        metavar="NAME",
+        help="Candidate name approved for LoRA training; repeat for multiple accepted candidates",
     )
-    smoke.add_argument("--tag", action="append", default=[], help="Additional caption tag; repeat as needed")
-    smoke.add_argument("--approved-by", default="user", help="Approver recorded in the smoke manifest")
-    smoke.add_argument("--output-dir", required=True, type=Path, help="Smoke output directory")
-    smoke.add_argument("--overwrite", action="store_true", help="Replace an existing smoke output directory")
-    _add_train_runtime_args(smoke)
-    smoke.add_argument("--compact", action="store_true", help="Write compact JSON")
+    candidate_review.add_argument("--approved-by", default="user", help="Approver recorded in accepted.json")
+    candidate_review.add_argument("--output-dir", type=Path, help="Review output directory")
+    candidate_review.add_argument("--overwrite", action="store_true", help="Replace an existing review directory")
+    candidate_review.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     training_preflight = lora_subparsers.add_parser(
         "training-preflight",
@@ -211,6 +298,28 @@ def run_lora_command(
         if args.lora_command == "dataset-schema":
             dump_json(stdout, lora_dataset_schema(), pretty=not args.compact)
             return 0
+        if args.lora_command == "candidate-brief-schema":
+            dump_json(stdout, lora_candidate_brief_schema(), pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-brief-plan":
+            payload = plan_lora_candidate_brief(
+                args.canon_dir,
+                judge_config_from_args(args),
+                output_path=args.output,
+                plan_config=LoraCandidateBriefPlanConfig(
+                    width=args.width,
+                    height=args.height,
+                    steps=args.steps,
+                    seed_start=args.seed_start,
+                    seeds_per_candidate=args.seeds_per_candidate,
+                    candidate_count=args.candidate_count,
+                    candidate_output_dir=args.candidate_output_dir,
+                ),
+                project_root=PROJECT_ROOT,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
         if args.lora_command == "dataset-build":
             progress.phase("build dataset")
             dump_json(
@@ -219,23 +328,67 @@ def run_lora_command(
                 pretty=not args.compact,
             )
             return 0
-        if args.lora_command == "smoke":
-            payload = run_lora_smoke(
-                smoke_id=args.id,
+        if args.lora_command == "canon-init":
+            payload = init_lora_canon(
                 character_id=args.character_id,
                 trigger_token=args.trigger_token,
+                identity_prompt=args.identity_prompt,
                 anchor_specs=args.anchor,
-                identity_caption=args.identity_caption,
-                tags=args.tag,
+                output_dir=args.output_dir,
+                approved_by=args.approved_by,
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "dataset-audit":
+            payload = audit_lora_dataset_source(
+                args.source_dir,
+                output_dir=args.output_dir,
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-plan":
+            payload = plan_lora_candidates(
+                brief_path=args.brief,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-run":
+            payload = run_lora_candidate_plan(
+                args.candidate_dir,
+                profile=lora_candidate_profile_for_name(args.profile),
+                guidance_scale=args.guidance_scale,
+                max_sequence_length=args.max_sequence_length,
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-gate":
+            payload = gate_lora_candidates(
+                args.candidate_dir,
+                output_dir=args.output_dir,
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-review":
+            payload = review_lora_candidates(
+                args.candidate_dir,
+                accepted_names=args.accept,
                 approved_by=args.approved_by,
                 output_dir=args.output_dir,
                 overwrite=args.overwrite,
-                trainer_script=args.trainer_script,
-                base_model=args.base_model,
-                config=_train_config(args),
                 progress=progress,
             )
-        elif args.lora_command == "training-preflight":
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "training-preflight":
             payload = lora_training_preflight(args.dataset_dir.resolve())
         elif args.lora_command == "train-plan":
             payload = build_lora_train_plan(
@@ -279,7 +432,7 @@ def run_lora_command(
                     seed=args.seed,
                 ),
             )
-        else:
+        elif args.lora_command == "control-audit-run":
             payload = run_lora_control_audit(
                 args.lora_run_dir,
                 case_specs=args.case,
@@ -306,7 +459,17 @@ def run_lora_command(
             )
         dump_json(stdout, payload, pretty=not args.compact)
         return 0
-    except (LoraDatasetError, LoraTrainingError, LoraSmokeError, LoraControlAuditError, ManifestIOError) as error:
+    except (
+        LoraCanonError,
+        LoraDatasetError,
+        LoraTrainingError,
+        LoraControlAuditError,
+        LoraCandidateError,
+        LoraCandidateBriefError,
+        LoraCandidateProfileError,
+        QwenVlmError,
+        ManifestIOError,
+    ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1
 

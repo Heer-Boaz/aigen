@@ -22,16 +22,17 @@ class LoraDatasetCharacterSpec(StrictModel):
     trigger_token: str = Field(min_length=1)
 
 
-class LoraCaptionSourceSpec(StrictModel):
-    plan: str
-    field: Literal["view_bank"]
-
-
-class ViewBankLoraSourceSpec(StrictModel):
-    type: Literal["view_bank"]
+class CanonLoraSourceSpec(StrictModel):
+    type: Literal["canon"]
     path: str
-    views: list[str] = Field(min_length=1)
-    caption_source: LoraCaptionSourceSpec
+    images: list[str] = Field(min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    split: Literal["train", "val"] | None = None
+
+
+class CandidateReviewLoraSourceSpec(StrictModel):
+    type: Literal["candidate_review"]
+    path: str
     tags: list[str] = Field(default_factory=list)
     split: Literal["train", "val"] | None = None
 
@@ -48,7 +49,7 @@ class LoraDatasetSpec(StrictModel):
     kind: Literal["lora-dataset"]
     id: str
     character: LoraDatasetCharacterSpec
-    sources: list[ViewBankLoraSourceSpec]
+    sources: list[CanonLoraSourceSpec | CandidateReviewLoraSourceSpec]
     output: LoraDatasetOutputSpec
 
 

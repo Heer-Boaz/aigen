@@ -125,40 +125,6 @@ class ViewBankEntryAcceptanceSpec(StrictModel):
     minimum_passing_variants: int | None = None
 
 
-class ViewBankTrainingHardRejectsSpec(StrictModel):
-    identity_mismatch: bool
-    outfit_mismatch: bool
-    hairstyle_mismatch: bool
-    malformed_subject: bool
-    bad_background: bool
-    low_image_quality: bool
-
-
-class ViewBankTrainingScoresSpec(StrictModel):
-    identity_preservation: float
-    outfit_preservation: float
-    hairstyle_preservation: float
-    anatomy_quality: float
-    background_quality: float
-    style_consistency: float
-    overall: float
-
-
-class ViewBankTrainingEvidenceSpec(StrictModel):
-    identity: str
-    quality: str
-    concerns: list[str]
-
-
-class ViewBankTrainingValidationSpec(StrictModel):
-    validator: str
-    model: str
-    usable_for_lora_training: bool
-    hard_rejects: ViewBankTrainingHardRejectsSpec
-    scores: ViewBankTrainingScoresSpec
-    evidence: ViewBankTrainingEvidenceSpec
-
-
 class ViewBankEntrySpec(StrictModel):
     view: ViewBankViewSpec
     image: ImageAssetSpec
@@ -166,7 +132,6 @@ class ViewBankEntrySpec(StrictModel):
     accepted_seed: int | None = None
     assets: ViewBankEntryAssetsSpec | None = None
     acceptance: ViewBankEntryAcceptanceSpec | None = None
-    training_validation: ViewBankTrainingValidationSpec | None = None
 
 
 class CharacterViewBankSpec(StrictModel):

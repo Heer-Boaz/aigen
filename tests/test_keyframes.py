@@ -1136,41 +1136,6 @@ class FakeJudgeRunner:
         return None
 
 
-class FakeViewTrainingJudgeRunner:
-    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
-        self.prompt = prompt
-        return json.dumps(
-            {
-                "usable_for_lora_training": True,
-                "hard_rejects": {
-                    "identity_mismatch": False,
-                    "outfit_mismatch": False,
-                    "hairstyle_mismatch": False,
-                    "malformed_subject": False,
-                    "bad_background": False,
-                    "low_image_quality": False,
-                },
-                "scores": {
-                    "identity_preservation": 9,
-                    "outfit_preservation": 9,
-                    "hairstyle_preservation": 9,
-                    "anatomy_quality": 9,
-                    "background_quality": 9,
-                    "style_consistency": 9,
-                    "overall": 9,
-                },
-                "evidence": {
-                    "identity": "same character identity",
-                    "quality": "clean neutral canonical view",
-                    "concerns": [],
-                },
-            }
-        )
-
-    def close(self) -> None:
-        return None
-
-
 class ClosingFakeJudgeRunner(FakeJudgeRunner):
     def __init__(self) -> None:
         self.closed = False
@@ -1575,42 +1540,6 @@ class KeyframeTests(unittest.TestCase):
             self.assertTrue(Path(accepted["canonical_path"]).exists())
             self.assertEqual(bank["views"]["left_profile"]["accepted_candidate"], "seed_003")
             self.assertEqual(bank["views"]["left_profile"]["image"]["sha256"], accepted["canonical_sha256"])
-
-    def test_cli_character_view_lora_validate_writes_training_validation(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            job_path, run_dir = write_character_view_fixture(root)
-            accepted = accept_character_view(job_path, run_dir=run_dir, candidate="seed_003", project_root=Path.cwd())
-            bank_path = Path(accepted["bank_path"])
-            stdout = StringIO()
-            runner = FakeViewTrainingJudgeRunner()
-
-            with (
-                patch("aigen.character_view_training_validation.QwenVlm", return_value=runner),
-                redirect_stdout(stdout),
-            ):
-                exit_code = main(
-                    [
-                        "characters",
-                        "view-lora-validate",
-                        bank_path.as_posix(),
-                        "--view",
-                        "left_profile",
-                        "--compact",
-                    ]
-                )
-
-            payload = json.loads(stdout.getvalue())
-            bank = json.loads(bank_path.read_text(encoding="utf-8"))
-            validation = bank["views"]["left_profile"]["training_validation"]
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["status"], "validated")
-            self.assertEqual(validation["usable_for_lora_training"], True)
-            self.assertEqual(validation["scores"]["identity_preservation"], 9)
-            self.assertNotIn("keyframe", runner.prompt)
-            self.assertIn('"identity"', runner.prompt)
-            self.assertIn('"quality"', runner.prompt)
-            self.assertNotIn("identity string", runner.prompt)
 
     def test_cli_character_view_schema_has_no_embedded_character_prompt(self) -> None:
         stdout = StringIO()
