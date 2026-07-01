@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 from aigen.cli import main
 from aigen.generation.kontext_identity import _pipeline_device_report
+from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.lora_candidate_models import (
     LoraCandidateBriefError,
     LoraCandidatePromptSpec,
@@ -182,6 +183,21 @@ class LoraDatasetTests(unittest.TestCase):
             ["text_encoder", "text_encoder_2", "transformer", "vae"],
         )
         self.assertEqual(report["components"]["transformer"]["class"], "Linear")
+
+    def test_contact_sheet_uses_tiled_grid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            outputs = []
+            for index in range(10):
+                path = root / f"image_{index}.png"
+                write_training_source(path, (index * 20, 80, 160), str(index))
+                outputs.append({"name": f"candidate_{index}", "path": path.as_posix()})
+
+            sheet_path = root / "contact_sheet.png"
+            save_contact_sheet(outputs, sheet_path, thumb_width=48, max_columns=4)
+
+            with Image.open(sheet_path) as sheet:
+                self.assertEqual(sheet.size, (192, 288))
 
     def test_lora_candidate_prompt_schema_is_not_character_specific(self) -> None:
         prompt = LoraCandidatePromptSpec(

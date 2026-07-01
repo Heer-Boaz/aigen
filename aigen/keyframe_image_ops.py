@@ -55,22 +55,25 @@ def save_contact_sheet(
     thumb_width: int,
     label_x: int = 6,
     max_label_chars: int | None = None,
+    max_columns: int = 8,
 ) -> None:
-    images = []
-    for output in outputs:
-        with Image.open(output["path"]) as image:
-            images.append(image.convert("RGB"))
-    thumb_height = max(1, int(thumb_width * images[0].height / images[0].width))
+    with Image.open(outputs[0]["path"]) as first_image:
+        thumb_height = max(1, int(thumb_width * first_image.height / first_image.width))
     label_height = 32
-    sheet = Image.new("RGB", (thumb_width * len(images), thumb_height + label_height), "white")
+    columns = min(max_columns, len(outputs))
+    rows = (len(outputs) + columns - 1) // columns
+    cell_height = thumb_height + label_height
+    sheet = Image.new("RGB", (thumb_width * columns, cell_height * rows), "white")
     draw = ImageDraw.Draw(sheet)
-    for index, (image, output) in enumerate(zip(images, outputs, strict=True)):
-        x = index * thumb_width
+    for index, output in enumerate(outputs):
+        x = index % columns * thumb_width
+        y = index // columns * cell_height
         label = output["name"]
         if max_label_chars is not None:
             label = label[:max_label_chars]
-        sheet.paste(image.resize((thumb_width, thumb_height), Image.Resampling.LANCZOS), (x, label_height))
-        draw.text((x + label_x, 8), label, fill="black")
+        with Image.open(output["path"]) as image:
+            sheet.paste(image.convert("RGB").resize((thumb_width, thumb_height), Image.Resampling.LANCZOS), (x, y + label_height))
+        draw.text((x + label_x, y + 8), label, fill="black")
     sheet.save(output_path)
 
 
