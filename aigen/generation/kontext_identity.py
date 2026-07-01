@@ -74,7 +74,7 @@ class CharacterKontextIdentitySession:
 
     def environment(self) -> dict[str, Any]:
         return {
-            "device_report": module_device_report(self.pipeline),
+            "device_report": _pipeline_device_report(self.pipeline),
         }
 
     def close(self) -> None:
@@ -133,6 +133,19 @@ def _load_flux_kontext_identity() -> tuple[Any, Any, Any]:
 
     diffusers_logging.disable_progress_bar()
     return torch, FluxKontextPipeline, load_image
+
+
+def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
+    return {
+        "pipeline_class": type(pipeline).__qualname__,
+        "model_cpu_offload_seq": pipeline.model_cpu_offload_seq,
+        "components": {
+            "transformer": module_device_report(pipeline.transformer),
+            "vae": module_device_report(pipeline.vae),
+            "text_encoder": module_device_report(pipeline.text_encoder),
+            "text_encoder_2": module_device_report(pipeline.text_encoder_2),
+        },
+    }
 
 
 def _torch_dtype(torch_module: Any, dtype: str) -> Any:

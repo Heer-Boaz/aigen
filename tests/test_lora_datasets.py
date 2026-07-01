@@ -11,6 +11,7 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 from aigen.cli import main
+from aigen.generation.kontext_identity import _pipeline_device_report
 from aigen.lora_candidate_models import (
     LoraCandidateBriefError,
     LoraCandidatePromptSpec,
@@ -159,7 +160,29 @@ class FakeLoraCandidateJudge:
         self.closed = True
 
 
+class FakeKontextIdentityPipeline:
+    model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
+
+    def __init__(self) -> None:
+        import torch
+
+        self.transformer = torch.nn.Linear(1, 1)
+        self.vae = torch.nn.Linear(1, 1)
+        self.text_encoder = torch.nn.Linear(1, 1)
+        self.text_encoder_2 = torch.nn.Linear(1, 1)
+
+
 class LoraDatasetTests(unittest.TestCase):
+    def test_kontext_identity_device_report_uses_pipeline_components(self) -> None:
+        report = _pipeline_device_report(FakeKontextIdentityPipeline())
+
+        self.assertEqual(report["pipeline_class"], "FakeKontextIdentityPipeline")
+        self.assertEqual(
+            sorted(report["components"]),
+            ["text_encoder", "text_encoder_2", "transformer", "vae"],
+        )
+        self.assertEqual(report["components"]["transformer"]["class"], "Linear")
+
     def test_lora_candidate_prompt_schema_is_not_character_specific(self) -> None:
         prompt = LoraCandidatePromptSpec(
             positive="matte robot character illustration, rear camera view, neutral studio floor"
