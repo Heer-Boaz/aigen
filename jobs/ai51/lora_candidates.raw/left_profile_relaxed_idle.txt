@@ -1,0 +1,11 @@
+```json
+{
+  "name": "left_profile_relaxed_idle",
+  "view": "left profile view",
+  "pose": "relaxed idle pose",
+  "identity_primer": "left_profile",
+  "prompt": {
+    "positive": "anime-style illustration, left profile view, relaxed idle pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, light blush, blue necktie, standing, flat-chested, small breasts, clean black background, anime-style illustration"
+  }
+}
+```

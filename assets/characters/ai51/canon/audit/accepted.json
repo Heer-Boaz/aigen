@@ -7,8 +7,8 @@
       },
       "name": "front",
       "path": "/home/boaz/aigen/assets/characters/ai51/canon/images/front.png",
-      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, front",
-      "sha256": "67cffe122ea90c15d6004b7fe5d7298ee313ec043a43ae0a73e7f6b6601b2b77"
+      "sha256": "67cffe122ea90c15d6004b7fe5d7298ee313ec043a43ae0a73e7f6b6601b2b77",
+      "training_caption": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, front"
     },
     {
       "approval": {
@@ -17,8 +17,8 @@
       },
       "name": "left_profile",
       "path": "/home/boaz/aigen/assets/characters/ai51/canon/images/left_profile.png",
-      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, left profile",
-      "sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c"
+      "sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
+      "training_caption": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, left profile"
     }
   ]
 }

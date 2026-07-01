@@ -19,13 +19,13 @@ from aigen.lora_canon import (
     lora_canon_images_by_name,
 )
 from aigen.lora_quality import lora_quality_contract, write_lora_crop_sheet
-from aigen.lora_text import caption_contains_token, join_caption_parts
+from aigen.lora_text import caption_contains_token
 from aigen.manifest_io import read_json, resolve_output_path, sha256_file, write_json
 from aigen.progress import StatusReporter
 
 
 CANDIDATES_MANIFEST = "candidates.json"
-GATE_DIR = "gate"
+CANDIDATE_EVIDENCE_DIR = "evidence"
 REVIEW_DIR = "review"
 
 
@@ -62,10 +62,9 @@ def plan_lora_candidates(
         for offset in range(generation.seeds_per_candidate):
             seed = generation.seed_start + offset
             name = f"{template.name}_seed_{seed:04d}"
-            generation_prompt = _generation_prompt(character["identity_prompt"], template)
+            generation_prompt = _generation_prompt(template)
             training_caption = _training_caption(
                 character["trigger_token"],
-                character["identity_prompt"],
                 template,
             )
             prompt_path = output_dir / "generation_prompts" / f"{name}.txt"
@@ -273,10 +272,9 @@ def run_lora_candidate_plan(
             memory_sampler.stop()
 
 
-def gate_lora_candidates(
+def build_lora_candidate_evidence(
     candidate_dir: Path,
     *,
-    output_dir: Path | None,
     overwrite: bool,
     progress: StatusReporter,
 ) -> dict[str, Any]:
@@ -284,70 +282,83 @@ def gate_lora_candidates(
     plan = read_json(candidate_dir / CANDIDATES_MANIFEST, label="LoRA candidate manifest")
     if plan.get("kind") != "lora-candidate-plan":
         raise LoraCandidateError(f"Not a LoRA candidate manifest: {(candidate_dir / CANDIDATES_MANIFEST).as_posix()}")
-    gate_dir = (output_dir or candidate_dir / GATE_DIR).resolve()
-    if gate_dir.exists():
+    evidence_dir = (candidate_dir / CANDIDATE_EVIDENCE_DIR).resolve()
+    if evidence_dir.exists():
         if not overwrite:
-            raise LoraCandidateError(f"Output exists and overwrite=false: {gate_dir.as_posix()}")
-        shutil.rmtree(gate_dir)
-    (gate_dir / "crops").mkdir(parents=True)
+            raise LoraCandidateError(f"Output exists and overwrite=false: {evidence_dir.as_posix()}")
+        shutil.rmtree(evidence_dir)
+    (evidence_dir / "crops").mkdir(parents=True)
 
-    shortlist: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
+    review_items: list[dict[str, Any]] = []
+    rejected_images: list[dict[str, Any]] = []
     existing_images: list[dict[str, str]] = []
-    progress.begin(len(plan["candidates"]), "gate candidate images")
+    progress.begin(len(plan["candidates"]), "prepare candidate review evidence")
     for candidate in plan["candidates"]:
         path = Path(candidate["image"]["path"])
         name = candidate["name"]
         if not path.exists():
-            rejected.append(
-                _gate_item(
+            rejected_images.append(
+                _candidate_evidence_item(
                     candidate,
-                    status="rejected_auto",
+                    status="missing_candidate_image",
                     hard_rejects={"missing_candidate_image": True},
                     evidence={},
                 )
             )
             progress.step(name)
             continue
-        evidence = _image_evidence(path, candidate, gate_dir)
+        evidence = _image_evidence(path, candidate, evidence_dir)
         hard_rejects = {}
         if evidence["image"]["width"] != candidate["image"]["width"] or evidence["image"]["height"] != candidate["image"]["height"]:
             hard_rejects["wrong_dimensions"] = True
         if hard_rejects:
-            rejected.append(_gate_item(candidate, status="rejected_auto", hard_rejects=hard_rejects, evidence=evidence))
+            rejected_images.append(
+                _candidate_evidence_item(
+                    candidate,
+                    status="invalid_candidate_image",
+                    hard_rejects=hard_rejects,
+                    evidence=evidence,
+                )
+            )
         else:
-            shortlist.append(_gate_item(candidate, status="needs_human_review", hard_rejects={}, evidence=evidence))
+            review_items.append(
+                _candidate_evidence_item(
+                    candidate,
+                    status="ready_for_model_judgment",
+                    hard_rejects={},
+                    evidence=evidence,
+                )
+            )
             existing_images.append({"name": name, "path": path.as_posix()})
         progress.step(name)
 
     if existing_images:
-        save_contact_sheet(existing_images, gate_dir / "contact_sheet.png", thumb_width=192, max_label_chars=24)
+        save_contact_sheet(existing_images, evidence_dir / "contact_sheet.png", thumb_width=192, max_label_chars=24)
 
     report = {
         "status": "completed",
-        "kind": "lora-candidate-gate",
+        "kind": "lora-candidate-evidence",
         "candidate_manifest": (candidate_dir / CANDIDATES_MANIFEST).as_posix(),
         "quality_contract": lora_quality_contract(),
-        "model_required_hard_rejects": lora_quality_contract()["hard_rejects"],
         "counts": {
             "candidates": len(plan["candidates"]),
-            "shortlisted": len(shortlist),
-            "rejected_auto": len(rejected),
+            "review_items": len(review_items),
+            "rejected_images": len(rejected_images),
         },
-        "shortlist": shortlist,
-        "rejected_auto": rejected,
+        "review_items": review_items,
+        "rejected_images": rejected_images,
         "output": {
-            "directory": gate_dir.as_posix(),
-            "shortlist": (gate_dir / "shortlist.json").as_posix(),
-            "rejected_auto": (gate_dir / "rejected_auto.json").as_posix(),
-            "crops": (gate_dir / "crops").as_posix(),
-            "contact_sheet": (gate_dir / "contact_sheet.png").as_posix() if existing_images else None,
-            "report": (gate_dir / "gate_report.json").as_posix(),
+            "directory": evidence_dir.as_posix(),
+            "review_items": (evidence_dir / "review_items.json").as_posix(),
+            "rejected_images": (evidence_dir / "rejected_images.json").as_posix(),
+            "crops": (evidence_dir / "crops").as_posix(),
+            "contact_sheet": (evidence_dir / "contact_sheet.png").as_posix() if existing_images else None,
+            "report": (evidence_dir / "evidence_report.json").as_posix(),
         },
     }
-    write_json(gate_dir / "shortlist.json", {"items": shortlist})
-    write_json(gate_dir / "rejected_auto.json", {"items": rejected})
-    write_json(gate_dir / "gate_report.json", report)
+    write_json(evidence_dir / "review_items.json", {"items": review_items})
+    write_json(evidence_dir / "rejected_images.json", {"items": rejected_images})
+    write_json(evidence_dir / "evidence_report.json", report)
     return report
 
 
@@ -356,21 +367,22 @@ def review_lora_candidates(
     *,
     accepted_names: list[str],
     approved_by: str,
-    output_dir: Path | None,
     overwrite: bool,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     if not accepted_names:
         raise LoraCandidateError("Candidate review requires at least one --accept NAME")
     candidate_dir = candidate_dir.resolve()
-    shortlist_path = candidate_dir / GATE_DIR / "shortlist.json"
-    shortlist = read_json(shortlist_path, label="LoRA candidate shortlist")["items"]
-    by_name = {item["name"]: item for item in shortlist}
+    passed_items_path = candidate_dir / CANDIDATE_EVIDENCE_DIR / "passed.json"
+    passed_items = read_json(passed_items_path, label="model-passed LoRA candidate items")["items"]
+    if not passed_items:
+        raise LoraCandidateError(f"No model-passed LoRA candidates are available: {passed_items_path.as_posix()}")
+    by_name = {item["name"]: item for item in passed_items}
     missing = [name for name in accepted_names if name not in by_name]
     if missing:
-        raise LoraCandidateError(f"Shortlist has no candidate: {', '.join(missing)}")
+        raise LoraCandidateError(f"Model-passed evidence has no candidate: {', '.join(missing)}")
 
-    review_dir = (output_dir or candidate_dir / REVIEW_DIR).resolve()
+    review_dir = (candidate_dir / REVIEW_DIR).resolve()
     if review_dir.exists():
         if not overwrite:
             raise LoraCandidateError(f"Output exists and overwrite=false: {review_dir.as_posix()}")
@@ -379,9 +391,9 @@ def review_lora_candidates(
 
     accepted = []
     rejected_human = []
-    progress.begin(len(shortlist), "write human review")
+    progress.begin(len(passed_items), "write human review")
     accepted_set = set(accepted_names)
-    for item in shortlist:
+    for item in passed_items:
         if item["name"] in accepted_set:
             accepted_item = dict(item)
             accepted_item["approval"] = {
@@ -408,9 +420,9 @@ def review_lora_candidates(
         "status": "completed",
         "kind": "lora-candidate-review",
         "candidate_manifest": (candidate_dir / CANDIDATES_MANIFEST).as_posix(),
-        "gate": (candidate_dir / GATE_DIR).as_posix(),
+        "candidate_evidence": (candidate_dir / CANDIDATE_EVIDENCE_DIR).as_posix(),
         "counts": {
-            "shortlisted": len(shortlist),
+            "model_passed": len(passed_items),
             "accepted": len(accepted),
             "rejected_human": len(rejected_human),
         },
@@ -450,16 +462,16 @@ def _validate_candidate_prompts_for_generation(candidates: list[Any], trigger_to
             )
 
 
-def _generation_prompt(identity_prompt: str, template: Any) -> str:
-    return join_caption_parts(identity_prompt, template.view, template.pose, template.prompt.positive)
+def _generation_prompt(template: Any) -> str:
+    return template.prompt.positive
 
 
-def _training_caption(trigger_token: str, identity_prompt: str, template: Any) -> str:
-    return join_caption_parts(trigger_token, identity_prompt, template.view, template.pose, template.prompt.positive)
+def _training_caption(trigger_token: str, template: Any) -> str:
+    return f"{trigger_token}, {template.prompt.positive}"
 
 
-def _image_evidence(path: Path, candidate: dict[str, Any], gate_dir: Path) -> dict[str, Any]:
-    crop_path = gate_dir / "crops" / f"{_slug(candidate['name'])}.png"
+def _image_evidence(path: Path, candidate: dict[str, Any], evidence_dir: Path) -> dict[str, Any]:
+    crop_path = evidence_dir / "crops" / f"{_slug(candidate['name'])}.png"
     write_lora_crop_sheet(path, crop_path)
     with Image.open(path) as image:
         width, height = image.size
@@ -476,7 +488,7 @@ def _image_evidence(path: Path, candidate: dict[str, Any], gate_dir: Path) -> di
     }
 
 
-def _gate_item(
+def _candidate_evidence_item(
     candidate: dict[str, Any],
     *,
     status: str,
@@ -490,6 +502,7 @@ def _gate_item(
         "seed": candidate["seed"],
         "generation_prompt": candidate["generation_prompt"],
         "training_caption": candidate["training_caption"],
+        "identity_primer": candidate["identity_primer"],
         "image": candidate["image"],
         "hard_rejects": hard_rejects,
         "evidence": evidence,

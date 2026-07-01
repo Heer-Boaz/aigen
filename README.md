@@ -199,11 +199,15 @@ only `lora-canon` manifests created from explicit anchors are accepted as canon.
 ## LoRA Candidate Factory
 
 The production LoRA path plans many candidates, filters hard and trains only on
-human-approved canon-worthy images. Candidate intent is not hardcoded in Python:
-a local visual planner writes the `lora-candidate-brief` from approved canon
-images. The brief owns candidate names, views, poses, prompts, identity primers,
-seed budget and output directory; `candidate-plan` materializes it into exact
-generation prompts, training captions, seeds and output paths.
+human-approved canon-worthy images. The candidate brief owns candidate names,
+views, poses, prompts, identity primers, seed budget and output directory. The
+pipeline owns the neutral coverage contract; the local visual planner writes the
+actual generation prompt for each requested view/pose from the approved canon
+images. `candidate-plan` materializes the brief into exact generation prompts,
+training captions, seeds and output paths.
+Rear/back candidates are only planned when an approved rear/back canon anchor is
+present; otherwise the planner stays with grounded front/profile/three-quarter
+and mild-pose identity coverage.
 
 ```bash
 .venv/bin/python -m aigen.cli lora candidate-brief-plan assets/characters/ai51/canon \
@@ -211,45 +215,19 @@ generation prompts, training captions, seeds and output paths.
   --candidate-output-dir runs/lora_candidates/ai51_identity
 ```
 
-```json
-{
-  "$schema": "schemas/lora-candidate-brief.schema.json",
-  "kind": "lora-candidate-brief",
-  "id": "ai51.identity.candidates",
-  "character": {
-    "canon": "assets/characters/ai51/canon"
-  },
-  "generation": {
-    "width": 576,
-    "height": 864,
-    "steps": 24,
-    "seed_start": 1,
-    "seeds_per_candidate": 256
-  },
-  "candidates": [
-    {
-      "name": "front_neutral",
-      "view": "front",
-      "pose": "neutral standing",
-      "identity_primer": "front",
-      "prompt": {
-        "positive": "AI51 anime girl, leather skirt with belt, front view, neutral standing pose, full body, clean anime lineart, clean neutral background"
-      }
-    }
-  ],
-  "output": {
-    "directory": "runs/lora_candidates/ai51_identity",
-    "overwrite": true
-  }
-}
-```
+The generated candidate brief is model-written. Do not hand-author character
+prompts in Python or documentation examples: the planner must infer identity,
+clothing, view, pose, background and visual medium from the approved canon
+images and the full user identity prompt.
 
 ```bash
 .venv/bin/python -m aigen.cli lora candidate-plan jobs/ai51/lora_candidates.json
 
 .venv/bin/python -m aigen.cli lora candidate-run runs/lora_candidates/ai51_identity
 
-.venv/bin/python -m aigen.cli lora candidate-gate runs/lora_candidates/ai51_identity
+.venv/bin/python -m aigen.cli lora candidate-evidence runs/lora_candidates/ai51_identity
+
+.venv/bin/python -m aigen.cli lora candidate-judge runs/lora_candidates/ai51_identity
 
 .venv/bin/python -m aigen.cli lora candidate-review runs/lora_candidates/ai51_identity \
   --accept front_neutral_seed_0044 \
@@ -262,8 +240,11 @@ training captions with the trigger token, seeds and exact output paths.
 `candidate-run` is the only GPU image executor for those planned candidates and
 uses only `generation_prompt`. Dataset build uses only `training_caption` after
 human approval.
-`candidate-gate` then writes full sheets and crop evidence for face, torso,
-waist/lower body, legs/feet and silhouette. `candidate-review` writes
+`candidate-evidence` then writes full sheets and crop evidence for face, torso,
+waist/lower body, legs/feet and silhouette; it does not claim model approval.
+`candidate-judge` compares every candidate against the approved primer and crop
+evidence, writes `evidence/passed.json` and blocks non-canon training images.
+`candidate-review` only accepts candidates from that model-passed set and writes
 `review/accepted.json`, `review/rejected_human.json`, `review/quota_report.json`
 and an accepted contact sheet. LoRA dataset specs use canon manifests and
 human-approved candidate review manifests:

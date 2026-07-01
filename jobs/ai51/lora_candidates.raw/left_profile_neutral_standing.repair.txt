@@ -1,0 +1,11 @@
+```json
+{
+  "name": "left_profile_neutral_standing",
+  "view": "left profile view",
+  "pose": "neutral standing pose",
+  "identity_primer": "left_profile",
+  "prompt": {
+    "positive": "anime-style illustration, left profile view, neutral standing pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, clean black background, anime-style illustration"
+  }
+}
+```

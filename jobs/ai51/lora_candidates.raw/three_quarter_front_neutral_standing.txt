@@ -1,0 +1,11 @@
+```json
+{
+  "name": "three_quarter_front_neutral_standing",
+  "view": "three-quarter front view",
+  "pose": "neutral standing pose",
+  "identity_primer": "front",
+  "prompt": {
+    "positive": "anime-style illustration, three-quarter front view, neutral standing pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, clean black background, anime art style"
+  }
+}
+```

@@ -6,7 +6,7 @@
       "name": "front_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, front view, neutral standing pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, clean black background, anime-style illustration"
       },
       "view": "front view"
     },
@@ -15,7 +15,7 @@
       "name": "left_profile_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, left profile view, neutral standing pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, clean black background, anime-style illustration"
       },
       "view": "left profile view"
     },
@@ -24,7 +24,7 @@
       "name": "right_profile_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, right profile view, neutral standing pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, light blush, blue necktie, clean black background, anime-style illustration"
       },
       "view": "right profile view"
     },
@@ -33,81 +33,81 @@
       "name": "three_quarter_front_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, three-quarter front view, neutral standing pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, clean black background, anime art style"
       },
       "view": "three-quarter front view"
     },
     {
       "identity_primer": "left_profile",
-      "name": "three_quarter_left_profile_neutral_standing",
+      "name": "three_quarter_left_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, three-quarter left view, neutral standing pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, clean black background, anime-style illustration"
       },
-      "view": "three-quarter left profile view"
+      "view": "three-quarter left view"
     },
     {
       "identity_primer": "left_profile",
-      "name": "three_quarter_right_profile_neutral_standing",
+      "name": "three_quarter_right_neutral_standing",
       "pose": "neutral standing pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, three-quarter right view, neutral standing pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, light blush, blue necktie, clean black background, anime-style illustration"
       },
-      "view": "three-quarter right profile view"
+      "view": "three-quarter right view"
     },
     {
       "identity_primer": "front",
-      "name": "front_mild_walk_contact",
-      "pose": "mild walk contact pose",
+      "name": "front_relaxed_idle",
+      "pose": "relaxed idle pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, front view, relaxed idle pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, clean black background, anime-style illustration"
       },
       "view": "front view"
     },
     {
       "identity_primer": "left_profile",
-      "name": "left_profile_mild_walk_contact",
-      "pose": "mild walk contact pose",
+      "name": "left_profile_relaxed_idle",
+      "pose": "relaxed idle pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, left profile view, relaxed idle pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, light blush, blue necktie, standing, flat-chested, small breasts, clean black background, anime-style illustration"
       },
       "view": "left profile view"
     },
     {
       "identity_primer": "left_profile",
-      "name": "right_profile_mild_walk_contact",
+      "name": "right_profile_relaxed_idle",
+      "pose": "relaxed idle pose",
+      "prompt": {
+        "positive": "anime-style illustration, right profile view, relaxed idle pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, light blush, blue necktie, standing, clean black background, detailed character design"
+      },
+      "view": "right profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "left_profile_walk_contact",
       "pose": "mild walk contact pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, left profile view, mild walk contact pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, smiling, light blush, blue necktie, standing, clean black background"
+      },
+      "view": "left profile view"
+    },
+    {
+      "identity_primer": "left_profile",
+      "name": "right_profile_walk_contact",
+      "pose": "mild walk contact pose",
+      "prompt": {
+        "positive": "anime-style illustration, right profile view, mild walk contact pose, full body, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking away, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, clean black background"
       },
       "view": "right profile view"
     },
     {
       "identity_primer": "front",
-      "name": "three_quarter_front_mild_walk_contact",
-      "pose": "mild walk contact pose",
+      "name": "front_small_step",
+      "pose": "small step pose",
       "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
+        "positive": "anime-style illustration, front view, small step pose, full body, 1girl, blue eyes, gloves, blue thigh-highs, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, clean black background, anime-style illustration"
       },
-      "view": "three-quarter front view"
-    },
-    {
-      "identity_primer": "left_profile",
-      "name": "three_quarter_left_profile_mild_walk_contact",
-      "pose": "mild walk contact pose",
-      "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
-      },
-      "view": "three-quarter left profile view"
-    },
-    {
-      "identity_primer": "left_profile",
-      "name": "three_quarter_right_profile_mild_walk_contact",
-      "pose": "mild walk contact pose",
-      "prompt": {
-        "positive": "full body, clean neutral background, clean anime lineart, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts"
-      },
-      "view": "three-quarter right profile view"
+      "view": "front view"
     }
   ],
   "character": {
@@ -115,7 +115,7 @@
   },
   "generation": {
     "height": 864,
-    "seed_start": 1,
+    "seed_start": 300,
     "seeds_per_candidate": 64,
     "steps": 24,
     "width": 576

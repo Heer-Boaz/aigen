@@ -1,0 +1,78 @@
+You are planning a production LoRA candidate-generation brief from approved character canon images.
+
+Write exactly one pre-LoRA generation prompt for one candidate image.
+The generated candidate may later become character identity LoRA training data, but only after model evidence and human approval.
+The training dataset must contain only canon-worthy identity drawings. Do not plan punch, hit, jump, combat, deformed, exaggerated or malformed action frames.
+Inspect the supplied canon images and detail images yourself. Describe the character from the images and from the full user identity prompt.
+The full user identity prompt is:
+1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts
+
+Images are supplied in this exact order:
+1. canon anchor front: /home/boaz/aigen/assets/characters/ai51/canon/images/front.png
+2. canon anchor front face_hair_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/front_face_hair_detail.png
+3. canon anchor front torso_outfit_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/front_torso_outfit_detail.png
+4. canon anchor front waist_legs_footwear_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/front_waist_legs_footwear_detail.png
+5. canon anchor left_profile: /home/boaz/aigen/assets/characters/ai51/canon/images/left_profile.png
+6. canon anchor left_profile face_hair_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/left_profile_face_hair_detail.png
+7. canon anchor left_profile torso_outfit_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/left_profile_torso_outfit_detail.png
+8. canon anchor left_profile waist_legs_footwear_detail: /home/boaz/aigen/jobs/ai51/planner_evidence/left_profile_waist_legs_footwear_detail.png
+
+Use the whole prompt above. Preserve every visible identity feature: subject, hair, eyes, upper clothing, neckwear, waist garment, belt, legwear, footwear, body proportions, visual style and background cleanliness.
+Treat camera or pose wording in the user prompt, such as looking at viewer or standing, as source-image evidence. Omit or adapt it when it conflicts with the candidate view or pose.
+Never include the phrase looking at viewer in profile, side, back or rear-view candidate prompts.
+For back or rear-view prompts, describe visible rear clothing, hair shape, legwear, footwear and silhouette; do not request visible eyes, smile, blush or viewer-facing face details.
+If the requested candidate view is back or rear, prompt.positive must not contain: blue eyes, eye, eyes, smile, smiling, blush, looking at viewer, flat-chested, small breasts.
+Detail images in the evidence list are inspection aids only. Never create candidates whose view, pose, name or prompt describes crop, close-up or partial-body framing.
+The generated candidates should cover useful identity views and mild pose variety for LoRA training: neutral front, left/right profile, mild three-quarter views, back view only when the canon evidence supports it, simple idle, simple walking or standing variations.
+If more distinct candidates are needed, vary full-body mild poses such as relaxed idle, hands-at-sides, small step, contrapposto or neutral stance. Do not use close-up, upper-body, lower-body or crop variants to fill the candidate count.
+Changing only identity_primer or name is not a distinct candidate. Every candidate must have a unique view and pose pair. Do not repeat back view neutral standing more than once.
+Avoid direct source-image copying, sprite-like output, top-down distortion, bottom-up distortion, extreme foreshortening, hard action poses and random costumes.
+Every candidate must show the complete character with a clean simple background.
+
+Available identity primer names: front, left_profile
+
+Requested candidate intent. Do not invent, rename or alter these fields:
+- name: three_quarter_front_neutral_standing
+- view: three-quarter front view
+- pose: neutral standing pose
+- identity_primer: front
+
+Runtime contract:
+- canvas: 576x864
+- steps: 24
+- seed_start: 300
+- seeds_per_candidate: 64
+
+Return JSON only. The first character of your response must be "{" and the last character must be "}".
+The JSON object must contain exactly:
+- name: exact requested name
+- view: exact requested view
+- pose: exact requested pose
+- identity_primer: exact requested identity_primer
+- prompt: object with exactly one key, positive
+
+Exact JSON shape:
+{
+  "name": "three_quarter_front_neutral_standing",
+  "view": "three-quarter front view",
+  "pose": "neutral standing pose",
+  "identity_primer": "front",
+  "prompt": {
+    "positive": "full visual prompt for this candidate"
+  }
+}
+
+The positive prompt must be written by inspecting the images. It must include the character identity, clothing, waist garment, belt if visible, legwear, footwear, view, pose, full-body framing, a clean simple background and the visual style inferred from the canon images.
+Each positive prompt must explicitly mention the background and the observed visual style in its own words.
+The visual style must be a concise art-medium phrase inferred from the images, such as anime-style illustration, clean ink drawing, painterly concept art or another phrase that actually matches the supplied canon.
+Do not use filler style phrases like medium style, consistent visual style or detailed character design in place of concrete visual description.
+Start each positive prompt with the inferred medium/style phrase, then the exact requested view, then the exact requested pose. For example, a front view candidate must include the words "front view" in positive; a left profile candidate must include "left" or "left-facing"; a right profile candidate must include "right" or "right-facing"; a back view candidate must include "back" or "rear"; a three-quarter view must include "three-quarter" or "3/4".
+The generated image sees only prompt.positive. It will not see name, view, pose or identity_primer, so prompt.positive must materialize all of them.
+The name must describe the actual output view and pose, not the source primer. A name containing left, right, front or back must match the view field.
+The view field must describe only camera angle, such as "front view", "left profile view", "right profile view" or "three-quarter front view".
+The pose field must describe only body pose, such as "neutral standing pose", "relaxed idle pose" or "mild walk contact pose".
+The positive prompt is the exact generation prompt. Do not rely on the executor to add identity, view or pose text later.
+The positive prompt must not be just the full identity prompt copied verbatim.
+Do not include the trigger token in candidate prompts. Candidate prompts are used for pre-LoRA image generation, where the trigger token has no meaning. The executor adds the trigger token only to training captions after human approval.
+Do not use a JSON string for prompt. prompt must always be an object with positive.
+Do not return placeholder text, markdown or explanations.

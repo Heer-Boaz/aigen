@@ -10,7 +10,6 @@
         "approved_by": "boaz",
         "mode": "human_approved_canon"
       },
-      "caption_file": "images/front.txt",
       "file_name": "images/front.png",
       "image": {
         "height": 2048,
@@ -20,16 +19,16 @@
         "width": 1024
       },
       "name": "front",
-      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, front",
       "source_path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
-      "source_sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f"
+      "source_sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
+      "training_caption": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, front",
+      "training_caption_file": "images/front.txt"
     },
     {
       "approval": {
         "approved_by": "boaz",
         "mode": "human_approved_canon"
       },
-      "caption_file": "images/left_profile.txt",
       "file_name": "images/left_profile.png",
       "image": {
         "height": 768,
@@ -39,9 +38,10 @@
         "width": 512
       },
       "name": "left_profile",
-      "prompt": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, looking at viewer, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, left profile",
       "source_path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
-      "source_sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c"
+      "source_sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
+      "training_caption": "ai51char, 1girl, blue eyes, gloves, blue thigh-highs, full body, white blouse, button-up shirt, short hair, brown hair, leather skirt, belt, brown long boots, collared shirt, brown leather jacket, sleeved jacket, smile, light blush, blue necktie, standing, flat-chested, small breasts, left profile",
+      "training_caption_file": "images/left_profile.txt"
     }
   ],
   "kind": "lora-canon",

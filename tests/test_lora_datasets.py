@@ -11,6 +11,12 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 from aigen.cli import main
+from aigen.lora_candidate_models import (
+    LoraCandidateBriefError,
+    LoraCandidatePromptSpec,
+    LoraCandidateTemplateSpec,
+    load_lora_candidate_brief,
+)
 from aigen.lora_dataset_models import LoraDatasetError, load_lora_dataset_spec
 from aigen.lora_datasets import build_lora_dataset
 from aigen.lora_candidates import LoraCandidateError, plan_lora_candidates
@@ -31,44 +37,121 @@ def write_training_source(path: Path, color: tuple[int, int, int], mark: str) ->
 class FakeLoraCandidatePlanner:
     def __init__(self) -> None:
         self.prompt = ""
+        self.prompts: list[str] = []
         self.image_paths: list[Path] = []
         self.closed = False
 
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         self.prompt = prompt
+        self.prompts.append(prompt)
+        self.image_paths = image_paths
+        if "name: left_profile_neutral_standing" in prompt:
+            candidate = {
+                "name": "left_profile_neutral_standing",
+                "view": "left profile view",
+                "pose": "neutral standing pose",
+                "identity_primer": "left_profile",
+                "prompt": {
+                    "positive": (
+                        "Anime-style full-body illustration of a girl with short brown hair, blue eyes, brown leather jacket, "
+                        "blue necktie, brown leather skirt with belt, blue thigh-highs and "
+                        "brown boots, left profile view, neutral standing pose, plain studio background"
+                    )
+                },
+            }
+        else:
+            candidate = {
+                "name": "front_neutral_standing",
+                "view": "front view",
+                "pose": "neutral standing pose",
+                "identity_primer": "front",
+                "prompt": {
+                    "positive": (
+                        "Anime-style full-body illustration of a girl with short brown hair, blue eyes, brown leather jacket, "
+                        "blue necktie, brown leather skirt with belt, blue thigh-highs and "
+                        "brown boots, front view, neutral standing pose, plain studio background"
+                    )
+                },
+            }
+        return json.dumps(candidate)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class InvalidLoraCandidatePlanner(FakeLoraCandidatePlanner):
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompt = prompt
+        self.prompts.append(prompt)
         self.image_paths = image_paths
         return json.dumps(
             {
                 "candidates": [
                     {
-                        "name": "front_neutral",
+                        "name": "front_neutral_standing",
                         "view": "front view",
-                        "pose": "neutral standing",
+                        "pose": "neutral standing pose",
                         "identity_primer": "front",
                         "prompt": {
                             "positive": (
-                                "anime girl with short brown hair, blue eyes, brown leather jacket, "
+                                "Anime-style full-body illustration of a girl with short brown hair, blue eyes, brown leather jacket, "
                                 "blue necktie, brown leather skirt with belt, blue thigh-highs and "
-                                "brown boots, front view, neutral standing pose, full body, clean "
-                                "neutral background"
-                            )
-                        },
-                    },
-                    {
-                        "name": "left_profile_idle",
-                        "view": "left profile",
-                        "pose": "relaxed side idle",
-                        "identity_primer": "left_profile",
-                        "prompt": {
-                            "positive": (
-                                "anime girl with short brown hair, blue eyes, brown leather jacket, "
-                                "blue necktie, brown leather skirt with belt, blue thigh-highs and "
-                                "brown boots, left-facing profile, relaxed idle stance, full body, "
-                                "clean neutral background"
+                                "brown boots, front view, neutral standing pose, plain studio background"
                             )
                         },
                     },
                 ]
+            }
+        )
+
+
+class FakeLoraCandidateJudge:
+    device_report = {"modules": []}
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.image_paths: list[list[Path]] = []
+        self.closed = False
+
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompts.append(prompt)
+        self.image_paths.append(image_paths)
+        candidate = prompt.split("Generated candidate image named ", 1)[1].split(".", 1)[0]
+        return json.dumps(
+            {
+                "candidate": candidate,
+                "pass": True,
+                "hard_rejects": {
+                    "wrong_face": False,
+                    "wrong_hair_length_or_color": False,
+                    "wrong_outfit": False,
+                    "missing_required_neckwear_or_accessory": False,
+                    "missing_required_waist_or_lower_body_garment": False,
+                    "missing_required_belt_or_waist_detail": False,
+                    "missing_required_legwear": False,
+                    "missing_required_footwear": False,
+                    "deformed_body": False,
+                    "broken_hands_or_feet": False,
+                    "bad_crop": False,
+                    "dirty_or_distracting_background": False,
+                    "style_drift": False,
+                    "view_label_mismatch": False,
+                },
+                "scores": {
+                    "identity_preservation": 9,
+                    "outfit_preservation": 9,
+                    "anatomy_quality": 9,
+                    "crop_quality": 9,
+                    "background_quality": 9,
+                    "style_match": 9,
+                    "view_pose_match": 9,
+                    "training_usability": 9,
+                },
+                "evidence": {
+                    "identity_match": "Matches the approved primer.",
+                    "quality_assessment": "Canon-worthy training image.",
+                    "concerns": [],
+                },
             }
         )
 
@@ -77,6 +160,177 @@ class FakeLoraCandidatePlanner:
 
 
 class LoraDatasetTests(unittest.TestCase):
+    def test_lora_candidate_prompt_schema_is_not_character_specific(self) -> None:
+        prompt = LoraCandidatePromptSpec(
+            positive="matte robot character illustration, rear camera view, neutral studio floor"
+        )
+
+        self.assertEqual(
+            prompt.positive,
+            "matte robot character illustration, rear camera view, neutral studio floor",
+        )
+
+    def test_lora_candidate_prompt_must_materialize_view_and_pose(self) -> None:
+        with self.assertRaisesRegex(ValueError, "view term"):
+            LoraCandidateTemplateSpec(
+                name="left_profile_idle",
+                view="left profile view",
+                pose="idle standing pose",
+                identity_primer="front",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration of the approved character, "
+                        "idle standing pose, plain studio background"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "view term"):
+            LoraCandidateTemplateSpec(
+                name="right_profile_idle",
+                view="right profile view",
+                pose="idle standing pose",
+                identity_primer="front",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration of the approved character, "
+                        "bright studio background, idle standing pose"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "requested pose"):
+            LoraCandidateTemplateSpec(
+                name="front_walk_contact",
+                view="front view",
+                pose="walk contact pose",
+                identity_primer="front",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration of the approved character, "
+                        "front view, plain studio background"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "front-view gaze"):
+            LoraCandidateTemplateSpec(
+                name="left_profile_idle",
+                view="left profile view",
+                pose="idle standing pose",
+                identity_primer="left_profile",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration, left profile view, idle standing pose, "
+                        "looking at viewer, plain studio background"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "name view term"):
+            LoraCandidateTemplateSpec(
+                name="left_profile_three_quarter",
+                view="three-quarter front view",
+                pose="neutral standing pose",
+                identity_primer="front",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration, three-quarter front view, neutral standing pose, "
+                        "plain studio background"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "front-facing facial details"):
+            LoraCandidateTemplateSpec(
+                name="back_neutral",
+                view="back view",
+                pose="neutral standing pose",
+                identity_primer="front",
+                prompt={
+                    "positive": (
+                        "Anime-style full-body illustration, back view, neutral standing pose, "
+                        "blue eyes and smiling face, brown leather jacket, leather skirt, plain studio background"
+                    )
+                },
+            )
+
+        with self.assertRaisesRegex(ValueError, "filler style wording"):
+            LoraCandidatePromptSpec(
+                positive="medium style, front view, neutral standing pose, full body, plain studio background"
+            )
+
+    def test_lora_candidate_templates_reject_reused_generation_prompts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "front.png"
+            write_training_source(front, (180, 50, 60), "F")
+            canon_dir = root / "canon"
+            main(
+                [
+                    "lora",
+                    "canon-init",
+                    "--character-id",
+                    "ai51",
+                    "--trigger-token",
+                    "ai51char",
+                    "--identity-prompt",
+                    "1girl, blue eyes, short hair, brown hair, leather skirt, belt, blue necktie",
+                    "--anchor",
+                    f"front={front.as_posix()}",
+                    "--output-dir",
+                    canon_dir.as_posix(),
+                    "--compact",
+                ]
+            )
+            brief_path = root / "candidate_brief.json"
+            write_json(
+                brief_path,
+                {
+                    "$schema": "schemas/lora-candidate-brief.schema.json",
+                    "kind": "lora-candidate-brief",
+                    "id": "ai51.identity.candidates",
+                    "character": {"canon": canon_dir.as_posix()},
+                    "generation": {
+                        "width": 96,
+                        "height": 128,
+                        "steps": 20,
+                        "seed_start": 20,
+                        "seeds_per_candidate": 1,
+                    },
+                    "candidates": [
+                        {
+                            "name": "front_neutral",
+                            "view": "front view",
+                            "pose": "neutral standing",
+                            "identity_primer": "front",
+                            "prompt": {
+                                "positive": (
+                                    "Clean illustration style, front view, neutral standing walk contact pose, "
+                                    "complete character, plain studio background"
+                                ),
+                            },
+                        },
+                        {
+                            "name": "front_walk_contact",
+                            "view": "front view",
+                            "pose": "walk contact",
+                            "identity_primer": "front",
+                            "prompt": {
+                                "positive": (
+                                    "Clean illustration style, front view, neutral standing walk contact pose, "
+                                    "complete character, plain studio background"
+                                ),
+                            },
+                        },
+                    ],
+                    "output": {"directory": (root / "candidates").as_posix(), "overwrite": True},
+                },
+            )
+
+            with self.assertRaisesRegex(LoraCandidateBriefError, "candidate generation prompts must be unique"):
+                load_lora_candidate_brief(brief_path)
+
     def test_lora_canon_init_writes_human_approved_anchor_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -127,11 +381,15 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertTrue((output_dir / "contact_sheet.png").exists())
             self.assertTrue((output_dir / "canon_manifest.json").exists())
             captions = [
-                (output_dir / item["caption_file"]).read_text(encoding="utf-8")
+                (output_dir / item["training_caption_file"]).read_text(encoding="utf-8")
                 for item in result["images"]
             ]
+            self.assertTrue(all("training_caption" in item for item in result["images"]))
+            self.assertTrue(all("prompt" not in item for item in result["images"]))
             self.assertTrue(all(caption.startswith("ai51char, 1girl, blue eyes") for caption in captions))
             self.assertTrue(any("left profile" in caption for caption in captions))
+            left_caption = next(caption for caption in captions if "left profile" in caption)
+            self.assertNotIn("looking at viewer", left_caption)
             self.assertEqual(result["images"][0]["approval"]["mode"], "human_approved_canon")
 
     def test_lora_canon_init_rejects_prompt_with_trigger_token(self) -> None:
@@ -234,19 +492,95 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(result["kind"], "lora-candidate-brief-plan")
             self.assertTrue(planner.closed)
-            self.assertIn(identity_prompt, planner.prompt)
-            self.assertIn("Available identity primer names: front, left_profile", planner.prompt)
+            self.assertEqual(len(planner.prompts), 2)
+            first_prompt = planner.prompts[0]
+            self.assertIn(identity_prompt, first_prompt)
+            self.assertIn("Available identity primer names: front, left_profile", first_prompt)
+            self.assertIn("Write exactly one pre-LoRA generation prompt", first_prompt)
+            self.assertIn('first character of your response must be "{"', first_prompt)
+            self.assertIn('last character must be "}"', first_prompt)
+            self.assertNotIn("Every positive prompt must contain these exact literal phrases", first_prompt)
+            self.assertNotIn("- clean anime lineart", first_prompt)
+            self.assertIn("The positive prompt is the exact generation prompt", first_prompt)
+            self.assertNotIn("executor materializes", first_prompt)
             self.assertGreaterEqual(len(planner.image_paths), 4)
             self.assertEqual(brief["kind"], "lora-candidate-brief")
             self.assertNotIn("schema_version", brief)
             self.assertEqual(brief["id"], "ai51.lora.candidates")
             self.assertEqual(brief["generation"]["seeds_per_candidate"], 3)
-            self.assertEqual([candidate["name"] for candidate in brief["candidates"]], ["front_neutral", "left_profile_idle"])
+            self.assertEqual(
+                [candidate["name"] for candidate in brief["candidates"]],
+                ["front_neutral_standing", "left_profile_neutral_standing"],
+            )
             self.assertIn("leather skirt with belt", brief["candidates"][0]["prompt"]["positive"])
             self.assertNotIn("ai51char", brief["candidates"][0]["prompt"]["positive"])
             self.assertEqual(brief["candidates"][1]["identity_primer"], "left_profile")
-            self.assertTrue(brief_path.with_suffix(".raw.txt").exists())
-            self.assertTrue(brief_path.with_suffix(".prompt.txt").exists())
+            self.assertTrue((brief_path.with_suffix(".raw") / "front_neutral_standing.txt").exists())
+            self.assertTrue((brief_path.with_suffix(".prompts") / "front_neutral_standing.txt").exists())
+
+    def test_lora_candidate_planner_rejects_invalid_vlm_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "front.png"
+            left = root / "left.png"
+            write_training_source(front, (180, 50, 60), "F")
+            write_training_source(left, (50, 170, 90), "L")
+            canon_dir = root / "canon"
+            identity_prompt = "1girl, blue eyes, short hair, brown hair, leather skirt, belt, blue necktie"
+            main(
+                [
+                    "lora",
+                    "canon-init",
+                    "--character-id",
+                    "ai51",
+                    "--trigger-token",
+                    "ai51char",
+                    "--identity-prompt",
+                    identity_prompt,
+                    "--anchor",
+                    f"front={front.as_posix()}",
+                    "--anchor",
+                    f"left_profile={left.as_posix()}",
+                    "--output-dir",
+                    canon_dir.as_posix(),
+                    "--compact",
+                ]
+            )
+            brief_path = root / "candidate_brief.json"
+            planner = InvalidLoraCandidatePlanner()
+            stdout = io.StringIO()
+            with (
+                patch("aigen.lora_candidate_planner.QwenVlm", return_value=planner),
+                contextlib.redirect_stdout(stdout),
+            ):
+                exit_code = main(
+                    [
+                        "lora",
+                        "candidate-brief-plan",
+                        canon_dir.as_posix(),
+                        "--output",
+                        brief_path.as_posix(),
+                        "--candidate-output-dir",
+                        (root / "candidate_runs" / "ai51").as_posix(),
+                        "--width",
+                        "96",
+                        "--height",
+                        "128",
+                        "--steps",
+                        "20",
+                        "--seed-start",
+                        "30",
+                        "--seeds-per-candidate",
+                        "3",
+                        "--candidate-count",
+                        "2",
+                        "--compact",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertFalse(brief_path.exists())
 
     def test_lora_dataset_audit_accepts_canon_and_pending_loose_images(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -351,7 +685,7 @@ class LoraDatasetTests(unittest.TestCase):
                             "type": "canon",
                             "path": canon_dir.as_posix(),
                             "images": ["front", "left_profile"],
-                            "tags": ["clean anime lineart"],
+                            "tags": ["approved style note"],
                         }
                     ],
                     "output": {
@@ -371,7 +705,8 @@ class LoraDatasetTests(unittest.TestCase):
             records = [json.loads(line) for line in (output_dir / "metadata.jsonl").read_text().splitlines()]
             self.assertEqual({record["source_kind"] for record in records}, {"canon"})
             self.assertTrue(all(record["prompt"].startswith("ai51char, 1girl, blue eyes") for record in records))
-            self.assertTrue(all("clean anime lineart" in record["prompt"] for record in records))
+            self.assertTrue(all("approved style note" not in record["prompt"] for record in records))
+            self.assertTrue(all("approved style note" in record["tags"] for record in records))
             self.assertTrue(all(record["source_metadata"]["approval"]["mode"] == "human_approved_canon" for record in records))
 
     def test_lora_candidate_funnel_builds_dataset_from_human_accepted_json(self) -> None:
@@ -428,7 +763,10 @@ class LoraDatasetTests(unittest.TestCase):
                             "pose": "neutral",
                             "identity_primer": "front",
                             "prompt": {
-                                "positive": "front view, neutral standing pose, full body, clean anime lineart, clean neutral background",
+                                "positive": (
+                                    f"Anime-style full-body illustration, {identity_prompt}, "
+                                    "front view, neutral standing pose, plain studio background"
+                                ),
                             },
                         },
                         {
@@ -437,7 +775,10 @@ class LoraDatasetTests(unittest.TestCase):
                             "pose": "walk contact",
                             "identity_primer": "front",
                             "prompt": {
-                                "positive": "side-view walk contact pose, full body, clean anime lineart, clean neutral background",
+                                "positive": (
+                                    f"Anime-style full-body illustration, {identity_prompt}, "
+                                    "side-view walk contact pose, plain studio background"
+                                ),
                             },
                         },
                     ],
@@ -465,9 +806,14 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(generate_result["counts"]["candidate_templates"], 2)
             self.assertEqual([candidate["name"] for candidate in generate_result["candidate_templates"]], ["front_neutral", "walk_contact"])
             planned_manifest = json.loads((candidate_dir / "candidates.json").read_text(encoding="utf-8"))
-            self.assertIn(identity_prompt, planned_manifest["candidates"][0]["generation_prompt"])
-            self.assertNotIn("ai51char", planned_manifest["candidates"][0]["generation_prompt"])
-            self.assertTrue(planned_manifest["candidates"][0]["training_caption"].startswith(f"ai51char, {identity_prompt}"))
+            first_candidate = planned_manifest["candidates"][0]
+            self.assertEqual(
+                first_candidate["generation_prompt"],
+                planned_manifest["candidate_templates"][0]["prompt"]["positive"],
+            )
+            self.assertIn(identity_prompt, first_candidate["generation_prompt"])
+            self.assertNotIn("ai51char", first_candidate["generation_prompt"])
+            self.assertEqual(first_candidate["training_caption"], f"ai51char, {first_candidate['generation_prompt']}")
             self.assertIn("generation_prompts/front_neutral_seed_0020.txt", planned_manifest["candidates"][0]["generation_prompt_file"])
             self.assertNotIn("candidates", generate_result)
 
@@ -475,21 +821,75 @@ class LoraDatasetTests(unittest.TestCase):
             selected_path = candidate_dir / "images" / f"{selected_name}.png"
             write_training_source(selected_path, (90, 140, 210), "A")
 
-            gate_stdout = io.StringIO()
-            with contextlib.redirect_stdout(gate_stdout):
-                gate_exit = main(
+            evidence_stdout = io.StringIO()
+            with contextlib.redirect_stdout(evidence_stdout):
+                evidence_exit = main(
                     [
                         "lora",
-                        "candidate-gate",
+                        "candidate-evidence",
                         candidate_dir.as_posix(),
                         "--compact",
                     ]
                 )
-            gate_result = json.loads(gate_stdout.getvalue())
-            self.assertEqual(gate_exit, 0)
-            self.assertEqual(gate_result["kind"], "lora-candidate-gate")
-            self.assertEqual(gate_result["counts"], {"candidates": 4, "shortlisted": 1, "rejected_auto": 3})
-            self.assertTrue(Path(gate_result["shortlist"][0]["evidence"]["crop_sheet"]).exists())
+            evidence_result = json.loads(evidence_stdout.getvalue())
+            self.assertEqual(evidence_exit, 0)
+            self.assertEqual(evidence_result["kind"], "lora-candidate-evidence")
+            self.assertEqual(evidence_result["counts"], {"candidates": 4, "review_items": 1, "rejected_images": 3})
+            self.assertTrue(Path(evidence_result["review_items"][0]["evidence"]["crop_sheet"]).exists())
+
+            unsupported_evidence_stderr = io.StringIO()
+            with contextlib.redirect_stderr(unsupported_evidence_stderr):
+                with self.assertRaises(SystemExit) as unsupported_evidence:
+                    main(
+                        [
+                            "lora",
+                            "candidate-evidence",
+                            candidate_dir.as_posix(),
+                            "--output-dir",
+                            (root / "elsewhere").as_posix(),
+                            "--compact",
+                        ]
+                    )
+            self.assertEqual(unsupported_evidence.exception.code, 2)
+            self.assertIn("unrecognized arguments: --output-dir", unsupported_evidence_stderr.getvalue())
+
+            early_review_stderr = io.StringIO()
+            with contextlib.redirect_stderr(early_review_stderr):
+                early_review_exit = main(
+                    [
+                        "lora",
+                        "candidate-review",
+                        candidate_dir.as_posix(),
+                        "--accept",
+                        selected_name,
+                        "--compact",
+                    ]
+                )
+            self.assertEqual(early_review_exit, 1)
+            self.assertIn("model-passed LoRA candidate items", early_review_stderr.getvalue())
+
+            judge_runner = FakeLoraCandidateJudge()
+            judge_stdout = io.StringIO()
+            with (
+                patch("aigen.lora_candidate_judge.QwenVlm", return_value=judge_runner),
+                contextlib.redirect_stdout(judge_stdout),
+            ):
+                judge_exit = main(
+                    [
+                        "lora",
+                        "candidate-judge",
+                        candidate_dir.as_posix(),
+                        "--compact",
+                    ]
+                )
+            judge_result = json.loads(judge_stdout.getvalue())
+            self.assertEqual(judge_exit, 0)
+            self.assertEqual(judge_result["kind"], "lora-candidate-judge")
+            self.assertEqual(judge_result["counts"], {"review_items": 1, "passed": 1, "blocked": 0})
+            self.assertTrue(judge_runner.closed)
+            self.assertIn("canon-worthy training data", judge_runner.prompts[0])
+            self.assertEqual(judge_result["selection_gate"]["passed"], [selected_name])
+            self.assertTrue((candidate_dir / "evidence" / "passed.json").exists())
 
             review_stdout = io.StringIO()
             with contextlib.redirect_stdout(review_stdout):
@@ -508,6 +908,7 @@ class LoraDatasetTests(unittest.TestCase):
             review_result = json.loads(review_stdout.getvalue())
             self.assertEqual(review_exit, 0)
             self.assertEqual(review_result["kind"], "lora-candidate-review")
+            self.assertEqual(review_result["counts"]["model_passed"], 1)
             self.assertEqual(review_result["counts"]["accepted"], 1)
             self.assertEqual(review_result["quota_report"]["by_candidate"], {"front_neutral": 1})
             accepted_path = candidate_dir / "review" / "accepted.json"
@@ -544,7 +945,8 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(records[0]["source_metadata"]["approval"]["mode"], "human_approved_lora_candidate")
             self.assertEqual(records[0]["source_metadata"]["candidate"]["name"], "front_neutral")
             self.assertTrue(records[0]["prompt"].startswith("ai51char, "))
-            self.assertIn("canon-worthy accepted candidate", records[0]["prompt"])
+            self.assertNotIn("canon-worthy accepted candidate", records[0]["prompt"])
+            self.assertIn("canon-worthy accepted candidate", records[0]["tags"])
 
     def test_lora_candidate_plan_rejects_trigger_token_in_generation_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -593,8 +995,8 @@ class LoraDatasetTests(unittest.TestCase):
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
-                                    "ai51char, front view, neutral standing pose, full body, "
-                                    "clean anime lineart, clean neutral background"
+                                    "ai51char, anime-style full-body illustration, front view, "
+                                    "neutral standing pose, plain studio background"
                                 )
                             },
                         }
@@ -769,7 +1171,26 @@ class LoraDatasetTests(unittest.TestCase):
             trainer_script = root / "train_dreambooth_lora_flux.py"
             trainer_script.write_text('check_min_version("0.38.0")\n', encoding="utf-8")
             base_model = root / "models" / "FLUX.1-dev-bnb-4bit"
-            (base_model / "transformer").mkdir(parents=True)
+            for entry in (
+                "scheduler",
+                "text_encoder",
+                "text_encoder_2",
+                "tokenizer",
+                "tokenizer_2",
+                "transformer",
+                "vae",
+            ):
+                (base_model / entry).mkdir(parents=True)
+            write_json(base_model / "model_index.json", {"_class_name": "FluxPipeline"})
+            write_json(
+                base_model / "transformer" / "config.json",
+                {
+                    "_class_name": "FluxTransformer2DModel",
+                    "quantization_config": {
+                        "load_in_4bit": True,
+                    },
+                },
+            )
 
             plan = build_lora_train_plan(
                 Path(dataset_result["output"]["directory"]),
@@ -783,7 +1204,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(plan["profile"], "flux-lora-local-16gb")
             self.assertEqual(plan["dataset"]["caption_column"], "prompt")
             self.assertEqual(plan["trainer"]["required_instance_prompt"], "ai51char")
-            self.assertEqual(plan["model"]["base_model_kind"], "local_bnb_4bit_flux_pipeline")
+            self.assertEqual(plan["model"]["base_model_kind"], "local_4bit_flux_transformer")
             self.assertIn(base_model.as_posix(), command)
             self.assertIn("--dataset_name", command)
             self.assertIn((root / "lora-output" / "train_dataset").as_posix(), command)
@@ -816,6 +1237,71 @@ class LoraDatasetTests(unittest.TestCase):
 
         self.assertNotEqual(raised.exception.code, 0)
         self.assertIn("must be greater than 0", stderr.getvalue())
+
+    def test_lora_train_plan_requires_complete_flux_model_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image = root / "assets" / "front.png"
+            write_training_source(image, (80, 120, 190), "F")
+            canon_dir = root / "canon"
+            main(
+                [
+                    "lora",
+                    "canon-init",
+                    "--character-id",
+                    "ai51",
+                    "--trigger-token",
+                    "ai51char",
+                    "--identity-prompt",
+                    "1girl, blue eyes, short hair, brown hair, leather skirt, blue necktie",
+                    "--anchor",
+                    f"front={image.as_posix()}",
+                    "--output-dir",
+                    canon_dir.as_posix(),
+                    "--compact",
+                ]
+            )
+            spec_path = root / "dataset.json"
+            write_json(
+                spec_path,
+                {
+                    "$schema": "schemas/lora-dataset.schema.json",
+                    "kind": "lora-dataset",
+                    "id": "ai51_identity_lora_pilot",
+                    "character": {"id": "ai51", "trigger_token": "ai51char"},
+                    "sources": [
+                        {
+                            "type": "canon",
+                            "path": canon_dir.as_posix(),
+                            "images": ["front"],
+                            "split": "train",
+                        }
+                    ],
+                    "output": {
+                        "directory": (root / "dataset").as_posix(),
+                        "overwrite": True,
+                        "validation_ratio": 0.0,
+                        "save_contact_sheet": True,
+                    },
+                },
+            )
+            dataset_result = build_lora_dataset(spec_path, progress=SILENT_STATUS)
+            trainer_script = root / "train_dreambooth_lora_flux.py"
+            trainer_script.write_text('check_min_version("0.38.0")\n', encoding="utf-8")
+            base_model = root / "models" / "incomplete-flux"
+            (base_model / "transformer").mkdir(parents=True)
+
+            plan = build_lora_train_plan(
+                Path(dataset_result["output"]["directory"]),
+                trainer_script=trainer_script,
+                base_model=base_model,
+                output_dir=root / "lora-output",
+            )
+
+            self.assertEqual(plan["status"], "missing_local_inputs")
+            self.assertIn((base_model / "model_index.json").as_posix(), plan["missing"])
+            self.assertIn((base_model / "tokenizer").as_posix(), plan["missing"])
+            self.assertIn((base_model / "vae").as_posix(), plan["missing"])
 
     def test_lora_control_audit_plan_requires_trained_weights_and_plain_nunchaku(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

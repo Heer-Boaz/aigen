@@ -17,12 +17,13 @@ from aigen.lora_control_audit import (
 )
 from aigen.lora_candidates import (
     LoraCandidateError,
-    gate_lora_candidates,
+    build_lora_candidate_evidence,
     plan_lora_candidates,
     run_lora_candidate_plan,
     review_lora_candidates,
 )
 from aigen.lora_candidate_models import LoraCandidateBriefError, lora_candidate_brief_schema
+from aigen.lora_candidate_judge import LoraCandidateJudgeError, judge_lora_candidate_evidence
 from aigen.lora_candidate_planner import LoraCandidateBriefPlanConfig, plan_lora_candidate_brief
 from aigen.lora_candidate_profiles import (
     LORA_CANDIDATE_PROFILE,
@@ -78,7 +79,7 @@ def add_lora_commands(subparsers: Any) -> None:
     candidate_brief_plan.add_argument("--seed-start", type=_non_negative_int, default=1)
     candidate_brief_plan.add_argument("--seeds-per-candidate", type=_positive_int, default=256)
     candidate_brief_plan.add_argument("--candidate-count", type=_positive_int, default=12)
-    add_judge_runtime_args(candidate_brief_plan, role="candidate planner", max_new_tokens=1800)
+    add_judge_runtime_args(candidate_brief_plan, role="candidate planner", max_new_tokens=3200)
     candidate_brief_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     dataset_build = lora_subparsers.add_parser("dataset-build", help="Build a curated LoRA training dataset")
@@ -128,20 +129,28 @@ def add_lora_commands(subparsers: Any) -> None:
     candidate_run.add_argument("--overwrite", action="store_true", help="Replace existing candidate images")
     candidate_run.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    candidate_gate = lora_subparsers.add_parser(
-        "candidate-gate",
-        help="Build LoRA candidate crop evidence and deterministic hard rejects",
+    candidate_evidence = lora_subparsers.add_parser(
+        "candidate-evidence",
+        help="Build LoRA candidate crop evidence for human review",
     )
-    candidate_gate.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
-    candidate_gate.add_argument("--output-dir", type=Path, help="Gate output directory")
-    candidate_gate.add_argument("--overwrite", action="store_true", help="Replace an existing gate directory")
-    candidate_gate.add_argument("--compact", action="store_true", help="Write compact JSON")
+    candidate_evidence.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
+    candidate_evidence.add_argument("--overwrite", action="store_true", help="Replace an existing evidence directory")
+    candidate_evidence.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_judge = lora_subparsers.add_parser(
+        "candidate-judge",
+        help="Judge LoRA candidate evidence with the local VLM before human review",
+    )
+    candidate_judge.add_argument("candidate_dir", type=Path, help="Candidate batch directory with evidence/review_items.json")
+    candidate_judge.add_argument("--overwrite", action="store_true", help="Replace existing candidate judge output")
+    add_judge_runtime_args(candidate_judge, role="candidate judge", max_new_tokens=900)
+    candidate_judge.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     candidate_review = lora_subparsers.add_parser(
         "candidate-review",
         help="Write human-approved LoRA candidates and quota report",
     )
-    candidate_review.add_argument("candidate_dir", type=Path, help="Candidate batch directory with gate/shortlist.json")
+    candidate_review.add_argument("candidate_dir", type=Path, help="Candidate batch directory with evidence/passed.json")
     candidate_review.add_argument(
         "--accept",
         action="append",
@@ -150,7 +159,6 @@ def add_lora_commands(subparsers: Any) -> None:
         help="Candidate name approved for LoRA training; repeat for multiple accepted candidates",
     )
     candidate_review.add_argument("--approved-by", default="user", help="Approver recorded in accepted.json")
-    candidate_review.add_argument("--output-dir", type=Path, help="Review output directory")
     candidate_review.add_argument("--overwrite", action="store_true", help="Replace an existing review directory")
     candidate_review.add_argument("--compact", action="store_true", help="Write compact JSON")
 
@@ -368,10 +376,18 @@ def run_lora_command(
             )
             dump_json(stdout, payload, pretty=not args.compact)
             return 0
-        if args.lora_command == "candidate-gate":
-            payload = gate_lora_candidates(
+        if args.lora_command == "candidate-evidence":
+            payload = build_lora_candidate_evidence(
                 args.candidate_dir,
-                output_dir=args.output_dir,
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-judge":
+            payload = judge_lora_candidate_evidence(
+                args.candidate_dir,
+                judge_config_from_args(args),
                 overwrite=args.overwrite,
                 progress=progress,
             )
@@ -382,7 +398,6 @@ def run_lora_command(
                 args.candidate_dir,
                 accepted_names=args.accept,
                 approved_by=args.approved_by,
-                output_dir=args.output_dir,
                 overwrite=args.overwrite,
                 progress=progress,
             )
@@ -464,6 +479,7 @@ def run_lora_command(
         LoraDatasetError,
         LoraTrainingError,
         LoraControlAuditError,
+        LoraCandidateJudgeError,
         LoraCandidateError,
         LoraCandidateBriefError,
         LoraCandidateProfileError,
@@ -491,7 +507,7 @@ def _add_train_runtime_args(parser: argparse.ArgumentParser) -> None:
         "--base-model",
         type=Path,
         default=DEFAULT_BASE_MODEL,
-        help="Local 4-bit FLUX base model directory",
+        help="Local FLUX Diffusers model directory for LoRA training",
     )
     parser.add_argument("--resolution", type=_positive_int, default=512)
     parser.add_argument("--rank", type=_positive_int, default=4)

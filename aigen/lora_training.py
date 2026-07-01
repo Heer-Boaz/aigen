@@ -18,6 +18,16 @@ DEFAULT_BASE_MODEL = PROJECT_ROOT / "aigen" / "models" / "diffusers" / "black-fo
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "runs" / "lora"
 LOCAL_PROFILE_NAME = "flux-lora-local-16gb"
 TRAIN_CAPTION_COLUMN = "prompt"
+REQUIRED_FLUX_MODEL_ENTRIES = (
+    "model_index.json",
+    "scheduler",
+    "text_encoder",
+    "text_encoder_2",
+    "tokenizer",
+    "tokenizer_2",
+    "transformer",
+    "vae",
+)
 TRAINER_SOURCE_URL = (
     "https://raw.githubusercontent.com/huggingface/diffusers/v0.38.0/"
     "examples/dreambooth/train_dreambooth_lora_flux.py"
@@ -75,6 +85,7 @@ def build_lora_train_plan(
     source_train_dir = dataset_dir / "images" / "train"
     train_data_dir = output_dir / "train_dataset"
     required_instance_prompt = _required_instance_prompt(report)
+    base_model_kind = _base_model_kind(base_model)
     command = _train_command(
         trainer_script=trainer_script.resolve(),
         base_model=base_model.resolve(),
@@ -114,7 +125,7 @@ def build_lora_train_plan(
         },
         "model": {
             "base_model": base_model.resolve().as_posix(),
-            "base_model_kind": "local_bnb_4bit_flux_pipeline",
+            "base_model_kind": base_model_kind,
         },
         "output": {"directory": output_dir.as_posix(), "plan": (output_dir / "train_plan.json").as_posix()},
         "local_gpu": _nvidia_smi_snapshot(),
@@ -132,20 +143,7 @@ def build_lora_train_plan(
             "seed": config.seed,
             "mixed_precision": config.mixed_precision,
         },
-        "memory_strategy": [
-            "local 4-bit FLUX base model",
-            "BF16 mixed precision avoids fp16 GradScaler unscale failures with local 4-bit FLUX training",
-            "train transformer LoRA only; text encoders are frozen",
-            "captioned Hugging Face imagefolder dataset materialized from the train split",
-            "per-image prompts are read from metadata.jsonl column prompt",
-            "training images are square-padded upstream to preserve full-body framing",
-            "batch size 1 with gradient accumulation",
-            "rank 4 LoRA on attention projections only",
-            "gradient checkpointing",
-            "8-bit Adam optimizer",
-            "VAE latent caching",
-            "512px training resolution for the first measured local profile",
-        ],
+        "memory_strategy": _memory_strategy(base_model_kind),
         "missing": missing,
         "command": command,
     }
@@ -298,9 +296,51 @@ def _missing_inputs(
         missing.append(trainer_script.as_posix())
     if not base_model.exists():
         missing.append(base_model.as_posix())
+    else:
+        for entry in REQUIRED_FLUX_MODEL_ENTRIES:
+            path = base_model / entry
+            if not path.exists():
+                missing.append(path.as_posix())
     if not source_train_dir.exists() or train_count <= 0:
         missing.append(source_train_dir.as_posix())
     return missing
+
+
+def _base_model_kind(base_model: Path) -> str:
+    config_path = base_model / "transformer" / "config.json"
+    if not config_path.exists():
+        return "local_flux_transformer"
+    config = read_json(config_path, label="FLUX transformer config")
+    quantization = config.get("quantization_config")
+    if isinstance(quantization, dict) and quantization.get("load_in_4bit"):
+        return "local_4bit_flux_transformer"
+    return "local_flux_transformer"
+
+
+def _memory_strategy(base_model_kind: str) -> list[str]:
+    strategy = [
+        "train transformer LoRA only; text encoders are frozen",
+        "captioned Hugging Face imagefolder dataset materialized from the train split",
+        "per-image prompts are read from metadata.jsonl column prompt",
+        "training images are square-padded upstream to preserve full-body framing",
+        "batch size 1 with gradient accumulation",
+        "rank 4 LoRA on attention projections only",
+        "gradient checkpointing",
+        "8-bit Adam optimizer",
+        "VAE latent caching",
+        "512px training resolution for the first measured local profile",
+    ]
+    if base_model_kind == "local_4bit_flux_transformer":
+        return [
+            "local 4-bit FLUX transformer QLoRA profile",
+            "BF16 mixed precision avoids fp16 GradScaler unscale failures with local 4-bit FLUX training",
+            *strategy,
+        ]
+    return [
+        "local FLUX transformer LoRA profile",
+        "BF16 mixed precision for local FLUX LoRA training",
+        *strategy,
+    ]
 
 
 def materialize_captioned_train_dataset(dataset_dir: Path, target_dir: Path) -> None:

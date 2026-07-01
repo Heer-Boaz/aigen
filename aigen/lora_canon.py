@@ -41,7 +41,7 @@ def lora_canon_images_by_name(manifest: dict[str, Any], canon_dir: Path) -> dict
             "path": path.as_posix(),
             "sha256": image["image"]["sha256"],
             "source_sha256": image["source_sha256"],
-            "prompt": image["prompt"],
+            "training_caption": image["training_caption"],
             "approval": image["approval"],
         }
     return by_name
@@ -76,15 +76,15 @@ def init_lora_canon(
         name, source_path = _parse_named_path(spec)
         output_path = canon_dir / "images" / f"{_slug(name)}.png"
         _copy_rgb_png(source_path, output_path)
-        caption = _caption(trigger_token, identity_prompt, name)
+        training_caption = _training_caption(trigger_token, identity_prompt, name)
         caption_path = output_path.with_suffix(".txt")
-        caption_path.write_text(caption + "\n", encoding="utf-8")
+        caption_path.write_text(training_caption + "\n", encoding="utf-8")
         images.append(
             {
                 "name": name,
                 "file_name": output_path.relative_to(canon_dir).as_posix(),
-                "caption_file": caption_path.relative_to(canon_dir).as_posix(),
-                "prompt": caption,
+                "training_caption_file": caption_path.relative_to(canon_dir).as_posix(),
+                "training_caption": training_caption,
                 "image": image_asset_json(output_path),
                 "source_path": source_path.as_posix(),
                 "source_sha256": sha256_file(source_path),
@@ -210,7 +210,7 @@ def _canon_images(source_dir: Path, manifest: dict[str, Any]) -> list[dict[str, 
                 "name": item["name"],
                 "path": path.as_posix(),
                 "sha256": sha256_file(path),
-                "prompt": item["prompt"],
+                "training_caption": item["training_caption"],
                 "approval": item["approval"],
             }
         )
@@ -250,8 +250,22 @@ def _copy_rgb_png(source_path: Path, output_path: Path) -> None:
         source.convert("RGB").save(output_path)
 
 
-def _caption(trigger_token: str, identity_prompt: str, name: str) -> str:
-    return f"{trigger_token}, {identity_prompt}, {_words(name)}"
+def _training_caption(trigger_token: str, identity_prompt: str, name: str) -> str:
+    return f"{trigger_token}, {', '.join(_caption_tags(identity_prompt, name))}, {_words(name)}"
+
+
+def _caption_tags(identity_prompt: str, name: str) -> list[str]:
+    tags = [tag.strip() for tag in identity_prompt.split(",") if tag.strip()]
+    words = set(_words(name).split())
+    if words & {"profile", "side", "back", "rear"}:
+        tags = [tag for tag in tags if tag != "looking at viewer"]
+    if words & {"back", "rear"}:
+        tags = [
+            tag
+            for tag in tags
+            if tag not in {"blue eyes", "smile", "light blush", "flat-chested", "small breasts"}
+        ]
+    return tags
 
 
 def _slug(value: str) -> str:

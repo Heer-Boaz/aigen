@@ -111,10 +111,11 @@ def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str
 def _dataset_candidates(spec: LoraDatasetSpec, base_dir: Path) -> list[LoraDatasetCandidate]:
     candidates: list[LoraDatasetCandidate] = []
     for source in spec.sources:
-        if source.type == "canon":
-            candidates.extend(_canon_candidates(spec, source, base_dir))
-        else:
-            candidates.extend(_candidate_review_candidates(spec, source, base_dir))
+        match source.type:
+            case "canon":
+                candidates.extend(_canon_candidates(spec, source, base_dir))
+            case "candidate_review":
+                candidates.extend(_candidate_review_candidates(spec, source, base_dir))
     return candidates
 
 
@@ -148,7 +149,7 @@ def _canon_candidates(
                 source_kind="canon",
                 name=image_name,
                 image_path=image_path,
-                caption=_caption_with_tags(item["prompt"], source.tags),
+                caption=item["training_caption"],
                 tags=source.tags,
                 split=source.split,
                 source_metadata={
@@ -187,7 +188,7 @@ def _candidate_review_candidates(
                 source_kind="candidate_review",
                 name=item["name"],
                 image_path=image_path,
-                caption=_caption_with_tags(item["training_caption"], source.tags),
+                caption=item["training_caption"],
                 tags=source.tags,
                 split=source.split,
                 source_metadata={
@@ -278,18 +279,6 @@ def _write_metadata(records: list[dict[str, Any]], output_dir: Path) -> None:
     with (output_dir / "captions.txt").open("w", encoding="utf-8") as captions:
         for record in records:
             captions.write(f"{record['file_name']}\t{record['prompt']}\n")
-
-
-def _caption_with_tags(prompt: str, tags: list[str]) -> str:
-    parts = [prompt]
-    seen = {prompt.strip().lower()}
-    for tag in tags:
-        cleaned = " ".join(tag.split())
-        key = cleaned.lower()
-        if cleaned and key not in seen:
-            parts.append(cleaned)
-            seen.add(key)
-    return ", ".join(parts)
 
 
 def _perceptual_hash(path: Path) -> str:
