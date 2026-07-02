@@ -1,7 +1,7 @@
 {
   "character": {
     "id": "ai51",
-    "identity_prompt": "A young woman with short brown hair styled in a slightly tousled bob with windswept strands, bright blue eyes with a neutral expression, calm and composed face with no smile, small petite build with balanced proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves.",
+    "identity_prompt": "A young woman with short brown hair styled in a slightly tousled bob, bright blue eyes, and a small petite build with slender proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves.",
     "trigger_token": "ai51char"
   },
   "images": [
@@ -21,7 +21,7 @@
       "name": "front",
       "source_path": "/home/boaz/aigen/assets/characters/ai51/views/front.png",
       "source_sha256": "d9ef66e45f5d5f2fbbda217f7205ad3af597931c7b49ac7574da91f3a227974f",
-      "training_caption": "ai51char, A young woman with short brown hair styled in a slightly tousled bob with windswept strands, bright blue eyes with a neutral expression, calm and composed face with no smile, small petite build with balanced proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves, front",
+      "training_caption": "ai51char, A young woman with short brown hair styled in a slightly tousled bob, bright blue eyes, and a small petite build with slender proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves, front",
       "training_caption_file": "images/front.txt"
     },
     {
@@ -40,7 +40,7 @@
       "name": "left_profile",
       "source_path": "/home/boaz/aigen/assets/characters/ai51/views/left_profile.png",
       "source_sha256": "074f197586c94c8ef937b464186a182cbe83c805bc498225d1581201ebb1df0c",
-      "training_caption": "ai51char, A young woman with short brown hair styled in a slightly tousled bob with windswept strands, bright blue eyes with a neutral expression, calm and composed face with no smile, small petite build with balanced proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves, left profile",
+      "training_caption": "ai51char, A young woman with short brown hair styled in a slightly tousled bob, bright blue eyes, and a small petite build with slender proportions. She wears a fitted brown leather jacket with silver zipper hardware and structured shoulders, over a crisp white button-up collared shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She wears a fitted brown leather mini skirt with a matching leather belt with a silver rectangular buckle, brown leather knee-high boots with low heels and buckle details, and brown leather gloves, left profile",
       "training_caption_file": "images/left_profile.txt"
     }
   ],

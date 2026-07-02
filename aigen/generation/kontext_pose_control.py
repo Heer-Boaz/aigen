@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from aigen.flux_geometry import fit_size_to_area
+from aigen.generation.flux_components import T5_TOKENIZER_COMPONENT, flux_text_component_device_reports
 from aigen.generation.runtime_diagnostics import (
     elapsed_ms,
     module_device_report,
@@ -295,16 +296,16 @@ def _generation_environment(torch_module: Any, pipeline: Any) -> dict[str, Any]:
 
 
 def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
+    components = {
+        "controlnet": module_device_report(pipeline.controlnet),
+        "transformer": module_device_report(pipeline.transformer),
+        "vae": module_device_report(pipeline.vae),
+    }
+    components.update(flux_text_component_device_reports(pipeline))
     return {
         "pipeline_class": type(pipeline).__qualname__,
         "model_cpu_offload_seq": pipeline.model_cpu_offload_seq,
-        "components": {
-            "controlnet": module_device_report(pipeline.controlnet),
-            "transformer": module_device_report(pipeline.transformer),
-            "vae": module_device_report(pipeline.vae),
-            "text_encoder": module_device_report(pipeline.text_encoder),
-            "text_encoder_2": module_device_report(pipeline.text_encoder_2),
-        },
+        "components": components,
     }
 
 
@@ -628,8 +629,9 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
 
             prompt_encode_start = synchronized_time(torch)
             text_prompt = prompt if t5_prompt is None else t5_prompt
+            t5_tokenizer = getattr(self, T5_TOKENIZER_COMPONENT)
             prompt_token_count = len(
-                self.tokenizer_2(
+                t5_tokenizer(
                     text_prompt,
                     padding=False,
                     truncation=False,
@@ -642,7 +644,7 @@ def _load_flux_kontext_controlnet() -> tuple[Any, Any, Any, Any, Any]:
                 )
             if true_cfg_scale > 1:
                 negative_prompt_token_count = len(
-                    self.tokenizer_2(
+                    t5_tokenizer(
                         negative_prompt,
                         padding=False,
                         truncation=False,

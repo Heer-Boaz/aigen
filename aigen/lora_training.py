@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aigen.generation.flux_components import (
+    CLIP_TEXT_ENCODER_COMPONENT,
+    CLIP_TOKENIZER_COMPONENT,
+    T5_TEXT_ENCODER_COMPONENT,
+    T5_TOKENIZER_COMPONENT,
+)
 from aigen.gpu_status import GpuStatusError, nvidia_smi_memory_snapshot
 from aigen.keyframe_memory import NvidiaSmiMemorySampler
 from aigen.manifest_io import read_json, write_json, write_json_line
@@ -21,10 +27,10 @@ TRAIN_CAPTION_COLUMN = "prompt"
 REQUIRED_FLUX_MODEL_ENTRIES = (
     "model_index.json",
     "scheduler",
-    "text_encoder",
-    "text_encoder_2",
-    "tokenizer",
-    "tokenizer_2",
+    CLIP_TEXT_ENCODER_COMPONENT,
+    T5_TEXT_ENCODER_COMPONENT,
+    CLIP_TOKENIZER_COMPONENT,
+    T5_TOKENIZER_COMPONENT,
     "transformer",
     "vae",
 )

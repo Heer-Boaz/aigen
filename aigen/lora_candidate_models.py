@@ -39,9 +39,6 @@ class LoraCandidatePromptSpec(StrictModel):
         cleaned = " ".join(value.split())
         if cleaned.lower() in {"", ".", "...", "prompt", "candidate prompt"}:
             raise ValueError("candidate prompt must be a concrete visual instruction")
-        lowered = cleaned.lower()
-        if not any(word in lowered for word in ("background", "backdrop", "studio", "plain")):
-            raise ValueError("candidate prompt must explicitly describe the background")
         return cleaned
 
 
@@ -49,6 +46,7 @@ class LoraCandidateTemplateSpec(StrictModel):
     name: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
     view: str = Field(min_length=1)
     pose: str = Field(min_length=1)
+    framing: str = Field(min_length=1)
     identity_primer: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
     prompt: LoraCandidatePromptSpec
 
@@ -57,9 +55,9 @@ class LoraCandidateTemplateSpec(StrictModel):
     def semantic_name(cls, value: str) -> str:
         if value.rsplit("_", 1)[-1].isdigit():
             raise ValueError("candidate name must be semantic, not numbered")
-        banned = {"crop", "close", "closeup", "close_up", "upper", "middle", "lower", "partial"}
+        banned = {"crop", "close", "closeup", "close_up", "partial"}
         if any(part.lower() in banned for part in value.replace("-", "_").replace(".", "_").split("_")):
-            raise ValueError("candidate name must describe a full-body view/pose, not a crop or close-up")
+            raise ValueError("candidate name must describe an intentional view/pose/framing, not a crop or close-up")
         return value
 
     @field_validator("view", "pose")
@@ -69,12 +67,24 @@ class LoraCandidateTemplateSpec(StrictModel):
         if cleaned.lower() in {"", ".", "...", "unknown", "n/a"}:
             raise ValueError("candidate fields must be concrete")
         lowered = cleaned.lower()
-        if any(term in lowered for term in ("background", "lineart", "full body", "full-body", "crop")):
+        if any(term in lowered for term in _NON_VIEW_POSE_TERMS):
             raise ValueError("view and pose must describe camera/pose only")
         return cleaned
 
+    @field_validator("framing")
+    @classmethod
+    def concrete_framing(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if cleaned.lower() in {"", ".", "...", "unknown", "n/a"}:
+            raise ValueError("candidate framing must be concrete")
+        if not _framing_groups(cleaned):
+            raise ValueError(
+                "candidate framing must describe visible body coverage, such as full body, thigh-up, waist-up or portrait"
+            )
+        return cleaned
+
     @model_validator(mode="after")
-    def prompt_materializes_view_and_pose(self) -> LoraCandidateTemplateSpec:
+    def prompt_materializes_view_pose_and_framing(self) -> LoraCandidateTemplateSpec:
         prompt = self.prompt.positive.lower()
         view = self.view.lower()
         name_parts = _name_parts(self.name)
@@ -84,6 +94,9 @@ class LoraCandidateTemplateSpec(StrictModel):
         missing_view_terms = _missing_view_terms(self.view, prompt)
         if missing_view_terms:
             raise ValueError(f"candidate prompt must explicitly include view term: {missing_view_terms[0]}")
+        missing_framing_terms = _missing_framing_terms(self.framing, prompt)
+        if missing_framing_terms:
+            raise ValueError(f"candidate prompt must explicitly include framing term: {missing_framing_terms[0]}")
         if "looking at viewer" in prompt and any(term in view for term in ("profile", "back", "rear")):
             raise ValueError("candidate prompt must not include front-view gaze language for profile or rear views")
         rear_forbidden_terms = (
@@ -117,11 +130,15 @@ class LoraCandidateTemplateListSpec(StrictModel):
         if len(set(names)) != len(names):
             raise ValueError("candidate names must be unique")
         view_pose_pairs = [
-            (" ".join(candidate.view.split()).lower(), " ".join(candidate.pose.split()).lower())
+            (
+                " ".join(candidate.view.split()).lower(),
+                " ".join(candidate.pose.split()).lower(),
+                " ".join(candidate.framing.split()).lower(),
+            )
             for candidate in self.candidates
         ]
         if len(set(view_pose_pairs)) != len(view_pose_pairs):
-            raise ValueError("candidate view/pose pairs must be unique")
+            raise ValueError("candidate view/pose/framing tuples must be unique")
         prompts = [" ".join(candidate.prompt.positive.split()).lower() for candidate in self.candidates]
         if len(set(prompts)) != len(prompts):
             raise ValueError("candidate generation prompts must be unique")
@@ -174,6 +191,34 @@ def _missing_view_terms(view: str, prompt: str) -> list[str]:
     return missing
 
 
+def _missing_framing_terms(framing: str, prompt: str) -> list[str]:
+    missing = []
+    for group in _framing_groups(framing):
+        if not any(_contains_term(prompt, term) for term in group):
+            missing.append(group[0])
+    return missing
+
+
+def _framing_groups(framing: str) -> list[tuple[str, ...]]:
+    lowered = framing.lower()
+    groups: list[tuple[str, ...]] = []
+    if "full" in lowered and "body" in lowered:
+        groups.append(("full body", "full-body", "entire body", "entire figure", "head-to-toe", "head to toe"))
+    if "thigh" in lowered:
+        groups.append(("thigh-up", "thigh up", "upper thighs", "mid-thigh"))
+    if "knee" in lowered:
+        groups.append(("knee-up", "knee up", "knees-up", "knees up"))
+    if "waist" in lowered:
+        groups.append(("waist-up", "waist up", "upper body"))
+    if "bust" in lowered:
+        groups.append(("bust portrait", "bust-up", "bust up", "chest-up", "chest up"))
+    if "head" in lowered or "shoulder" in lowered:
+        groups.append(("head-and-shoulders", "head and shoulders", "shoulders-up", "shoulders up"))
+    if "portrait" in lowered and not groups:
+        groups.append(("portrait",))
+    return groups
+
+
 def _name_parts(value: str) -> set[str]:
     return {part for part in value.lower().replace("-", "_").replace(".", "_").split("_") if part}
 
@@ -191,6 +236,28 @@ def _semantic_terms(value: str) -> list[str]:
         for token in value.lower().replace("-", " ").replace("_", " ").split()
         if len(token) > 3 and token not in stop_words
     ]
+
+
+_NON_VIEW_POSE_TERMS = (
+    "background",
+    "lineart",
+    "full body",
+    "full-body",
+    "entire body",
+    "entire figure",
+    "head-to-toe",
+    "head to toe",
+    "thigh-up",
+    "thigh up",
+    "knee-up",
+    "knee up",
+    "waist-up",
+    "waist up",
+    "upper body",
+    "bust",
+    "portrait",
+    "crop",
+)
 
 
 def load_lora_candidate_brief(path: Path) -> LoraCandidateBriefSpec:

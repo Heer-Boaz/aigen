@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
 
 from aigen.diffusers_kontext_adapter import kontext_inpaint_text_kwargs
+from aigen.generation.flux_components import flux_text_component_device_reports
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, elapsed_ms, module_device_report, synchronized_time
 from aigen.generation.runtime_types import resolve_torch_dtype
 from aigen.image_assets import image_asset_json
@@ -644,13 +645,13 @@ def _generation_environment(torch_module: Any) -> dict[str, Any]:
 
 
 def _pipeline_device_report(pipeline: Any) -> dict[str, Any]:
+    components = {
+        "transformer": module_device_report(pipeline.transformer),
+        "vae": module_device_report(pipeline.vae),
+    }
+    components.update(flux_text_component_device_reports(pipeline))
     return {
         "pipeline_class": type(pipeline).__qualname__,
         "model_cpu_offload_seq": pipeline.model_cpu_offload_seq,
-        "components": {
-            "transformer": module_device_report(pipeline.transformer),
-            "vae": module_device_report(pipeline.vae),
-            "text_encoder": module_device_report(pipeline.text_encoder),
-            "text_encoder_2": module_device_report(pipeline.text_encoder_2),
-        },
+        "components": components,
     }

@@ -17,7 +17,6 @@ class LoraCandidateProfile:
     nunchaku_transformer_model: Path
     attention_impl: str
     dtype: str
-    pipeline_cpu_offload: bool
     vae_tiling: bool
     model_revisions: dict[str, dict[str, str]]
 
@@ -31,7 +30,6 @@ LORA_CANDIDATE_PROFILE = LoraCandidateProfile(
     ),
     attention_impl="nunchaku-fp16",
     dtype="bfloat16",
-    pipeline_cpu_offload=False,
     vae_tiling=False,
     model_revisions={
         "kontext": KEYFRAME_MODEL_REVISIONS["kontext"],

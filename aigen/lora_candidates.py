@@ -6,6 +6,7 @@ from typing import Any
 
 from PIL import Image
 
+from aigen.generation.flux_prompt_encoding import encode_flux_prompts
 from aigen.generation.kontext_identity import CharacterKontextIdentitySession
 from aigen.generation.runtime_diagnostics import cuda_memory_stats, synchronized_time
 from aigen.image_assets import image_asset_json
@@ -81,6 +82,7 @@ def plan_lora_candidates(
                         "name": template.name,
                         "view": template.view,
                         "pose": template.pose,
+                        "framing": template.framing,
                     },
                     "seed": seed,
                     "generation_prompt": generation_prompt,
@@ -177,13 +179,19 @@ def run_lora_candidate_plan(
     memory_sampler.start()
     memory: dict[str, Any] | None = None
     try:
+        progress.phase("encode unique candidate prompts")
+        prompt_embeddings, prompt_encode_ms = encode_flux_prompts(
+            profile.model,
+            prompts=_unique_generation_prompts(plan),
+            dtype=profile.dtype,
+            max_sequence_length=max_sequence_length,
+        )
         progress.phase("load identity generation models")
         session = CharacterKontextIdentitySession(
             profile.model,
             dtype=profile.dtype,
             nunchaku_transformer_model=profile.nunchaku_transformer_model,
             attention_impl=profile.attention_impl,
-            pipeline_cpu_offload=profile.pipeline_cpu_offload,
             vae_tiling=profile.vae_tiling,
         )
         try:
@@ -195,7 +203,7 @@ def run_lora_candidate_plan(
             for candidate in plan["candidates"]:
                 image, timings = session.generate(
                     reference_image=Path(candidate["identity_primer"]["path"]),
-                    prompt=candidate["generation_prompt"],
+                    prompt_embedding=prompt_embeddings[candidate["generation_prompt"]],
                     width=candidate["generation"]["width"],
                     height=candidate["generation"]["height"],
                     steps=candidate["generation"]["steps"],
@@ -234,8 +242,8 @@ def run_lora_candidate_plan(
                     "name": profile.name,
                     "dtype": profile.dtype,
                     "attention_impl": profile.attention_impl,
-                    "pipeline_cpu_offload": profile.pipeline_cpu_offload,
                     "vae_tiling": profile.vae_tiling,
+                    "prompt_encoding": "precomputed_prompt_embeds",
                     "models": {
                         **profile.model_revisions,
                         "kontext": {
@@ -254,6 +262,7 @@ def run_lora_candidate_plan(
                 },
                 "outputs": outputs,
                 "timings_ms": {
+                    "prompt_encode_ms": prompt_encode_ms,
                     "model_load_ms": session.model_load_ms,
                     "total_ms": (synchronized_time(torch) - total_start) * 1000,
                 },
@@ -464,6 +473,10 @@ def _validate_candidate_prompts_for_generation(candidates: list[Any], trigger_to
             )
 
 
+def _unique_generation_prompts(plan: dict[str, Any]) -> list[str]:
+    return list(dict.fromkeys(candidate["generation_prompt"] for candidate in plan["candidates"]))
+
+
 def _generation_prompt(identity_prompt: str, template: Any) -> str:
     return join_prompt_parts(identity_prompt, template.prompt.positive)
 
@@ -512,11 +525,13 @@ def _quota_report(accepted: list[dict[str, Any]]) -> dict[str, Any]:
     by_candidate: dict[str, int] = {}
     by_view: dict[str, int] = {}
     by_pose: dict[str, int] = {}
+    by_framing: dict[str, int] = {}
     for item in accepted:
         candidate = item["candidate"]
         by_candidate[candidate["name"]] = by_candidate.get(candidate["name"], 0) + 1
         by_view[candidate["view"]] = by_view.get(candidate["view"], 0) + 1
         by_pose[candidate["pose"]] = by_pose.get(candidate["pose"], 0) + 1
+        by_framing[candidate["framing"]] = by_framing.get(candidate["framing"], 0) + 1
     total = len(accepted)
     dominant = [
         {"axis": "candidate", "name": name, "count": count}
@@ -528,11 +543,17 @@ def _quota_report(accepted: list[dict[str, Any]]) -> dict[str, Any]:
         for name, count in by_view.items()
         if total and count / total > 0.5
     )
+    dominant.extend(
+        {"axis": "framing", "name": name, "count": count}
+        for name, count in by_framing.items()
+        if total and count / total > 0.6
+    )
     return {
         "accepted": total,
         "by_candidate": by_candidate,
         "by_view": by_view,
         "by_pose": by_pose,
+        "by_framing": by_framing,
         "warnings": [
             f"{item['axis']} {item['name']} dominates accepted candidates ({item['count']}/{total})"
             for item in dominant

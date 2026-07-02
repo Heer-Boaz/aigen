@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from aigen.brief_commands import add_brief_commands, run_brief_command
 from aigen.character_commands import add_character_commands, run_character_command

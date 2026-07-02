@@ -43,6 +43,7 @@ class LoraCandidateIntent:
     name: str
     view: str
     pose: str
+    framing: str
     identity_primer: str
 
 
@@ -254,6 +255,7 @@ def _validate_candidate_intents(
         intent.name: {
             "view": intent.view,
             "pose": intent.pose,
+            "framing": intent.framing,
             "identity_primer": intent.identity_primer,
         }
         for intent in intents
@@ -268,12 +270,13 @@ def _validate_candidate_intents(
         changed_contract = (
             candidate.view != contract["view"]
             or candidate.pose != contract["pose"]
+            or candidate.framing != contract["framing"]
             or candidate.identity_primer != contract["identity_primer"]
         )
         if changed_contract:
             raise LoraCandidateBriefError(
                 f"Invalid LoRA candidate planner response {raw_path.as_posix()}: "
-                f"candidate {candidate.name} changed the requested view, pose or identity_primer"
+                f"candidate {candidate.name} changed the requested view, pose, framing or identity_primer"
             )
 
 
@@ -286,11 +289,12 @@ def _validate_candidate_intent(
         candidate.name != intent.name
         or candidate.view != intent.view
         or candidate.pose != intent.pose
+        or candidate.framing != intent.framing
         or candidate.identity_primer != intent.identity_primer
     ):
         raise LoraCandidateBriefError(
             f"Invalid LoRA candidate planner response {raw_path.as_posix()}: "
-            f"candidate changed the requested name, view, pose or identity_primer"
+            f"candidate changed the requested name, view, pose, framing or identity_primer"
         )
 
 
@@ -338,7 +342,7 @@ def _single_candidate_prompt(
 Write exactly one variable generation prompt suffix for one candidate image.
 The generated candidate may later become character identity LoRA training data, but only after model evidence and human approval.
 The training dataset must contain only canon-worthy identity drawings. Do not plan punch, hit, jump, combat, deformed, exaggerated or malformed action frames.
-Inspect the supplied full canon images yourself. Describe only the requested view, pose, framing, expression if needed, and clean background in prompt.positive.
+Inspect the supplied canon images yourself. Describe only the requested view, pose, framing, expression if needed, and clean background in prompt.positive.
 The executor prepends this full user identity prompt to every generation:
 {character['identity_prompt']}
 
@@ -350,12 +354,11 @@ prompt.positive is concatenated after the full user identity prompt, so it shoul
 Never include the phrase looking at viewer in profile, side, back or rear-view candidate prompts.
 For back or rear-view prompts, describe the rear camera angle and visible silhouette; do not request visible eyes, smile, blush or viewer-facing face details.
 If the requested candidate view is back or rear, prompt.positive must not contain: eye, eyes, smile, smiling, blush, looking at viewer.
-Never create candidates whose view, pose, name or prompt describes crop, close-up or partial-body framing.
-The generated candidates should cover useful identity views and mild pose variety for LoRA training: neutral front, left/right profile, mild three-quarter views, back view only when the canon evidence supports it, simple idle, simple walking or standing variations.
-If more distinct candidates are needed, vary full-body mild poses such as relaxed idle, hands-at-sides, small step, contrapposto or neutral stance. Do not use close-up, upper-body, lower-body or crop variants to fill the candidate count.
-Changing only identity_primer or name is not a distinct candidate. Every candidate must have a unique view and pose pair. Do not repeat back view neutral standing more than once.
+The generated candidates should cover useful identity views, intentional framing variety and mild pose variety for LoRA training: neutral front, left/right profile, mild three-quarter views, back view only when the canon evidence supports it, simple idle, simple walking or standing variations, full-body, thigh-up, waist-up and portrait/detail framing.
+If more distinct candidates are needed, vary mild poses such as relaxed idle, hands-at-sides, small step, contrapposto or neutral stance, and vary intentional framing. Do not use accidental cut-off, malformed crops or close-up filler.
+Changing only identity_primer or name is not a distinct candidate. Every candidate must have a unique view, pose and framing tuple. Do not repeat back view neutral standing more than once.
 Avoid direct source-image copying, sprite-like output, top-down distortion, bottom-up distortion, extreme foreshortening, hard action poses and random costumes.
-Every candidate must show the complete character with a clean simple background.
+Every candidate must use a clean simple background. Partial-body candidates are valid only when the requested framing states exactly what is visible.
 
 Available identity primer names: {primer_names}
 
@@ -363,6 +366,7 @@ Requested candidate intent. Do not invent, rename or alter these fields:
 - name: {intent.name}
 - view: {intent.view}
 - pose: {intent.pose}
+- framing: {intent.framing}
 - identity_primer: {intent.identity_primer}
 
 Runtime contract:
@@ -376,6 +380,7 @@ The JSON object must contain exactly:
 - name: exact requested name
 - view: exact requested view
 - pose: exact requested pose
+- framing: exact requested framing
 - identity_primer: exact requested identity_primer
 - prompt: object with exactly one key, positive
 
@@ -384,19 +389,21 @@ Exact JSON shape:
   "name": "{intent.name}",
   "view": "{intent.view}",
   "pose": "{intent.pose}",
+  "framing": "{intent.framing}",
   "identity_primer": "{intent.identity_primer}",
   "prompt": {{
     "positive": "variable camera, pose, framing and background suffix for this candidate"
   }}
 }}
 
-The positive prompt must be a suffix, not a full prompt. It must include the requested view, requested pose, full-body framing and a clean simple background.
+The positive prompt must be a suffix, not a full prompt. It must include the requested view, requested pose, requested framing and a clean simple background.
 The positive prompt must not repeat the full user identity prompt and must not list the whole outfit. The executor prepends the full user identity prompt before this suffix.
 For example, a front view candidate must include the words "front view" in positive; a left profile candidate must include "left" or "left-facing"; a right profile candidate must include "right" or "right-facing"; a back view candidate must include "back" or "rear"; a three-quarter view must include "three-quarter" or "3/4".
-The generated image sees the full user identity prompt plus prompt.positive. It will not see name, view, pose or identity_primer, so prompt.positive must materialize the requested view and pose.
+The generated image sees the full user identity prompt plus prompt.positive. It will not see name, view, pose, framing or identity_primer, so prompt.positive must materialize the requested view, pose and framing.
 The name must describe the actual output view and pose, not the source primer. A name containing left, right, front or back must match the view field.
 The view field must describe only camera angle, such as "front view", "left profile view", "right profile view" or "three-quarter front view".
 The pose field must describe only body pose, such as "neutral standing pose", "relaxed idle pose" or "mild walk contact pose".
+The framing field must describe only visible body coverage, such as "full body", "thigh-up", "waist-up", "bust portrait" or "head-and-shoulders portrait".
 The positive prompt is not the full generation prompt. The executor adds the full user identity prompt before this suffix.
 The positive prompt must not be the full identity prompt copied verbatim.
 Do not include the trigger token in candidate prompts. Candidate prompts are used for pre-LoRA image generation, where the trigger token has no meaning. The executor adds the trigger token only to training captions after human approval.
@@ -408,24 +415,27 @@ def _candidate_intents(canon_images: dict[str, dict[str, Any]], candidate_count:
     front = _primer(canon_images, "front")
     side = _primer(canon_images, "left_profile")
     templates = [
-        ("front_neutral_standing", "front view", "neutral standing pose", front),
-        ("left_profile_neutral_standing", "left profile view", "neutral standing pose", side),
-        ("right_profile_neutral_standing", "right profile view", "neutral standing pose", side),
-        ("three_quarter_front_neutral_standing", "three-quarter front view", "neutral standing pose", front),
-        ("three_quarter_left_neutral_standing", "three-quarter left view", "neutral standing pose", side),
-        ("three_quarter_right_neutral_standing", "three-quarter right view", "neutral standing pose", side),
-        ("front_relaxed_idle", "front view", "relaxed idle pose", front),
-        ("left_profile_relaxed_idle", "left profile view", "relaxed idle pose", side),
-        ("right_profile_relaxed_idle", "right profile view", "relaxed idle pose", side),
-        ("left_profile_walk_contact", "left profile view", "mild walk contact pose", side),
-        ("right_profile_walk_contact", "right profile view", "mild walk contact pose", side),
-        ("front_small_step", "front view", "small step pose", front),
-        ("left_profile_small_step", "left profile view", "small step pose", side),
-        ("right_profile_small_step", "right profile view", "small step pose", side),
+        ("front_neutral_full_body", "front view", "neutral standing pose", "full body", front),
+        ("front_neutral_thigh_up", "front view", "neutral standing pose", "thigh-up", front),
+        ("front_neutral_waist_up", "front view", "neutral standing pose", "waist-up", front),
+        ("front_neutral_portrait", "front view", "neutral standing pose", "head-and-shoulders portrait", front),
+        ("left_profile_neutral_full_body", "left profile view", "neutral standing pose", "full body", side),
+        ("left_profile_neutral_thigh_up", "left profile view", "neutral standing pose", "thigh-up", side),
+        ("right_profile_neutral_full_body", "right profile view", "neutral standing pose", "full body", side),
+        ("right_profile_neutral_thigh_up", "right profile view", "neutral standing pose", "thigh-up", side),
+        ("three_quarter_front_neutral_thigh_up", "three-quarter front view", "neutral standing pose", "thigh-up", front),
+        ("three_quarter_left_neutral_thigh_up", "three-quarter left view", "neutral standing pose", "thigh-up", side),
+        ("three_quarter_right_neutral_thigh_up", "three-quarter right view", "neutral standing pose", "thigh-up", side),
+        ("front_relaxed_idle_thigh_up", "front view", "relaxed idle pose", "thigh-up", front),
+        ("left_profile_relaxed_idle_full_body", "left profile view", "relaxed idle pose", "full body", side),
+        ("right_profile_relaxed_idle_full_body", "right profile view", "relaxed idle pose", "full body", side),
+        ("left_profile_walk_contact_full_body", "left profile view", "mild walk contact pose", "full body", side),
+        ("right_profile_walk_contact_full_body", "right profile view", "mild walk contact pose", "full body", side),
+        ("front_small_step_full_body", "front view", "small step pose", "full body", front),
     ]
     back_primer = _back_primer(canon_images)
     if back_primer is not None:
-        templates.insert(6, ("back_neutral_standing", "back view", "neutral standing pose", back_primer))
+        templates.insert(8, ("back_neutral_full_body", "back view", "neutral standing pose", "full body", back_primer))
     if candidate_count > len(templates):
         raise LoraCandidateBriefError(f"LoRA candidate planner supports at most {len(templates)} candidate intents")
     return [LoraCandidateIntent(*template) for template in templates[:candidate_count]]

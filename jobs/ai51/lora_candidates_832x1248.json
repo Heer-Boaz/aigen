@@ -156,16 +156,16 @@
     "canon": "../../assets/characters/ai51/canon"
   },
   "generation": {
-    "height": 864,
+    "height": 1248,
     "seed_start": 300,
     "seeds_per_candidate": 64,
     "steps": 24,
-    "width": 576
+    "width": 832
   },
-  "id": "ai51.lora.candidates",
+  "id": "ai51.lora.candidates.832x1248",
   "kind": "lora-candidate-brief",
   "output": {
-    "directory": "../../runs/lora_candidates/ai51_identity",
+    "directory": "../../runs/lora_candidates/ai51_identity_832x1248_mixed_framing",
     "overwrite": true
   }
 }

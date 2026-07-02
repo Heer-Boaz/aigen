@@ -11,6 +11,11 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 from aigen.cli import main
+from aigen.generation.flux_components import (
+    CLIP_TEXT_ENCODER_COMPONENT,
+    T5_TEXT_ENCODER_COMPONENT,
+    T5_TOKENIZER_COMPONENT,
+)
 from aigen.generation.kontext_identity import _pipeline_device_report
 from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.lora_candidate_models import (
@@ -21,7 +26,8 @@ from aigen.lora_candidate_models import (
 )
 from aigen.lora_dataset_models import LoraDatasetError, load_lora_dataset_spec
 from aigen.lora_datasets import build_lora_dataset
-from aigen.lora_candidates import LoraCandidateError, plan_lora_candidates
+from aigen.lora_candidates import LoraCandidateError, plan_lora_candidates, run_lora_candidate_plan
+from aigen.lora_candidate_profiles import LoraCandidateProfile
 from aigen.lora_training import materialize_captioned_train_dataset, build_lora_train_plan
 from aigen.manifest_io import write_json
 from aigen.progress import SILENT_STATUS
@@ -47,11 +53,12 @@ class FakeLoraCandidatePlanner:
         self.prompt = prompt
         self.prompts.append(prompt)
         self.image_paths = image_paths
-        if "name: left_profile_neutral_standing" in prompt:
+        if "name: left_profile_neutral_full_body" in prompt:
             candidate = {
-                "name": "left_profile_neutral_standing",
+                "name": "left_profile_neutral_full_body",
                 "view": "left profile view",
                 "pose": "neutral standing pose",
+                "framing": "full body",
                 "identity_primer": "left_profile",
                 "prompt": {
                     "positive": (
@@ -60,11 +67,26 @@ class FakeLoraCandidatePlanner:
                     )
                 },
             }
-        else:
+        elif "name: front_neutral_thigh_up" in prompt:
             candidate = {
-                "name": "front_neutral_standing",
+                "name": "front_neutral_thigh_up",
                 "view": "front view",
                 "pose": "neutral standing pose",
+                "framing": "thigh-up",
+                "identity_primer": "front",
+                "prompt": {
+                    "positive": (
+                        "anime-style thigh-up illustration, front view, neutral standing pose, "
+                        "looking at viewer, smile, light blush, plain studio background"
+                    )
+                },
+            }
+        else:
+            candidate = {
+                "name": "front_neutral_full_body",
+                "view": "front view",
+                "pose": "neutral standing pose",
+                "framing": "full body",
                 "identity_primer": "front",
                 "prompt": {
                     "positive": (
@@ -91,13 +113,14 @@ class InvalidLoraCandidatePlanner(FakeLoraCandidatePlanner):
                         "name": "front_neutral_standing",
                         "view": "front view",
                         "pose": "neutral standing pose",
+                        "framing": "full body",
                         "identity_primer": "front",
-                                "prompt": {
-                                    "positive": (
-                                        "anime-style full-body illustration, front view, neutral standing pose, "
-                                        "plain studio background"
-                                    )
-                                },
+                        "prompt": {
+                            "positive": (
+                                "anime-style full-body illustration, front view, neutral standing pose, "
+                                "plain studio background"
+                            )
+                        },
                     },
                 ]
             }
@@ -123,23 +146,21 @@ class FakeLoraCandidateJudge:
                 "hard_rejects": {
                     "wrong_face": False,
                     "wrong_hair_length_or_color": False,
-                    "wrong_outfit": False,
-                    "missing_required_neckwear_or_accessory": False,
-                    "missing_required_waist_or_lower_body_garment": False,
-                    "missing_required_belt_or_waist_detail": False,
-                    "missing_required_legwear": False,
-                    "missing_required_footwear": False,
-                    "deformed_body": False,
-                    "broken_hands_or_feet": False,
-                    "bad_framing": False,
+                    "childlike_or_chibi_proportions": False,
+                    "wrong_visible_outfit": False,
+                    "missing_visible_required_identity_detail": False,
+                    "deformed_visible_anatomy": False,
+                    "broken_visible_hands_or_feet": False,
+                    "framing_mismatch": False,
                     "dirty_or_distracting_background": False,
                     "style_drift": False,
                     "view_label_mismatch": False,
                 },
                 "scores": {
                     "identity_preservation": 9,
-                    "outfit_preservation": 9,
-                    "anatomy_quality": 9,
+                    "visible_outfit_preservation": 9,
+                    "visible_anatomy_quality": 9,
+                    "petite_proportion_preservation": 9,
                     "framing_quality": 9,
                     "background_quality": 9,
                     "style_match": 9,
@@ -159,15 +180,58 @@ class FakeLoraCandidateJudge:
 
 
 class FakeKontextIdentityPipeline:
-    model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
+    model_cpu_offload_seq = "text_encoder->t5_text_encoder->transformer->vae"
 
     def __init__(self) -> None:
         import torch
 
         self.transformer = torch.nn.Linear(1, 1)
         self.vae = torch.nn.Linear(1, 1)
-        self.text_encoder = torch.nn.Linear(1, 1)
-        self.text_encoder_2 = torch.nn.Linear(1, 1)
+        setattr(self, CLIP_TEXT_ENCODER_COMPONENT, torch.nn.Linear(1, 1))
+        setattr(self, T5_TEXT_ENCODER_COMPONENT, torch.nn.Linear(1, 1))
+
+
+class FakeCuda:
+    def is_available(self) -> bool:
+        return False
+
+
+class FakeTorch:
+    cuda = FakeCuda()
+
+
+class FakeKontextIdentitySession:
+    last: FakeKontextIdentitySession
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.torch = FakeTorch()
+        self.model_load_ms = 7.0
+        self.generated: list[dict[str, object]] = []
+        self.closed = False
+        FakeKontextIdentitySession.last = self
+
+    def generate(self, **kwargs):
+        self.generated.append(kwargs)
+        image = Image.new("RGB", (kwargs["width"], kwargs["height"]), (100, 120, 140))
+        return image, {"pipeline_ms": 3.0}
+
+    def environment(self) -> dict[str, object]:
+        return {"prompt_encoding": "precomputed_prompt_embeds"}
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeMemorySampler:
+    def __init__(self, preflight: dict[str, int]) -> None:
+        self.preflight = preflight
+        self.started = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> dict[str, int]:
+        return {**self.preflight, "nvidia_smi_peak_used_mb": self.preflight["nvidia_smi_preflight_used_mb"]}
 
 
 class LoraDatasetTests(unittest.TestCase):
@@ -177,9 +241,15 @@ class LoraDatasetTests(unittest.TestCase):
         self.assertEqual(report["pipeline_class"], "FakeKontextIdentityPipeline")
         self.assertEqual(
             sorted(report["components"]),
-            ["text_encoder", "text_encoder_2", "transformer", "vae"],
+            ["clip_text_encoder", "t5_text_encoder", "transformer", "vae"],
         )
         self.assertEqual(report["components"]["transformer"]["class"], "Linear")
+
+        textless_pipeline = FakeKontextIdentityPipeline()
+        setattr(textless_pipeline, CLIP_TEXT_ENCODER_COMPONENT, None)
+        setattr(textless_pipeline, T5_TEXT_ENCODER_COMPONENT, None)
+        textless_report = _pipeline_device_report(textless_pipeline)
+        self.assertEqual(sorted(textless_report["components"]), ["transformer", "vae"])
 
     def test_contact_sheet_uses_tiled_grid(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -202,12 +272,11 @@ class LoraDatasetTests(unittest.TestCase):
             front = root / "front.png"
             write_training_source(front, (180, 50, 60), "F")
             identity_prompt = (
-                "A young woman with short brown hair styled in a slightly tousled bob with windswept strands, "
-                "bright blue eyes with a neutral expression, calm and composed face with no smile, small "
-                "petite build with balanced proportions. She wears a fitted brown leather jacket with silver "
-                "zipper hardware and structured shoulders, over a crisp white button-up collared shirt. "
-                "Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. She "
-                "wears a fitted brown leather mini skirt with a matching leather belt with a silver "
+                "A young woman with short brown hair styled in a slightly tousled bob, bright blue eyes with "
+                "and a small petite build with slender proportions. She wears a fitted brown leather jacket "
+                "with silver zipper hardware and structured shoulders, over a crisp white button-up collared "
+                "shirt. Around her neck hangs a bold blue necktie, matching her blue thigh-high stockings. "
+                "She wears a fitted brown leather mini skirt with a matching leather belt with a silver "
                 "rectangular buckle, brown leather knee-high boots with low heels and buckle details, and "
                 "brown leather gloves."
             )
@@ -255,6 +324,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="left_profile_idle",
                 view="left profile view",
                 pose="idle standing pose",
+                framing="full body",
                 identity_primer="front",
                 prompt={
                     "positive": (
@@ -269,6 +339,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="right_profile_idle",
                 view="right profile view",
                 pose="idle standing pose",
+                framing="full body",
                 identity_primer="front",
                 prompt={
                     "positive": (
@@ -283,6 +354,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="front_walk_contact",
                 view="front view",
                 pose="walk contact pose",
+                framing="full body",
                 identity_primer="front",
                 prompt={
                     "positive": (
@@ -297,6 +369,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="left_profile_idle",
                 view="left profile view",
                 pose="idle standing pose",
+                framing="full body",
                 identity_primer="left_profile",
                 prompt={
                     "positive": (
@@ -311,6 +384,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="left_profile_three_quarter",
                 view="three-quarter front view",
                 pose="neutral standing pose",
+                framing="full body",
                 identity_primer="front",
                 prompt={
                     "positive": (
@@ -325,6 +399,7 @@ class LoraDatasetTests(unittest.TestCase):
                 name="back_neutral",
                 view="back view",
                 pose="neutral standing pose",
+                framing="full body",
                 identity_primer="front",
                 prompt={
                     "positive": (
@@ -377,11 +452,12 @@ class LoraDatasetTests(unittest.TestCase):
                             "name": "front_neutral",
                             "view": "front view",
                             "pose": "neutral standing",
+                            "framing": "full body",
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
                                     "Clean illustration style, front view, neutral standing walk contact pose, "
-                                    "complete character, plain studio background"
+                                    "full body, plain studio background"
                                 ),
                             },
                         },
@@ -389,11 +465,12 @@ class LoraDatasetTests(unittest.TestCase):
                             "name": "front_walk_contact",
                             "view": "front view",
                             "pose": "walk contact",
+                            "framing": "full body",
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
                                     "Clean illustration style, front view, neutral standing walk contact pose, "
-                                    "complete character, plain studio background"
+                                    "full body, plain studio background"
                                 ),
                             },
                         },
@@ -586,14 +663,14 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertEqual(brief["generation"]["seeds_per_candidate"], 3)
             self.assertEqual(
                 [candidate["name"] for candidate in brief["candidates"]],
-                ["front_neutral_standing", "left_profile_neutral_standing"],
+                ["front_neutral_full_body", "front_neutral_thigh_up"],
             )
             self.assertIn("front view", brief["candidates"][0]["prompt"]["positive"])
             self.assertNotIn("leather skirt", brief["candidates"][0]["prompt"]["positive"])
             self.assertNotIn("ai51char", brief["candidates"][0]["prompt"]["positive"])
-            self.assertEqual(brief["candidates"][1]["identity_primer"], "left_profile")
-            self.assertTrue((brief_path.with_suffix(".raw") / "front_neutral_standing.txt").exists())
-            self.assertTrue((brief_path.with_suffix(".prompts") / "front_neutral_standing.txt").exists())
+            self.assertEqual(brief["candidates"][1]["framing"], "thigh-up")
+            self.assertTrue((brief_path.with_suffix(".raw") / "front_neutral_full_body.txt").exists())
+            self.assertTrue((brief_path.with_suffix(".prompts") / "front_neutral_full_body.txt").exists())
 
     def test_lora_candidate_planner_rejects_invalid_vlm_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -839,6 +916,7 @@ class LoraDatasetTests(unittest.TestCase):
                             "name": "front_neutral",
                             "view": "front",
                             "pose": "neutral",
+                            "framing": "full body",
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
@@ -851,6 +929,7 @@ class LoraDatasetTests(unittest.TestCase):
                             "name": "walk_contact",
                             "view": "side",
                             "pose": "walk contact",
+                            "framing": "full body",
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
@@ -895,6 +974,7 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertIn("leather skirt", first_candidate["generation_prompt"])
             self.assertNotIn("ai51char", first_candidate["generation_prompt"])
             self.assertEqual(first_candidate["training_caption"], f"ai51char, {first_candidate['generation_prompt']}")
+            self.assertIn("smile", first_candidate["training_caption"])
             self.assertIn("generation_prompts/front_neutral_seed_0020.txt", planned_manifest["candidates"][0]["generation_prompt_file"])
             self.assertNotIn("candidates", generate_result)
 
@@ -1031,6 +1111,135 @@ class LoraDatasetTests(unittest.TestCase):
             self.assertNotIn("canon-worthy accepted candidate", records[0]["prompt"])
             self.assertIn("canon-worthy accepted candidate", records[0]["tags"])
 
+    def test_lora_candidate_run_precomputes_unique_prompt_embeddings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "front.png"
+            write_training_source(front, (180, 50, 60), "F")
+            canon_dir = root / "canon"
+            identity_prompt = "1girl, blue eyes, brown leather jacket, leather skirt"
+            main(
+                [
+                    "lora",
+                    "canon-init",
+                    "--character-id",
+                    "ai51",
+                    "--trigger-token",
+                    "ai51char",
+                    "--identity-prompt",
+                    identity_prompt,
+                    "--anchor",
+                    f"front={front.as_posix()}",
+                    "--output-dir",
+                    canon_dir.as_posix(),
+                    "--compact",
+                ]
+            )
+            candidate_dir = root / "candidates"
+            brief_path = root / "candidate_brief.json"
+            write_json(
+                brief_path,
+                {
+                    "$schema": "schemas/lora-candidate-brief.schema.json",
+                    "kind": "lora-candidate-brief",
+                    "id": "ai51.identity.candidates",
+                    "character": {"canon": canon_dir.as_posix()},
+                    "generation": {
+                        "width": 96,
+                        "height": 128,
+                        "steps": 20,
+                        "seed_start": 20,
+                        "seeds_per_candidate": 2,
+                    },
+                    "candidates": [
+                        {
+                            "name": "front_neutral",
+                            "view": "front",
+                            "pose": "neutral standing",
+                            "framing": "full body",
+                            "identity_primer": "front",
+                            "prompt": {
+                                "positive": "front view, neutral standing pose, full body, plain studio background",
+                            },
+                        },
+                        {
+                            "name": "side_idle",
+                            "view": "side",
+                            "pose": "idle standing",
+                            "framing": "full body",
+                            "identity_primer": "front",
+                            "prompt": {
+                                "positive": "left side view, idle standing pose, full body, plain studio background",
+                            },
+                        },
+                    ],
+                    "output": {"directory": candidate_dir.as_posix(), "overwrite": True},
+                },
+            )
+            plan_lora_candidates(brief_path=brief_path, progress=SILENT_STATUS)
+            encoded: dict[str, object] = {}
+
+            def fake_encode(model: str, *, prompts: list[str], dtype: str, max_sequence_length: int):
+                encoded.update(
+                    {
+                        "model": model,
+                        "prompts": prompts,
+                        "dtype": dtype,
+                        "max_sequence_length": max_sequence_length,
+                    }
+                )
+                return {prompt: f"embedding:{index}" for index, prompt in enumerate(prompts)}, 12.5
+
+            profile = LoraCandidateProfile(
+                name="test-profile",
+                model="/models/kontext",
+                nunchaku_transformer_model=Path("/models/nunchaku.safetensors"),
+                attention_impl="nunchaku-fp16",
+                dtype="bfloat16",
+                vae_tiling=False,
+                model_revisions={
+                    "kontext": {"repo_id": "kontext", "revision": "kontext-rev"},
+                    "nunchaku_transformer": {"repo_id": "nunchaku", "revision": "nunchaku-rev"},
+                },
+            )
+
+            with (
+                patch("aigen.lora_candidates.encode_flux_prompts", side_effect=fake_encode),
+                patch("aigen.lora_candidates.CharacterKontextIdentitySession", FakeKontextIdentitySession),
+                patch(
+                    "aigen.lora_candidates.nvidia_smi_preflight_limit",
+                    return_value={
+                        "nvidia_smi_preflight_used_mb": 100,
+                        "nvidia_smi_device_total_mb": 16000,
+                        "nvidia_smi_preflight_utilization_gpu": 0,
+                    },
+                ),
+                patch("aigen.lora_candidates.NvidiaSmiMemorySampler", FakeMemorySampler),
+            ):
+                result = run_lora_candidate_plan(
+                    candidate_dir,
+                    profile=profile,
+                    guidance_scale=2.5,
+                    max_sequence_length=128,
+                    overwrite=True,
+                    progress=SILENT_STATUS,
+                )
+
+            session = FakeKontextIdentitySession.last
+            self.assertTrue(session.closed)
+            self.assertEqual(encoded["model"], "/models/kontext")
+            self.assertEqual(len(encoded["prompts"]), 2)
+            self.assertEqual(encoded["dtype"], "bfloat16")
+            self.assertEqual(encoded["max_sequence_length"], 128)
+            self.assertEqual(len(session.generated), 4)
+            self.assertEqual(
+                [item["prompt_embedding"] for item in session.generated],
+                ["embedding:0", "embedding:0", "embedding:1", "embedding:1"],
+            )
+            self.assertEqual(result["profile"]["prompt_encoding"], "precomputed_prompt_embeds")
+            self.assertNotIn("pipeline_cpu_offload", result["profile"])
+            self.assertEqual(result["timings_ms"]["prompt_encode_ms"], 12.5)
+
     def test_lora_candidate_plan_rejects_trigger_token_in_generation_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1075,6 +1284,7 @@ class LoraDatasetTests(unittest.TestCase):
                             "name": "front_neutral",
                             "view": "front",
                             "pose": "neutral standing",
+                            "framing": "full body",
                             "identity_primer": "front",
                             "prompt": {
                                 "positive": (
@@ -1257,9 +1467,9 @@ class LoraDatasetTests(unittest.TestCase):
             for entry in (
                 "scheduler",
                 "text_encoder",
-                "text_encoder_2",
+                T5_TEXT_ENCODER_COMPONENT,
                 "tokenizer",
-                "tokenizer_2",
+                T5_TOKENIZER_COMPONENT,
                 "transformer",
                 "vae",
             ):

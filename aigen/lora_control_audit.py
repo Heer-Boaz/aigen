@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aigen.generation.flux_components import FLUX_TEXT_COMPONENTS_DISABLED
+from aigen.generation.flux_prompt_encoding import encode_flux_prompts
 from aigen.gpu_status import GpuStatusError, nvidia_smi_memory_snapshot
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import save_contact_sheet
@@ -163,8 +164,7 @@ def run_lora_control_audit(
         raise LoraControlAuditError(f"LoRA control audit inputs are missing: {', '.join(plan['missing'])}")
 
     progress.phase("encode LoRA audit prompts")
-    prompt_embeddings, torch, encode_ms = _encode_prompts(plan)
-    _release_cuda(torch)
+    prompt_embeddings, encode_ms = _encode_prompts(plan)
     progress.phase("load LoRA control audit pipeline")
     pipeline, torch, load_ms = _load_pipeline(plan)
     outputs = []
@@ -397,10 +397,7 @@ def _load_pipeline(plan: dict[str, Any]) -> tuple[Any, Any, float]:
         plan["models"]["base_model"]["path"],
         transformer=transformer,
         controlnet=controlnet,
-        text_encoder=None,
-        text_encoder_2=None,
-        tokenizer=None,
-        tokenizer_2=None,
+        **FLUX_TEXT_COMPONENTS_DISABLED,
         torch_dtype=dtype,
         local_files_only=True,
     )
@@ -444,53 +441,22 @@ def _generate_case(
     return result.images[0], {"total_ms": elapsed_ms(start, synchronized_time(torch))}
 
 
-def _encode_prompts(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], Any, float]:
-    import torch
-    from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
-
-    dtype = resolve_torch_dtype(torch, "bfloat16", auto_value=None)
-    device = torch.device("cuda")
-    base_model = plan["models"]["base_model"]["path"]
-    tokenizer = CLIPTokenizer.from_pretrained(base_model, subfolder="tokenizer", local_files_only=True)
-    tokenizer_2 = T5TokenizerFast.from_pretrained(base_model, subfolder="tokenizer_2", local_files_only=True)
-    text_encoder = CLIPTextModel.from_pretrained(
-        base_model,
-        subfolder="text_encoder",
-        torch_dtype=dtype,
-        local_files_only=True,
-    ).to(device)
-    text_encoder_2 = T5EncoderModel.from_pretrained(
-        base_model,
-        subfolder="text_encoder_2",
-        torch_dtype=dtype,
-        local_files_only=True,
-    ).to(device)
-    start = synchronized_time(torch)
+def _encode_prompts(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], float]:
+    prompt_embeddings, elapsed = encode_flux_prompts(
+        plan["models"]["base_model"]["path"],
+        prompts=[case["prompt"] for case in plan["audit_cases"]],
+        dtype="bfloat16",
+        max_sequence_length=plan["generation"]["max_sequence_length"],
+    )
     embeddings = {}
-    with torch.no_grad():
-        for case in plan["audit_cases"]:
-            prompt = case["prompt"]
-            pooled_prompt_embeds = _encode_clip_prompt(
-                tokenizer,
-                text_encoder,
-                prompt=prompt,
-                device=device,
-            )
-            prompt_embeds = _encode_t5_prompt(
-                tokenizer_2,
-                text_encoder_2,
-                prompt=prompt,
-                device=device,
-                max_sequence_length=plan["generation"]["max_sequence_length"],
-            )
-            embeddings[case["name"]] = {
-                "prompt": prompt,
-                "prompt_embeds": prompt_embeds.cpu(),
-                "pooled_prompt_embeds": pooled_prompt_embeds.cpu(),
-            }
-    elapsed = elapsed_ms(start, synchronized_time(torch))
-    del text_encoder, text_encoder_2, tokenizer, tokenizer_2
-    return embeddings, torch, elapsed
+    for case in plan["audit_cases"]:
+        prompt_embedding = prompt_embeddings[case["prompt"]]
+        embeddings[case["name"]] = {
+            "prompt": prompt_embedding.prompt,
+            "prompt_embeds": prompt_embedding.prompt_embeds,
+            "pooled_prompt_embeds": prompt_embedding.pooled_prompt_embeds,
+        }
+    return embeddings, elapsed
 
 
 def _baseline_outputs(plan: dict[str, Any]) -> list[dict[str, Any]]:
@@ -513,47 +479,6 @@ def _comparison_outputs(plan: dict[str, Any], outputs: list[dict[str, Any]]) -> 
     return comparison
 
 
-def _encode_clip_prompt(
-    tokenizer: Any,
-    text_encoder: Any,
-    *,
-    prompt: str,
-    device: Any,
-) -> Any:
-    text_inputs = tokenizer(
-        [prompt],
-        padding="max_length",
-        max_length=tokenizer.model_max_length,
-        truncation=True,
-        return_overflowing_tokens=False,
-        return_length=False,
-        return_tensors="pt",
-    )
-    prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False).pooler_output
-    return prompt_embeds.to(dtype=text_encoder.dtype, device=device).view(1, -1)
-
-
-def _encode_t5_prompt(
-    tokenizer: Any,
-    text_encoder: Any,
-    *,
-    prompt: str,
-    device: Any,
-    max_sequence_length: int,
-) -> Any:
-    text_inputs = tokenizer(
-        [prompt],
-        padding="max_length",
-        max_length=max_sequence_length,
-        truncation=True,
-        return_length=False,
-        return_overflowing_tokens=False,
-        return_tensors="pt",
-    )
-    prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False)[0]
-    return prompt_embeds.to(dtype=text_encoder.dtype, device=device)
-
-
 def _torch_memory(torch: Any) -> dict[str, int]:
     if not torch.cuda.is_available():
         raise LoraControlAuditError("LoRA control audit requires CUDA")
@@ -561,11 +486,3 @@ def _torch_memory(torch: Any) -> dict[str, int]:
         "torch_max_allocated_mb": round(torch.cuda.max_memory_allocated() / 2**20),
         "torch_max_reserved_mb": round(torch.cuda.max_memory_reserved() / 2**20),
     }
-
-
-def _release_cuda(torch: Any) -> None:
-    gc.collect()
-    if not torch.cuda.is_available():
-        raise LoraControlAuditError("LoRA control audit requires CUDA")
-    torch.cuda.empty_cache()
-    torch.cuda.reset_peak_memory_stats()

@@ -27,15 +27,12 @@ class StrictModel(BaseModel):
 class LoraCandidateHardRejects(StrictModel):
     wrong_face: bool
     wrong_hair_length_or_color: bool
-    wrong_outfit: bool
-    missing_required_neckwear_or_accessory: bool
-    missing_required_waist_or_lower_body_garment: bool
-    missing_required_belt_or_waist_detail: bool
-    missing_required_legwear: bool
-    missing_required_footwear: bool
-    deformed_body: bool
-    broken_hands_or_feet: bool
-    bad_framing: bool
+    childlike_or_chibi_proportions: bool
+    wrong_visible_outfit: bool
+    missing_visible_required_identity_detail: bool
+    deformed_visible_anatomy: bool
+    broken_visible_hands_or_feet: bool
+    framing_mismatch: bool
     dirty_or_distracting_background: bool
     style_drift: bool
     view_label_mismatch: bool
@@ -43,8 +40,9 @@ class LoraCandidateHardRejects(StrictModel):
 
 class LoraCandidateScores(StrictModel):
     identity_preservation: float
-    outfit_preservation: float
-    anatomy_quality: float
+    visible_outfit_preservation: float
+    visible_anatomy_quality: float
+    petite_proportion_preservation: float
     framing_quality: float
     background_quality: float
     style_match: float
@@ -190,12 +188,15 @@ You will receive these images in order:
 
 Decide whether the candidate is canon-worthy training data for the same character.
 Do not choose the prettiest image. Do not accept an image just because the pose is useful.
-Accept only if the full candidate preserves identity, outfit, proportions, visual style, complete full-body framing and clean background.
+Accept only if the visible candidate preserves identity, visible outfit details, petite proportions, visual style, requested framing and clean background.
+Partial-body candidates are valid LoRA training data when their requested framing is partial-body. Do not reject a waist-up, thigh-up or portrait image just because boots, socks or lower legs are outside the frame.
+Judge only details that should be visible in the requested framing, but always enforce face, hair color/length, petite balanced proportions, visible outfit accuracy, clean background and style.
 
 Candidate label:
 - template: {candidate["name"]}
 - requested view: {candidate["view"]}
 - requested pose: {candidate["pose"]}
+- requested framing: {candidate["framing"]}
 
 Generation prompt:
 {item["generation_prompt"]}
@@ -211,8 +212,8 @@ Scoring rules:
 Return valid JSON only. The JSON object must contain:
 - candidate: exactly "{item["name"]}"
 - pass: boolean
-- hard_rejects: object with booleans for wrong_face, wrong_hair_length_or_color, wrong_outfit, missing_required_neckwear_or_accessory, missing_required_waist_or_lower_body_garment, missing_required_belt_or_waist_detail, missing_required_legwear, missing_required_footwear, deformed_body, broken_hands_or_feet, bad_framing, dirty_or_distracting_background, style_drift, view_label_mismatch
-- scores: object with numeric values for identity_preservation, outfit_preservation, anatomy_quality, framing_quality, background_quality, style_match, view_pose_match, training_usability
+- hard_rejects: object with booleans for wrong_face, wrong_hair_length_or_color, childlike_or_chibi_proportions, wrong_visible_outfit, missing_visible_required_identity_detail, deformed_visible_anatomy, broken_visible_hands_or_feet, framing_mismatch, dirty_or_distracting_background, style_drift, view_label_mismatch
+- scores: object with numeric values for identity_preservation, visible_outfit_preservation, visible_anatomy_quality, petite_proportion_preservation, framing_quality, background_quality, style_match, view_pose_match, training_usability
 - evidence: object with identity_match string, quality_assessment string, concerns string array
 Do not wrap the JSON in Markdown code fences.
 """
@@ -236,8 +237,9 @@ def _selection_status(judgment: LoraCandidateJudgment) -> dict[str, Any]:
         name
         for name in (
             "identity_preservation",
-            "outfit_preservation",
-            "anatomy_quality",
+            "visible_outfit_preservation",
+            "visible_anatomy_quality",
+            "petite_proportion_preservation",
             "framing_quality",
             "background_quality",
             "style_match",
