@@ -8,8 +8,8 @@ from PIL import Image
 
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import save_contact_sheet
-from aigen.lora_quality import lora_quality_contract, write_lora_crop_sheet
-from aigen.lora_text import caption_contains_token
+from aigen.lora_quality import lora_quality_contract
+from aigen.lora_text import caption_contains_token, join_prompt_parts
 from aigen.manifest_io import read_json, resolve_existing_path, sha256_file, write_json
 from aigen.progress import StatusReporter
 
@@ -138,7 +138,7 @@ def audit_lora_dataset_source(
         if not overwrite:
             raise LoraCanonError(f"Output exists and overwrite=false: {audit_dir.as_posix()}")
         shutil.rmtree(audit_dir)
-    (audit_dir / "crops").mkdir(parents=True)
+    audit_dir.mkdir(parents=True)
 
     progress.phase("load audit source")
     manifest_path = source_dir / CANON_MANIFEST
@@ -164,9 +164,6 @@ def audit_lora_dataset_source(
         thumb_width=192,
         max_label_chars=24,
     )
-    for image in images:
-        write_lora_crop_sheet(Path(image["path"]), audit_dir / "crops" / f"{_slug(image['name'])}.png")
-
     rejected: list[dict[str, Any]] = []
     report = {
         "status": status,
@@ -188,7 +185,6 @@ def audit_lora_dataset_source(
             "pending": (audit_dir / "pending.json").as_posix(),
             "rejected": (audit_dir / "rejected.json").as_posix(),
             "contact_sheet": (audit_dir / "contact_sheet.png").as_posix(),
-            "crops": (audit_dir / "crops").as_posix(),
             "report": (audit_dir / "dataset_report.json").as_posix(),
         },
     }
@@ -251,21 +247,7 @@ def _copy_rgb_png(source_path: Path, output_path: Path) -> None:
 
 
 def _training_caption(trigger_token: str, identity_prompt: str, name: str) -> str:
-    return f"{trigger_token}, {', '.join(_caption_tags(identity_prompt, name))}, {_words(name)}"
-
-
-def _caption_tags(identity_prompt: str, name: str) -> list[str]:
-    tags = [tag.strip() for tag in identity_prompt.split(",") if tag.strip()]
-    words = set(_words(name).split())
-    if words & {"profile", "side", "back", "rear"}:
-        tags = [tag for tag in tags if tag != "looking at viewer"]
-    if words & {"back", "rear"}:
-        tags = [
-            tag
-            for tag in tags
-            if tag not in {"blue eyes", "smile", "light blush", "flat-chested", "small breasts"}
-        ]
-    return tags
+    return join_prompt_parts(trigger_token, identity_prompt, _words(name))
 
 
 def _slug(value: str) -> str:

@@ -40,32 +40,8 @@ class LoraCandidatePromptSpec(StrictModel):
         if cleaned.lower() in {"", ".", "...", "prompt", "candidate prompt"}:
             raise ValueError("candidate prompt must be a concrete visual instruction")
         lowered = cleaned.lower()
-        if "medium style" in lowered:
-            raise ValueError("candidate prompt must name the visual medium instead of using filler style wording")
         if not any(word in lowered for word in ("background", "backdrop", "studio", "plain")):
             raise ValueError("candidate prompt must explicitly describe the background")
-        if not any(
-            word in lowered
-            for word in (
-                "style",
-                "illustration",
-                "drawing",
-                "line art",
-                "lineart",
-                "anime",
-                "manga",
-                "cartoon",
-                "concept art",
-                "painterly",
-                "watercolor",
-                "render",
-                "photo",
-                "photograph",
-                "pixel art",
-                "sprite",
-            )
-        ):
-            raise ValueError("candidate prompt must explicitly describe the visual style or medium")
         return cleaned
 
 

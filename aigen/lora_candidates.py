@@ -18,8 +18,8 @@ from aigen.lora_canon import (
     load_lora_canon_manifest,
     lora_canon_images_by_name,
 )
-from aigen.lora_quality import lora_quality_contract, write_lora_crop_sheet
-from aigen.lora_text import caption_contains_token
+from aigen.lora_quality import lora_quality_contract
+from aigen.lora_text import caption_contains_token, join_prompt_parts
 from aigen.manifest_io import read_json, resolve_output_path, sha256_file, write_json
 from aigen.progress import StatusReporter
 
@@ -62,9 +62,13 @@ def plan_lora_candidates(
         for offset in range(generation.seeds_per_candidate):
             seed = generation.seed_start + offset
             name = f"{template.name}_seed_{seed:04d}"
-            generation_prompt = _generation_prompt(template)
+            generation_prompt = _generation_prompt(
+                character["identity_prompt"],
+                template,
+            )
             training_caption = _training_caption(
                 character["trigger_token"],
+                character["identity_prompt"],
                 template,
             )
             prompt_path = output_dir / "generation_prompts" / f"{name}.txt"
@@ -161,7 +165,6 @@ def run_lora_candidate_plan(
     plan = read_json(candidate_dir / CANDIDATES_MANIFEST, label="LoRA candidate manifest")
     if plan.get("kind") != "lora-candidate-plan":
         raise LoraCandidateError(f"Not a LoRA candidate manifest: {(candidate_dir / CANDIDATES_MANIFEST).as_posix()}")
-
     existing = [candidate["image"]["path"] for candidate in plan["candidates"] if Path(candidate["image"]["path"]).exists()]
     if existing and not overwrite:
         raise LoraCandidateError(f"Candidate output exists and overwrite=false: {existing[0]}")
@@ -287,7 +290,7 @@ def build_lora_candidate_evidence(
         if not overwrite:
             raise LoraCandidateError(f"Output exists and overwrite=false: {evidence_dir.as_posix()}")
         shutil.rmtree(evidence_dir)
-    (evidence_dir / "crops").mkdir(parents=True)
+    evidence_dir.mkdir(parents=True)
 
     review_items: list[dict[str, Any]] = []
     rejected_images: list[dict[str, Any]] = []
@@ -307,7 +310,7 @@ def build_lora_candidate_evidence(
             )
             progress.step(name)
             continue
-        evidence = _image_evidence(path, candidate, evidence_dir)
+        evidence = _image_evidence(path)
         hard_rejects = {}
         if evidence["image"]["width"] != candidate["image"]["width"] or evidence["image"]["height"] != candidate["image"]["height"]:
             hard_rejects["wrong_dimensions"] = True
@@ -351,7 +354,6 @@ def build_lora_candidate_evidence(
             "directory": evidence_dir.as_posix(),
             "review_items": (evidence_dir / "review_items.json").as_posix(),
             "rejected_images": (evidence_dir / "rejected_images.json").as_posix(),
-            "crops": (evidence_dir / "crops").as_posix(),
             "contact_sheet": (evidence_dir / "contact_sheet.png").as_posix() if existing_images else None,
             "report": (evidence_dir / "evidence_report.json").as_posix(),
         },
@@ -462,17 +464,15 @@ def _validate_candidate_prompts_for_generation(candidates: list[Any], trigger_to
             )
 
 
-def _generation_prompt(template: Any) -> str:
-    return template.prompt.positive
+def _generation_prompt(identity_prompt: str, template: Any) -> str:
+    return join_prompt_parts(identity_prompt, template.prompt.positive)
 
 
-def _training_caption(trigger_token: str, template: Any) -> str:
-    return f"{trigger_token}, {template.prompt.positive}"
+def _training_caption(trigger_token: str, identity_prompt: str, template: Any) -> str:
+    return join_prompt_parts(trigger_token, identity_prompt, template.prompt.positive)
 
 
-def _image_evidence(path: Path, candidate: dict[str, Any], evidence_dir: Path) -> dict[str, Any]:
-    crop_path = evidence_dir / "crops" / f"{_slug(candidate['name'])}.png"
-    write_lora_crop_sheet(path, crop_path)
+def _image_evidence(path: Path) -> dict[str, Any]:
     with Image.open(path) as image:
         width, height = image.size
         mode = image.mode
@@ -484,7 +484,6 @@ def _image_evidence(path: Path, candidate: dict[str, Any], evidence_dir: Path) -
             "height": height,
             "mode": mode,
         },
-        "crop_sheet": crop_path.as_posix(),
     }
 
 
@@ -539,16 +538,3 @@ def _quota_report(accepted: list[dict[str, Any]]) -> dict[str, Any]:
             for item in dominant
         ],
     }
-
-
-def _slug(value: str) -> str:
-    chars = []
-    previous_dash = False
-    for char in value.lower():
-        if char.isalnum():
-            chars.append(char)
-            previous_dash = False
-        elif not previous_dash:
-            chars.append("-")
-            previous_dash = True
-    return "".join(chars).strip("-") or "candidate"

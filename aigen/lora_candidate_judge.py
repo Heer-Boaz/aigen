@@ -35,7 +35,7 @@ class LoraCandidateHardRejects(StrictModel):
     missing_required_footwear: bool
     deformed_body: bool
     broken_hands_or_feet: bool
-    bad_crop: bool
+    bad_framing: bool
     dirty_or_distracting_background: bool
     style_drift: bool
     view_label_mismatch: bool
@@ -45,7 +45,7 @@ class LoraCandidateScores(StrictModel):
     identity_preservation: float
     outfit_preservation: float
     anatomy_quality: float
-    crop_quality: float
+    framing_quality: float
     background_quality: float
     style_match: float
     view_pose_match: float
@@ -176,7 +176,6 @@ def _candidate_image_paths(item: dict[str, Any]) -> list[Path]:
     return [
         Path(item["identity_primer"]["path"]),
         Path(item["image"]["path"]),
-        Path(item["evidence"]["crop_sheet"]),
     ]
 
 
@@ -188,11 +187,10 @@ def _candidate_prompt(item: dict[str, Any]) -> str:
 You will receive these images in order:
 1. Approved identity primer for the character.
 2. Generated candidate image named {item["name"]}.
-3. Candidate crop sheet with full image, face, torso, waist/lower body, legs/feet and silhouette crops.
 
 Decide whether the candidate is canon-worthy training data for the same character.
 Do not choose the prettiest image. Do not accept an image just because the pose is useful.
-Accept only if the candidate preserves identity, outfit, proportions, visual style and clean background.
+Accept only if the full candidate preserves identity, outfit, proportions, visual style, complete full-body framing and clean background.
 
 Candidate label:
 - template: {candidate["name"]}
@@ -213,8 +211,8 @@ Scoring rules:
 Return valid JSON only. The JSON object must contain:
 - candidate: exactly "{item["name"]}"
 - pass: boolean
-- hard_rejects: object with booleans for wrong_face, wrong_hair_length_or_color, wrong_outfit, missing_required_neckwear_or_accessory, missing_required_waist_or_lower_body_garment, missing_required_belt_or_waist_detail, missing_required_legwear, missing_required_footwear, deformed_body, broken_hands_or_feet, bad_crop, dirty_or_distracting_background, style_drift, view_label_mismatch
-- scores: object with numeric values for identity_preservation, outfit_preservation, anatomy_quality, crop_quality, background_quality, style_match, view_pose_match, training_usability
+- hard_rejects: object with booleans for wrong_face, wrong_hair_length_or_color, wrong_outfit, missing_required_neckwear_or_accessory, missing_required_waist_or_lower_body_garment, missing_required_belt_or_waist_detail, missing_required_legwear, missing_required_footwear, deformed_body, broken_hands_or_feet, bad_framing, dirty_or_distracting_background, style_drift, view_label_mismatch
+- scores: object with numeric values for identity_preservation, outfit_preservation, anatomy_quality, framing_quality, background_quality, style_match, view_pose_match, training_usability
 - evidence: object with identity_match string, quality_assessment string, concerns string array
 Do not wrap the JSON in Markdown code fences.
 """
@@ -240,7 +238,7 @@ def _selection_status(judgment: LoraCandidateJudgment) -> dict[str, Any]:
             "identity_preservation",
             "outfit_preservation",
             "anatomy_quality",
-            "crop_quality",
+            "framing_quality",
             "background_quality",
             "style_match",
             "view_pose_match",

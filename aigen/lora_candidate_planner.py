@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
 from pydantic import ValidationError
 
 from aigen.lora_candidate_models import (
@@ -61,7 +60,7 @@ def plan_lora_candidate_brief(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     manifest = load_lora_canon_manifest(canon_dir)
     canon_images = lora_canon_images_by_name(manifest, canon_dir)
-    evidence = _planner_evidence(manifest, canon_images, output_path.parent / "planner_evidence")
+    evidence = _planner_evidence(manifest, canon_images)
     intents = _candidate_intents(canon_images, plan_config.candidate_count)
     prompt_dir = output_path.with_suffix(".prompts")
     raw_dir = output_path.with_suffix(".raw")
@@ -110,7 +109,6 @@ def plan_lora_candidate_brief(
         "brief": output_path.as_posix(),
         "prompts": prompt_dir.as_posix(),
         "raw_responses": raw_dir.as_posix(),
-        "evidence": (output_path.parent / "planner_evidence").as_posix(),
     }
     return {
         "status": "planned",
@@ -304,19 +302,17 @@ def _validate_candidate_prompts(
     normalized_identity = _compact_text(identity_prompt).lower()
     for candidate in template_list.candidates:
         normalized_prompt = _compact_text(candidate.prompt.positive).lower()
-        if normalized_prompt == normalized_identity:
+        if normalized_prompt == normalized_identity or normalized_identity in normalized_prompt:
             raise LoraCandidateBriefError(
                 f"Invalid LoRA candidate planner response {raw_path.as_posix()}: "
-                f"candidate {candidate.name} prompt only copies the canon identity prompt"
+                f"candidate {candidate.name} prompt copies the full user identity prompt"
             )
 
 
 def _planner_evidence(
     manifest: dict[str, Any],
     canon_images: dict[str, dict[str, Any]],
-    output_dir: Path,
 ) -> LoraCandidatePlannerEvidence:
-    output_dir.mkdir(parents=True, exist_ok=True)
     image_paths: list[Path] = []
     order_lines: list[str] = []
     for image in manifest["images"]:
@@ -324,27 +320,7 @@ def _planner_evidence(
         path = Path(canon_images[name]["path"])
         image_paths.append(path)
         order_lines.append(f"canon anchor {name}: {path}")
-        for label, crop_path in _detail_crops(path, output_dir, name).items():
-            image_paths.append(crop_path)
-            order_lines.append(f"canon anchor {name} {label}: {crop_path}")
     return LoraCandidatePlannerEvidence(image_paths=image_paths, order_lines=order_lines)
-
-
-def _detail_crops(path: Path, output_dir: Path, name: str) -> dict[str, Path]:
-    with Image.open(path) as image:
-        rgb = image.convert("RGB")
-        width, height = rgb.size
-        crops = {
-            "face_hair_detail": rgb.crop((0, 0, width, round(height * 0.38))),
-            "torso_outfit_detail": rgb.crop((0, round(height * 0.24), width, round(height * 0.76))),
-            "waist_legs_footwear_detail": rgb.crop((0, round(height * 0.55), width, height)),
-        }
-    outputs = {}
-    for label, crop in crops.items():
-        target = output_dir / f"{_slug(name)}_{label}.png"
-        crop.save(target)
-        outputs[label] = target
-    return outputs
 
 
 def _single_candidate_prompt(
@@ -359,22 +335,22 @@ def _single_candidate_prompt(
     primer_names = ", ".join(canon_images.keys())
     return f"""You are planning a production LoRA candidate-generation brief from approved character canon images.
 
-Write exactly one pre-LoRA generation prompt for one candidate image.
+Write exactly one variable generation prompt suffix for one candidate image.
 The generated candidate may later become character identity LoRA training data, but only after model evidence and human approval.
 The training dataset must contain only canon-worthy identity drawings. Do not plan punch, hit, jump, combat, deformed, exaggerated or malformed action frames.
-Inspect the supplied canon images and detail images yourself. Describe the character from the images and from the full user identity prompt.
-The full user identity prompt is:
+Inspect the supplied full canon images yourself. Describe only the requested view, pose, framing, expression if needed, and clean background in prompt.positive.
+The executor prepends this full user identity prompt to every generation:
 {character['identity_prompt']}
 
 Images are supplied in this exact order:
 {image_order}
 
-Use the whole prompt above. Preserve every visible identity feature: subject, hair, eyes, upper clothing, neckwear, waist garment, belt, legwear, footwear, body proportions, visual style and background cleanliness.
-Treat camera or pose wording in the user prompt, such as looking at viewer or standing, as source-image evidence. Omit or adapt it when it conflicts with the candidate view or pose.
+Use the canon images and the full user prompt to understand the character, but do not repeat the full user identity prompt in prompt.positive.
+prompt.positive is concatenated after the full user identity prompt, so it should only add the requested camera, pose, framing, expression when needed, and background.
 Never include the phrase looking at viewer in profile, side, back or rear-view candidate prompts.
-For back or rear-view prompts, describe visible rear clothing, hair shape, legwear, footwear and silhouette; do not request visible eyes, smile, blush or viewer-facing face details.
-If the requested candidate view is back or rear, prompt.positive must not contain: blue eyes, eye, eyes, smile, smiling, blush, looking at viewer, flat-chested, small breasts.
-Detail images in the evidence list are inspection aids only. Never create candidates whose view, pose, name or prompt describes crop, close-up or partial-body framing.
+For back or rear-view prompts, describe the rear camera angle and visible silhouette; do not request visible eyes, smile, blush or viewer-facing face details.
+If the requested candidate view is back or rear, prompt.positive must not contain: eye, eyes, smile, smiling, blush, looking at viewer.
+Never create candidates whose view, pose, name or prompt describes crop, close-up or partial-body framing.
 The generated candidates should cover useful identity views and mild pose variety for LoRA training: neutral front, left/right profile, mild three-quarter views, back view only when the canon evidence supports it, simple idle, simple walking or standing variations.
 If more distinct candidates are needed, vary full-body mild poses such as relaxed idle, hands-at-sides, small step, contrapposto or neutral stance. Do not use close-up, upper-body, lower-body or crop variants to fill the candidate count.
 Changing only identity_primer or name is not a distinct candidate. Every candidate must have a unique view and pose pair. Do not repeat back view neutral standing more than once.
@@ -410,21 +386,19 @@ Exact JSON shape:
   "pose": "{intent.pose}",
   "identity_primer": "{intent.identity_primer}",
   "prompt": {{
-    "positive": "full visual prompt for this candidate"
+    "positive": "variable camera, pose, framing and background suffix for this candidate"
   }}
 }}
 
-The positive prompt must be written by inspecting the images. It must include the character identity, clothing, waist garment, belt if visible, legwear, footwear, view, pose, full-body framing, a clean simple background and the visual style inferred from the canon images.
-Each positive prompt must explicitly mention the background and the observed visual style in its own words.
-The visual style must be a concise art-medium phrase inferred from the images, such as anime-style illustration, clean ink drawing, painterly concept art or another phrase that actually matches the supplied canon.
-Do not use filler style phrases like medium style, consistent visual style or detailed character design in place of concrete visual description.
-Start each positive prompt with the inferred medium/style phrase, then the exact requested view, then the exact requested pose. For example, a front view candidate must include the words "front view" in positive; a left profile candidate must include "left" or "left-facing"; a right profile candidate must include "right" or "right-facing"; a back view candidate must include "back" or "rear"; a three-quarter view must include "three-quarter" or "3/4".
-The generated image sees only prompt.positive. It will not see name, view, pose or identity_primer, so prompt.positive must materialize all of them.
+The positive prompt must be a suffix, not a full prompt. It must include the requested view, requested pose, full-body framing and a clean simple background.
+The positive prompt must not repeat the full user identity prompt and must not list the whole outfit. The executor prepends the full user identity prompt before this suffix.
+For example, a front view candidate must include the words "front view" in positive; a left profile candidate must include "left" or "left-facing"; a right profile candidate must include "right" or "right-facing"; a back view candidate must include "back" or "rear"; a three-quarter view must include "three-quarter" or "3/4".
+The generated image sees the full user identity prompt plus prompt.positive. It will not see name, view, pose or identity_primer, so prompt.positive must materialize the requested view and pose.
 The name must describe the actual output view and pose, not the source primer. A name containing left, right, front or back must match the view field.
 The view field must describe only camera angle, such as "front view", "left profile view", "right profile view" or "three-quarter front view".
 The pose field must describe only body pose, such as "neutral standing pose", "relaxed idle pose" or "mild walk contact pose".
-The positive prompt is the exact generation prompt. Do not rely on the executor to add identity, view or pose text later.
-The positive prompt must not be just the full identity prompt copied verbatim.
+The positive prompt is not the full generation prompt. The executor adds the full user identity prompt before this suffix.
+The positive prompt must not be the full identity prompt copied verbatim.
 Do not include the trigger token in candidate prompts. Candidate prompts are used for pre-LoRA image generation, where the trigger token has no meaning. The executor adds the trigger token only to training captions after human approval.
 Do not use a JSON string for prompt. prompt must always be an object with positive.
 Do not return placeholder text, markdown or explanations."""
@@ -468,16 +442,6 @@ def _back_primer(canon_images: dict[str, dict[str, Any]]) -> str | None:
         if name in canon_images:
             return name
     return None
-
-
-def _slug(value: str) -> str:
-    cleaned = []
-    for char in value.lower():
-        if char.isalnum():
-            cleaned.append(char)
-        elif cleaned and cleaned[-1] != "_":
-            cleaned.append("_")
-    return "".join(cleaned).strip("_") or "canon"
 
 
 def _compact_text(value: str) -> str:

@@ -131,7 +131,7 @@ def add_lora_commands(subparsers: Any) -> None:
 
     candidate_evidence = lora_subparsers.add_parser(
         "candidate-evidence",
-        help="Build LoRA candidate crop evidence for human review",
+        help="Build LoRA candidate full-image evidence for model and human review",
     )
     candidate_evidence.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
     candidate_evidence.add_argument("--overwrite", action="store_true", help="Replace an existing evidence directory")
