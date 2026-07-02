@@ -7,14 +7,14 @@
   },
   "generation": {
     "buckets": [
-      {"width": 832, "height": 1248},
+      {"width": 704, "height": 1472},
       {"width": 768, "height": 1408},
-      {"width": 896, "height": 1152},
+      {"width": 960, "height": 1088},
       {"width": 1024, "height": 1024}
     ],
     "steps": 24,
     "seed_start": 1000,
-    "seeds_per_bucket": 8
+    "seeds_per_bucket": 2
   },
   "output": {
     "directory": "../../runs/lora_candidates/ai51_freegen",
