@@ -158,7 +158,7 @@
   "generation": {
     "height": 1248,
     "seed_start": 300,
-    "seeds_per_candidate": 64,
+    "seeds_per_candidate": 4,
     "steps": 24,
     "width": 832
   },

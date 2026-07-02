@@ -1,0 +1,179 @@
+{
+  "$defs": {
+    "LoraCandidateCharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "canon": {
+          "title": "Canon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canon"
+      ],
+      "title": "LoraCandidateCharacterSpec",
+      "type": "object"
+    },
+    "LoraCandidateGenerationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "seed_start": {
+          "minimum": 0,
+          "title": "Seed Start",
+          "type": "integer"
+        },
+        "seeds_per_candidate": {
+          "exclusiveMinimum": 0,
+          "title": "Seeds Per Candidate",
+          "type": "integer"
+        },
+        "steps": {
+          "exclusiveMinimum": 0,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "steps",
+        "seed_start",
+        "seeds_per_candidate"
+      ],
+      "title": "LoraCandidateGenerationSpec",
+      "type": "object"
+    },
+    "LoraCandidateOutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "overwrite": {
+          "title": "Overwrite",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "directory",
+        "overwrite"
+      ],
+      "title": "LoraCandidateOutputSpec",
+      "type": "object"
+    },
+    "LoraCandidatePromptSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "positive": {
+          "minLength": 1,
+          "title": "Positive",
+          "type": "string"
+        }
+      },
+      "required": [
+        "positive"
+      ],
+      "title": "LoraCandidatePromptSpec",
+      "type": "object"
+    },
+    "LoraCandidateTemplateSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "framing": {
+          "minLength": 1,
+          "title": "Framing",
+          "type": "string"
+        },
+        "identity_primer": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Identity Primer",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pose": {
+          "minLength": 1,
+          "title": "Pose",
+          "type": "string"
+        },
+        "prompt": {
+          "$ref": "#/$defs/LoraCandidatePromptSpec"
+        },
+        "view": {
+          "minLength": 1,
+          "title": "View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "view",
+        "pose",
+        "framing",
+        "identity_primer",
+        "prompt"
+      ],
+      "title": "LoraCandidateTemplateSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/LoraCandidateTemplateSpec"
+      },
+      "minItems": 1,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "character": {
+      "$ref": "#/$defs/LoraCandidateCharacterSpec"
+    },
+    "generation": {
+      "$ref": "#/$defs/LoraCandidateGenerationSpec"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "lora-candidate-brief",
+      "title": "Kind",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/LoraCandidateOutputSpec"
+    }
+  },
+  "required": [
+    "$schema",
+    "kind",
+    "id",
+    "character",
+    "generation",
+    "candidates",
+    "output"
+  ],
+  "title": "LoraCandidateBriefSpec",
+  "type": "object"
+}

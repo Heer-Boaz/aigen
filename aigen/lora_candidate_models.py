@@ -165,8 +165,50 @@ class LoraCandidateBriefSpec(StrictModel):
         return self
 
 
+class LoraFreeGenBucketSpec(StrictModel):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def latent_compatible(self) -> LoraFreeGenBucketSpec:
+        for label, value in (("width", self.width), ("height", self.height)):
+            if value % 16:
+                raise ValueError(f"bucket {label} must be divisible by 16: {value}")
+        return self
+
+
+class LoraFreeGenGenerationSpec(StrictModel):
+    buckets: list[LoraFreeGenBucketSpec] = Field(min_length=1)
+    steps: int = Field(gt=0)
+    seed_start: int = Field(ge=0)
+    seeds_per_bucket: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def buckets_are_unique(self) -> LoraFreeGenGenerationSpec:
+        sizes = [(bucket.width, bucket.height) for bucket in self.buckets]
+        if len(set(sizes)) != len(sizes):
+            raise ValueError("free-generation buckets must be unique")
+        return self
+
+
+class LoraFreeGenBriefSpec(StrictModel):
+    schema_path: str = Field(alias="$schema")
+    kind: Literal["lora-freegen-brief"]
+    id: str
+    character: LoraCandidateCharacterSpec
+    generation: LoraFreeGenGenerationSpec
+    identity_primers: list[str] | None = Field(default=None, min_length=1)
+    output: LoraCandidateOutputSpec
+
+
 def lora_candidate_brief_schema() -> dict[str, Any]:
     schema = LoraCandidateBriefSpec.model_json_schema(by_alias=True)
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    return schema
+
+
+def lora_freegen_brief_schema() -> dict[str, Any]:
+    schema = LoraFreeGenBriefSpec.model_json_schema(by_alias=True)
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     return schema
 
@@ -265,3 +307,10 @@ def load_lora_candidate_brief(path: Path) -> LoraCandidateBriefSpec:
         return LoraCandidateBriefSpec.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, ValidationError) as error:
         raise LoraCandidateBriefError(f"Invalid LoRA candidate brief {path}: {error}") from error
+
+
+def load_lora_freegen_brief(path: Path) -> LoraFreeGenBriefSpec:
+    try:
+        return LoraFreeGenBriefSpec.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, ValidationError) as error:
+        raise LoraCandidateBriefError(f"Invalid LoRA free-generation brief {path}: {error}") from error

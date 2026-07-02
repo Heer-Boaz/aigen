@@ -19,10 +19,16 @@ from aigen.lora_candidates import (
     LoraCandidateError,
     build_lora_candidate_evidence,
     plan_lora_candidates,
+    plan_lora_freegen,
     run_lora_candidate_plan,
     review_lora_candidates,
 )
-from aigen.lora_candidate_models import LoraCandidateBriefError, lora_candidate_brief_schema
+from aigen.lora_candidate_captions import LoraCandidateCaptionError, caption_lora_candidates
+from aigen.lora_candidate_models import (
+    LoraCandidateBriefError,
+    lora_candidate_brief_schema,
+    lora_freegen_brief_schema,
+)
 from aigen.lora_candidate_judge import LoraCandidateJudgeError, judge_lora_candidate_evidence
 from aigen.lora_candidate_planner import LoraCandidateBriefPlanConfig, plan_lora_candidate_brief
 from aigen.lora_candidate_profiles import (
@@ -77,7 +83,7 @@ def add_lora_commands(subparsers: Any) -> None:
     candidate_brief_plan.add_argument("--height", type=_positive_int, default=864)
     candidate_brief_plan.add_argument("--steps", type=_positive_int, default=24)
     candidate_brief_plan.add_argument("--seed-start", type=_non_negative_int, default=1)
-    candidate_brief_plan.add_argument("--seeds-per-candidate", type=_positive_int, default=256)
+    candidate_brief_plan.add_argument("--seeds-per-candidate", type=_positive_int, default=4)
     candidate_brief_plan.add_argument("--candidate-count", type=_positive_int, default=12)
     add_judge_runtime_args(candidate_brief_plan, role="candidate planner", max_new_tokens=3200)
     candidate_brief_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -118,6 +124,19 @@ def add_lora_commands(subparsers: Any) -> None:
     candidate_plan.add_argument("brief", type=Path, help="LoRA candidate brief JSON")
     candidate_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    freegen_brief_schema_parser = lora_subparsers.add_parser(
+        "freegen-brief-schema",
+        help="Write the LoRA free-generation brief JSON schema",
+    )
+    freegen_brief_schema_parser.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    freegen_plan = lora_subparsers.add_parser(
+        "freegen-plan",
+        help="Plan a free-generation LoRA candidate batch: identity prompt only, buckets x primers x seeds",
+    )
+    freegen_plan.add_argument("brief", type=Path, help="LoRA free-generation brief JSON")
+    freegen_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     candidate_run = lora_subparsers.add_parser(
         "candidate-run",
         help="Generate images for a LoRA candidate batch plan",
@@ -134,6 +153,12 @@ def add_lora_commands(subparsers: Any) -> None:
         help="Build LoRA candidate full-image evidence for model and human review",
     )
     candidate_evidence.add_argument("candidate_dir", type=Path, help="Candidate batch directory")
+    candidate_evidence.add_argument(
+        "--dedupe-threshold",
+        type=_non_negative_int,
+        default=6,
+        help="Max dHash Hamming distance for near-duplicate rejection; 0 rejects only exact perceptual duplicates",
+    )
     candidate_evidence.add_argument("--overwrite", action="store_true", help="Replace an existing evidence directory")
     candidate_evidence.add_argument("--compact", action="store_true", help="Write compact JSON")
 
@@ -145,6 +170,15 @@ def add_lora_commands(subparsers: Any) -> None:
     candidate_judge.add_argument("--overwrite", action="store_true", help="Replace existing candidate judge output")
     add_judge_runtime_args(candidate_judge, role="candidate judge", max_new_tokens=900)
     candidate_judge.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    candidate_caption = lora_subparsers.add_parser(
+        "candidate-caption",
+        help="Caption model-passed LoRA candidates from the images themselves with the local VLM",
+    )
+    candidate_caption.add_argument("candidate_dir", type=Path, help="Candidate batch directory with evidence/passed.json")
+    candidate_caption.add_argument("--overwrite", action="store_true", help="Replace existing caption output")
+    add_judge_runtime_args(candidate_caption, role="candidate captioner", max_new_tokens=400)
+    candidate_caption.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     candidate_review = lora_subparsers.add_parser(
         "candidate-review",
@@ -365,6 +399,16 @@ def run_lora_command(
             )
             dump_json(stdout, payload, pretty=not args.compact)
             return 0
+        if args.lora_command == "freegen-brief-schema":
+            dump_json(stdout, lora_freegen_brief_schema(), pretty=not args.compact)
+            return 0
+        if args.lora_command == "freegen-plan":
+            payload = plan_lora_freegen(
+                brief_path=args.brief,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
         if args.lora_command == "candidate-run":
             payload = run_lora_candidate_plan(
                 args.candidate_dir,
@@ -380,12 +424,22 @@ def run_lora_command(
             payload = build_lora_candidate_evidence(
                 args.candidate_dir,
                 overwrite=args.overwrite,
+                dedupe_threshold=args.dedupe_threshold,
                 progress=progress,
             )
             dump_json(stdout, payload, pretty=not args.compact)
             return 0
         if args.lora_command == "candidate-judge":
             payload = judge_lora_candidate_evidence(
+                args.candidate_dir,
+                judge_config_from_args(args),
+                overwrite=args.overwrite,
+                progress=progress,
+            )
+            dump_json(stdout, payload, pretty=not args.compact)
+            return 0
+        if args.lora_command == "candidate-caption":
+            payload = caption_lora_candidates(
                 args.candidate_dir,
                 judge_config_from_args(args),
                 overwrite=args.overwrite,
@@ -480,6 +534,7 @@ def run_lora_command(
         LoraTrainingError,
         LoraControlAuditError,
         LoraCandidateJudgeError,
+        LoraCandidateCaptionError,
         LoraCandidateError,
         LoraCandidateBriefError,
         LoraCandidateProfileError,

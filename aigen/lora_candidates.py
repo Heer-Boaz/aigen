@@ -12,7 +12,7 @@ from aigen.generation.runtime_diagnostics import cuda_memory_stats, synchronized
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import save_contact_sheet
 from aigen.keyframe_memory import NVIDIA_SMI_PREFLIGHT_LIMIT_MB, NvidiaSmiMemorySampler, nvidia_smi_preflight_limit
-from aigen.lora_candidate_models import load_lora_candidate_brief
+from aigen.lora_candidate_models import load_lora_candidate_brief, load_lora_freegen_brief
 from aigen.lora_candidate_profiles import LoraCandidateProfile
 from aigen.lora_canon import (
     CANON_MANIFEST,
@@ -107,6 +107,7 @@ def plan_lora_candidates(
     plan = {
         "status": "planned",
         "kind": "lora-candidate-plan",
+        "planning_mode": "templates",
         "brief_id": brief.id,
         "candidate_brief": {
             "path": brief_path.as_posix(),
@@ -142,6 +143,7 @@ def plan_lora_candidates(
     return {
         "status": plan["status"],
         "kind": plan["kind"],
+        "planning_mode": plan["planning_mode"],
         "brief_id": plan["brief_id"],
         "candidate_brief": plan["candidate_brief"],
         "character": plan["character"],
@@ -150,6 +152,125 @@ def plan_lora_candidates(
         "counts": plan["counts"],
         "generation": plan["generation"],
         "candidate_templates": plan["candidate_templates"],
+        "output": plan["output"],
+    }
+
+
+def plan_lora_freegen(
+    *,
+    brief_path: Path,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    brief_path = brief_path.resolve()
+    brief = load_lora_freegen_brief(brief_path)
+    canon_dir = resolve_output_path(brief.character.canon, brief_path.parent)
+    manifest = load_lora_canon_manifest(canon_dir)
+    character = manifest["character"]
+    identity_prompt = join_prompt_parts(character["identity_prompt"])
+    if caption_contains_token(identity_prompt, character["trigger_token"]):
+        raise LoraCandidateError(
+            f"Canon identity prompt includes LoRA trigger token {character['trigger_token']}"
+        )
+
+    output_dir = resolve_output_path(brief.output.directory, brief_path.parent)
+    if output_dir.exists():
+        if not brief.output.overwrite:
+            raise LoraCandidateError(f"Output exists and overwrite=false: {output_dir.as_posix()}")
+        shutil.rmtree(output_dir)
+    (output_dir / "images").mkdir(parents=True)
+    (output_dir / "generation_prompts").mkdir(parents=True)
+
+    canon_images = lora_canon_images_by_name(manifest, canon_dir)
+    primer_names = brief.identity_primers or list(canon_images.keys())
+    generation = brief.generation
+    progress.begin(
+        len(primer_names) * len(generation.buckets) * generation.seeds_per_bucket,
+        "plan free generations",
+    )
+    candidates = []
+    for primer_name in primer_names:
+        identity_primer = _identity_primer_for_template(primer_name, canon_images)
+        for bucket in generation.buckets:
+            cell = f"free_{primer_name}_{bucket.width}x{bucket.height}"
+            for offset in range(generation.seeds_per_bucket):
+                seed = generation.seed_start + offset
+                name = f"{cell}_seed_{seed:04d}"
+                prompt_path = output_dir / "generation_prompts" / f"{name}.txt"
+                prompt_path.write_text(identity_prompt + "\n", encoding="utf-8")
+                candidates.append(
+                    {
+                        "name": name,
+                        "status": "planned",
+                        "candidate": {
+                            "name": cell,
+                            "mode": "free",
+                        },
+                        "seed": seed,
+                        "generation_prompt": identity_prompt,
+                        "generation_prompt_file": prompt_path.relative_to(output_dir).as_posix(),
+                        "identity_primer": identity_primer,
+                        "image": {
+                            "path": (output_dir / "images" / f"{name}.png").as_posix(),
+                            "width": bucket.width,
+                            "height": bucket.height,
+                        },
+                        "generation": {
+                            "screening": True,
+                            "width": bucket.width,
+                            "height": bucket.height,
+                            "steps": generation.steps,
+                        },
+                    }
+                )
+                progress.step(name)
+
+    plan = {
+        "status": "planned",
+        "kind": "lora-candidate-plan",
+        "planning_mode": "free",
+        "brief_id": brief.id,
+        "candidate_brief": {
+            "path": brief_path.as_posix(),
+            "sha256": sha256_file(brief_path),
+        },
+        "character": character,
+        "canon": {
+            "directory": canon_dir.as_posix(),
+            "manifest": (canon_dir / CANON_MANIFEST).as_posix(),
+        },
+        "quality_contract": lora_quality_contract(),
+        "counts": {
+            "identity_primers": len(primer_names),
+            "buckets": len(generation.buckets),
+            "seeds_per_bucket": generation.seeds_per_bucket,
+            "candidates": len(candidates),
+        },
+        "generation": {
+            "steps": generation.steps,
+            "seed_start": generation.seed_start,
+            "buckets": [{"width": bucket.width, "height": bucket.height} for bucket in generation.buckets],
+        },
+        "candidate_templates": [],
+        "candidates": candidates,
+        "output": {
+            "directory": output_dir.as_posix(),
+            "images": (output_dir / "images").as_posix(),
+            "generation_prompts": (output_dir / "generation_prompts").as_posix(),
+            "manifest": (output_dir / CANDIDATES_MANIFEST).as_posix(),
+        },
+    }
+    write_json(output_dir / CANDIDATES_MANIFEST, plan)
+    return {
+        "status": plan["status"],
+        "kind": plan["kind"],
+        "planning_mode": plan["planning_mode"],
+        "brief_id": plan["brief_id"],
+        "candidate_brief": plan["candidate_brief"],
+        "character": plan["character"],
+        "canon": plan["canon"],
+        "quality_contract": plan["quality_contract"],
+        "counts": plan["counts"],
+        "generation": plan["generation"],
         "output": plan["output"],
     }
 
@@ -214,18 +335,18 @@ def run_lora_candidate_plan(
                 output_path = Path(candidate["image"]["path"])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 image.save(output_path)
-                outputs.append(
-                    {
-                        "name": candidate["name"],
-                        "seed": candidate["seed"],
-                        "candidate": candidate["candidate"],
-                        "identity_primer": candidate["identity_primer"],
-                        "generation_prompt": candidate["generation_prompt"],
-                        "training_caption": candidate["training_caption"],
-                        "image": image_asset_json(output_path),
-                        "timings_ms": timings,
-                    }
-                )
+                output = {
+                    "name": candidate["name"],
+                    "seed": candidate["seed"],
+                    "candidate": candidate["candidate"],
+                    "identity_primer": candidate["identity_primer"],
+                    "generation_prompt": candidate["generation_prompt"],
+                    "image": image_asset_json(output_path),
+                    "timings_ms": timings,
+                }
+                if candidate.get("training_caption") is not None:
+                    output["training_caption"] = candidate["training_caption"]
+                outputs.append(output)
                 progress.step(candidate["name"])
             save_contact_sheet(
                 [{"name": output["name"], "path": output["image"]["path"]} for output in outputs],
@@ -288,6 +409,7 @@ def build_lora_candidate_evidence(
     candidate_dir: Path,
     *,
     overwrite: bool,
+    dedupe_threshold: int = 6,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     candidate_dir = candidate_dir.resolve()
@@ -304,6 +426,8 @@ def build_lora_candidate_evidence(
     review_items: list[dict[str, Any]] = []
     rejected_images: list[dict[str, Any]] = []
     existing_images: list[dict[str, str]] = []
+    kept_hashes: list[tuple[str, int]] = []
+    near_duplicates = 0
     progress.begin(len(plan["candidates"]), "prepare candidate review evidence")
     for candidate in plan["candidates"]:
         path = Path(candidate["image"]["path"])
@@ -332,7 +456,27 @@ def build_lora_candidate_evidence(
                     evidence=evidence,
                 )
             )
+            progress.step(name)
+            continue
+        image_hash = _dhash(path)
+        duplicate_of = _nearest_kept_image(image_hash, kept_hashes, dedupe_threshold)
+        if duplicate_of is not None:
+            kept_name, distance = duplicate_of
+            near_duplicates += 1
+            rejected_images.append(
+                _candidate_evidence_item(
+                    candidate,
+                    status="near_duplicate_image",
+                    hard_rejects={"near_duplicate": True},
+                    evidence=evidence
+                    | {
+                        "near_duplicate_of": kept_name,
+                        "hamming_distance": distance,
+                    },
+                )
+            )
         else:
+            kept_hashes.append((name, image_hash))
             review_items.append(
                 _candidate_evidence_item(
                     candidate,
@@ -356,6 +500,10 @@ def build_lora_candidate_evidence(
             "candidates": len(plan["candidates"]),
             "review_items": len(review_items),
             "rejected_images": len(rejected_images),
+        },
+        "dedupe": {
+            "threshold": dedupe_threshold,
+            "near_duplicates": near_duplicates,
         },
         "review_items": review_items,
         "rejected_images": rejected_images,
@@ -384,7 +532,10 @@ def review_lora_candidates(
     if not accepted_names:
         raise LoraCandidateError("Candidate review requires at least one --accept NAME")
     candidate_dir = candidate_dir.resolve()
+    captioned_items_path = candidate_dir / CANDIDATE_EVIDENCE_DIR / "captioned.json"
     passed_items_path = candidate_dir / CANDIDATE_EVIDENCE_DIR / "passed.json"
+    if captioned_items_path.exists():
+        passed_items_path = captioned_items_path
     passed_items = read_json(passed_items_path, label="model-passed LoRA candidate items")["items"]
     if not passed_items:
         raise LoraCandidateError(f"No model-passed LoRA candidates are available: {passed_items_path.as_posix()}")
@@ -392,6 +543,12 @@ def review_lora_candidates(
     missing = [name for name in accepted_names if name not in by_name]
     if missing:
         raise LoraCandidateError(f"Model-passed evidence has no candidate: {', '.join(missing)}")
+    uncaptioned = [name for name in accepted_names if not by_name[name].get("training_caption")]
+    if uncaptioned:
+        raise LoraCandidateError(
+            "Accepted candidates have no training caption; run `lora candidate-caption` first: "
+            + ", ".join(uncaptioned)
+        )
 
     review_dir = (candidate_dir / REVIEW_DIR).resolve()
     if review_dir.exists():
@@ -507,18 +664,44 @@ def _candidate_evidence_item(
     hard_rejects: dict[str, bool],
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
+    item = {
         "name": candidate["name"],
         "status": status,
         "candidate": candidate["candidate"],
         "seed": candidate["seed"],
         "generation_prompt": candidate["generation_prompt"],
-        "training_caption": candidate["training_caption"],
         "identity_primer": candidate["identity_primer"],
         "image": candidate["image"],
         "hard_rejects": hard_rejects,
         "evidence": evidence,
     }
+    if candidate.get("training_caption") is not None:
+        item["training_caption"] = candidate["training_caption"]
+    return item
+
+
+def _dhash(path: Path) -> int:
+    with Image.open(path) as source:
+        gray = source.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
+    pixels = gray.tobytes()
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (1 if pixels[row * 9 + col] > pixels[row * 9 + col + 1] else 0)
+    return bits
+
+
+def _nearest_kept_image(
+    image_hash: int,
+    kept_hashes: list[tuple[str, int]],
+    threshold: int,
+) -> tuple[str, int] | None:
+    nearest: tuple[str, int] | None = None
+    for kept_name, kept_hash in kept_hashes:
+        distance = (image_hash ^ kept_hash).bit_count()
+        if distance <= threshold and (nearest is None or distance < nearest[1]):
+            nearest = (kept_name, distance)
+    return nearest
 
 
 def _quota_report(accepted: list[dict[str, Any]]) -> dict[str, Any]:
@@ -529,9 +712,12 @@ def _quota_report(accepted: list[dict[str, Any]]) -> dict[str, Any]:
     for item in accepted:
         candidate = item["candidate"]
         by_candidate[candidate["name"]] = by_candidate.get(candidate["name"], 0) + 1
-        by_view[candidate["view"]] = by_view.get(candidate["view"], 0) + 1
-        by_pose[candidate["pose"]] = by_pose.get(candidate["pose"], 0) + 1
-        by_framing[candidate["framing"]] = by_framing.get(candidate["framing"], 0) + 1
+        view = candidate.get("view", "unspecified")
+        pose = candidate.get("pose", "unspecified")
+        framing = candidate.get("framing", "unspecified")
+        by_view[view] = by_view.get(view, 0) + 1
+        by_pose[pose] = by_pose.get(pose, 0) + 1
+        by_framing[framing] = by_framing.get(framing, 0) + 1
     total = len(accepted)
     dominant = [
         {"axis": "candidate", "name": name, "count": count}

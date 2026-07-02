@@ -41,7 +41,7 @@ Runtime contract:
 - canvas: 576x864
 - steps: 24
 - seed_start: 300
-- seeds_per_candidate: 64
+- seeds_per_candidate: 4
 
 Return JSON only. The first character of your response must be "{" and the last character must be "}".
 The JSON object must contain exactly:

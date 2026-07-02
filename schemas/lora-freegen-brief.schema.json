@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "LoraCandidateCharacterSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "canon": {
+          "title": "Canon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canon"
+      ],
+      "title": "LoraCandidateCharacterSpec",
+      "type": "object"
+    },
+    "LoraCandidateOutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "title": "Directory",
+          "type": "string"
+        },
+        "overwrite": {
+          "title": "Overwrite",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "directory",
+        "overwrite"
+      ],
+      "title": "LoraCandidateOutputSpec",
+      "type": "object"
+    },
+    "LoraFreeGenBucketSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "LoraFreeGenBucketSpec",
+      "type": "object"
+    },
+    "LoraFreeGenGenerationSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "buckets": {
+          "items": {
+            "$ref": "#/$defs/LoraFreeGenBucketSpec"
+          },
+          "minItems": 1,
+          "title": "Buckets",
+          "type": "array"
+        },
+        "seed_start": {
+          "minimum": 0,
+          "title": "Seed Start",
+          "type": "integer"
+        },
+        "seeds_per_bucket": {
+          "exclusiveMinimum": 0,
+          "title": "Seeds Per Bucket",
+          "type": "integer"
+        },
+        "steps": {
+          "exclusiveMinimum": 0,
+          "title": "Steps",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "buckets",
+        "steps",
+        "seed_start",
+        "seeds_per_bucket"
+      ],
+      "title": "LoraFreeGenGenerationSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "title": "$Schema",
+      "type": "string"
+    },
+    "character": {
+      "$ref": "#/$defs/LoraCandidateCharacterSpec"
+    },
+    "generation": {
+      "$ref": "#/$defs/LoraFreeGenGenerationSpec"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "identity_primers": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Identity Primers"
+    },
+    "kind": {
+      "const": "lora-freegen-brief",
+      "title": "Kind",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "#/$defs/LoraCandidateOutputSpec"
+    }
+  },
+  "required": [
+    "$schema",
+    "kind",
+    "id",
+    "character",
+    "generation",
+    "output"
+  ],
+  "title": "LoraFreeGenBriefSpec",
+  "type": "object"
+}

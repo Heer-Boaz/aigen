@@ -64,6 +64,38 @@ class LoraCandidateJudgment(StrictModel):
     evidence: LoraCandidateEvidence
 
 
+class LoraFreeCandidateHardRejects(StrictModel):
+    wrong_face: bool
+    wrong_hair_length_or_color: bool
+    childlike_or_chibi_proportions: bool
+    wrong_visible_outfit: bool
+    missing_visible_required_identity_detail: bool
+    deformed_visible_anatomy: bool
+    broken_visible_hands_or_feet: bool
+    awkward_crop_or_cutoff: bool
+    dirty_or_distracting_background: bool
+    style_drift: bool
+
+
+class LoraFreeCandidateScores(StrictModel):
+    identity_preservation: float
+    visible_outfit_preservation: float
+    visible_anatomy_quality: float
+    petite_proportion_preservation: float
+    framing_quality: float
+    background_quality: float
+    style_match: float
+    training_usability: float
+
+
+class LoraFreeCandidateJudgment(StrictModel):
+    candidate: str
+    passes: bool = Field(alias="pass")
+    hard_rejects: LoraFreeCandidateHardRejects
+    scores: LoraFreeCandidateScores
+    evidence: LoraCandidateEvidence
+
+
 def judge_lora_candidate_evidence(
     candidate_dir: Path,
     config: QwenVlmConfig,
@@ -109,7 +141,7 @@ def judge_lora_candidate_evidence(
             prompt_path.write_text(prompt, encoding="utf-8")
             raw_text = active_runner.judge_candidate(prompt, _candidate_image_paths(item))
             raw_path.write_text(raw_text + "\n", encoding="utf-8")
-            judgment = _parse_candidate_judgment(raw_text)
+            judgment = _parse_candidate_judgment(raw_text, free=_is_free_item(item))
             if judgment.candidate != candidate_name:
                 raise LoraCandidateJudgeError(f"Judge returned candidate {judgment.candidate}, expected {candidate_name}")
             judged.append(
@@ -177,7 +209,13 @@ def _candidate_image_paths(item: dict[str, Any]) -> list[Path]:
     ]
 
 
+def _is_free_item(item: dict[str, Any]) -> bool:
+    return item["candidate"].get("mode") == "free"
+
+
 def _candidate_prompt(item: dict[str, Any]) -> str:
+    if _is_free_item(item):
+        return _free_candidate_prompt(item)
     hard_rejects = lora_quality_contract()["hard_rejects"]
     candidate = item["candidate"]
     return f"""You are a strict QA judge for LoRA training images.
@@ -219,35 +257,61 @@ Do not wrap the JSON in Markdown code fences.
 """
 
 
-def _parse_candidate_judgment(raw_text: str) -> LoraCandidateJudgment:
+def _free_candidate_prompt(item: dict[str, Any]) -> str:
+    hard_reject_fields = list(LoraFreeCandidateHardRejects.model_fields)
+    score_fields = list(LoraFreeCandidateScores.model_fields)
+    hard_reject_lines = "\n".join(f"- {field.replace('_', ' ')}" for field in hard_reject_fields)
+    return f"""You are a strict QA judge for LoRA training images.
+
+You will receive these images in order:
+1. Approved identity primer for the character.
+2. Generated candidate image named {item["name"]}.
+
+The candidate was generated without a requested view, pose or framing. Any natural camera angle, pose,
+expression and body coverage is acceptable; the image will be captioned from what it actually shows.
+Judge only identity and quality. Do not reject an image for its view, pose, expression or for showing
+a partial body, as long as the framing looks intentional rather than accidentally cut off.
+Judge only details that should be visible in the actual framing, but always enforce face, hair color/length,
+petite balanced adult proportions, visible outfit accuracy, clean background and style.
+Accept only images you would train a character identity LoRA on.
+
+Generation prompt:
+{item["generation_prompt"]}
+
+Hard reject if any of these are true:
+{hard_reject_lines}
+
+Scoring rules:
+- Every score is a number from 0 to 10.
+- 10 is excellent, 7 is usable with minor concerns, 5 is weak, 0 is unusable.
+- training_usability must be 7 or higher only for images you would actually train a character LoRA on.
+
+Return valid JSON only. The JSON object must contain:
+- candidate: exactly "{item["name"]}"
+- pass: boolean
+- hard_rejects: object with booleans for {", ".join(hard_reject_fields)}
+- scores: object with numeric values for {", ".join(score_fields)}
+- evidence: object with identity_match string, quality_assessment string, concerns string array
+Do not wrap the JSON in Markdown code fences.
+"""
+
+
+def _parse_candidate_judgment(raw_text: str, *, free: bool) -> LoraCandidateJudgment | LoraFreeCandidateJudgment:
     try:
         data = json_object_from_vlm_response(raw_text)
     except VlmJsonError as error:
         raise LoraCandidateJudgeError(str(error)) from error
+    model = LoraFreeCandidateJudgment if free else LoraCandidateJudgment
     try:
-        return LoraCandidateJudgment.model_validate(data)
+        return model.model_validate(data)
     except ValidationError as error:
         raise LoraCandidateJudgeError(f"Judge returned invalid LoRA candidate JSON: {error}") from error
 
 
-def _selection_status(judgment: LoraCandidateJudgment) -> dict[str, Any]:
+def _selection_status(judgment: LoraCandidateJudgment | LoraFreeCandidateJudgment) -> dict[str, Any]:
     dumped = judgment.model_dump(mode="json", by_alias=True)
     hard_rejects = [name for name, rejected in dumped["hard_rejects"].items() if rejected]
-    score_blockers = [
-        name
-        for name in (
-            "identity_preservation",
-            "visible_outfit_preservation",
-            "visible_anatomy_quality",
-            "petite_proportion_preservation",
-            "framing_quality",
-            "background_quality",
-            "style_match",
-            "view_pose_match",
-            "training_usability",
-        )
-        if dumped["scores"][name] < 7.0
-    ]
+    score_blockers = [name for name, score in dumped["scores"].items() if score < 7.0]
     blockers = hard_rejects + score_blockers
     if not dumped["pass"]:
         blockers.append("judge_failed_candidate")

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
-from aigen.cli import main
+from aigen.cli import build_parser, main
 from aigen.generation.flux_components import (
     CLIP_TEXT_ENCODER_COMPONENT,
     T5_TEXT_ENCODER_COMPONENT,
@@ -40,6 +40,23 @@ def write_training_source(path: Path, color: tuple[int, int, int], mark: str) ->
     draw.rectangle((14, 18, 56, 92), outline="white", width=5)
     draw.text((18, 24), mark, fill="black")
     image.save(path)
+
+
+class LoraCandidateCommandTests(unittest.TestCase):
+    def test_candidate_brief_plan_defaults_to_four_seed_screening_batch(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "lora",
+                "candidate-brief-plan",
+                "canon",
+                "--output",
+                "brief.json",
+                "--candidate-output-dir",
+                "runs/candidates",
+            ]
+        )
+
+        self.assertEqual(args.seeds_per_candidate, 4)
 
 
 class FakeLoraCandidatePlanner:
@@ -173,6 +190,76 @@ class FakeLoraCandidateJudge:
                     "concerns": [],
                 },
             }
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeLoraFreeCandidateJudge:
+    device_report = {"modules": []}
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.image_paths: list[list[Path]] = []
+        self.closed = False
+
+    def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompts.append(prompt)
+        self.image_paths.append(image_paths)
+        candidate = prompt.split("Generated candidate image named ", 1)[1].split(".", 1)[0]
+        return json.dumps(
+            {
+                "candidate": candidate,
+                "pass": True,
+                "hard_rejects": {
+                    "wrong_face": False,
+                    "wrong_hair_length_or_color": False,
+                    "childlike_or_chibi_proportions": False,
+                    "wrong_visible_outfit": False,
+                    "missing_visible_required_identity_detail": False,
+                    "deformed_visible_anatomy": False,
+                    "broken_visible_hands_or_feet": False,
+                    "awkward_crop_or_cutoff": False,
+                    "dirty_or_distracting_background": False,
+                    "style_drift": False,
+                },
+                "scores": {
+                    "identity_preservation": 9,
+                    "visible_outfit_preservation": 9,
+                    "visible_anatomy_quality": 9,
+                    "petite_proportion_preservation": 9,
+                    "framing_quality": 9,
+                    "background_quality": 9,
+                    "style_match": 9,
+                    "training_usability": 9,
+                },
+                "evidence": {
+                    "identity_match": "Matches the approved primer.",
+                    "quality_assessment": "Canon-worthy training image.",
+                    "concerns": [],
+                },
+            }
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeLoraCandidateCaptioner:
+    device_report = {"modules": []}
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.image_paths: list[list[Path]] = []
+        self.closed = False
+
+    def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompts.append(prompt)
+        self.image_paths.append(image_paths)
+        return (
+            "short brown hair, blue eyes, brown leather jacket, front view, "
+            "standing, thigh-up, plain grey background, anime style"
         )
 
     def close(self) -> None:
@@ -1321,6 +1408,220 @@ class LoraDatasetTests(unittest.TestCase):
         self.assertEqual(candidate_exit, 0)
         self.assertEqual(candidate_payload["properties"]["kind"]["const"], "lora-candidate-brief")
         self.assertNotIn("schema_" "version", candidate_payload["properties"])
+
+    def test_lora_freegen_brief_validates_buckets(self) -> None:
+        from pydantic import ValidationError as PydanticValidationError
+
+        from aigen.lora_candidate_models import LoraFreeGenBriefSpec
+
+        base = {
+            "$schema": "schemas/lora-freegen-brief.schema.json",
+            "kind": "lora-freegen-brief",
+            "id": "ai51.lora.freegen",
+            "character": {"canon": "canon"},
+            "generation": {
+                "buckets": [{"width": 96, "height": 128}],
+                "steps": 20,
+                "seed_start": 0,
+                "seeds_per_bucket": 1,
+            },
+            "output": {"directory": "out", "overwrite": True},
+        }
+        LoraFreeGenBriefSpec.model_validate(base)
+
+        bad_width = json.loads(json.dumps(base))
+        bad_width["generation"]["buckets"] = [{"width": 100, "height": 128}]
+        with self.assertRaisesRegex(PydanticValidationError, "divisible by 16"):
+            LoraFreeGenBriefSpec.model_validate(bad_width)
+
+        duplicate = json.loads(json.dumps(base))
+        duplicate["generation"]["buckets"] = [
+            {"width": 96, "height": 128},
+            {"width": 96, "height": 128},
+        ]
+        with self.assertRaisesRegex(PydanticValidationError, "buckets must be unique"):
+            LoraFreeGenBriefSpec.model_validate(duplicate)
+
+    def test_lora_freegen_funnel_plans_dedupes_captions_and_reviews(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            front = root / "front.png"
+            side = root / "left_profile.png"
+            write_training_source(front, (180, 50, 60), "F")
+            write_training_source(side, (60, 90, 200), "L")
+            identity_prompt = "1girl, short brown hair, blue eyes, brown leather jacket, blue necktie"
+            canon_dir = root / "canon"
+            with contextlib.redirect_stdout(io.StringIO()):
+                canon_exit = main(
+                    [
+                        "lora",
+                        "canon-init",
+                        "--character-id",
+                        "ai51",
+                        "--trigger-token",
+                        "ai51char",
+                        "--identity-prompt",
+                        identity_prompt,
+                        "--anchor",
+                        f"front={front.as_posix()}",
+                        "--anchor",
+                        f"left_profile={side.as_posix()}",
+                        "--output-dir",
+                        canon_dir.as_posix(),
+                        "--compact",
+                    ]
+                )
+            self.assertEqual(canon_exit, 0)
+
+            candidate_dir = root / "freegen"
+            brief_path = root / "freegen_brief.json"
+            write_json(
+                brief_path,
+                {
+                    "$schema": "schemas/lora-freegen-brief.schema.json",
+                    "kind": "lora-freegen-brief",
+                    "id": "ai51.lora.freegen",
+                    "character": {"canon": canon_dir.as_posix()},
+                    "generation": {
+                        "buckets": [{"width": 96, "height": 128}],
+                        "steps": 20,
+                        "seed_start": 5,
+                        "seeds_per_bucket": 2,
+                    },
+                    "output": {"directory": candidate_dir.as_posix(), "overwrite": True},
+                },
+            )
+
+            plan_stdout = io.StringIO()
+            with contextlib.redirect_stdout(plan_stdout):
+                plan_exit = main(["lora", "freegen-plan", brief_path.as_posix(), "--compact"])
+            plan_result = json.loads(plan_stdout.getvalue())
+            self.assertEqual(plan_exit, 0)
+            self.assertEqual(plan_result["planning_mode"], "free")
+            self.assertEqual(
+                plan_result["counts"],
+                {"identity_primers": 2, "buckets": 1, "seeds_per_bucket": 2, "candidates": 4},
+            )
+            manifest = json.loads((candidate_dir / "candidates.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                [candidate["name"] for candidate in manifest["candidates"]],
+                [
+                    "free_front_96x128_seed_0005",
+                    "free_front_96x128_seed_0006",
+                    "free_left_profile_96x128_seed_0005",
+                    "free_left_profile_96x128_seed_0006",
+                ],
+            )
+            for candidate in manifest["candidates"]:
+                self.assertEqual(candidate["generation_prompt"], identity_prompt)
+                self.assertNotIn("training_caption", candidate)
+                self.assertEqual(candidate["candidate"]["mode"], "free")
+                self.assertTrue((candidate_dir / candidate["generation_prompt_file"]).exists())
+
+            def write_candidate_image(name: str, box: tuple[int, int, int, int]) -> None:
+                image = Image.new("RGB", (96, 128), (30, 30, 30))
+                draw = ImageDraw.Draw(image)
+                draw.rectangle(box, fill="white")
+                image.save(candidate_dir / "images" / f"{name}.png")
+
+            write_candidate_image("free_front_96x128_seed_0005", (0, 0, 47, 127))
+            write_candidate_image("free_front_96x128_seed_0006", (0, 0, 47, 127))
+            write_candidate_image("free_left_profile_96x128_seed_0005", (48, 0, 95, 127))
+
+            evidence_stdout = io.StringIO()
+            with contextlib.redirect_stdout(evidence_stdout):
+                evidence_exit = main(
+                    [
+                        "lora",
+                        "candidate-evidence",
+                        candidate_dir.as_posix(),
+                        "--dedupe-threshold",
+                        "0",
+                        "--compact",
+                    ]
+                )
+            evidence_result = json.loads(evidence_stdout.getvalue())
+            self.assertEqual(evidence_exit, 0)
+            self.assertEqual(
+                evidence_result["counts"],
+                {"candidates": 4, "review_items": 2, "rejected_images": 2},
+            )
+            self.assertEqual(evidence_result["dedupe"], {"threshold": 0, "near_duplicates": 1})
+            rejected_by_status = {item["status"]: item for item in evidence_result["rejected_images"]}
+            self.assertEqual(
+                rejected_by_status["near_duplicate_image"]["evidence"]["near_duplicate_of"],
+                "free_front_96x128_seed_0005",
+            )
+            self.assertIn("missing_candidate_image", rejected_by_status)
+
+            judge_runner = FakeLoraFreeCandidateJudge()
+            judge_stdout = io.StringIO()
+            with (
+                patch("aigen.lora_candidate_judge.QwenVlm", return_value=judge_runner),
+                contextlib.redirect_stdout(judge_stdout),
+            ):
+                judge_exit = main(["lora", "candidate-judge", candidate_dir.as_posix(), "--compact"])
+            judge_result = json.loads(judge_stdout.getvalue())
+            self.assertEqual(judge_exit, 0)
+            self.assertEqual(judge_result["counts"], {"review_items": 2, "passed": 2, "blocked": 0})
+            self.assertIn("without a requested view, pose or framing", judge_runner.prompts[0])
+            self.assertIn("awkward_crop_or_cutoff", judge_runner.prompts[0])
+            self.assertNotIn("view_label_mismatch", judge_runner.prompts[0])
+
+            uncaptioned_review_stderr = io.StringIO()
+            with contextlib.redirect_stderr(uncaptioned_review_stderr):
+                uncaptioned_review_exit = main(
+                    [
+                        "lora",
+                        "candidate-review",
+                        candidate_dir.as_posix(),
+                        "--accept",
+                        "free_front_96x128_seed_0005",
+                        "--compact",
+                    ]
+                )
+            self.assertEqual(uncaptioned_review_exit, 1)
+            self.assertIn("candidate-caption", uncaptioned_review_stderr.getvalue())
+
+            captioner = FakeLoraCandidateCaptioner()
+            caption_stdout = io.StringIO()
+            with (
+                patch("aigen.lora_candidate_captions.QwenVlm", return_value=captioner),
+                contextlib.redirect_stdout(caption_stdout),
+            ):
+                caption_exit = main(["lora", "candidate-caption", candidate_dir.as_posix(), "--compact"])
+            caption_result = json.loads(caption_stdout.getvalue())
+            self.assertEqual(caption_exit, 0)
+            self.assertEqual(caption_result["counts"], {"captioned": 2})
+            self.assertTrue(captioner.closed)
+            self.assertIn("Describe only what is visible", captioner.prompts[0])
+            caption_file = candidate_dir / "captions" / "free_front_96x128_seed_0005.txt"
+            self.assertEqual(
+                caption_file.read_text(encoding="utf-8").strip(),
+                "ai51char, short brown hair, blue eyes, brown leather jacket, front view, "
+                "standing, thigh-up, plain grey background, anime style",
+            )
+
+            review_stdout = io.StringIO()
+            with contextlib.redirect_stdout(review_stdout):
+                review_exit = main(
+                    [
+                        "lora",
+                        "candidate-review",
+                        candidate_dir.as_posix(),
+                        "--accept",
+                        "free_front_96x128_seed_0005",
+                        "--approved-by",
+                        "boaz",
+                        "--compact",
+                    ]
+                )
+            review_result = json.loads(review_stdout.getvalue())
+            self.assertEqual(review_exit, 0)
+            accepted = json.loads((candidate_dir / "review" / "accepted.json").read_text(encoding="utf-8"))["items"]
+            self.assertEqual(len(accepted), 1)
+            self.assertTrue(accepted[0]["training_caption"].startswith("ai51char, short brown hair"))
+            self.assertEqual(review_result["quota_report"]["by_view"], {"unspecified": 1})
 
     def test_lora_training_dataset_materializes_prompt_column(self) -> None:
         from datasets import load_dataset

@@ -1,0 +1,23 @@
+{
+  "$schema": "../../schemas/lora-freegen-brief.schema.json",
+  "kind": "lora-freegen-brief",
+  "id": "ai51.lora.freegen",
+  "character": {
+    "canon": "../../assets/characters/ai51/canon"
+  },
+  "generation": {
+    "buckets": [
+      {"width": 832, "height": 1248},
+      {"width": 768, "height": 1408},
+      {"width": 896, "height": 1152},
+      {"width": 1024, "height": 1024}
+    ],
+    "steps": 24,
+    "seed_start": 1000,
+    "seeds_per_bucket": 8
+  },
+  "output": {
+    "directory": "../../runs/lora_candidates/ai51_freegen",
+    "overwrite": true
+  }
+}

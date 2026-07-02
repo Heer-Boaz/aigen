@@ -75,6 +75,9 @@ class QwenVlm:
     def judge_candidate(self, prompt: str, image_paths: list[Path]) -> str:
         return self._generate(prompt, image_paths)
 
+    def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
+        return self._generate(prompt, image_paths)
+
     def close(self) -> None:
         del self.model
         del self.processor
