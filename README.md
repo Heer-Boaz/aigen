@@ -97,6 +97,30 @@ Accepted views are written to `assets/characters/<id>/views/` and registered in
 `assets/characters/<id>/view_bank.json` with hashes, view metadata and source
 run evidence.
 
+## Reference Packs
+
+PixAI-style character editing starts with a named reference pack and a compact
+identity profile. The pack builder records image metadata only; the parser uses
+the local Qwen VLM to turn those references into machine-readable identity
+facts for later edit and refine runs.
+
+```bash
+.venv/bin/python -m aigen.cli characters reference-pack build \
+  --character-id ai51 \
+  --reference front=path/to/front.png \
+  --reference portrait=path/to/portrait.png \
+  --reference side=path/to/side.png \
+  --reference back=path/to/back.png \
+  --output-dir assets/characters/ai51/references
+
+.venv/bin/python -m aigen.cli characters reference-pack parse \
+  assets/characters/ai51/references/reference_pack.json
+```
+
+This writes `reference_pack.json` and `identity_profile.json`. The generation
+runners should select 1-3 references per case from the pack rather than pass all
+available images to every edit.
+
 ## Qwen Identity Smoke
 
 The local Qwen route starts with Nunchaku-quantized Qwen-Image-Edit-2509. Do

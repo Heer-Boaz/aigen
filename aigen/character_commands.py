@@ -4,6 +4,12 @@ import argparse
 from pathlib import Path
 from typing import Any, TextIO
 
+from aigen.character_reference_models import CharacterReferenceError
+from aigen.character_reference_pack import (
+    build_character_reference_pack,
+    parse_character_reference_args,
+    parse_character_reference_pack,
+)
 from aigen.character_view_models import (
     CharacterViewError,
     character_view_bank_schema,
@@ -30,9 +36,11 @@ from aigen.generation.qwen_image_edit_identity import (
     run_qwen_image_edit_identity,
 )
 from aigen.keyframe_memory import KeyframeMemoryError
+from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_character_commands(subparsers: Any) -> None:
@@ -65,6 +73,37 @@ def add_character_commands(subparsers: Any) -> None:
     view_accept.add_argument("--run-dir", type=Path, required=True, help="Completed character-view run directory")
     view_accept.add_argument("--candidate", required=True, help="Candidate name to accept")
     view_accept.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    reference_pack = character_subparsers.add_parser(
+        "reference-pack",
+        help="Build and parse multi-reference character identity packs",
+    )
+    reference_pack_subparsers = reference_pack.add_subparsers(dest="reference_pack_command", required=True)
+
+    reference_pack_build = reference_pack_subparsers.add_parser(
+        "build",
+        help="Build a named character reference pack",
+    )
+    reference_pack_build.add_argument("--character-id", required=True, help="Character id")
+    reference_pack_build.add_argument(
+        "--reference",
+        action="append",
+        required=True,
+        help="Named reference image as name=path; supported names: front, portrait, side, back, body_shape",
+    )
+    reference_pack_build.add_argument("--output-dir", type=Path, required=True, help="Reference pack directory")
+    reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    reference_pack_build.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    reference_pack_parse = reference_pack_subparsers.add_parser(
+        "parse",
+        help="Use the local Qwen VLM to write an identity profile from a reference pack",
+    )
+    reference_pack_parse.add_argument("pack", type=Path, help="reference_pack.json")
+    reference_pack_parse.add_argument("--output", type=Path, help="Generated identity_profile.json")
+    reference_pack_parse.add_argument("--overwrite", action="store_true", help="Replace an existing identity profile")
+    add_judge_runtime_args(reference_pack_parse, role="reference parser", max_new_tokens=1600)
+    reference_pack_parse.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     qwen_identity = character_subparsers.add_parser(
         "qwen-identity-run",
@@ -178,6 +217,32 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
+        if args.characters_command == "reference-pack":
+            if args.reference_pack_command == "build":
+                dump_json(
+                    stdout,
+                    build_character_reference_pack(
+                        character_id=args.character_id,
+                        references=parse_character_reference_args(args.reference, Path.cwd()),
+                        output_dir=args.output_dir,
+                        overwrite=args.overwrite,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
+            if args.reference_pack_command == "parse":
+                dump_json(
+                    stdout,
+                    parse_character_reference_pack(
+                        args.pack,
+                        judge_config_from_args(args),
+                        output_path=args.output,
+                        overwrite=args.overwrite,
+                        progress=progress,
+                    ),
+                    pretty=not args.compact,
+                )
+                return 0
         if args.characters_command == "qwen-identity-run":
             dump_json(
                 stdout,
@@ -199,6 +264,13 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
-    except (CharacterViewError, QwenImageEditIdentityError, KeyframeMemoryError, ManifestIOError) as error:
+    except (
+        CharacterReferenceError,
+        CharacterViewError,
+        QwenImageEditIdentityError,
+        KeyframeMemoryError,
+        ManifestIOError,
+        QwenVlmError,
+    ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1

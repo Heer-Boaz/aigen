@@ -9,6 +9,7 @@ from typing import Any
 
 from PIL import Image
 
+from aigen.character_reference_models import CHARACTER_REFERENCE_NAME_SET
 from aigen.generation.runtime_diagnostics import (
     cuda_memory_stats,
     elapsed_ms,
@@ -28,7 +29,7 @@ DEFAULT_QWEN_IDENTITY_PROFILE = "nunchaku-qwen-edit-2509-fp4-r32-lightning-4step
 DEFAULT_QWEN_IDENTITY_MAX_SIDE = 640
 DEFAULT_QWEN_IDENTITY_SEED = 0
 DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH = 512
-QWEN_IDENTITY_REFERENCE_NAMES = frozenset({"front", "portrait", "side", "back", "body_shape"})
+QWEN_IDENTITY_REFERENCE_NAMES = CHARACTER_REFERENCE_NAME_SET
 
 
 class QwenImageEditIdentityError(RuntimeError):
