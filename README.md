@@ -45,6 +45,14 @@ The model manifests used by the installer are:
 - `model_sources/keyframe_pose_dwpose_onnx.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 
+Optional Qwen identity smoke assets are intentionally separate from the default
+installer:
+
+- `model_sources/qwen_identity_2509_fp4_r32_lightning_4step.json`
+- `model_sources/qwen_identity_2509_fp4_r32_lightning_8step.json`
+- `model_sources/qwen_identity_2509_fp4_r32_full.json`
+- `model_sources/qwen_identity_2509_fp4_r128_full.json`
+
 To inspect a model download manifest manually:
 
 ```bash
@@ -88,6 +96,40 @@ keyframe is allowed to infer a random reference image.
 Accepted views are written to `assets/characters/<id>/views/` and registered in
 `assets/characters/<id>/view_bank.json` with hashes, view metadata and source
 run evidence.
+
+## Qwen Identity Smoke
+
+The local Qwen route starts with Nunchaku-quantized Qwen-Image-Edit-2509. Do
+not download or run full Qwen-Image-Edit-2511 for the native aigen smoke path.
+Each Qwen 2509 manifest allowlists exactly one Nunchaku checkpoint.
+
+```bash
+.venv/bin/python -m aigen.cli models download \
+  --manifest model_sources/qwen_identity_2509_fp4_r32_lightning_4step.json \
+  --models-root aigen/models
+
+.venv/bin/python tools/smoke_qwen_image_edit_2509_nunchaku.py \
+  --input-image path/to/front.png \
+  --output-dir runs/qwen_identity/fit_4step
+```
+
+Only after the single-image fit smoke succeeds, run the multi-reference identity
+smoke. It does not train LoRAs, use ControlNet, score outputs or judge with a
+VLM.
+
+```bash
+.venv/bin/python -m aigen.cli characters qwen-identity-run \
+  --reference front=path/to/front.png \
+  --reference portrait=path/to/portrait.png \
+  --reference side=path/to/side.png \
+  --reference back=path/to/back.png \
+  --output-dir runs/qwen_identity/smoke
+```
+
+The default profile is `nunchaku-qwen-edit-2509-fp4-r32-lightning-4step`.
+`--nunchaku-blocks-on-gpu` explicitly enables the slower layer-offload path for
+the multi-reference runner. The standalone fit script uses `--offload-mode auto`
+by default on 18GB-or-smaller GPUs.
 
 ## Briefs
 

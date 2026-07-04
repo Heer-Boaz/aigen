@@ -17,6 +17,19 @@ from aigen.character_views import (
     validate_character_view_job,
 )
 from aigen.command_io import command_error_payload, dump_json
+from aigen.generation.qwen_image_edit_identity import (
+    DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH,
+    DEFAULT_QWEN_IDENTITY_MAX_SIDE,
+    DEFAULT_QWEN_IDENTITY_PROFILE,
+    DEFAULT_QWEN_IDENTITY_SEED,
+    QwenImageEditIdentityError,
+    parse_qwen_identity_reference_args,
+    qwen_identity_cli_case_names,
+    qwen_image_edit_identity_profile_for_name,
+    qwen_image_edit_identity_profile_names,
+    run_qwen_image_edit_identity,
+)
+from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
@@ -52,6 +65,65 @@ def add_character_commands(subparsers: Any) -> None:
     view_accept.add_argument("--run-dir", type=Path, required=True, help="Completed character-view run directory")
     view_accept.add_argument("--candidate", required=True, help="Candidate name to accept")
     view_accept.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    qwen_identity = character_subparsers.add_parser(
+        "qwen-identity-run",
+        help="Run a fixed multi-reference Qwen Image Edit identity smoke",
+    )
+    qwen_identity.add_argument(
+        "--reference",
+        action="append",
+        required=True,
+        help="Named reference image as name=path; supported names: front, portrait, side, back, body_shape",
+    )
+    qwen_identity.add_argument(
+        "--case",
+        action="append",
+        choices=qwen_identity_cli_case_names(),
+        help="Identity case to generate; defaults to all fixed cases",
+    )
+    qwen_identity.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
+    qwen_identity.add_argument(
+        "--profile",
+        default=DEFAULT_QWEN_IDENTITY_PROFILE,
+        choices=qwen_image_edit_identity_profile_names(),
+        help="Qwen Image Edit model profile",
+    )
+    qwen_identity.add_argument(
+        "--max-side",
+        type=int,
+        default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
+        help="Longest generated/reference side for the smoke run",
+    )
+    qwen_identity.add_argument(
+        "--steps",
+        type=int,
+        help="Qwen Image Edit denoising steps; defaults to the selected profile",
+    )
+    qwen_identity.add_argument(
+        "--true-cfg-scale",
+        type=float,
+        help="Classifier-free guidance scale; defaults to the selected profile",
+    )
+    qwen_identity.add_argument(
+        "--guidance-scale",
+        type=float,
+        help="Guidance-distilled model scale; defaults to the selected profile",
+    )
+    qwen_identity.add_argument("--seed", type=int, default=DEFAULT_QWEN_IDENTITY_SEED, help="Base seed")
+    qwen_identity.add_argument(
+        "--max-sequence-length",
+        type=int,
+        default=DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH,
+        help="Maximum prompt token sequence length",
+    )
+    qwen_identity.add_argument(
+        "--nunchaku-blocks-on-gpu",
+        type=int,
+        help="Explicit slow-fit Nunchaku layer offload; leave unset for direct GPU execution",
+    )
+    qwen_identity.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    qwen_identity.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def run_character_command(
@@ -106,6 +178,27 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
-    except (CharacterViewError, ManifestIOError) as error:
+        if args.characters_command == "qwen-identity-run":
+            dump_json(
+                stdout,
+                run_qwen_image_edit_identity(
+                    references=parse_qwen_identity_reference_args(args.reference, Path.cwd()),
+                    output_dir=args.output_dir,
+                    profile=qwen_image_edit_identity_profile_for_name(args.profile),
+                    cases=args.case or (),
+                    max_side=args.max_side,
+                    steps=args.steps,
+                    true_cfg_scale=args.true_cfg_scale,
+                    guidance_scale=args.guidance_scale,
+                    seed=args.seed,
+                    max_sequence_length=args.max_sequence_length,
+                    overwrite=args.overwrite,
+                    nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+    except (CharacterViewError, QwenImageEditIdentityError, KeyframeMemoryError, ManifestIOError) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1

@@ -79,6 +79,36 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "1a3d3f78b545e33a0897da2101150292ebbd158a")
         self.assertIn("svdq-fp4_r32-flux.1-dev.safetensors", download.include)
 
+    def test_qwen_identity_2509_manifests_download_runtime_and_one_exact_checkpoint(self) -> None:
+        cases = {
+            "model_sources/qwen_identity_2509_fp4_r32_lightning_4step.json": (
+                "lightning-251115/svdq-fp4_r32-qwen-image-edit-2509-lightning-4steps-251115.safetensors"
+            ),
+            "model_sources/qwen_identity_2509_fp4_r32_lightning_8step.json": (
+                "lightning-251115/svdq-fp4_r32-qwen-image-edit-2509-lightning-8steps-251115.safetensors"
+            ),
+            "model_sources/qwen_identity_2509_fp4_r32_full.json": (
+                "svdq-fp4_r32-qwen-image-edit-2509.safetensors"
+            ),
+            "model_sources/qwen_identity_2509_fp4_r128_full.json": (
+                "svdq-fp4_r128-qwen-image-edit-2509.safetensors"
+            ),
+        }
+
+        for manifest_path, checkpoint in cases.items():
+            with self.subTest(manifest_path=manifest_path):
+                manifest = load_download_manifest(Path(manifest_path))
+                base, nunchaku = manifest.downloads
+
+                self.assertEqual(base.repo_id, "Qwen/Qwen-Image-Edit-2509")
+                self.assertEqual(base.revision, "d3968ef930e841f4c73640fb8afa3b306a78167e")
+                self.assertEqual(base.local_path, "diffusers/Qwen/Qwen-Image-Edit-2509")
+                self.assertIn("transformer/config.json", base.include)
+                self.assertNotIn("transformer/**", base.include)
+                self.assertEqual(nunchaku.repo_id, "nunchaku-ai/nunchaku-qwen-image-edit-2509")
+                self.assertEqual(nunchaku.revision, "e93a5fb77403d02a5a73c7cc8707b292c6ebc659")
+                self.assertEqual([item for item in nunchaku.include if item.endswith(".safetensors")], [checkpoint])
+
     def test_keyframe_judge_manifest_downloads_qwen_vl_7b(self) -> None:
         manifest = load_download_manifest(Path("model_sources/keyframe_judge_qwen2_5_vl_7b.json"))
         download = manifest.downloads[0]

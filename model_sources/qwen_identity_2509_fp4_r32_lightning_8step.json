@@ -1,0 +1,35 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "strategy": "Qwen-Image-Edit-2509 base runtime with one Nunchaku FP4 r32 8-step lightning checkpoint"
+  },
+  "downloads": [
+    {
+      "name": "qwen-image-edit-2509-runtime-without-bf16-transformer-weights",
+      "repo_id": "Qwen/Qwen-Image-Edit-2509",
+      "revision": "d3968ef930e841f4c73640fb8afa3b306a78167e",
+      "local_path": "diffusers/Qwen/Qwen-Image-Edit-2509",
+      "include": [
+        "README.md",
+        "model_index.json",
+        "processor/**",
+        "scheduler/**",
+        "text_encoder/**",
+        "tokenizer/**",
+        "transformer/config.json",
+        "vae/**"
+      ]
+    },
+    {
+      "name": "nunchaku-qwen-image-edit-2509-fp4-r32-lightning-8step",
+      "repo_id": "nunchaku-ai/nunchaku-qwen-image-edit-2509",
+      "revision": "e93a5fb77403d02a5a73c7cc8707b292c6ebc659",
+      "local_path": "nunchaku/nunchaku-ai/nunchaku-qwen-image-edit-2509",
+      "include": [
+        "README.md",
+        "lightning-251115/svdq-fp4_r32-qwen-image-edit-2509-lightning-8steps-251115.safetensors"
+      ]
+    }
+  ]
+}
