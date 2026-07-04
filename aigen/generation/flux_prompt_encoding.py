@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gc
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +9,7 @@ from aigen.generation.flux_components import (
     T5_TEXT_ENCODER_COMPONENT,
     T5_TOKENIZER_COMPONENT,
 )
+from aigen.generation.prompt_encoding import ordered_unique, release_prompt_encoder_memory
 from aigen.generation.runtime_diagnostics import elapsed_ms, synchronized_time
 from aigen.generation.runtime_types import resolve_torch_dtype
 
@@ -58,7 +58,7 @@ def encode_flux_prompts(
 
     embeddings: dict[str, FluxPromptEmbedding] = {}
     with torch.no_grad():
-        for prompt in dict.fromkeys(prompts):
+        for prompt in ordered_unique(prompts):
             embeddings[prompt] = FluxPromptEmbedding(
                 prompt=prompt,
                 prompt_embeds=_encode_t5_prompt(
@@ -78,7 +78,7 @@ def encode_flux_prompts(
     encode_ms = elapsed_ms(start, synchronized_time(torch))
 
     del clip_text_encoder, t5_text_encoder, clip_tokenizer, t5_tokenizer
-    _release_cuda(torch)
+    release_prompt_encoder_memory(torch)
     return embeddings, encode_ms
 
 
@@ -132,10 +132,3 @@ def _encode_t5_prompt(
     )
     prompt_embeds = text_encoder(text_inputs.input_ids.to(device), output_hidden_states=False)[0]
     return prompt_embeds.to(dtype=text_encoder.dtype, device=device)
-
-
-def _release_cuda(torch: Any) -> None:
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()

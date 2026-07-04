@@ -266,11 +266,11 @@ def _format_line(snapshot: RuntimeStatusSnapshot) -> str:
     return " | ".join(
         [
             f"{_activity(snapshot, width=ACTIVITY_WIDTH)} {snapshot.label}",
-            snapshot.phase,
             _progress_text(snapshot),
             _elapsed_text(snapshot.elapsed_seconds),
             _cpu_text(snapshot.telemetry),
             _gpu_text(snapshot.telemetry),
+            snapshot.phase,
         ]
     )
 
@@ -295,6 +295,11 @@ def _activity(snapshot: RuntimeStatusSnapshot, *, width: int) -> str:
 
 def _progress_text(snapshot: RuntimeStatusSnapshot) -> str:
     if snapshot.total:
+        if snapshot.completed == 0:
+            return f"{snapshot.completed}/{snapshot.total} eta --:--"
+        if snapshot.completed < snapshot.total:
+            remaining_seconds = snapshot.elapsed_seconds / snapshot.completed * (snapshot.total - snapshot.completed)
+            return f"{snapshot.completed}/{snapshot.total} eta {_duration_text(remaining_seconds)}"
         return f"{snapshot.completed}/{snapshot.total}"
     return f"events {snapshot.events}"
 
@@ -308,6 +313,10 @@ def _gpu_text(telemetry: SystemTelemetry) -> str:
 
 
 def _elapsed_text(seconds: float) -> str:
+    return _duration_text(seconds)
+
+
+def _duration_text(seconds: float) -> str:
     seconds = max(0, int(seconds))
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
