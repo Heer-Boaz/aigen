@@ -92,6 +92,23 @@ def load_character_reference_pack_payload(data: dict[str, Any], *, path_label: s
     return pack
 
 
+def load_completed_character_reference_pack(data: dict[str, Any], *, path_label: str) -> CharacterReferencePackSpec:
+    return load_character_reference_pack_payload(_without_completed_status(data), path_label=path_label)
+
+
+def load_character_identity_profile_payload(data: dict[str, Any], *, path_label: str) -> CharacterIdentityProfileSpec:
+    try:
+        profile = CharacterIdentityProfileSpec.model_validate(data)
+    except ValidationError as error:
+        raise CharacterReferenceError(f"Invalid character identity profile {path_label}: {error}") from error
+    _validate_reference_names(profile.reference_roles, path_label=path_label)
+    return profile
+
+
+def load_completed_character_identity_profile(data: dict[str, Any], *, path_label: str) -> CharacterIdentityProfileSpec:
+    return load_character_identity_profile_payload(_without_completed_status(data), path_label=path_label)
+
+
 def load_character_identity_vlm_response(data: dict[str, Any], *, path_label: str) -> CharacterIdentityVlmResponseSpec:
     try:
         response = CharacterIdentityVlmResponseSpec.model_validate(data)
@@ -114,3 +131,11 @@ def _validate_reference_names(mapping: dict[str, Any], *, path_label: str) -> No
             f"Invalid character reference pack {path_label}: unknown reference name(s) "
             f"{', '.join(unknown)}; expected one of: {allowed}"
         )
+
+
+def _without_completed_status(data: dict[str, Any]) -> dict[str, Any]:
+    if data.get("status") != "completed":
+        return data
+    payload = dict(data)
+    del payload["status"]
+    return payload

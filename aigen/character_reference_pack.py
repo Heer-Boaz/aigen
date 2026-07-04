@@ -17,8 +17,8 @@ from aigen.character_reference_models import (
     CharacterReferencePackOutputSpec,
     CharacterReferencePackSpec,
     ImageAssetSpec,
+    load_completed_character_reference_pack,
     load_character_identity_vlm_response,
-    load_character_reference_pack_payload,
 )
 from aigen.image_assets import image_asset_json
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
@@ -95,8 +95,8 @@ def parse_character_reference_pack(
     progress: StatusReporter,
 ) -> dict[str, Any]:
     pack_path = pack_path.resolve()
-    pack = load_character_reference_pack_payload(
-        _strip_status(read_json(pack_path, label="character reference pack")),
+    pack = load_completed_character_reference_pack(
+        read_json(pack_path, label="character reference pack"),
         path_label=pack_path.as_posix(),
     )
     target_path = _identity_output_path(pack_path, output_path)
@@ -221,10 +221,3 @@ def _merged_reference_roles(base_roles: dict[str, str], parsed_roles: dict[str, 
             raise CharacterReferenceError(f"Identity parser returned a role for unknown reference {name}")
         merged[name] = role
     return merged
-
-
-def _strip_status(payload: dict[str, Any]) -> dict[str, Any]:
-    if payload.get("status") == "completed":
-        payload = dict(payload)
-        del payload["status"]
-    return payload

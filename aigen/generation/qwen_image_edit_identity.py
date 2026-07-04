@@ -73,6 +73,7 @@ class QwenIdentityCase:
     references: tuple[str, ...]
     prompt: str
     portrait_canvas: bool = False
+    normalized_instruction: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -299,6 +300,46 @@ def run_qwen_image_edit_identity(
     nunchaku_blocks_on_gpu: int | None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
+    selected_cases = _selected_cases(cases)
+    return run_qwen_image_edit_cases(
+        references=references,
+        output_dir=output_dir,
+        profile=profile,
+        edit_cases=selected_cases,
+        max_side=max_side,
+        steps=steps,
+        true_cfg_scale=true_cfg_scale,
+        guidance_scale=guidance_scale,
+        seed=seed,
+        max_sequence_length=max_sequence_length,
+        candidates_per_case=1,
+        overwrite=overwrite,
+        nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
+        result_kind="qwen-image-edit-identity-result",
+        manifest_context=None,
+        progress=progress,
+    )
+
+
+def run_qwen_image_edit_cases(
+    *,
+    references: Mapping[str, Path],
+    output_dir: Path,
+    profile: QwenImageEditIdentityProfile,
+    edit_cases: Sequence[QwenIdentityCase],
+    max_side: int,
+    steps: int | None,
+    true_cfg_scale: float | None,
+    guidance_scale: float | None,
+    seed: int,
+    max_sequence_length: int,
+    candidates_per_case: int,
+    overwrite: bool,
+    nunchaku_blocks_on_gpu: int | None,
+    result_kind: str,
+    manifest_context: Mapping[str, Any] | None,
+    progress: StatusReporter,
+) -> dict[str, Any]:
     resolved_steps = profile.default_steps if steps is None else steps
     resolved_true_cfg_scale = profile.default_true_cfg_scale if true_cfg_scale is None else true_cfg_scale
     resolved_guidance_scale = profile.default_guidance_scale if guidance_scale is None else guidance_scale
@@ -308,9 +349,11 @@ def run_qwen_image_edit_identity(
         true_cfg_scale=resolved_true_cfg_scale,
         guidance_scale=resolved_guidance_scale,
         max_sequence_length=max_sequence_length,
+        candidates_per_case=candidates_per_case,
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
     )
-    selected_cases = _selected_cases(cases)
+    selected_cases = tuple(edit_cases)
+    _validate_edit_cases(selected_cases)
     _validate_reference_pack(references, selected_cases)
     output_dir = output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -360,6 +403,7 @@ def run_qwen_image_edit_identity(
             guidance_scale=resolved_guidance_scale,
             seed=seed,
             max_sequence_length=max_sequence_length,
+            candidates_per_case=candidates_per_case,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -372,11 +416,11 @@ def run_qwen_image_edit_identity(
         memory = memory_sampler.stop()
         result = {
             "status": "completed",
-            "kind": "qwen-image-edit-identity-result",
+            "kind": result_kind,
             "profile": _profile_json(profile, nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu),
             "generation": {
                 "max_side": max_side,
-                "num_images_per_case": 1,
+                "num_images_per_case": candidates_per_case,
                 "max_references_per_case": 3,
                 "steps": resolved_steps,
                 "true_cfg_scale": resolved_true_cfg_scale,
@@ -402,6 +446,8 @@ def run_qwen_image_edit_identity(
                 "result": (output_dir / "result.json").as_posix(),
             },
         }
+        if manifest_context is not None:
+            result["plan"] = dict(manifest_context)
         write_json(output_dir / "result.json", result)
         return result
     finally:
@@ -466,36 +512,40 @@ def _run_qwen_identity_denoise_step(
     guidance_scale: float,
     seed: int,
     max_sequence_length: int,
+    candidates_per_case: int,
     progress: StatusReporter,
 ) -> QwenIdentityDenoiseStep:
     start = synchronized_time(session.torch)
     outputs: list[dict[str, Any]] = []
     total_cases = len(reference_step.cases)
-    progress.begin(total_cases * steps, "denoise qwen identity cases")
+    progress.begin(total_cases * candidates_per_case * steps, "denoise qwen identity cases")
     for index, case in enumerate(reference_step.cases):
         width, height = _case_canvas(case, max_side=max_side)
-        case_seed = seed + index
-        image, timings = session.generate(
-            reference_images=[reference_step.reference_images[name] for name in case.references],
-            prompt_embedding=prompt_step.embeddings[case.name],
-            case_name=case.name,
-            width=width,
-            height=height,
-            steps=steps,
-            true_cfg_scale=true_cfg_scale,
-            guidance_scale=guidance_scale,
-            seed=case_seed,
-            max_sequence_length=max_sequence_length,
-            case_index=index + 1,
-            case_total=total_cases,
-            progress=progress,
-        )
-        progress.phase(f"save qwen identity case {case.name}")
-        image_path = images_dir / f"{case.name}.png"
-        image.save(image_path)
-        outputs.append(
-            {
-                "name": case.name,
+        for candidate_index in range(candidates_per_case):
+            case_seed = seed + index * candidates_per_case + candidate_index
+            output_name = _case_output_name(case.name, candidate_index, candidates_per_case)
+            image, timings = session.generate(
+                reference_images=[reference_step.reference_images[name] for name in case.references],
+                prompt_embedding=prompt_step.embeddings[case.name],
+                case_name=output_name,
+                width=width,
+                height=height,
+                steps=steps,
+                true_cfg_scale=true_cfg_scale,
+                guidance_scale=guidance_scale,
+                seed=case_seed,
+                max_sequence_length=max_sequence_length,
+                case_index=index + 1,
+                case_total=total_cases,
+                progress=progress,
+            )
+            progress.phase(f"save qwen identity case {output_name}")
+            image_path = images_dir / f"{output_name}.png"
+            image.save(image_path)
+            output = {
+                "name": output_name,
+                "case": case.name,
+                "candidate_index": candidate_index,
                 "seed": case_seed,
                 "width": width,
                 "height": height,
@@ -504,7 +554,9 @@ def _run_qwen_identity_denoise_step(
                 "image": image_asset_json(image_path),
                 "timings_ms": timings,
             }
-        )
+            if case.normalized_instruction is not None:
+                output["normalized_instruction"] = case.normalized_instruction
+            outputs.append(output)
     return QwenIdentityDenoiseStep(outputs=outputs, elapsed_ms=elapsed_ms(start, synchronized_time(session.torch)))
 
 
@@ -617,6 +669,18 @@ def _validate_reference_pack(references: Mapping[str, Path], cases: Sequence[Qwe
         raise QwenImageEditIdentityError(f"Missing Qwen identity reference(s): {', '.join(missing)}")
 
 
+def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
+    if not cases:
+        raise QwenImageEditIdentityError("At least one Qwen edit case is required")
+    names = [case.name for case in cases]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise QwenImageEditIdentityError(f"Duplicate Qwen edit case(s): {', '.join(duplicates)}")
+    for case in cases:
+        if len(case.references) > 3:
+            raise QwenImageEditIdentityError(f"Qwen edit case {case.name} uses more than 3 references")
+
+
 def _validate_generation_settings(
     *,
     max_side: int,
@@ -624,6 +688,7 @@ def _validate_generation_settings(
     true_cfg_scale: float,
     guidance_scale: float,
     max_sequence_length: int,
+    candidates_per_case: int,
     nunchaku_blocks_on_gpu: int | None,
 ) -> None:
     if max_side < 16:
@@ -636,8 +701,16 @@ def _validate_generation_settings(
         raise QwenImageEditIdentityError("guidance_scale must be positive")
     if max_sequence_length < 1 or max_sequence_length > 1024:
         raise QwenImageEditIdentityError("max_sequence_length must be between 1 and 1024")
+    if candidates_per_case < 1:
+        raise QwenImageEditIdentityError("candidates_per_case must be at least 1")
     if nunchaku_blocks_on_gpu is not None and nunchaku_blocks_on_gpu < 1:
         raise QwenImageEditIdentityError("nunchaku_blocks_on_gpu must be at least 1")
+
+
+def _case_output_name(case_name: str, candidate_index: int, candidates_per_case: int) -> str:
+    if candidates_per_case == 1:
+        return case_name
+    return f"{case_name}_candidate_{candidate_index + 1:02d}"
 
 
 def _used_reference_names(cases: Sequence[QwenIdentityCase]) -> tuple[str, ...]:
