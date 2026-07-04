@@ -1,0 +1,527 @@
+{
+  "body_profile": {
+    "confidence_warnings": [
+      "head_to_body_ratio needs visible DWPose neck/nose evidence",
+      "shoulder_width_over_height used silhouette band fallback because DWPose shoulder evidence was incomplete",
+      "leg_length_over_height needs visible DWPose hip/knee/ankle evidence",
+      "boot_height_over_leg_length needs part-mask extraction before it can be measured reliably"
+    ],
+    "evidence_refs": [
+      "front",
+      "side",
+      "back"
+    ],
+    "extractors": {
+      "part_masks": "pending",
+      "pose": "DWPose",
+      "segmentation": "foreground_box_mask",
+      "semantic_summarizer": "identity_profile_only"
+    },
+    "measurements": {
+      "figure_bbox_height": {
+        "confidence": 0.92,
+        "evidence": {
+          "bbox": {
+            "bottom": 2096,
+            "height": 1848,
+            "left": 572,
+            "right": 1136,
+            "top": 248,
+            "width": 564
+          }
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "pixels",
+        "value": 1848.0
+      },
+      "figure_bbox_width_over_height": {
+        "confidence": 0.88,
+        "evidence": {
+          "bbox": {
+            "bottom": 2096,
+            "height": 1848,
+            "left": 572,
+            "right": 1136,
+            "top": 248,
+            "width": 564
+          }
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "ratio",
+        "value": 0.305195
+      },
+      "hip_or_skirt_width_over_waist_width": {
+        "confidence": 0.72,
+        "evidence": {
+          "denominator": {
+            "sample_rows": 203,
+            "width_over_bbox_width": 0.898936,
+            "width_over_height": 0.274351,
+            "width_px": 507.0
+          },
+          "denominator_band": "waist",
+          "numerator": {
+            "sample_rows": 222,
+            "width_over_bbox_width": 0.569149,
+            "width_over_height": 0.173701,
+            "width_px": 321.0
+          },
+          "numerator_band": "hip_skirt"
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "ratio",
+        "value": 0.633136
+      },
+      "shoulder_width_over_height": {
+        "confidence": 0.62,
+        "evidence": {
+          "band": "shoulders",
+          "width_profile": {
+            "sample_rows": 221,
+            "width_over_bbox_width": 0.714539,
+            "width_over_height": 0.218074,
+            "width_px": 403.0
+          }
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "ratio",
+        "value": 0.218074
+      },
+      "side_torso_thickness_over_height": {
+        "confidence": 0.72,
+        "evidence": {
+          "band": "upper_torso",
+          "width_profile": {
+            "sample_rows": 245,
+            "width_over_bbox_width": 0.861856,
+            "width_over_height": 0.204501,
+            "width_px": 418.0
+          }
+        },
+        "evidence_refs": [
+          "side"
+        ],
+        "unit": "ratio",
+        "value": 0.204501
+      },
+      "skirt_hem_back_silhouette": {
+        "confidence": 0.72,
+        "evidence": {
+          "band": "hip_skirt",
+          "width_profile": {
+            "sample_rows": 251,
+            "width_over_bbox_width": 0.868661,
+            "width_over_height": 0.319007,
+            "width_px": 668.0
+          }
+        },
+        "evidence_refs": [
+          "back"
+        ],
+        "unit": "ratio",
+        "value": 0.319007
+      },
+      "upper_torso_width_over_shoulder_width": {
+        "confidence": 0.72,
+        "evidence": {
+          "denominator": {
+            "sample_rows": 221,
+            "width_over_bbox_width": 0.714539,
+            "width_over_height": 0.218074,
+            "width_px": 403.0
+          },
+          "denominator_band": "shoulders",
+          "numerator": {
+            "sample_rows": 222,
+            "width_over_bbox_width": 0.803191,
+            "width_over_height": 0.24513,
+            "width_px": 453.0
+          },
+          "numerator_band": "upper_torso"
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "ratio",
+        "value": 1.124069
+      },
+      "waist_width_over_shoulder_width": {
+        "confidence": 0.72,
+        "evidence": {
+          "denominator": {
+            "sample_rows": 221,
+            "width_over_bbox_width": 0.714539,
+            "width_over_height": 0.218074,
+            "width_px": 403.0
+          },
+          "denominator_band": "shoulders",
+          "numerator": {
+            "sample_rows": 203,
+            "width_over_bbox_width": 0.898936,
+            "width_over_height": 0.274351,
+            "width_px": 507.0
+          },
+          "numerator_band": "waist"
+        },
+        "evidence_refs": [
+          "front"
+        ],
+        "unit": "ratio",
+        "value": 1.258065
+      }
+    },
+    "optional_missing_refs": [
+      "body_shape"
+    ],
+    "semantic_summary": {
+      "side_thickness": "preserve measured side thickness ratio 0.205",
+      "source": "measured masks and keypoints; VLM text is not authoritative for body proportions",
+      "style_constraint": "preserve stylized character silhouette from the reference pack",
+      "upper_torso": "preserve measured upper torso ratio 1.124",
+      "waist": "preserve measured waist ratio 1.258"
+    },
+    "source": "measured_from_reference_pack"
+  },
+  "character_id": "jillian",
+  "kind": "character-reference-analysis",
+  "output": {
+    "artifacts_directory": "/home/boaz/aigen/assets/characters/jillian/references/analysis",
+    "reference_analysis": "/home/boaz/aigen/assets/characters/jillian/references/reference_analysis.json"
+  },
+  "references": {
+    "back": {
+      "artifacts": {
+        "mask": "/home/boaz/aigen/assets/characters/jillian/references/analysis/masks/back.png",
+        "mask_overlay": "/home/boaz/aigen/assets/characters/jillian/references/analysis/overlays/back_mask.png"
+      },
+      "extractors_used": {
+        "part_masks": "none",
+        "pose": "none",
+        "segmentation": "foreground_box_mask"
+      },
+      "image": {
+        "height": 2240,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/jillian/reference03.png",
+        "sha256": "28ed4f9a8cf697468eeee1eb98b6fb9f0ac5f58f45c133670bf118f1b12fd4dd",
+        "width": 1680
+      },
+      "mask": {
+        "area_ratio": 0.3005891262755102,
+        "bbox": {
+          "bottom": 2238,
+          "height": 2094,
+          "left": 447,
+          "right": 1216,
+          "top": 144,
+          "width": 769
+        },
+        "width_profile": {
+          "boots": {
+            "sample_rows": 251,
+            "width_over_bbox_width": 0.657997,
+            "width_over_height": 0.241643,
+            "width_px": 506.0
+          },
+          "head": {
+            "sample_rows": 314,
+            "width_over_bbox_width": 0.644993,
+            "width_over_height": 0.236867,
+            "width_px": 496.0
+          },
+          "hip_skirt": {
+            "sample_rows": 251,
+            "width_over_bbox_width": 0.868661,
+            "width_over_height": 0.319007,
+            "width_px": 668.0
+          },
+          "legs": {
+            "sample_rows": 335,
+            "width_over_bbox_width": 0.940182,
+            "width_over_height": 0.345272,
+            "width_px": 723.0
+          },
+          "shoulders": {
+            "sample_rows": 251,
+            "width_over_bbox_width": 0.448635,
+            "width_over_height": 0.164756,
+            "width_px": 345.0
+          },
+          "upper_torso": {
+            "sample_rows": 251,
+            "width_over_bbox_width": 0.736021,
+            "width_over_height": 0.270296,
+            "width_px": 566.0
+          },
+          "waist": {
+            "sample_rows": 231,
+            "width_over_bbox_width": 0.772432,
+            "width_over_height": 0.283668,
+            "width_px": 594.0
+          }
+        }
+      },
+      "pose": {
+        "extractor": "none",
+        "keypoints": {},
+        "status": "not_requested",
+        "visible_body_keypoints": 0
+      },
+      "role": "back hair shape, jacket back, skirt back and footwear from behind",
+      "warnings": []
+    },
+    "front": {
+      "artifacts": {
+        "mask": "/home/boaz/aigen/assets/characters/jillian/references/analysis/masks/front.png",
+        "mask_overlay": "/home/boaz/aigen/assets/characters/jillian/references/analysis/overlays/front_mask.png"
+      },
+      "extractors_used": {
+        "part_masks": "none",
+        "pose": "none",
+        "segmentation": "foreground_box_mask"
+      },
+      "image": {
+        "height": 2240,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/jillian/reference02.png",
+        "sha256": "2fcde3082fa89cd12158e83c7549cec44e6b7d2e8f9702c9746aeab8a46c8811",
+        "width": 1680
+      },
+      "mask": {
+        "area_ratio": 0.17656037414965986,
+        "bbox": {
+          "bottom": 2096,
+          "height": 1848,
+          "left": 572,
+          "right": 1136,
+          "top": 248,
+          "width": 564
+        },
+        "width_profile": {
+          "boots": {
+            "sample_rows": 222,
+            "width_over_bbox_width": 0.593972,
+            "width_over_height": 0.181277,
+            "width_px": 335.0
+          },
+          "head": {
+            "sample_rows": 278,
+            "width_over_bbox_width": 0.484929,
+            "width_over_height": 0.147998,
+            "width_px": 273.5
+          },
+          "hip_skirt": {
+            "sample_rows": 222,
+            "width_over_bbox_width": 0.569149,
+            "width_over_height": 0.173701,
+            "width_px": 321.0
+          },
+          "legs": {
+            "sample_rows": 295,
+            "width_over_bbox_width": 0.634752,
+            "width_over_height": 0.193723,
+            "width_px": 358.0
+          },
+          "shoulders": {
+            "sample_rows": 221,
+            "width_over_bbox_width": 0.714539,
+            "width_over_height": 0.218074,
+            "width_px": 403.0
+          },
+          "upper_torso": {
+            "sample_rows": 222,
+            "width_over_bbox_width": 0.803191,
+            "width_over_height": 0.24513,
+            "width_px": 453.0
+          },
+          "waist": {
+            "sample_rows": 203,
+            "width_over_bbox_width": 0.898936,
+            "width_over_height": 0.274351,
+            "width_px": 507.0
+          }
+        }
+      },
+      "pose": {
+        "extractor": "none",
+        "keypoints": {},
+        "status": "not_requested",
+        "visible_body_keypoints": 0
+      },
+      "role": "front outfit, colors, face placement and body proportions",
+      "warnings": []
+    },
+    "portrait": {
+      "artifacts": {
+        "mask": "/home/boaz/aigen/assets/characters/jillian/references/analysis/masks/portrait.png",
+        "mask_overlay": "/home/boaz/aigen/assets/characters/jillian/references/analysis/overlays/portrait_mask.png"
+      },
+      "extractors_used": {
+        "part_masks": "none",
+        "pose": "none",
+        "segmentation": "foreground_box_mask"
+      },
+      "image": {
+        "height": 2528,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/jillian/reference01.jpg",
+        "sha256": "1f6f4e30e2c9358be0bafea42a9932889f0396f13431a54c3594f3378ce0d052",
+        "width": 1696
+      },
+      "mask": {
+        "area_ratio": 0.6597308260687843,
+        "bbox": {
+          "bottom": 2526,
+          "height": 2436,
+          "left": 27,
+          "right": 1680,
+          "top": 90,
+          "width": 1653
+        },
+        "width_profile": {
+          "boots": {
+            "sample_rows": 292,
+            "width_over_bbox_width": 0.980036,
+            "width_over_height": 0.665025,
+            "width_px": 1620.0
+          },
+          "head": {
+            "sample_rows": 365,
+            "width_over_bbox_width": 0.508772,
+            "width_over_height": 0.345238,
+            "width_px": 841.0
+          },
+          "hip_skirt": {
+            "sample_rows": 292,
+            "width_over_bbox_width": 0.875681,
+            "width_over_height": 0.594212,
+            "width_px": 1447.5
+          },
+          "legs": {
+            "sample_rows": 390,
+            "width_over_bbox_width": 0.944949,
+            "width_over_height": 0.641215,
+            "width_px": 1562.0
+          },
+          "shoulders": {
+            "sample_rows": 293,
+            "width_over_bbox_width": 0.710224,
+            "width_over_height": 0.481938,
+            "width_px": 1174.0
+          },
+          "upper_torso": {
+            "sample_rows": 292,
+            "width_over_bbox_width": 0.69389,
+            "width_over_height": 0.470854,
+            "width_px": 1147.0
+          },
+          "waist": {
+            "sample_rows": 268,
+            "width_over_bbox_width": 0.412583,
+            "width_over_height": 0.279967,
+            "width_px": 682.0
+          }
+        }
+      },
+      "pose": {
+        "extractor": "none",
+        "keypoints": {},
+        "status": "not_requested",
+        "visible_body_keypoints": 0
+      },
+      "role": "face, hair, eyes, neckwear and expression",
+      "warnings": []
+    },
+    "side": {
+      "artifacts": {
+        "mask": "/home/boaz/aigen/assets/characters/jillian/references/analysis/masks/side.png",
+        "mask_overlay": "/home/boaz/aigen/assets/characters/jillian/references/analysis/overlays/side_mask.png"
+      },
+      "extractors_used": {
+        "part_masks": "none",
+        "pose": "none",
+        "segmentation": "foreground_box_mask"
+      },
+      "image": {
+        "height": 2240,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/assets/characters/jillian/reference04.png",
+        "sha256": "6b85de1d40dae08b491645b04a0ada3d9facfc21b7c498fda0584e95ddec09df",
+        "width": 1680
+      },
+      "mask": {
+        "area_ratio": 0.1834311224489796,
+        "bbox": {
+          "bottom": 2190,
+          "height": 2044,
+          "left": 595,
+          "right": 1080,
+          "top": 146,
+          "width": 485
+        },
+        "width_profile": {
+          "boots": {
+            "sample_rows": 245,
+            "width_over_bbox_width": 0.684536,
+            "width_over_height": 0.162427,
+            "width_px": 332.0
+          },
+          "head": {
+            "sample_rows": 307,
+            "width_over_bbox_width": 0.614433,
+            "width_over_height": 0.145793,
+            "width_px": 298.0
+          },
+          "hip_skirt": {
+            "sample_rows": 245,
+            "width_over_bbox_width": 0.614433,
+            "width_over_height": 0.145793,
+            "width_px": 298.0
+          },
+          "legs": {
+            "sample_rows": 327,
+            "width_over_bbox_width": 0.661856,
+            "width_over_height": 0.157045,
+            "width_px": 321.0
+          },
+          "shoulders": {
+            "sample_rows": 245,
+            "width_over_bbox_width": 0.802062,
+            "width_over_height": 0.190313,
+            "width_px": 389.0
+          },
+          "upper_torso": {
+            "sample_rows": 245,
+            "width_over_bbox_width": 0.861856,
+            "width_over_height": 0.204501,
+            "width_px": 418.0
+          },
+          "waist": {
+            "sample_rows": 225,
+            "width_over_bbox_width": 0.929897,
+            "width_over_height": 0.220646,
+            "width_px": 451.0
+          }
+        }
+      },
+      "pose": {
+        "extractor": "none",
+        "keypoints": {},
+        "status": "not_requested",
+        "visible_body_keypoints": 0
+      },
+      "role": "profile silhouette, outfit thickness and body shape",
+      "warnings": []
+    }
+  },
+  "source_reference_pack": "/home/boaz/aigen/assets/characters/jillian/references/reference_pack.json",
+  "status": "completed"
+}

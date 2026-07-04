@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 CHARACTER_REFERENCE_PACK_KIND = "character-reference-pack"
 CHARACTER_IDENTITY_PROFILE_KIND = "character-identity-profile"
+CHARACTER_REFERENCE_ANALYSIS_KIND = "character-reference-analysis"
 CHARACTER_REFERENCE_NAMES = ("front", "portrait", "side", "back", "body_shape")
 CHARACTER_REFERENCE_NAME_SET = frozenset(CHARACTER_REFERENCE_NAMES)
 CHARACTER_REFERENCE_ROLES = {
@@ -70,6 +71,48 @@ class CharacterIdentityProfileSpec(StrictModel):
     output: CharacterIdentityProfileOutputSpec
 
 
+class BodyMeasurementSpec(StrictModel):
+    value: float
+    unit: str
+    confidence: float
+    evidence_refs: list[str]
+    evidence: dict[str, Any]
+
+
+class BodyProfileSpec(StrictModel):
+    source: Literal["measured_from_reference_pack"]
+    extractors: dict[str, str]
+    measurements: dict[str, BodyMeasurementSpec]
+    semantic_summary: dict[str, str]
+    evidence_refs: list[str]
+    optional_missing_refs: list[str]
+    confidence_warnings: list[str]
+
+
+class ReferenceAnalysisSpec(StrictModel):
+    role: str
+    image: ImageAssetSpec
+    extractors_used: dict[str, str]
+    artifacts: dict[str, str]
+    mask: dict[str, Any]
+    pose: dict[str, Any]
+    warnings: list[str]
+
+
+class CharacterReferenceAnalysisOutputSpec(StrictModel):
+    reference_analysis: str
+    artifacts_directory: str
+
+
+class CharacterReferenceAnalysisSpec(StrictModel):
+    kind: Literal["character-reference-analysis"]
+    character_id: str
+    source_reference_pack: str
+    references: dict[str, ReferenceAnalysisSpec]
+    body_profile: BodyProfileSpec
+    output: CharacterReferenceAnalysisOutputSpec
+
+
 def character_reference_pack_schema() -> dict[str, Any]:
     schema = CharacterReferencePackSpec.model_json_schema()
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
@@ -78,6 +121,12 @@ def character_reference_pack_schema() -> dict[str, Any]:
 
 def character_identity_profile_schema() -> dict[str, Any]:
     schema = CharacterIdentityProfileSpec.model_json_schema()
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    return schema
+
+
+def character_reference_analysis_schema() -> dict[str, Any]:
+    schema = CharacterReferenceAnalysisSpec.model_json_schema()
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     return schema
 
@@ -107,6 +156,19 @@ def load_character_identity_profile_payload(data: dict[str, Any], *, path_label:
 
 def load_completed_character_identity_profile(data: dict[str, Any], *, path_label: str) -> CharacterIdentityProfileSpec:
     return load_character_identity_profile_payload(_without_completed_status(data), path_label=path_label)
+
+
+def load_character_reference_analysis_payload(data: dict[str, Any], *, path_label: str) -> CharacterReferenceAnalysisSpec:
+    try:
+        analysis = CharacterReferenceAnalysisSpec.model_validate(data)
+    except ValidationError as error:
+        raise CharacterReferenceError(f"Invalid character reference analysis {path_label}: {error}") from error
+    _validate_reference_names(analysis.references, path_label=path_label)
+    return analysis
+
+
+def load_completed_character_reference_analysis(data: dict[str, Any], *, path_label: str) -> CharacterReferenceAnalysisSpec:
+    return load_character_reference_analysis_payload(_without_completed_status(data), path_label=path_label)
 
 
 def load_character_identity_vlm_response(data: dict[str, Any], *, path_label: str) -> CharacterIdentityVlmResponseSpec:

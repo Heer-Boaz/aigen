@@ -227,6 +227,29 @@ def save_pose_evidence(
     canvas.save(output_path)
 
 
+def save_pose_keypoints_overlay(
+    image_path: Path,
+    keypoints: PoseKeypoints,
+    output_path: Path,
+    *,
+    color: tuple[int, int, int] = (0, 210, 255),
+) -> None:
+    with Image.open(image_path) as image:
+        canvas = image.convert("RGB")
+    draw = ImageDraw.Draw(canvas)
+    width, height = canvas.size
+
+    for x_norm, y_norm in keypoints.points:
+        if not np.isfinite(x_norm):
+            continue
+        x = int(round(float(x_norm) * width))
+        y = int(round(float(y_norm) * height))
+        draw.ellipse((x - 5, y - 5, x + 5, y + 5), outline=color, width=3)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(output_path)
+
+
 def _load_rgb(path: Path) -> np.ndarray:
     with Image.open(path) as image:
         return np.asarray(image.convert("RGB"), dtype=np.uint8)

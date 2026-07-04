@@ -6,9 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from aigen.character_reference_models import (
+    BodyProfileSpec,
+    CharacterReferenceAnalysisSpec,
     CharacterIdentityProfileSpec,
     CharacterReferenceError,
     CharacterReferencePackSpec,
+    load_completed_character_reference_analysis,
     load_completed_character_identity_profile,
     load_completed_character_reference_pack,
 )
@@ -95,20 +98,11 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         background="plain light studio background",
         portrait_canvas=True,
     ),
-    "body_proportion": QwenCharacterEditCaseTemplate(
-        name="body_proportion",
-        references=("body_shape", "side", "portrait"),
-        task="Generate a clean full-body neutral character reference focused on matching body proportions and silhouette.",
-        requested_view="front_body_proportion",
-        requested_pose="neutral standing",
-        background="plain light studio background",
-    ),
 }
 
 QWEN_CHARACTER_EDIT_CASE_ALIASES = {
     "right-profile": "right_profile",
     "three-quarter": "three_quarter",
-    "body-proportion": "body_proportion",
 }
 
 IDENTITY_PRESERVE_FIELDS = {
@@ -132,6 +126,7 @@ def plan_qwen_character_edit(
     *,
     pack_path: Path,
     identity_profile_path: Path | None,
+    reference_analysis_path: Path | None,
     cases: Sequence[str],
     instruction: str | None,
     candidates_per_case: int,
@@ -142,6 +137,7 @@ def plan_qwen_character_edit(
         **_build_qwen_character_edit_plan(
             pack_path=pack_path,
             identity_profile_path=identity_profile_path,
+            reference_analysis_path=reference_analysis_path,
             cases=cases,
             instruction=instruction,
             candidates_per_case=candidates_per_case,
@@ -154,6 +150,7 @@ def run_qwen_character_edit(
     *,
     pack_path: Path,
     identity_profile_path: Path | None,
+    reference_analysis_path: Path | None,
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
     cases: Sequence[str],
@@ -172,6 +169,7 @@ def run_qwen_character_edit(
     planned = _build_qwen_character_edit_plan(
         pack_path=pack_path,
         identity_profile_path=identity_profile_path,
+        reference_analysis_path=reference_analysis_path,
         cases=cases,
         instruction=instruction,
         candidates_per_case=candidates_per_case,
@@ -207,6 +205,7 @@ def _build_qwen_character_edit_plan(
     *,
     pack_path: Path,
     identity_profile_path: Path | None,
+    reference_analysis_path: Path | None,
     cases: Sequence[str],
     instruction: str | None,
     candidates_per_case: int,
@@ -220,8 +219,11 @@ def _build_qwen_character_edit_plan(
     resolved_identity_profile_path = _identity_profile_path(pack_path, identity_profile_path)
     identity_profile = _load_identity_profile(resolved_identity_profile_path)
     _validate_identity_profile(pack, identity_profile, resolved_identity_profile_path)
+    resolved_reference_analysis_path = _reference_analysis_path(pack_path, reference_analysis_path)
+    reference_analysis = _load_reference_analysis(resolved_reference_analysis_path)
+    _validate_reference_analysis(pack, reference_analysis, resolved_reference_analysis_path)
     templates = _selected_templates(cases)
-    edit_cases = tuple(_planned_case(template, identity_profile, instruction) for template in templates)
+    edit_cases = tuple(_planned_case(template, identity_profile, reference_analysis.body_profile, instruction) for template in templates)
     _validate_planned_references(pack, edit_cases)
     return PlannedQwenCharacterEdit(
         reference_paths=_reference_paths(pack, pack_path),
@@ -229,8 +231,10 @@ def _build_qwen_character_edit_plan(
         manifest=_plan_manifest(
             pack_path=pack_path,
             identity_profile_path=resolved_identity_profile_path,
+            reference_analysis_path=resolved_reference_analysis_path,
             pack=pack,
             identity_profile=identity_profile,
+            reference_analysis=reference_analysis,
             edit_cases=edit_cases,
             candidates_per_case=candidates_per_case,
             instruction=instruction,
@@ -258,10 +262,26 @@ def _load_identity_profile(identity_profile_path: Path) -> CharacterIdentityProf
         raise QwenCharacterEditError(str(error)) from error
 
 
+def _load_reference_analysis(reference_analysis_path: Path) -> CharacterReferenceAnalysisSpec:
+    try:
+        return load_completed_character_reference_analysis(
+            read_json(reference_analysis_path, label="character reference analysis"),
+            path_label=reference_analysis_path.as_posix(),
+        )
+    except CharacterReferenceError as error:
+        raise QwenCharacterEditError(str(error)) from error
+
+
 def _identity_profile_path(pack_path: Path, identity_profile_path: Path | None) -> Path:
     if identity_profile_path is not None:
         return identity_profile_path.resolve()
     return pack_path.parent / "identity_profile.json"
+
+
+def _reference_analysis_path(pack_path: Path, reference_analysis_path: Path | None) -> Path:
+    if reference_analysis_path is not None:
+        return reference_analysis_path.resolve()
+    return pack_path.parent / "reference_analysis.json"
 
 
 def _validate_identity_profile(
@@ -272,6 +292,18 @@ def _validate_identity_profile(
     if identity_profile.character_id != pack.character_id:
         raise QwenCharacterEditError(
             f"Identity profile {identity_profile_path.as_posix()} is for {identity_profile.character_id}, "
+            f"expected {pack.character_id}"
+        )
+
+
+def _validate_reference_analysis(
+    pack: CharacterReferencePackSpec,
+    reference_analysis: CharacterReferenceAnalysisSpec,
+    reference_analysis_path: Path,
+) -> None:
+    if reference_analysis.character_id != pack.character_id:
+        raise QwenCharacterEditError(
+            f"Reference analysis {reference_analysis_path.as_posix()} is for {reference_analysis.character_id}, "
             f"expected {pack.character_id}"
         )
 
@@ -306,9 +338,10 @@ def _selected_templates(case_names: Sequence[str]) -> tuple[QwenCharacterEditCas
 def _planned_case(
     template: QwenCharacterEditCaseTemplate,
     identity_profile: CharacterIdentityProfileSpec,
+    body_profile: BodyProfileSpec,
     instruction: str | None,
 ) -> QwenIdentityCase:
-    normalized_instruction = _normalized_instruction(template, identity_profile, instruction)
+    normalized_instruction = _normalized_instruction(template, identity_profile, body_profile, instruction)
     return QwenIdentityCase(
         name=template.name,
         references=template.references,
@@ -321,9 +354,10 @@ def _planned_case(
 def _normalized_instruction(
     template: QwenCharacterEditCaseTemplate,
     identity_profile: CharacterIdentityProfileSpec,
+    body_profile: BodyProfileSpec,
     instruction: str | None,
 ) -> dict[str, Any]:
-    must_preserve = _identity_must_preserve(identity_profile)
+    must_preserve = _identity_must_preserve(identity_profile) + _body_profile_must_preserve(body_profile)
     avoid = _identity_avoid(identity_profile)
     normalized: dict[str, Any] = {
         "task": "identity_edit",
@@ -336,6 +370,15 @@ def _normalized_instruction(
         "must_preserve": must_preserve,
         "avoid": avoid,
         "identity": dict(identity_profile.identity),
+        "body_profile_used": True,
+        "body_proportion_source": body_profile.source,
+        "body_profile": body_profile.model_dump(mode="json"),
+        "measurements": {
+            name: measurement.model_dump(mode="json")
+            for name, measurement in body_profile.measurements.items()
+        },
+        "optional_missing_refs": body_profile.optional_missing_refs,
+        "confidence_warnings": body_profile.confidence_warnings,
         "reference_roles": {
             name: identity_profile.reference_roles[name]
             for name in template.references
@@ -343,6 +386,24 @@ def _normalized_instruction(
         },
     }
     return normalized
+
+
+def _body_profile_must_preserve(body_profile: BodyProfileSpec) -> list[str]:
+    constraints = [
+        f"body proportions measured from reference pack ({body_profile.source})",
+        "preserve the measured character silhouette and body proportions",
+    ]
+    for key in (
+        "shoulder_width_over_height",
+        "upper_torso_width_over_shoulder_width",
+        "waist_width_over_shoulder_width",
+        "hip_or_skirt_width_over_waist_width",
+        "side_torso_thickness_over_height",
+    ):
+        measurement = body_profile.measurements.get(key)
+        if measurement is not None:
+            constraints.append(f"{key}: {measurement.value:.3f}")
+    return constraints
 
 
 def _identity_must_preserve(identity_profile: CharacterIdentityProfileSpec) -> list[str]:
@@ -380,6 +441,12 @@ def _prompt_from_instruction(instruction: Mapping[str, Any]) -> str:
     identity_facts = "; ".join(f"{name}: {value}" for name, value in identity.items() if value)
     must_preserve = "; ".join(instruction["must_preserve"])
     avoid = "; ".join(instruction["avoid"])
+    body_profile = instruction["body_profile"]
+    body_measurements = "; ".join(
+        f"{name}={measurement['value']:.3f}"
+        for name, measurement in body_profile["measurements"].items()
+        if measurement["unit"] == "ratio"
+    )
     source_instruction = instruction.get("source_instruction")
     requested = f" Additional user request: {source_instruction.strip()}" if source_instruction else ""
     return (
@@ -387,6 +454,8 @@ def _prompt_from_instruction(instruction: Mapping[str, Any]) -> str:
         f"{instruction['task_prompt']} "
         f"Background: {instruction['background']}. "
         f"Stable identity facts: {identity_facts}. "
+        f"Measured body profile source: {body_profile['source']}. "
+        f"Measured body ratios to preserve: {body_measurements}. "
         f"Must preserve: {must_preserve}. "
         f"Avoid: {avoid}. "
         "Do not add props, text, extra characters, alternate outfits, or scene layout elements."
@@ -405,31 +474,70 @@ def _plan_manifest(
     *,
     pack_path: Path,
     identity_profile_path: Path,
+    reference_analysis_path: Path,
     pack: CharacterReferencePackSpec,
     identity_profile: CharacterIdentityProfileSpec,
+    reference_analysis: CharacterReferenceAnalysisSpec,
     edit_cases: Sequence[QwenIdentityCase],
     candidates_per_case: int,
     instruction: str | None,
 ) -> dict[str, Any]:
+    body_profile = reference_analysis.body_profile
     return {
         "kind": "qwen-character-edit-plan",
         "character_id": pack.character_id,
         "reference_pack": pack_path.as_posix(),
         "identity_profile": identity_profile_path.as_posix(),
+        "reference_analysis": reference_analysis_path.as_posix(),
         "source_instruction": instruction,
         "normalizer": "identity_profile_case_template_v1",
-        "reference_selector": "case_reference_roles_v1",
+        "reference_selector": "case_reference_roles_with_body_profile_v1",
         "candidates_per_case": candidates_per_case,
         "cases": [
             {
                 "name": case.name,
                 "references": list(case.references),
+                "refs_used": list(case.references),
+                "masks_used": _case_masks_used(reference_analysis, case),
+                "keypoints_used": _case_keypoints_used(reference_analysis, case),
+                "identity_profile_used": True,
+                "body_profile_used": True,
+                "body_proportion_source": body_profile.source,
+                "optional_missing_refs": body_profile.optional_missing_refs,
+                "confidence_warnings": body_profile.confidence_warnings,
+                "measurements": {
+                    name: measurement.model_dump(mode="json")
+                    for name, measurement in body_profile.measurements.items()
+                },
                 "normalized_instruction": case.normalized_instruction,
                 "prompt": case.prompt,
             }
             for case in edit_cases
         ],
         "identity": identity_profile.identity,
+        "body_profile": body_profile.model_dump(mode="json"),
+        "body_profile_used": True,
+        "body_proportion_source": body_profile.source,
+        "optional_missing_refs": body_profile.optional_missing_refs,
+        "confidence_warnings": body_profile.confidence_warnings,
         "must_preserve": identity_profile.must_preserve,
         "avoid": identity_profile.avoid,
     }
+
+
+def _case_masks_used(reference_analysis: CharacterReferenceAnalysisSpec, case: QwenIdentityCase) -> list[str]:
+    masks = []
+    for reference_name in case.references:
+        reference = reference_analysis.references.get(reference_name)
+        if reference is not None and "mask" in reference.artifacts:
+            masks.append(reference.artifacts["mask"])
+    return masks
+
+
+def _case_keypoints_used(reference_analysis: CharacterReferenceAnalysisSpec, case: QwenIdentityCase) -> list[str]:
+    keypoints = []
+    for reference_name in case.references:
+        reference = reference_analysis.references.get(reference_name)
+        if reference is not None and reference.pose.get("status") == "completed":
+            keypoints.append(reference_name)
+    return keypoints
