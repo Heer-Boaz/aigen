@@ -102,7 +102,9 @@ run evidence.
 PixAI-style character editing starts with a named reference pack and a compact
 identity profile. The pack builder records image metadata only; the parser uses
 the local Qwen VLM to turn those references into machine-readable identity
-facts for later edit and refine runs.
+facts, reference roles and body-proportion invariants for later edit and refine
+runs. Reference names are pack-local ids and optional hints; the VLM-inferred
+roles in `identity_profile.json` are the source of truth.
 
 ```bash
 .venv/bin/python -m aigen.cli characters reference-pack build \
@@ -118,8 +120,9 @@ facts for later edit and refine runs.
 ```
 
 This writes `reference_pack.json` and `identity_profile.json`. The generation
-runners should select 1-3 references per case from the pack rather than pass all
-available images to every edit.
+runners select 1-3 references per case from the VLM-inferred roles and consume
+`identity_profile.body_proportion` for every case. A dedicated `body_shape`
+reference is optional evidence, not a hard requirement.
 
 ## Qwen Identity Smoke
 

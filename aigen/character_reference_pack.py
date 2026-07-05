@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from aigen.character_reference_models import (
+    CHARACTER_BODY_PROPORTION_SOURCE,
     CHARACTER_IDENTITY_PROFILE_KIND,
     CHARACTER_REFERENCE_PACK_KIND,
-    CHARACTER_REFERENCE_ROLES,
-    CHARACTER_REFERENCE_NAME_SET,
     CharacterIdentityProfileSpec,
     CharacterIdentityProfileOutputSpec,
     CharacterReferenceError,
@@ -35,11 +34,9 @@ def parse_character_reference_args(reference_args: Sequence[str], base_dir: Path
     references: dict[str, Path] = {}
     for raw_reference in reference_args:
         name, separator, raw_path = raw_reference.partition("=")
+        name = name.strip()
         if separator != "=" or not name or not raw_path:
             raise CharacterReferenceError(f"Reference must be name=path: {raw_reference}")
-        if name not in CHARACTER_REFERENCE_NAME_SET:
-            allowed = ", ".join(sorted(CHARACTER_REFERENCE_NAME_SET))
-            raise CharacterReferenceError(f"Unknown reference name {name}; expected one of: {allowed}")
         if name in references:
             raise CharacterReferenceError(f"Duplicate reference name: {name}")
         references[name] = resolve_existing_path(raw_path, base_dir)
@@ -67,12 +64,11 @@ def build_character_reference_pack(
         name: ImageAssetSpec(**image_asset_json(path)).model_dump(mode="json")
         for name, path in _ordered_references(references).items()
     }
-    reference_roles = {name: CHARACTER_REFERENCE_ROLES[name] for name in reference_assets}
     pack = CharacterReferencePackSpec(
         kind=CHARACTER_REFERENCE_PACK_KIND,
         character_id=character_id,
         references={name: ImageAssetSpec(**asset) for name, asset in reference_assets.items()},
-        reference_roles=reference_roles,
+        reference_hints={name: name for name in reference_assets},
         output=CharacterReferencePackOutputSpec(
             directory=output_dir.as_posix(),
             reference_pack=pack_path.as_posix(),
@@ -111,13 +107,16 @@ def parse_character_reference_pack(
     progress.phase("parse character references with Qwen VLM")
     with closing(QwenVlm(config)) as runner:
         raw_text = runner.describe_image(prompt, image_paths)
-        response = _identity_response_from_raw(raw_text, target_path)
+        response = _identity_response_from_raw(raw_text, target_path, reference_ids=frozenset(pack.references))
         profile = CharacterIdentityProfileSpec(
             kind=CHARACTER_IDENTITY_PROFILE_KIND,
             character_id=pack.character_id,
             source_reference_pack=pack_path.as_posix(),
             identity=response.identity,
-            reference_roles=_merged_reference_roles(pack.reference_roles, response.reference_roles),
+            body_proportion=response.body_proportion,
+            body_proportion_source=CHARACTER_BODY_PROPORTION_SOURCE,
+            reference_roles=response.reference_roles,
+            optional_missing_refs=_optional_missing_refs(response.reference_roles),
             must_preserve=response.must_preserve,
             avoid=response.avoid,
             parser=qwen_vlm_config_json(config) | {"device_report": runner.device_report},
@@ -132,17 +131,26 @@ def parse_character_reference_pack(
     return payload
 
 
-def _identity_response_from_raw(raw_text: str, target_path: Path):
+def _identity_response_from_raw(
+    raw_text: str,
+    target_path: Path,
+    *,
+    reference_ids: frozenset[str],
+):
     try:
         generated = json_object_from_vlm_response(raw_text)
     except VlmJsonError as error:
         raise CharacterReferenceError(f"Invalid character identity parser response {target_path.as_posix()}: {error}") from error
-    return load_character_identity_vlm_response(generated, path_label=target_path.as_posix())
+    return load_character_identity_vlm_response(
+        generated,
+        path_label=target_path.as_posix(),
+        reference_ids=reference_ids,
+    )
 
 
 def _identity_parser_prompt(pack: CharacterReferencePackSpec) -> str:
     reference_lines = "\n".join(
-        f"- {name}: {pack.reference_roles[name]} ({asset.width}x{asset.height}, {asset.mode})"
+        f"- {name}: provided label/hint {pack.reference_hints[name]!r} ({asset.width}x{asset.height}, {asset.mode})"
         for name, asset in _ordered_reference_assets(pack.references).items()
     )
     return f"""You are building a compact machine-readable identity dossier for a local character edit pipeline.
@@ -150,7 +158,10 @@ def _identity_parser_prompt(pack: CharacterReferencePackSpec) -> str:
 Images are supplied in this exact order:
 {reference_lines}
 
-Describe the same character across the references. Extract stable visual identity facts only.
+The provided labels are optional evidence only. Infer each reference role from the pixels yourself.
+Allowed reference role values are: front, portrait, side, back, body_shape.
+
+Describe the same character across the references. Extract stable visual identity and body-proportion facts only.
 Do not invent names, story, mood, quality boosters, scene details, poster text or layout instructions.
 
 Return exactly one JSON object with this shape:
@@ -164,12 +175,26 @@ Return exactly one JSON object with this shape:
     "bottom": "short factual phrase",
     "legwear": "short factual phrase",
     "footwear": "short factual phrase",
-    "body_shape": "short factual phrase",
     "style": "short factual phrase"
   }},
+  "body_proportion": {{
+    "chest_size": "short factual phrase",
+    "build": "short factual phrase",
+    "shoulder_width": "short factual phrase",
+    "waist": "short factual phrase",
+    "hip_skirt_silhouette": "short factual phrase",
+    "side_body_thickness": "short factual phrase",
+    "leg_proportion": "short factual phrase",
+    "skirt_back_shape": "short factual phrase",
+    "do_not_change": [
+      "short body-proportion invariant"
+    ],
+    "evidence_refs": [
+      "reference id from the supplied image list"
+    ]
+  }},
   "reference_roles": {{
-    "front": "how this provided reference should be used",
-    "portrait": "how this provided reference should be used"
+    "reference id from the supplied image list": "front"
   }},
   "must_preserve": [
     "short visual fact that must survive edits"
@@ -180,7 +205,10 @@ Return exactly one JSON object with this shape:
 }}
 
 Rules:
-- Include only reference_roles keys for images actually supplied.
+- Include exactly one reference_roles key for each supplied image.
+- reference_roles values must be one of: front, portrait, side, back, body_shape.
+- A dedicated body_shape image is optional. If none is supplied, infer body_proportion from the whole pack.
+- body_proportion.evidence_refs must name supplied image ids.
 - Use concise strings, not paragraphs.
 - Use plain JSON only. No Markdown.
 """
@@ -193,11 +221,11 @@ def _identity_output_path(pack_path: Path, output_path: Path | None) -> Path:
 
 
 def _ordered_references(references: Mapping[str, Path]) -> dict[str, Path]:
-    return {name: references[name] for name in CHARACTER_REFERENCE_ROLES if name in references}
+    return dict(references)
 
 
 def _ordered_reference_assets(references: Mapping[str, ImageAssetSpec]) -> dict[str, ImageAssetSpec]:
-    return {name: references[name] for name in CHARACTER_REFERENCE_ROLES if name in references}
+    return dict(references)
 
 
 def _validate_character_id(character_id: str) -> None:
@@ -208,16 +236,12 @@ def _validate_character_id(character_id: str) -> None:
 def _validate_reference_mapping(references: Mapping[str, Path]) -> None:
     if not references:
         raise CharacterReferenceError("At least one named reference image is required")
-    unknown = sorted(name for name in references if name not in CHARACTER_REFERENCE_NAME_SET)
-    if unknown:
-        allowed = ", ".join(sorted(CHARACTER_REFERENCE_NAME_SET))
-        raise CharacterReferenceError(f"Unknown reference name(s) {', '.join(unknown)}; expected one of: {allowed}")
+    invalid = sorted(name for name in references if not name.strip())
+    if invalid:
+        raise CharacterReferenceError("Reference names must not be empty")
 
 
-def _merged_reference_roles(base_roles: dict[str, str], parsed_roles: dict[str, str]) -> dict[str, str]:
-    merged = dict(base_roles)
-    for name, role in parsed_roles.items():
-        if name not in base_roles:
-            raise CharacterReferenceError(f"Identity parser returned a role for unknown reference {name}")
-        merged[name] = role
-    return merged
+def _optional_missing_refs(reference_roles: Mapping[str, str]) -> list[str]:
+    if "body_shape" in reference_roles.values():
+        return []
+    return ["body_shape"]

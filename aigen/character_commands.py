@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.character_reference_models import CharacterReferenceError
-from aigen.character_reference_analysis import analyze_character_reference_pack
 from aigen.character_reference_pack import (
     build_character_reference_pack,
     parse_character_reference_args,
@@ -96,7 +95,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--reference",
         action="append",
         required=True,
-        help="Named reference image as name=path; supported names: front, portrait, side, back, body_shape",
+        help="Named reference image as name=path; names are pack-local ids and optional role hints",
     )
     reference_pack_build.add_argument("--output-dir", type=Path, required=True, help="Reference pack directory")
     reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
@@ -112,18 +111,6 @@ def add_character_commands(subparsers: Any) -> None:
     add_judge_runtime_args(reference_pack_parse, role="reference parser", max_new_tokens=1600)
     reference_pack_parse.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    reference_pack_analyze = reference_pack_subparsers.add_parser(
-        "analyze",
-        help="Measure body identity evidence from a reference pack",
-    )
-    reference_pack_analyze.add_argument("pack", type=Path, help="reference_pack.json")
-    reference_pack_analyze.add_argument("--output", type=Path, help="Generated reference_analysis.json")
-    reference_pack_analyze.add_argument("--artifacts-dir", type=Path, help="Directory for analysis masks and overlays")
-    reference_pack_analyze.add_argument("--pose-device", default="cuda", help="DWPose device, for example cuda or cpu")
-    reference_pack_analyze.add_argument("--no-pose", action="store_true", help="Skip DWPose and write silhouette evidence only")
-    reference_pack_analyze.add_argument("--overwrite", action="store_true", help="Replace an existing analysis")
-    reference_pack_analyze.add_argument("--compact", action="store_true", help="Write compact JSON")
-
     qwen_identity = character_subparsers.add_parser(
         "qwen-identity-run",
         help="Run fixed multi-reference Qwen Image Edit identity cases from explicit refs",
@@ -132,7 +119,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--reference",
         action="append",
         required=True,
-        help="Named reference image as name=path; supported names: front, portrait, side, back, body_shape",
+        help="Explicit role reference image as role=path; supported roles: front, portrait, side, back, body_shape",
     )
     qwen_identity.add_argument(
         "--case",
@@ -194,11 +181,6 @@ def add_character_commands(subparsers: Any) -> None:
         help="identity_profile.json; defaults to identity_profile.json next to the pack",
     )
     qwen_edit_plan.add_argument(
-        "--reference-analysis",
-        type=Path,
-        help="reference_analysis.json; defaults to reference_analysis.json next to the pack",
-    )
-    qwen_edit_plan.add_argument(
         "--case",
         action="append",
         choices=qwen_character_edit_case_names(),
@@ -220,11 +202,6 @@ def add_character_commands(subparsers: Any) -> None:
         "--identity-profile",
         type=Path,
         help="identity_profile.json; defaults to identity_profile.json next to the pack",
-    )
-    qwen_edit.add_argument(
-        "--reference-analysis",
-        type=Path,
-        help="reference_analysis.json; defaults to reference_analysis.json next to the pack",
     )
     qwen_edit.add_argument(
         "--case",
@@ -364,21 +341,6 @@ def run_character_command(
                     pretty=not args.compact,
                 )
                 return 0
-            if args.reference_pack_command == "analyze":
-                dump_json(
-                    stdout,
-                    analyze_character_reference_pack(
-                        args.pack,
-                        output_path=args.output,
-                        artifacts_dir=args.artifacts_dir,
-                        overwrite=args.overwrite,
-                        pose_device=args.pose_device,
-                        enable_pose=not args.no_pose,
-                        progress=progress,
-                    ),
-                    pretty=not args.compact,
-                )
-                return 0
         if args.characters_command == "qwen-identity-run":
             dump_json(
                 stdout,
@@ -406,7 +368,6 @@ def run_character_command(
                 plan_qwen_character_edit(
                     pack_path=args.pack,
                     identity_profile_path=args.identity_profile,
-                    reference_analysis_path=args.reference_analysis,
                     cases=args.case or (),
                     instruction=args.instruction,
                     candidates_per_case=args.candidates,
@@ -421,7 +382,6 @@ def run_character_command(
                 run_qwen_character_edit(
                     pack_path=args.pack,
                     identity_profile_path=args.identity_profile,
-                    reference_analysis_path=args.reference_analysis,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
                     cases=args.case or (),
