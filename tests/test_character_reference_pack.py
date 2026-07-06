@@ -207,6 +207,17 @@ class CharacterReferencePackTests(unittest.TestCase):
             runner = FakeReferenceParser.last
             self.assertTrue(runner.closed)
             self.assertIn("Infer each reference role from the pixels yourself", runner.prompt)
+            self.assertIn("The supplied reference ids are exactly: ref_face, ref_front, ref_side.", runner.prompt)
+            self.assertIn(
+                "reference_roles keys must be exactly the supplied reference ids: ref_face, ref_front, ref_side.",
+                runner.prompt,
+            )
+            self.assertIn("If there is no supplied reference id for body_shape, do not create one.", runner.prompt)
+            self.assertIn(
+                "body_proportion.evidence_refs must be a non-empty subset of the supplied reference ids: "
+                "ref_face, ref_front, ref_side.",
+                runner.prompt,
+            )
             self.assertEqual([path.name for path in runner.image_paths], ["face.png", "front.png", "side.png"])
             self.assertEqual(result["kind"], "character-identity-profile")
             self.assertEqual(result["body_proportion_source"], CHARACTER_BODY_PROPORTION_SOURCE)

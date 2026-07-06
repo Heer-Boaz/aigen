@@ -13,6 +13,7 @@ DEFAULT_MODELS_ROOT = Path(__file__).resolve().parent / "models"
 DEFAULT_SAM_CHECKPOINT = (
     DEFAULT_MODELS_ROOT / "segmentation/ybelkada/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
 )
+DEFAULT_SAM2_MODEL = DEFAULT_MODELS_ROOT / "segmentation/facebook/sam2.1-hiera-tiny"
 
 
 class KeyframeSegmentationError(RuntimeError):
@@ -25,6 +26,13 @@ class SamSegmentationConfig:
     model_type: str = "vit_b"
     device: str = "cuda"
     prompt_threshold: float = 28.0
+
+
+@dataclass(frozen=True)
+class Sam2SegmentationConfig:
+    model: Path = DEFAULT_SAM2_MODEL
+    device: str = "cuda"
+    multimask_output: bool = True
 
 
 class SamForegroundSegmenter:
@@ -73,6 +81,57 @@ class SamForegroundSegmenter:
             import torch
 
             torch.cuda.empty_cache()
+
+
+class Sam2RegionSegmenter:
+    def __init__(self, config: Sam2SegmentationConfig):
+        try:
+            import torch
+            from transformers import Sam2Model, Sam2Processor
+            from transformers.utils import logging as transformers_logging
+        except ImportError as error:
+            raise KeyframeSegmentationError("SAM2 region segmentation requires torch and transformers.") from error
+
+        if not config.model.is_dir():
+            raise KeyframeSegmentationError(f"Missing SAM2 model: {config.model.as_posix()}")
+
+        transformers_logging.disable_progress_bar()
+        self._torch = torch
+        self._processor = Sam2Processor.from_pretrained(config.model, local_files_only=True)
+        self._model = Sam2Model.from_pretrained(config.model, local_files_only=True)
+        self._model.to(config.device)
+        self._model.eval()
+        self._device = config.device
+        self._multimask_output = config.multimask_output
+
+    def segment_image_boxes(self, image: np.ndarray, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
+        if not boxes:
+            return []
+        input_boxes = [[list(box) for box in boxes]]
+        pil_image = Image.fromarray(image, mode="RGB")
+        inputs = self._processor(images=pil_image, input_boxes=input_boxes, return_tensors="pt").to(self._device)
+        with self._torch.inference_mode():
+            outputs = self._model(**inputs, multimask_output=self._multimask_output)
+        masks = self._processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+        scores = outputs.iou_scores.detach().cpu()[0]
+        return [
+            _best_sam2_mask(masks[index], scores[index], box)
+            for index, box in enumerate(boxes)
+        ]
+
+    def close(self) -> None:
+        del self._model
+        del self._processor
+        if self._device.startswith("cuda"):
+            self._torch.cuda.empty_cache()
+
+
+def _best_sam2_mask(masks: Any, scores: Any, box: tuple[int, int, int, int]) -> np.ndarray:
+    mask_index = int(np.asarray(scores).argmax())
+    mask = np.asarray(masks[mask_index], dtype=bool)
+    if not mask.any():
+        raise KeyframeSegmentationError(f"SAM2 returned an empty mask for box {box}")
+    return mask
 
 
 def foreground_box_mask(image: np.ndarray, threshold: float = 28.0) -> np.ndarray:

@@ -25,7 +25,8 @@ scripts/install.sh
 The installer is modular internally and always installs the current production
 stack: FLUX Kontext, Shakker Union Pro ControlNet, Nunchaku, Qwen judge, DWPose
 pose scoring models, SAM foreground segmentation, GroundingDINO polish
-grounding, Florence-2 polish grounding and validation checks.
+grounding, Florence-2 polish grounding, SAM2 character region masks and
+validation checks.
 
 ```bash
 scripts/check_system.sh
@@ -40,6 +41,7 @@ The model manifests used by the installer are:
 - `model_sources/keyframe_generation_kontext_controlnet.json`
 - `model_sources/keyframe_generation_nunchaku_transformer.json`
 - `model_sources/keyframe_segmentation_sam_vit_b.json`
+- `model_sources/character_region_sam2_tiny.json`
 - `model_sources/keyframe_grounding_dino.json`
 - `model_sources/keyframe_grounding_florence2.json`
 - `model_sources/keyframe_pose_dwpose_onnx.json`
@@ -108,21 +110,53 @@ roles in `identity_profile.json` are the source of truth.
 
 ```bash
 .venv/bin/python -m aigen.cli characters reference-pack build \
-  --character-id ai51 \
+  --character-id <character-id> \
   --reference front=path/to/front.png \
   --reference portrait=path/to/portrait.png \
   --reference side=path/to/side.png \
   --reference back=path/to/back.png \
-  --output-dir assets/characters/ai51/references
+  --output-dir assets/characters/<character-id>/references
 
 .venv/bin/python -m aigen.cli characters reference-pack parse \
-  assets/characters/ai51/references/reference_pack.json
+  assets/characters/<character-id>/references/reference_pack.json
 ```
 
 This writes `reference_pack.json` and `identity_profile.json`. The generation
-runners select 1-3 references per case from the VLM-inferred roles and consume
-`identity_profile.body_proportion` for every case. A dedicated `body_shape`
-reference is optional evidence, not a hard requirement.
+view runner selects 1-3 references per case from the VLM-inferred roles. Refine
+keeps the full reference pack and identity profile as standing context, then
+routes 1-4 pack references into each Qwen call with per-reference purposes.
+Every path consumes `identity_profile.body_proportion`; a dedicated
+`body_shape` reference is optional evidence, not a hard requirement.
+
+```bash
+.venv/bin/python -m aigen.cli characters qwen-edit-run \
+  --pack assets/characters/<character-id>/references/reference_pack.json \
+  --case right_profile \
+  --model nunchaku-qwen-edit-2509-r32-4step \
+  --output-dir runs/characters/<character-id>/qwen_edit/right_profile_smoke
+
+.venv/bin/python -m aigen.cli characters region-plan \
+  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
+  --region face="visible face" \
+  --region outfit_detail="requested outfit detail" \
+  --output-dir runs/characters/<character-id>/region_plan/right_profile_candidate_01
+
+.venv/bin/python -m aigen.cli characters qwen-edit-refine-plan \
+  --pack assets/characters/<character-id>/references/reference_pack.json \
+  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
+  --region-plan runs/characters/<character-id>/region_plan/right_profile_candidate_01/result.json \
+  --region face \
+  --instruction "repair the selected local detail"
+
+.venv/bin/python -m aigen.cli characters qwen-edit-refine \
+  --pack assets/characters/<character-id>/references/reference_pack.json \
+  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
+  --region-plan runs/characters/<character-id>/region_plan/right_profile_candidate_01/result.json \
+  --region face \
+  --instruction "repair the selected local detail" \
+  --model nunchaku-qwen-edit-2509-r32-4step \
+  --output-dir runs/characters/<character-id>/qwen_refine/right_profile_candidate_01
+```
 
 ## Qwen Identity Smoke
 
@@ -153,10 +187,15 @@ VLM.
   --output-dir runs/qwen_identity/smoke
 ```
 
-The default profile is `nunchaku-qwen-edit-2509-fp4-r32-lightning-4step`.
+The default model is `nunchaku-qwen-edit-2509-r32-4step`.
 `--nunchaku-blocks-on-gpu` explicitly enables the slower layer-offload path for
 the multi-reference runner. The standalone fit script uses `--offload-mode auto`
 by default on 18GB-or-smaller GPUs.
+
+For non-interactive shells such as Codex tool runs, progress falls back to
+stderr and includes elapsed time, ETA, GPU utilization and VRAM. Use
+`AIGEN_PROGRESS=0` to disable it, or `AIGEN_PROGRESS_INTERVAL_SECONDS=1` for a
+faster update cadence during long Qwen runs.
 
 ## Briefs
 

@@ -48,7 +48,7 @@ class GroundedRegionBox:
 @dataclass(frozen=True)
 class GroundingRequest:
     prompt: str
-    prior_box: tuple[int, int, int, int]
+    prior_box: tuple[int, int, int, int] | None = None
 
 
 class KeyframeRegionGrounder:
@@ -64,7 +64,10 @@ class KeyframeRegionGrounder:
             return []
         image = image.convert("RGB")
         width, height = image.size
-        priors = [_clip_box(request.prior_box, width, height) for request in requests]
+        priors = [
+            _clip_box(request.prior_box, width, height) if request.prior_box is not None else None
+            for request in requests
+        ]
         boxes_by_request: list[list[GroundedRegionBox]] = [[] for _ in requests]
         for grounder_type in (GroundingDinoRegionGrounder, Florence2RegionGrounder):
             grounder = grounder_type(self._config)
@@ -77,17 +80,14 @@ class KeyframeRegionGrounder:
                             label=box.label,
                             score=box.score,
                             source=box.source,
-                            prior_iou=_box_iou(box.box, prior),
+                            prior_iou=_box_iou(box.box, prior) if prior is not None else 0.0,
                         )
                         for box in grounder.ground_boxes(image, request.prompt)
                     )
             finally:
                 grounder.close()
 
-        return [
-            _best_grounded_region(boxes, prior, request, self._config)
-            for boxes, prior, request in zip(boxes_by_request, priors, requests, strict=True)
-        ]
+        return [_best_grounded_region(boxes, prior, request, self._config) for boxes, prior, request in zip(boxes_by_request, priors, requests, strict=True)]
 
 
 class GroundingDinoRegionGrounder:
@@ -222,10 +222,15 @@ def _florence_phrase(prompt: str) -> str:
 
 def _best_grounded_region(
     boxes: list[GroundedRegionBox],
-    prior: tuple[int, int, int, int],
+    prior: tuple[int, int, int, int] | None,
     request: GroundingRequest,
     config: GroundingConfig,
 ) -> GroundedRegionBox:
+    if prior is None:
+        if boxes:
+            return max(boxes, key=lambda box: box.score)
+        raise KeyframeGroundingError(f"Grounding produced no region compatible with '{request.prompt}'")
+
     candidates = [
         box
         for box in boxes

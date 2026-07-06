@@ -10,11 +10,21 @@ from aigen.character_reference_pack import (
     parse_character_reference_args,
     parse_character_reference_pack,
 )
+from aigen.character_region_plan import (
+    CharacterRegionPlanError,
+    parse_character_region_args,
+    plan_character_regions,
+)
 from aigen.character_qwen_edit import (
     QwenCharacterEditError,
     plan_qwen_character_edit,
     qwen_character_edit_case_names,
     run_qwen_character_edit,
+)
+from aigen.character_qwen_refine import (
+    QwenCharacterRefineError,
+    plan_qwen_character_refine,
+    run_qwen_character_refine,
 )
 from aigen.character_view_models import (
     CharacterViewError,
@@ -38,10 +48,13 @@ from aigen.generation.qwen_image_edit_identity import (
     parse_qwen_identity_reference_args,
     qwen_identity_cli_case_names,
     qwen_image_edit_identity_profile_for_name,
+    qwen_image_edit_identity_model_names,
     qwen_image_edit_identity_profile_names,
     run_qwen_image_edit_identity,
 )
 from aigen.keyframe_memory import KeyframeMemoryError
+from aigen.keyframe_grounding import GroundingConfig, KeyframeGroundingError
+from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmentationError
 from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
@@ -215,10 +228,11 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
-        "--profile",
+        "--model",
+        dest="profile",
         default=DEFAULT_QWEN_IDENTITY_PROFILE,
-        choices=qwen_image_edit_identity_profile_names(),
-        help="Qwen Image Edit model profile",
+        choices=qwen_image_edit_identity_model_names(),
+        help="Qwen Image Edit model",
     )
     qwen_edit.add_argument(
         "--max-side",
@@ -261,6 +275,116 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_edit.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    qwen_refine_plan = character_subparsers.add_parser(
+        "qwen-edit-refine-plan",
+        help="Plan a masked Qwen Image Edit repair from a selected candidate and reference pack",
+    )
+    qwen_refine_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_refine_plan.add_argument(
+        "--identity-profile",
+        type=Path,
+        help="identity_profile.json; defaults to identity_profile.json next to the pack",
+    )
+    qwen_refine_plan.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
+    qwen_refine_plan.add_argument("--mask", type=Path, help="White-on-black repaint mask")
+    qwen_refine_plan.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
+    qwen_refine_plan.add_argument("--region", help="Region name inside --region-plan")
+    qwen_refine_plan.add_argument("--instruction", required=True, help="Local repair instruction")
+    qwen_refine_plan.add_argument("--candidates", type=int, default=2, help="Candidates to generate")
+    qwen_refine_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    qwen_refine = character_subparsers.add_parser(
+        "qwen-edit-refine",
+        help="Run masked Qwen Image Edit repair candidates from a selected image and reference pack",
+    )
+    qwen_refine.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_refine.add_argument(
+        "--identity-profile",
+        type=Path,
+        help="identity_profile.json; defaults to identity_profile.json next to the pack",
+    )
+    qwen_refine.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
+    qwen_refine.add_argument("--mask", type=Path, help="White-on-black repaint mask")
+    qwen_refine.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
+    qwen_refine.add_argument("--region", help="Region name inside --region-plan")
+    qwen_refine.add_argument("--instruction", required=True, help="Local repair instruction")
+    qwen_refine.add_argument("--output-dir", type=Path, required=True, help="Directory for refine candidates")
+    qwen_refine.add_argument(
+        "--model",
+        dest="profile",
+        default=DEFAULT_QWEN_IDENTITY_PROFILE,
+        choices=qwen_image_edit_identity_model_names(),
+        help="Qwen Image Edit model",
+    )
+    qwen_refine.add_argument(
+        "--max-side",
+        type=int,
+        default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
+        help="Longest source/reference side before prompt conditioning",
+    )
+    qwen_refine.add_argument(
+        "--steps",
+        type=int,
+        help="Qwen Image Edit denoising steps; defaults to the selected profile",
+    )
+    qwen_refine.add_argument(
+        "--true-cfg-scale",
+        type=float,
+        help="Classifier-free guidance scale; defaults to the selected profile",
+    )
+    qwen_refine.add_argument(
+        "--guidance-scale",
+        type=float,
+        help="Guidance-distilled model scale; defaults to the selected profile",
+    )
+    qwen_refine.add_argument(
+        "--strength",
+        type=float,
+        default=0.6,
+        help="Inpaint denoise strength; higher changes the masked area more",
+    )
+    qwen_refine.add_argument(
+        "--padding-mask-crop",
+        type=int,
+        help="Optional inpaint crop padding around the white mask region",
+    )
+    qwen_refine.add_argument("--seed", type=int, default=DEFAULT_QWEN_IDENTITY_SEED, help="Base seed")
+    qwen_refine.add_argument("--candidates", type=int, default=2, help="Candidates to generate")
+    qwen_refine.add_argument(
+        "--max-sequence-length",
+        type=int,
+        default=DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH,
+        help="Maximum prompt token sequence length",
+    )
+    qwen_refine.add_argument(
+        "--nunchaku-blocks-on-gpu",
+        type=int,
+        help="Explicit slow-fit Nunchaku layer offload; leave unset for direct GPU execution",
+    )
+    qwen_refine.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    qwen_refine.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    region_plan = character_subparsers.add_parser(
+        "region-plan",
+        help="Ground requested character regions and write SAM2 masks without generation",
+    )
+    region_plan.add_argument("--image", type=Path, required=True, help="Image to ground and mask")
+    region_plan.add_argument(
+        "--region",
+        action="append",
+        required=True,
+        help="Region request as NAME=TEXT, for example face='visible face'",
+    )
+    region_plan.add_argument("--output-dir", type=Path, required=True, help="Output directory for masks and debug sheet")
+    region_plan.add_argument("--dino-model", type=Path, default=GroundingConfig.dino_model, help="GroundingDINO model dir")
+    region_plan.add_argument("--florence-model", type=Path, default=GroundingConfig.florence_model, help="Florence-2 model dir")
+    region_plan.add_argument("--sam2-model", type=Path, default=Sam2SegmentationConfig.model, help="SAM2 model dir")
+    region_plan.add_argument("--device", default="cuda", help="Device for grounding and SAM2")
+    region_plan.add_argument("--grounding-threshold", type=float, default=GroundingConfig.threshold, help="GroundingDINO box threshold")
+    region_plan.add_argument("--text-threshold", type=float, default=GroundingConfig.text_threshold, help="GroundingDINO text threshold")
+    region_plan.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    region_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
 
 def run_character_command(
@@ -400,11 +524,85 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
+        if args.characters_command == "qwen-edit-refine-plan":
+            dump_json(
+                stdout,
+                plan_qwen_character_refine(
+                    pack_path=args.pack,
+                    identity_profile_path=args.identity_profile,
+                    source_image_path=args.image,
+                    mask_path=args.mask,
+                    region_plan_path=args.region_plan,
+                    region_name=args.region,
+                    instruction=args.instruction,
+                    candidates=args.candidates,
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "qwen-edit-refine":
+            dump_json(
+                stdout,
+                run_qwen_character_refine(
+                    pack_path=args.pack,
+                    identity_profile_path=args.identity_profile,
+                    source_image_path=args.image,
+                    mask_path=args.mask,
+                    region_plan_path=args.region_plan,
+                    region_name=args.region,
+                    instruction=args.instruction,
+                    output_dir=args.output_dir,
+                    profile=qwen_image_edit_identity_profile_for_name(args.profile),
+                    max_side=args.max_side,
+                    steps=args.steps,
+                    true_cfg_scale=args.true_cfg_scale,
+                    guidance_scale=args.guidance_scale,
+                    strength=args.strength,
+                    padding_mask_crop=args.padding_mask_crop,
+                    seed=args.seed,
+                    max_sequence_length=args.max_sequence_length,
+                    candidates=args.candidates,
+                    overwrite=args.overwrite,
+                    nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "region-plan":
+            dump_json(
+                stdout,
+                plan_character_regions(
+                    image_path=args.image,
+                    regions=parse_character_region_args(args.region),
+                    output_dir=args.output_dir,
+                    overwrite=args.overwrite,
+                    grounding_config=GroundingConfig(
+                        dino_model=args.dino_model,
+                        florence_model=args.florence_model,
+                        device=args.device,
+                        threshold=args.grounding_threshold,
+                        text_threshold=args.text_threshold,
+                    ),
+                    segmentation_config=Sam2SegmentationConfig(
+                        model=args.sam2_model,
+                        device=args.device,
+                    ),
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
     except (
         CharacterReferenceError,
+        CharacterRegionPlanError,
         QwenCharacterEditError,
+        QwenCharacterRefineError,
         CharacterViewError,
         QwenImageEditIdentityError,
+        KeyframeGroundingError,
+        KeyframeSegmentationError,
         KeyframeMemoryError,
         ManifestIOError,
         QwenVlmError,

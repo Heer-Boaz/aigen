@@ -2,35 +2,50 @@
   "avoid": [
     "long hair",
     "different eye color",
-    "different facial expression",
-    "different neckwear",
-    "different top",
-    "different bottom",
-    "different legwear",
-    "different footwear",
-    "different body shape",
-    "different style"
+    "different clothing style",
+    "different leg length",
+    "different skirt silhouette"
   ],
+  "body_proportion": {
+    "build": "petite frame",
+    "chest_size": "small",
+    "do_not_change": [
+      "compact frame"
+    ],
+    "evidence_refs": [
+      "front",
+      "side",
+      "back"
+    ],
+    "hip_skirt_silhouette": "tight skirt",
+    "leg_proportion": "long legs",
+    "shoulder_width": "narrow shoulders",
+    "side_body_thickness": "slender",
+    "skirt_back_shape": "straight",
+    "waist": "slight waist"
+  },
+  "body_proportion_source": "model_extracted_from_reference_pack",
   "character_id": "jillian",
   "identity": {
-    "body_shape": "slim",
-    "bottom": "brown leather mini skirt",
+    "bottom": "high-waisted skirt",
     "eyes": "blue",
-    "face": "smiling",
+    "face": "smooth, youthful",
     "footwear": "brown knee-high boots",
-    "hair": "brown shoulder-length bob",
-    "legwear": "blue thigh-high socks",
+    "hair": "short brown bob",
+    "legwear": "thigh-high blue stockings, brown boots",
     "neckwear": "blue bow tie",
-    "style": "anime-inspired",
-    "top": "brown leather jacket over white shirt"
+    "top": "brown leather jacket, white shirt"
   },
   "kind": "character-identity-profile",
   "must_preserve": [
     "brown leather jacket",
     "blue bow tie",
-    "brown mini skirt",
-    "blue thigh-high socks",
-    "brown knee-high boots"
+    "high-waisted skirt",
+    "thigh-high blue stockings",
+    "knee-high brown boots"
+  ],
+  "optional_missing_refs": [
+    "body_shape"
   ],
   "output": {
     "identity_profile": "/home/boaz/aigen/assets/characters/jillian/references/identity_profile.json"
@@ -183,10 +198,10 @@
     "temperature": 0.0
   },
   "reference_roles": {
-    "back": "back hair shape, jacket back, skirt back and footwear from behind",
-    "front": "primary character view",
-    "portrait": "close-up of face and upper body",
-    "side": "profile silhouette, outfit thickness and body shape"
+    "back": "back",
+    "front": "front",
+    "portrait": "portrait",
+    "side": "side"
   },
   "source_reference_pack": "/home/boaz/aigen/assets/characters/jillian/references/reference_pack.json",
   "status": "completed"

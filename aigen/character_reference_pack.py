@@ -149,6 +149,7 @@ def _identity_response_from_raw(
 
 
 def _identity_parser_prompt(pack: CharacterReferencePackSpec) -> str:
+    reference_ids = ", ".join(_ordered_reference_assets(pack.references))
     reference_lines = "\n".join(
         f"- {name}: provided label/hint {pack.reference_hints[name]!r} ({asset.width}x{asset.height}, {asset.mode})"
         for name, asset in _ordered_reference_assets(pack.references).items()
@@ -158,6 +159,7 @@ def _identity_parser_prompt(pack: CharacterReferencePackSpec) -> str:
 Images are supplied in this exact order:
 {reference_lines}
 
+The supplied reference ids are exactly: {reference_ids}.
 The provided labels are optional evidence only. Infer each reference role from the pixels yourself.
 Allowed reference role values are: front, portrait, side, back, body_shape.
 
@@ -205,10 +207,12 @@ Return exactly one JSON object with this shape:
 }}
 
 Rules:
-- Include exactly one reference_roles key for each supplied image.
+- Include exactly one reference_roles key for each supplied reference id.
+- reference_roles keys must be exactly the supplied reference ids: {reference_ids}.
+- Do not add keys for absent optional roles. If there is no supplied reference id for body_shape, do not create one.
 - reference_roles values must be one of: front, portrait, side, back, body_shape.
 - A dedicated body_shape image is optional. If none is supplied, infer body_proportion from the whole pack.
-- body_proportion.evidence_refs must name supplied image ids.
+- body_proportion.evidence_refs must be a non-empty subset of the supplied reference ids: {reference_ids}.
 - Use concise strings, not paragraphs.
 - Use plain JSON only. No Markdown.
 """

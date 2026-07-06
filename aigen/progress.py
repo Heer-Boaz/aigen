@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 from threading import Event, Lock, Thread
@@ -45,13 +46,19 @@ class StatusReporter(Protocol):
     def finish(self, status: str) -> None: ...
 
 
+class StatusRenderer(Protocol):
+    def render(self, snapshot: RuntimeStatusSnapshot) -> None: ...
+
+    def close(self) -> None: ...
+
+
 class RuntimeStatus:
     def __init__(
         self,
         *,
         label: str,
         interval_seconds: float = DEFAULT_PROGRESS_INTERVAL_SECONDS,
-        renderer: TerminalLineRenderer,
+        renderer: StatusRenderer,
         telemetry: SystemTelemetrySampler,
     ) -> None:
         self._label = label
@@ -82,6 +89,23 @@ class RuntimeStatus:
             label=label,
             interval_seconds=interval_seconds,
             renderer=TerminalLineRenderer(stream=stream, close_stream=close_stream),
+            telemetry=telemetry,
+        )
+
+    @classmethod
+    def lines(
+        cls,
+        *,
+        label: str,
+        interval_seconds: float,
+        stream: TextIO,
+        telemetry: SystemTelemetrySampler,
+        close_stream: bool = False,
+    ) -> RuntimeStatus:
+        return cls(
+            label=label,
+            interval_seconds=interval_seconds,
+            renderer=ProgressLineRenderer(stream=stream, close_stream=close_stream),
             telemetry=telemetry,
         )
 
@@ -180,6 +204,20 @@ class TerminalLineRenderer:
             self._stream.close()
 
 
+class ProgressLineRenderer:
+    def __init__(self, *, stream: TextIO, close_stream: bool = False) -> None:
+        self._stream = stream
+        self._close_stream = close_stream
+
+    def render(self, snapshot: RuntimeStatusSnapshot) -> None:
+        self._stream.write(f"{_format_line(snapshot)}\n")
+        self._stream.flush()
+
+    def close(self) -> None:
+        if self._close_stream:
+            self._stream.close()
+
+
 class SilentRuntimeStatus:
     @property
     def renders_live(self) -> bool:
@@ -215,15 +253,31 @@ SILENT_STATUS = SilentRuntimeStatus()
 def open_cli_progress(args: argparse.Namespace) -> StatusReporter:
     _claim_progress_ownership()
     label = _command_label(args)
-    stream = _open_terminal_stream()
-    if stream is None:
+    if _progress_disabled():
         return SilentRuntimeStatus()
-    return RuntimeStatus.terminal(
+    if os.environ.get("AIGEN_PROGRESS") == "stderr":
+        return _stderr_progress(label)
+    stream = _open_terminal_stream()
+    if stream is not None:
+        return RuntimeStatus.terminal(
+            label=label,
+            interval_seconds=_progress_interval_seconds(),
+            stream=stream,
+            telemetry=SystemTelemetrySampler(),
+            close_stream=True,
+        )
+    if os.environ.get("AIGEN_PROGRESS") == "tty":
+        return SilentRuntimeStatus()
+    return _stderr_progress(label)
+
+
+def _stderr_progress(label: str) -> RuntimeStatus:
+    return RuntimeStatus.lines(
         label=label,
         interval_seconds=_progress_interval_seconds(),
-        stream=stream,
+        stream=sys.stderr,
         telemetry=SystemTelemetrySampler(),
-        close_stream=True,
+        close_stream=False,
     )
 
 
@@ -247,12 +301,14 @@ def _claim_progress_ownership() -> None:
 
 
 def _open_terminal_stream() -> TextIO | None:
-    if os.environ.get("AIGEN_PROGRESS") == "0":
-        return None
     try:
         return open("/dev/tty", "w", encoding="utf-8", buffering=1)
     except OSError:
         return None
+
+
+def _progress_disabled() -> bool:
+    return os.environ.get("AIGEN_PROGRESS") == "0"
 
 
 def _progress_interval_seconds() -> float:
@@ -309,7 +365,9 @@ def _cpu_text(telemetry: SystemTelemetry) -> str:
 
 
 def _gpu_text(telemetry: SystemTelemetry) -> str:
-    return f"gpu {telemetry.gpu_percent:3d}% | vram {telemetry.vram_used_mb}/{telemetry.vram_total_mb} MB"
+    if telemetry.gpu is None:
+        return "gpu n/a | vram n/a"
+    return f"gpu {telemetry.gpu.gpu_percent:3d}% | vram {telemetry.gpu.vram_used_mb}/{telemetry.gpu.vram_total_mb} MB"
 
 
 def _elapsed_text(seconds: float) -> str:

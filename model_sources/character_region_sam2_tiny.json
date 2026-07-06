@@ -1,0 +1,22 @@
+{
+  "target_hardware": {
+    "phase": "character region-plan SAM2 masks",
+    "runtime": "Transformers Sam2Model box-prompted region masks",
+    "strategy": "small local SAM2.1 checkpoint for region masks before Qwen refine"
+  },
+  "downloads": [
+    {
+      "name": "sam2-1-hiera-tiny-character-region-plan",
+      "repo_id": "facebook/sam2.1-hiera-tiny",
+      "revision": "de431c4043854a71d8101e17995dfe596bf101a5",
+      "local_path": "segmentation/facebook/sam2.1-hiera-tiny",
+      "include": [
+        "README.md",
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json",
+        "processor_config.json"
+      ]
+    }
+  ]
+}

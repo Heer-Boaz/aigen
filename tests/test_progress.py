@@ -6,18 +6,26 @@ import os
 import unittest
 from unittest.mock import patch
 
+from aigen.gpu_status import GpuStatusError
 from aigen.progress import RuntimeStatus, SILENT_STATUS, open_cli_progress
-from aigen.system_telemetry import SystemTelemetry
+from aigen.system_telemetry import GpuTelemetry, SystemTelemetry, SystemTelemetrySampler
 
 
 class FakeTelemetrySampler:
     def sample(self) -> SystemTelemetry:
         return SystemTelemetry(
             cpu_percent=17.5,
-            gpu_percent=42,
-            vram_used_mb=1234,
-            vram_total_mb=16303,
+            gpu=GpuTelemetry(
+                gpu_percent=42,
+                vram_used_mb=1234,
+                vram_total_mb=16303,
+            ),
         )
+
+
+class FakeCpuSampler:
+    def percent(self) -> float:
+        return 17.5
 
 
 class ProgressTests(unittest.TestCase):
@@ -65,6 +73,54 @@ class ProgressTests(unittest.TestCase):
         self.assertIn("3/3", output)
         self.assertIn("[==================]", output)
 
+    def test_line_status_renders_non_tty_progress_snapshots(self) -> None:
+        stream = io.StringIO()
+
+        status = RuntimeStatus.lines(
+            label="characters qwen-edit-run",
+            interval_seconds=60.0,
+            stream=stream,
+            telemetry=FakeTelemetrySampler(),
+        )
+        with status:
+            status.begin(2, "denoise qwen identity cases")
+            status.step("denoised right_profile_candidate_01")
+            status.finish("completed")
+
+        output = stream.getvalue()
+        self.assertIn("characters qwen-edit-run", output)
+        self.assertIn("1/2 eta", output)
+        self.assertIn("gpu  42%", output)
+        self.assertIn("vram 1234/16303 MB", output)
+        self.assertIn("completed", output)
+        self.assertGreaterEqual(output.count("\n"), 2)
+        self.assertEqual(output.count("\r"), 0)
+
+    def test_progress_renders_unknown_gpu_when_nvidia_smi_fails(self) -> None:
+        stream = io.StringIO()
+
+        with (
+            patch("aigen.system_telemetry.CpuUsageSampler", return_value=FakeCpuSampler()),
+            patch(
+                "aigen.system_telemetry.nvidia_smi_memory_snapshot",
+                side_effect=GpuStatusError("Cannot read nvidia-smi GPU telemetry"),
+            ),
+        ):
+            status = RuntimeStatus.lines(
+                label="characters qwen-edit-run",
+                interval_seconds=60.0,
+                stream=stream,
+                telemetry=SystemTelemetrySampler(),
+            )
+            with status:
+                status.step("load model")
+                status.finish("completed")
+
+        output = stream.getvalue()
+        self.assertIn("cpu  17.5%", output)
+        self.assertIn("gpu n/a | vram n/a", output)
+        self.assertIn("completed", output)
+
     def test_quiet_status_keeps_same_runtime_contract(self) -> None:
         with SILENT_STATUS:
             SILENT_STATUS.begin(1, "load models")
@@ -76,6 +132,38 @@ class ProgressTests(unittest.TestCase):
         args = argparse.Namespace(command="keyframes", keyframes_command="run")
 
         with patch.dict("os.environ", {"AIGEN_PROGRESS": "0"}):
+            self.assertFalse(open_cli_progress(args).renders_live)
+
+    def test_cli_progress_falls_back_to_stderr_when_tty_is_missing(self) -> None:
+        args = argparse.Namespace(command="characters", characters_command="qwen-edit-run")
+        stream = io.StringIO()
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("aigen.progress._open_terminal_stream", return_value=None),
+            patch("aigen.progress.sys.stderr", stream),
+            patch("aigen.progress.SystemTelemetrySampler", FakeTelemetrySampler),
+        ):
+            status = open_cli_progress(args)
+            self.assertTrue(status.renders_live)
+            with status:
+                status.begin(2, "denoise qwen identity cases")
+                status.step("denoised right_profile_candidate_01")
+                status.finish("completed")
+
+        output = stream.getvalue()
+        self.assertIn("characters qwen-edit-run", output)
+        self.assertIn("gpu  42%", output)
+        self.assertIn("vram 1234/16303 MB", output)
+        self.assertIn("completed", output)
+
+    def test_cli_progress_tty_mode_stays_silent_when_tty_is_missing(self) -> None:
+        args = argparse.Namespace(command="characters", characters_command="qwen-edit-run")
+
+        with (
+            patch.dict("os.environ", {"AIGEN_PROGRESS": "tty"}),
+            patch("aigen.progress._open_terminal_stream", return_value=None),
+        ):
             self.assertFalse(open_cli_progress(args).renders_live)
 
     def test_cli_progress_claims_huggingface_progress_ownership(self) -> None:

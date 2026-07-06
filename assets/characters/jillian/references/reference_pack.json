@@ -5,11 +5,11 @@
     "directory": "/home/boaz/aigen/assets/characters/jillian/references",
     "reference_pack": "/home/boaz/aigen/assets/characters/jillian/references/reference_pack.json"
   },
-  "reference_roles": {
-    "back": "back hair shape, jacket back, skirt back and footwear from behind",
-    "front": "front outfit, colors, face placement and body proportions",
-    "portrait": "face, hair, eyes, neckwear and expression",
-    "side": "profile silhouette, outfit thickness and body shape"
+  "reference_hints": {
+    "back": "back",
+    "front": "front",
+    "portrait": "portrait",
+    "side": "side"
   },
   "references": {
     "back": {
@@ -23,7 +23,7 @@
       "height": 2240,
       "mode": "RGB",
       "path": "/home/boaz/aigen/assets/characters/jillian/reference02.png",
-      "sha256": "2fcde3082fa89cd12158e83c7549cec44e6b7d2e8f9702c9746aeab8a46c8811",
+      "sha256": "b543dfefaa41bdd5d91c39fa006ceafdb9cfe1a65172d7e0b118a69aefb7e4ab",
       "width": 1680
     },
     "portrait": {
@@ -36,8 +36,8 @@
     "side": {
       "height": 2240,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/reference04.png",
-      "sha256": "6b85de1d40dae08b491645b04a0ada3d9facfc21b7c498fda0584e95ddec09df",
+      "path": "/home/boaz/aigen/assets/characters/jillian/reference05.png",
+      "sha256": "d91b857e171739b74488d9eef0ddfc3c744233c1e8658045f50d38e693facfd8",
       "width": 1680
     }
   },

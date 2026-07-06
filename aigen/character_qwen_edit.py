@@ -33,6 +33,9 @@ class QwenCharacterEditCaseTemplate:
     requested_view: str
     requested_pose: str
     background: str
+    view_anchor_role: str
+    reference_purposes: tuple[tuple[str, str], ...]
+    view_constraints: tuple[str, ...]
     portrait_canvas: bool = False
 
 
@@ -41,6 +44,16 @@ class PlannedQwenCharacterEdit:
     reference_paths: dict[str, Path]
     edit_cases: tuple[QwenIdentityCase, ...]
     manifest: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class QwenCharacterReferenceContext:
+    pack_path: Path
+    identity_profile_path: Path
+    pack: CharacterReferencePackSpec
+    identity_profile: CharacterIdentityProfileSpec
+    role_reference_ids: dict[str, str]
+    reference_paths: dict[str, Path]
 
 
 QWEN_CHARACTER_EDIT_DEFAULT_CASES = ("front", "side", "right_profile", "back", "three_quarter", "portrait")
@@ -53,6 +66,18 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="front",
         requested_pose="neutral standing",
         background="plain light studio background",
+        view_anchor_role="front",
+        reference_purposes=(
+            ("front", "primary camera angle and full-body outfit anchor"),
+            ("portrait", "face identity and facial proportion support"),
+            ("side", "body depth and side-silhouette support"),
+        ),
+        view_constraints=(
+            "front-facing full-body camera",
+            "entire head-to-toe character remains fully visible with a small background margin",
+            "torso and face face the camera",
+            "do not rotate the character into a side, back, or three-quarter view",
+        ),
     ),
     "side": QwenCharacterEditCaseTemplate(
         name="side",
@@ -61,6 +86,18 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="left_side",
         requested_pose="neutral standing",
         background="plain light studio background",
+        view_anchor_role="side",
+        reference_purposes=(
+            ("side", "primary camera angle and side-body geometry anchor"),
+            ("portrait", "face identity and facial proportion support"),
+            ("front", "full-body outfit, color, and proportion support"),
+        ),
+        view_constraints=(
+            "strict left side profile",
+            "entire head-to-toe character remains fully visible with a small background margin",
+            "side-on body turned 90 degrees from the camera",
+            "do not produce a front-facing or three-quarter torso",
+        ),
     ),
     "right_profile": QwenCharacterEditCaseTemplate(
         name="right_profile",
@@ -69,6 +106,19 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="right_profile",
         requested_pose="neutral standing",
         background="plain light studio background",
+        view_anchor_role="side",
+        reference_purposes=(
+            ("side", "primary camera angle and side-body geometry anchor"),
+            ("portrait", "face identity and facial proportion support"),
+            ("front", "full-body outfit, color, and proportion support"),
+        ),
+        view_constraints=(
+            "strict right side profile",
+            "entire head-to-toe character remains fully visible with a small background margin",
+            "side-on body turned 90 degrees from the camera",
+            "only one side of the face and body is visible",
+            "do not produce a front-facing or three-quarter view",
+        ),
     ),
     "back": QwenCharacterEditCaseTemplate(
         name="back",
@@ -77,6 +127,18 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="back",
         requested_pose="neutral standing",
         background="plain light studio background",
+        view_anchor_role="back",
+        reference_purposes=(
+            ("back", "primary camera angle and back-view outfit anchor"),
+            ("portrait", "head and face identity support"),
+            ("front", "full-body outfit, color, and proportion support"),
+        ),
+        view_constraints=(
+            "back-facing full-body camera",
+            "entire head-to-toe character remains fully visible with a small background margin",
+            "back of the head, body, and outfit face the camera",
+            "do not show the front torso or front face",
+        ),
     ),
     "three_quarter": QwenCharacterEditCaseTemplate(
         name="three_quarter",
@@ -85,6 +147,18 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="three_quarter_front",
         requested_pose="neutral standing",
         background="plain light studio background",
+        view_anchor_role="front",
+        reference_purposes=(
+            ("front", "primary full-body outfit and front identity anchor"),
+            ("side", "body depth and turned-view geometry support"),
+            ("portrait", "face identity and facial proportion support"),
+        ),
+        view_constraints=(
+            "three-quarter front camera",
+            "entire head-to-toe character remains fully visible with a small background margin",
+            "front of the character remains visible while the body is slightly turned",
+            "do not produce a strict front, side, or back view",
+        ),
     ),
     "portrait": QwenCharacterEditCaseTemplate(
         name="portrait",
@@ -93,6 +167,17 @@ QWEN_CHARACTER_EDIT_CASES: dict[str, QwenCharacterEditCaseTemplate] = {
         requested_view="portrait",
         requested_pose="neutral expression",
         background="plain light studio background",
+        view_anchor_role="portrait",
+        reference_purposes=(
+            ("portrait", "primary face identity and portrait framing anchor"),
+            ("front", "outfit collar, color, and upper-body support"),
+            ("side", "head shape and side-silhouette support"),
+        ),
+        view_constraints=(
+            "shoulders-up portrait framing",
+            "face identity comes from the portrait reference",
+            "do not generate a full-body reference card",
+        ),
         portrait_canvas=True,
     ),
 }
@@ -193,31 +278,53 @@ def _build_qwen_character_edit_plan(
 ) -> PlannedQwenCharacterEdit:
     if candidates_per_case < 1:
         raise QwenCharacterEditError("candidates_per_case must be at least 1")
-    progress.phase("load qwen character edit reference pack")
-    pack_path = pack_path.resolve()
-    pack = _load_reference_pack(pack_path)
-    resolved_identity_profile_path = _identity_profile_path(pack_path, identity_profile_path)
-    identity_profile = _load_identity_profile(resolved_identity_profile_path)
-    _validate_identity_profile(pack, identity_profile, resolved_identity_profile_path)
-    role_reference_ids = _role_reference_ids(pack, identity_profile)
+    context = load_qwen_character_reference_context(
+        pack_path=pack_path,
+        identity_profile_path=identity_profile_path,
+        progress=progress,
+        phase="load qwen character edit reference pack",
+    )
     templates = _selected_templates(cases)
     edit_cases = tuple(
-        _planned_case(template, identity_profile, role_reference_ids, instruction)
+        _planned_case(template, context.identity_profile, context.role_reference_ids, instruction)
         for template in templates
     )
-    _validate_planned_references(pack, edit_cases)
+    _validate_planned_references(context.pack, edit_cases)
     return PlannedQwenCharacterEdit(
-        reference_paths=_reference_paths(pack, pack_path),
+        reference_paths=context.reference_paths,
         edit_cases=edit_cases,
         manifest=_plan_manifest(
-            pack_path=pack_path,
-            identity_profile_path=resolved_identity_profile_path,
-            pack=pack,
-            identity_profile=identity_profile,
+            pack_path=context.pack_path,
+            identity_profile_path=context.identity_profile_path,
+            pack=context.pack,
+            identity_profile=context.identity_profile,
             edit_cases=edit_cases,
             candidates_per_case=candidates_per_case,
             instruction=instruction,
         ),
+    )
+
+
+def load_qwen_character_reference_context(
+    *,
+    pack_path: Path,
+    identity_profile_path: Path | None,
+    progress: StatusReporter,
+    phase: str,
+) -> QwenCharacterReferenceContext:
+    progress.phase(phase)
+    resolved_pack_path = pack_path.resolve()
+    pack = _load_reference_pack(resolved_pack_path)
+    resolved_identity_profile_path = _identity_profile_path(resolved_pack_path, identity_profile_path)
+    identity_profile = _load_identity_profile(resolved_identity_profile_path)
+    _validate_identity_profile(pack, identity_profile, resolved_identity_profile_path)
+    return QwenCharacterReferenceContext(
+        pack_path=resolved_pack_path,
+        identity_profile_path=resolved_identity_profile_path,
+        pack=pack,
+        identity_profile=identity_profile,
+        role_reference_ids=_role_reference_ids(pack, identity_profile),
+        reference_paths=_reference_paths(pack, resolved_pack_path),
     )
 
 
@@ -353,11 +460,26 @@ def _normalized_instruction(
 ) -> dict[str, Any]:
     must_preserve = _identity_must_preserve(identity_profile)
     avoid = _identity_avoid(identity_profile)
+    reference_id_by_role = dict(zip(template.references, reference_ids, strict=True))
+    view_anchor_ref = reference_id_by_role[template.view_anchor_role]
     normalized: dict[str, Any] = {
         "task": "identity_edit",
         "case": template.name,
         "required_roles": list(template.references),
         "refs_used": list(reference_ids),
+        "view_anchor_role": template.view_anchor_role,
+        "view_anchor_ref": view_anchor_ref,
+        "view_anchor_input_index": template.references.index(template.view_anchor_role) + 1,
+        "reference_purposes": [
+            {
+                "role": role,
+                "reference_id": reference_id_by_role[role],
+                "input_index": template.references.index(role) + 1,
+                "purpose": purpose,
+            }
+            for role, purpose in template.reference_purposes
+        ],
+        "view_constraints": list(template.view_constraints),
         "task_prompt": template.task,
         "requested_view": template.requested_view,
         "requested_pose": template.requested_pose,
@@ -393,11 +515,19 @@ def _prompt_from_instruction(instruction: Mapping[str, Any]) -> str:
     avoid = "; ".join(instruction["avoid"])
     body_proportion = instruction["body_proportion"]
     body_proportion_facts = _body_proportion_facts(body_proportion)
+    reference_purposes = _reference_purpose_facts(instruction["reference_purposes"])
+    view_constraints = "; ".join(instruction["view_constraints"])
     source_instruction = instruction.get("source_instruction")
     requested = f" Additional user request: {source_instruction.strip()}" if source_instruction else ""
     return (
         "Use the input images as references for the same character. "
+        f"Reference routing: {reference_purposes}. "
+        f"Camera/view anchor: input image {instruction['view_anchor_input_index']} "
+        f"({instruction['view_anchor_ref']}, role {instruction['view_anchor_role']}) controls the requested "
+        "camera angle and body orientation; non-anchor references preserve identity details but must not override "
+        "the camera angle. "
         f"{instruction['task_prompt']} "
+        f"View constraints: {view_constraints}. "
         f"Background: {instruction['background']}. "
         f"Stable identity facts: {identity_facts}. "
         f"Body proportion source: {instruction['body_proportion_source']}. "
@@ -414,6 +544,14 @@ def _body_proportion_facts(body_proportion: Mapping[str, Any]) -> str:
         f"{name}: {value}"
         for name, value in body_proportion.items()
         if isinstance(value, str) and value
+    )
+
+
+def _reference_purpose_facts(reference_purposes: Sequence[Mapping[str, Any]]) -> str:
+    return "; ".join(
+        f"input image {reference['input_index']} ({reference['reference_id']}, role {reference['role']}): "
+        f"{reference['purpose']}"
+        for reference in reference_purposes
     )
 
 
@@ -440,7 +578,7 @@ def _plan_manifest(
         "reference_pack": pack_path.as_posix(),
         "identity_profile": identity_profile_path.as_posix(),
         "source_instruction": instruction,
-        "normalizer": "identity_profile_case_template_v1",
+        "normalizer": "identity_profile_case_template_v2",
         "reference_selector": "case_reference_roles_with_identity_profile_body_proportion_v1",
         "candidates_per_case": candidates_per_case,
         "cases": [
