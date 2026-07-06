@@ -35,6 +35,9 @@ IDENTITY_PROFILE_FILENAME = "identity_profile.json"
 @dataclass(frozen=True)
 class CharacterEditPlanParseResult:
     selected_refs: tuple[str, ...]
+    selected_planner_refs: tuple[str, ...]
+    planner_reference_map: dict[str, str]
+    reference_semantics: dict[str, str]
     edit_instruction: str
     prompt: str
     planner_image_paths: tuple[Path, ...]
@@ -147,24 +150,30 @@ def parse_character_edit_plan(
     runner: QwenVlm,
     pack: CharacterReferencePackSpec,
     reference_paths: Mapping[str, Path],
-    identity_profile: CharacterIdentityProfileSpec,
     case_name: str,
     user_instruction: str,
     path_label: str,
 ) -> CharacterEditPlanParseResult:
     reference_ids = tuple(pack.references)
+    planner_reference_map = {
+        f"reference{index + 1}": reference_id
+        for index, reference_id in enumerate(reference_ids)
+    }
+    planner_reference_ids = tuple(planner_reference_map)
     image_paths = tuple(reference_paths[reference_id] for reference_id in reference_ids)
     prompt = _edit_plan_parser_prompt(
         pack=pack,
-        identity_profile=identity_profile,
-        reference_ids=reference_ids,
+        planner_reference_map=planner_reference_map,
         case_name=case_name,
         user_instruction=user_instruction,
     )
     raw_text = runner.describe_image(prompt, list(image_paths))
-    response = _edit_plan_response_from_raw(raw_text, path_label, reference_ids=frozenset(reference_ids))
+    response = _edit_plan_response_from_raw(raw_text, path_label, reference_ids=frozenset(planner_reference_ids))
     return CharacterEditPlanParseResult(
-        selected_refs=tuple(response.selected_refs),
+        selected_refs=tuple(planner_reference_map[reference_id] for reference_id in response.selected_refs),
+        selected_planner_refs=tuple(response.selected_refs),
+        planner_reference_map=planner_reference_map,
+        reference_semantics=dict(response.reference_semantics),
         edit_instruction=response.edit_instruction.strip(),
         prompt=prompt,
         planner_image_paths=image_paths,
@@ -281,21 +290,20 @@ Rules:
 def _edit_plan_parser_prompt(
     *,
     pack: CharacterReferencePackSpec,
-    identity_profile: CharacterIdentityProfileSpec,
-    reference_ids: Sequence[str],
+    planner_reference_map: Mapping[str, str],
     case_name: str,
     user_instruction: str,
 ) -> str:
     reference_lines = "\n".join(
         _edit_plan_reference_line(
             input_index=index + 1,
-            reference_id=reference_id,
+            planner_reference_id=planner_reference_id,
+            pack_reference_id=pack_reference_id,
             pack=pack,
-            identity_profile=identity_profile,
         )
-        for index, reference_id in enumerate(reference_ids)
+        for index, (planner_reference_id, pack_reference_id) in enumerate(planner_reference_map.items())
     )
-    reference_id_list = ", ".join(reference_ids)
+    reference_id_list = ", ".join(planner_reference_map)
     return f"""You are the edit planner for a local character image-edit pipeline.
 
 Images are supplied in this exact order:
@@ -308,8 +316,8 @@ The user's requested edit is exactly: {user_instruction!r}.
 Look at the supplied images yourself. Choose the reference ids that should be sent to the image editor,
 then write the single instruction that should be sent with those images.
 The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
-Use only the user's requested edit and visual facts visible in the supplied images. Use the inferred roles as evidence,
-not as a fixed rule table.
+Use only the user's requested edit and visual facts visible in the supplied images.
+If useful, add concise semantic labels that you infer yourself for the supplied references.
 Do not invent names, story, mood, annotations, text, props, scene details or extra outputs.
 Do not choose references that are irrelevant to the requested edit.
 Qwen Image Edit accepts one to three selected reference images for this path.
@@ -319,12 +327,16 @@ Return exactly one JSON object with this shape:
   "selected_refs": [
     "reference id from the available reference id list"
   ],
+  "reference_semantics": {{
+    "reference id from the available reference id list": "short semantic label inferred from that image"
+  }},
   "edit_instruction": "one concise instruction"
 }}
 
 Rules:
 - selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
 - selected_refs order is the order the image editor will receive the images.
+- reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
 - edit_instruction must be a single non-empty string.
 - Use plain JSON only. No Markdown.
 """
@@ -333,16 +345,12 @@ Rules:
 def _edit_plan_reference_line(
     *,
     input_index: int,
-    reference_id: str,
+    planner_reference_id: str,
+    pack_reference_id: str,
     pack: CharacterReferencePackSpec,
-    identity_profile: CharacterIdentityProfileSpec,
 ) -> str:
-    asset = pack.references[reference_id]
-    role = identity_profile.reference_roles[reference_id]
-    return (
-        f"- input {input_index}: reference id {reference_id}, "
-        f"inferred role {role} ({asset.width}x{asset.height}, {asset.mode})"
-    )
+    asset = pack.references[pack_reference_id]
+    return f"- input {input_index}: reference id {planner_reference_id} ({asset.width}x{asset.height}, {asset.mode})"
 
 
 def _identity_output_path(pack_path: Path, output_path: Path | None) -> Path:

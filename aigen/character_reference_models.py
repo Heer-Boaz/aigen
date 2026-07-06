@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 CHARACTER_REFERENCE_PACK_KIND = "character-reference-pack"
@@ -67,6 +67,7 @@ class CharacterIdentityVlmResponseSpec(StrictModel):
 class CharacterEditPlanVlmResponseSpec(StrictModel):
     selected_refs: list[str]
     edit_instruction: str
+    reference_semantics: dict[str, str] = Field(default_factory=dict)
 
 
 class CharacterIdentityProfileOutputSpec(StrictModel):
@@ -201,6 +202,12 @@ def load_character_edit_plan_vlm_response(
         raise CharacterReferenceError(
             f"Invalid character edit plan response {path_label}: selected_refs contains unknown reference(s) "
             f"{', '.join(unknown_refs)}"
+        )
+    unknown_semantics = sorted(ref for ref in response.reference_semantics if ref not in reference_ids)
+    if unknown_semantics:
+        raise CharacterReferenceError(
+            f"Invalid character edit plan response {path_label}: reference_semantics contains unknown reference(s) "
+            f"{', '.join(unknown_semantics)}"
         )
     if not response.edit_instruction.strip():
         raise CharacterReferenceError(f"Invalid character edit plan response {path_label}: edit_instruction is empty")

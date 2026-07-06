@@ -236,11 +236,6 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
     qwen_edit_plan.add_argument(
-        "--identity-profile",
-        type=Path,
-        help="identity_profile.json; defaults to identity_profile.json next to the pack",
-    )
-    qwen_edit_plan.add_argument(
         "--case",
         action="append",
         choices=qwen_character_edit_case_names(),
@@ -259,11 +254,6 @@ def add_character_commands(subparsers: Any) -> None:
         help="Run pack/profile-driven Qwen Image Edit character cases",
     )
     qwen_edit.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
-    qwen_edit.add_argument(
-        "--identity-profile",
-        type=Path,
-        help="identity_profile.json; defaults to identity_profile.json next to the pack",
-    )
     qwen_edit.add_argument(
         "--case",
         action="append",
@@ -540,7 +530,6 @@ def run_character_command(
                 stdout,
                 plan_qwen_character_edit(
                     pack_path=args.pack,
-                    identity_profile_path=args.identity_profile,
                     vlm_config=edit_planner_vlm_config_from_args(args),
                     cases=args.case or (),
                     instruction=args.instruction,
@@ -555,7 +544,6 @@ def run_character_command(
                 stdout,
                 run_qwen_character_edit(
                     pack_path=args.pack,
-                    identity_profile_path=args.identity_profile,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
                     vlm_config=edit_planner_vlm_config_from_args(args),
