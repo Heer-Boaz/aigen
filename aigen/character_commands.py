@@ -58,8 +58,55 @@ from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmenta
 from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
-from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
-from aigen.vlm_qwen import QwenVlmError
+from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT, keyframe_profile_for_name
+from aigen.vlm_qwen import (
+    DEFAULT_JUDGE_ID,
+    DEFAULT_JUDGE_QUANTIZATION,
+    DEFAULT_JUDGE_REPO_ID,
+    DEFAULT_JUDGE_REVISION,
+    DEFAULT_MAX_PIXELS,
+    DEFAULT_MIN_PIXELS,
+    QwenVlmConfig,
+    QwenVlmError,
+)
+
+
+def add_edit_planner_vlm_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--vlm-judge", default=DEFAULT_JUDGE_ID, help="Edit planner id recorded in outputs")
+    parser.add_argument(
+        "--vlm-model",
+        type=Path,
+        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        help="Local Qwen2.5-VL-7B-Instruct model directory for edit planning",
+    )
+    parser.add_argument("--vlm-dtype", default="bfloat16", help="Torch dtype for edit planner VLM weights")
+    parser.add_argument("--vlm-attention-impl", default="sdpa", help="Transformers attention implementation")
+    parser.add_argument(
+        "--vlm-quantization",
+        choices=("bitsandbytes-8bit", "none"),
+        default=DEFAULT_JUDGE_QUANTIZATION,
+        help="Local inference quantization for the edit planner VLM",
+    )
+    parser.add_argument("--vlm-min-pixels", type=int, default=DEFAULT_MIN_PIXELS, help="Minimum Qwen visual pixels")
+    parser.add_argument("--vlm-max-pixels", type=int, default=DEFAULT_MAX_PIXELS, help="Maximum Qwen visual pixels")
+    parser.add_argument("--vlm-max-new-tokens", type=int, default=900, help="Edit planner response token budget")
+    parser.add_argument("--vlm-temperature", type=float, default=0.0, help="Edit planner sampling temperature")
+
+
+def edit_planner_vlm_config_from_args(args: argparse.Namespace) -> QwenVlmConfig:
+    return QwenVlmConfig(
+        judge_id=args.vlm_judge,
+        model=args.vlm_model,
+        repo_id=DEFAULT_JUDGE_REPO_ID,
+        revision=DEFAULT_JUDGE_REVISION,
+        dtype=args.vlm_dtype,
+        attention_impl=args.vlm_attention_impl,
+        quantization=args.vlm_quantization,
+        min_pixels=args.vlm_min_pixels,
+        max_pixels=args.vlm_max_pixels,
+        max_new_tokens=args.vlm_max_new_tokens,
+        temperature=args.vlm_temperature,
+    )
 
 
 def add_character_commands(subparsers: Any) -> None:
@@ -201,8 +248,9 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit_plan.add_argument(
         "--instruction",
-        help="Optional user instruction folded into the normalized case instruction",
+        help="Optional user request for the VLM edit planner; defaults to the selected case name",
     )
+    add_edit_planner_vlm_args(qwen_edit_plan)
     qwen_edit_plan.add_argument("--candidates", type=int, default=2, help="Candidates per case")
     qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
@@ -224,8 +272,9 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument(
         "--instruction",
-        help="Optional user instruction folded into the normalized case instruction",
+        help="Optional user request for the VLM edit planner; defaults to the selected case name",
     )
+    add_edit_planner_vlm_args(qwen_edit)
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
         "--model",
@@ -492,6 +541,7 @@ def run_character_command(
                 plan_qwen_character_edit(
                     pack_path=args.pack,
                     identity_profile_path=args.identity_profile,
+                    vlm_config=edit_planner_vlm_config_from_args(args),
                     cases=args.case or (),
                     instruction=args.instruction,
                     candidates_per_case=args.candidates,
@@ -508,6 +558,7 @@ def run_character_command(
                     identity_profile_path=args.identity_profile,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
+                    vlm_config=edit_planner_vlm_config_from_args(args),
                     cases=args.case or (),
                     instruction=args.instruction,
                     max_side=args.max_side,

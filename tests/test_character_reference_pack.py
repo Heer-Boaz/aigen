@@ -10,9 +10,15 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from aigen.character_reference_models import CHARACTER_BODY_PROPORTION_SOURCE, CharacterReferenceError
+from aigen.character_reference_models import (
+    CHARACTER_BODY_PROPORTION_SOURCE,
+    CharacterReferenceError,
+    load_completed_character_identity_profile,
+    load_completed_character_reference_pack,
+)
 from aigen.character_reference_pack import (
     build_character_reference_pack,
+    parse_character_edit_plan,
     parse_character_reference_args,
     parse_character_reference_pack,
 )
@@ -107,6 +113,18 @@ class InvalidReferenceParser(FakeReferenceParser):
                 "avoid": [],
             }
         )
+
+
+class FakeEditInstructionParser:
+    def __init__(self, response: dict[str, object]) -> None:
+        self.response = response
+        self.prompt = ""
+        self.image_paths: list[Path] = []
+
+    def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompt = prompt
+        self.image_paths = image_paths
+        return json.dumps(self.response)
 
 
 class CharacterReferencePackTests(unittest.TestCase):
@@ -207,18 +225,17 @@ class CharacterReferencePackTests(unittest.TestCase):
             runner = FakeReferenceParser.last
             self.assertTrue(runner.closed)
             self.assertIn("Infer each reference role from the pixels yourself", runner.prompt)
-            self.assertIn("The supplied reference ids are exactly: ref_face, ref_front, ref_side.", runner.prompt)
-            self.assertIn(
-                "reference_roles keys must be exactly the supplied reference ids: ref_face, ref_front, ref_side.",
-                runner.prompt,
-            )
+            self.assertIn("The supplied reference ids are exactly:", runner.prompt)
+            self.assertIn("reference_roles keys must be exactly the supplied reference ids:", runner.prompt)
+            self.assertIn("ref_front", runner.prompt)
+            self.assertIn("ref_face", runner.prompt)
+            self.assertIn("ref_side", runner.prompt)
             self.assertIn("If there is no supplied reference id for body_shape, do not create one.", runner.prompt)
             self.assertIn(
-                "body_proportion.evidence_refs must be a non-empty subset of the supplied reference ids: "
-                "ref_face, ref_front, ref_side.",
+                "body_proportion.evidence_refs must be a non-empty subset of the supplied reference ids:",
                 runner.prompt,
             )
-            self.assertEqual([path.name for path in runner.image_paths], ["face.png", "front.png", "side.png"])
+            self.assertCountEqual([path.name for path in runner.image_paths], ["front.png", "face.png", "side.png"])
             self.assertEqual(result["kind"], "character-identity-profile")
             self.assertEqual(result["body_proportion_source"], CHARACTER_BODY_PROPORTION_SOURCE)
             self.assertEqual(result["optional_missing_refs"], ["body_shape"])
@@ -247,6 +264,118 @@ class CharacterReferencePackTests(unittest.TestCase):
                         overwrite=False,
                         progress=SILENT_STATUS,
                     )
+
+    def test_parse_character_edit_plan_uses_vlm_selected_refs_and_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            refs = {
+                "ref_front": root / "front.png",
+                "ref_face": root / "face.png",
+                "ref_side": root / "side.png",
+            }
+            write_image(refs["ref_front"], (96, 144), (200, 50, 50))
+            write_image(refs["ref_face"], (96, 96), (50, 200, 50))
+            write_image(refs["ref_side"], (80, 144), (50, 50, 200))
+            build_character_reference_pack(
+                character_id="subject",
+                references=refs,
+                output_dir=root / "references",
+                overwrite=False,
+            )
+            pack_path = root / "references" / "reference_pack.json"
+
+            with patch("aigen.character_reference_pack.QwenVlm", FakeReferenceParser):
+                parse_character_reference_pack(
+                    pack_path,
+                    parser_config(root),
+                    output_path=None,
+                    overwrite=False,
+                    progress=SILENT_STATUS,
+                )
+            profile_payload = json.loads((root / "references" / "identity_profile.json").read_text(encoding="utf-8"))
+            loaded_pack = load_completed_character_reference_pack(
+                json.loads(pack_path.read_text(encoding="utf-8")),
+                path_label=pack_path.as_posix(),
+            )
+            loaded_profile = load_completed_character_identity_profile(
+                profile_payload,
+                path_label=(root / "references" / "identity_profile.json").as_posix(),
+            )
+            runner = FakeEditInstructionParser(
+                {
+                    "selected_refs": ["ref_side", "ref_face"],
+                    "edit_instruction": "model-authored edit instruction",
+                }
+            )
+
+            result = parse_character_edit_plan(
+                runner=runner,
+                pack=loaded_pack,
+                reference_paths={name: path for name, path in refs.items()},
+                identity_profile=loaded_profile,
+                case_name="right_profile",
+                user_instruction="right side profile",
+                path_label="test#right_profile",
+            )
+
+            self.assertEqual(result.selected_refs, ("ref_side", "ref_face"))
+            self.assertEqual(result.edit_instruction, "model-authored edit instruction")
+            self.assertEqual([path.name for path in runner.image_paths], ["face.png", "front.png", "side.png"])
+            self.assertIn("The user's requested edit is exactly: 'right side profile'.", runner.prompt)
+            self.assertIn("reference id ref_side, inferred role side", runner.prompt)
+            self.assertIn("Qwen Image Edit accepts one to three selected reference images", runner.prompt)
+
+    def test_parse_character_edit_plan_rejects_unknown_vlm_selected_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            refs = {"ref_front": root / "front.png"}
+            write_image(refs["ref_front"], (96, 144), (200, 50, 50))
+            build_character_reference_pack(
+                character_id="subject",
+                references=refs,
+                output_dir=root / "references",
+                overwrite=False,
+            )
+            pack_path = root / "references" / "reference_pack.json"
+            profile_payload = {
+                "status": "completed",
+                "kind": "character-identity-profile",
+                "character_id": "subject",
+                "source_reference_pack": pack_path.as_posix(),
+                "identity": {"hair": "model-extracted hair fact"},
+                "body_proportion": body_proportion_payload(evidence_refs=["ref_front"]),
+                "body_proportion_source": CHARACTER_BODY_PROPORTION_SOURCE,
+                "reference_roles": {"ref_front": "front"},
+                "optional_missing_refs": ["body_shape"],
+                "must_preserve": ["model-extracted visual invariant"],
+                "avoid": [],
+                "parser": {"id": "fake-parser"},
+                "output": {"identity_profile": (root / "references" / "identity_profile.json").as_posix()},
+            }
+            loaded_pack = load_completed_character_reference_pack(
+                json.loads(pack_path.read_text(encoding="utf-8")),
+                path_label=pack_path.as_posix(),
+            )
+            loaded_profile = load_completed_character_identity_profile(
+                profile_payload,
+                path_label="identity_profile.json",
+            )
+
+            with self.assertRaises(CharacterReferenceError):
+                parse_character_edit_plan(
+                    runner=FakeEditInstructionParser(
+                        {
+                            "selected_refs": ["missing_ref"],
+                            "edit_instruction": "model-authored edit instruction",
+                        }
+                    ),
+                    pack=loaded_pack,
+                    reference_paths=refs,
+                    identity_profile=loaded_profile,
+                    case_name="front",
+                    user_instruction="front",
+                    path_label="test#front",
+                )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -18,6 +19,7 @@ from aigen.generation.qwen_image_edit_identity import (
     _run_qwen_identity_denoise_step,
 )
 from aigen.progress import SILENT_STATUS
+from aigen.vlm_qwen import QwenVlmConfig
 
 
 def write_image(path: Path, size: tuple[int, int], color: tuple[int, int, int]) -> None:
@@ -69,6 +71,45 @@ def write_identity_profile(
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def vlm_config(root: Path) -> QwenVlmConfig:
+    return QwenVlmConfig(
+        judge_id="qwen2.5-vl-7b",
+        model=root / "models" / "qwen",
+        repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
+        revision="test-revision",
+        dtype="bfloat16",
+        attention_impl="sdpa",
+        quantization="bitsandbytes-8bit",
+        min_pixels=1,
+        max_pixels=1024,
+        max_new_tokens=600,
+        temperature=0.0,
+    )
+
+
+class FakeEditInstructionNormalizer:
+    last: FakeEditInstructionNormalizer
+    response: dict[str, object] = {
+        "selected_refs": ["image_a", "image_b"],
+        "edit_instruction": "VLM-authored right profile instruction",
+    }
+
+    def __init__(self, _config: QwenVlmConfig) -> None:
+        type(self).last = self
+        self.prompts: list[str] = []
+        self.image_paths: list[list[Path]] = []
+        self.device_report = {"all": [{"device": "cuda:0"}]}
+        self.closed = False
+
+    def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
+        self.prompts.append(prompt)
+        self.image_paths.append(image_paths)
+        return json.dumps(type(self).response)
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class CharacterQwenEditTests(unittest.TestCase):
     def test_qwen_edit_run_cli_accepts_plan_model_flag(self) -> None:
         args = build_parser().parse_args(
@@ -118,54 +159,61 @@ class CharacterQwenEditTests(unittest.TestCase):
                 optional_missing_refs=["body_shape"],
             )
 
-            plan = plan_qwen_character_edit(
-                pack_path=pack_path,
-                identity_profile_path=None,
-                cases=["right_profile"],
-                instruction="same character",
-                candidates_per_case=2,
-                progress=SILENT_STATUS,
-            )
+            with patch("aigen.character_qwen_edit.QwenVlm", FakeEditInstructionNormalizer):
+                plan = plan_qwen_character_edit(
+                    pack_path=pack_path,
+                    identity_profile_path=None,
+                    vlm_config=vlm_config(root),
+                    cases=["right_profile"],
+                    instruction="right side profile",
+                    candidates_per_case=2,
+                    progress=SILENT_STATUS,
+                )
 
             case = plan["cases"][0]
             self.assertNotIn("reference_analysis", plan)
-            self.assertEqual(case["refs_used"], ["image_a", "image_b", "image_c"])
+            self.assertEqual(case["refs_used"], ["image_a", "image_b"])
             normalized_instruction = case["normalized_instruction"]
-            self.assertEqual(normalized_instruction["required_roles"], ["side", "portrait", "front"])
-            self.assertEqual(normalized_instruction["view_anchor_role"], "side")
-            self.assertEqual(normalized_instruction["view_anchor_ref"], "image_a")
-            self.assertEqual(normalized_instruction["view_anchor_input_index"], 1)
+            self.assertCountEqual(normalized_instruction["planner_input_refs"], ["image_a", "image_b", "image_c"])
+            self.assertEqual(normalized_instruction["refs_used"], ["image_a", "image_b"])
+            self.assertEqual(normalized_instruction["instruction_request"], "right side profile")
+            self.assertEqual(normalized_instruction["edit_instruction_source"], "qwen_vlm_edit_planner")
+            self.assertEqual(normalized_instruction["edit_instruction"], "VLM-authored right profile instruction")
             self.assertEqual(
-                normalized_instruction["reference_purposes"][0],
+                json.loads(normalized_instruction["edit_planner_raw_response"]),
                 {
-                    "role": "side",
-                    "reference_id": "image_a",
-                    "input_index": 1,
-                    "purpose": "primary camera angle and side-body geometry anchor",
+                    "selected_refs": ["image_a", "image_b"],
+                    "edit_instruction": "VLM-authored right profile instruction",
                 },
             )
-            self.assertIn("strict right side profile", normalized_instruction["view_constraints"])
-            self.assertIn(
-                "entire head-to-toe character remains fully visible with a small background margin",
-                normalized_instruction["view_constraints"],
-            )
+            self.assertNotIn("reference_purposes", normalized_instruction)
+            self.assertNotIn("view_constraints", normalized_instruction)
+            self.assertNotIn("camera", normalized_instruction)
+            self.assertNotIn("anchor_ref", normalized_instruction)
+            self.assertNotIn("support_refs", normalized_instruction)
             self.assertEqual(case["body_proportion_source"], CHARACTER_BODY_PROPORTION_SOURCE)
             self.assertEqual(case["optional_missing_refs"], ["body_shape"])
             self.assertEqual(
                 normalized_instruction["body_proportion"]["do_not_change"],
                 ["model-extracted body invariant"],
             )
-            self.assertIn("model-extracted body invariant", case["prompt"])
-            self.assertIn("Camera/view anchor: input image 1 (image_a, role side)", case["prompt"])
-            self.assertIn("entire head-to-toe character remains fully visible", case["prompt"])
-            self.assertIn("do not produce a front-facing or three-quarter view", case["prompt"])
+            self.assertEqual(case["prompt"], "VLM-authored right profile instruction")
+            runner = FakeEditInstructionNormalizer.last
+            self.assertTrue(runner.closed)
+            self.assertEqual(len(runner.image_paths), 1)
+            self.assertCountEqual(
+                [path.name for path in runner.image_paths[0]],
+                ["side.png", "portrait.png", "front.png"],
+            )
+            self.assertIn("The user's requested edit is exactly: 'right side profile'.", runner.prompts[0])
+            self.assertIn("Available reference ids are exactly: image_a, image_b, image_c.", runner.prompts[0])
 
-    def test_qwen_edit_plan_rejects_duplicate_inferred_roles(self) -> None:
+    def test_qwen_edit_plan_rejects_unknown_vlm_selected_ref(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             refs = {
-                "image_a": root / "side-a.png",
-                "image_b": root / "side-b.png",
+                "image_a": root / "side.png",
+                "image_b": root / "portrait.png",
                 "image_c": root / "front.png",
             }
             write_image(refs["image_a"], (80, 144), (50, 50, 200))
@@ -183,23 +231,33 @@ class CharacterQwenEditTests(unittest.TestCase):
                 pack_path=pack_path,
                 reference_roles={
                     "image_a": "side",
-                    "image_b": "side",
+                    "image_b": "portrait",
                     "image_c": "front",
                 },
                 optional_missing_refs=["body_shape"],
             )
 
-            with self.assertRaises(QwenCharacterEditError):
-                plan_qwen_character_edit(
-                    pack_path=pack_path,
-                    identity_profile_path=None,
-                    cases=["right_profile"],
-                    instruction=None,
-                    candidates_per_case=2,
-                    progress=SILENT_STATUS,
-                )
+            previous = FakeEditInstructionNormalizer.response
+            FakeEditInstructionNormalizer.response = {
+                "selected_refs": ["missing"],
+                "edit_instruction": "bad plan",
+            }
+            try:
+                with patch("aigen.character_qwen_edit.QwenVlm", FakeEditInstructionNormalizer):
+                    with self.assertRaises(QwenCharacterEditError):
+                        plan_qwen_character_edit(
+                            pack_path=pack_path,
+                            identity_profile_path=None,
+                            vlm_config=vlm_config(root),
+                            cases=["right_profile"],
+                            instruction=None,
+                            candidates_per_case=2,
+                            progress=SILENT_STATUS,
+                        )
+            finally:
+                FakeEditInstructionNormalizer.response = previous
 
-    def test_qwen_edit_canvas_uses_view_anchor_reference_aspect_ratio(self) -> None:
+    def test_qwen_edit_canvas_uses_first_selected_reference_aspect_ratio(self) -> None:
         class FakeCuda:
             @staticmethod
             def is_available() -> bool:
