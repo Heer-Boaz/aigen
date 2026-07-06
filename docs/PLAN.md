@@ -24,6 +24,77 @@ models. Our pipeline must have that same property: the intelligence lives in
 the models; our code only routes images, instructions and conditioning between
 them.
 
+Research note to convert into a real implementation plan later:
+
+> Based on the official PixAI documentation of Edit Pro's architecture, here's
+> the analysis:
+>
+> What Edit Pro Likely Does
+> Yes, multi-stage analysis typically happens in advanced editors like Edit Pro.
+> Here's the probable order:
+>
+> Stage 1 — Global Scene Understanding VLM parses the whole image, identifies
+> main subjects (characters), background, composition. Gets the "big picture."
+>
+> Stage 2 — Component/Region Parsing The VLM then segments the character into
+> parts — face, hair, clothing items like jacket, bow, boots. This is what
+> enables "precise controllable local edits without breaking composition."
+>
+> Stage 3 — Feature Extraction per Component Each region gets its own feature
+> embedding — the ribbon bow's shape, color, position is captured separately
+> from the boots' leather texture, buckle details, etc.
+>
+> Stage 4 — Cross-Reference Alignment Multi-image input: matches components
+> across uploaded references. So if your bow in Image 1 should match the bow in
+> Image 2, it aligns those features.
+>
+> Practical Implication for Your Prompts
+> For Edit Pro to preserve specific details across edits, your prompts benefit
+> when:
+>
+> ✓ What helps:
+>
+> Naming specific components explicitly: "keep the blue ribbon bow, brown
+> leather jacket, buckle-strap boots"
+> Describing relationships: "swap the jacket but keep the bow and boots
+> unchanged"
+> Highlighting easily-confused elements: "flat knee-length skirt with side
+> pleats" (specific shape over generic)
+> Color + material + shape combinations: "satin-finish blue ribbon bow" vs just
+> "blue bow"
+> ✗ What doesn't help as much:
+>
+> Overloading vague adjectives ("nice outfit," "cool style")
+> Mentioning things you want added or removed with negations — describe what
+> should be in the final image instead
+> Forcing fine details Edit Pro cannot reasonably preserve (tiny logo placement,
+> subtle fabric patterns)
+> For Your Jillian Seed Context
+> When using Edit Pro for Jillian, your prompts should explicitly mention her
+> signature components:
+>
+>
+> Keep the brown leather jacket with silver hardware, white collared shirt,
+> large blue ribbon bow tie, blue thigh-high stockings, brown leather boots
+> with buckle straps, and short brown hair with blue eyes.
+> These explicit markers help the VLM correctly parse which component is which
+> when it generates the edit. Vague prompts like "the detective outfit" force
+> the model to guess what that means.
+>
+> Counter-Point
+> Edit Pro is trained on large volumes of fashion/character data. Common
+> clothing types (jacket, boots) get parsed well automatically. The
+> detail-matters-most when:
+>
+> The component is unusual (your oversized blue ribbon bow is signature)
+> Multiple similar items exist (which "bow" do you mean?)
+> Survival across edits is critical (user might regenerate 5 times)
+> So for signature pieces like Jillian's bow — name them. For generic
+> jeans/boots — less necessary.
+>
+> Think of it like labeling a diagram: the more specific the VLM's component
+> labels, the better downstream quality.
+
 ## Golden rule: character-agnostic code
 
 Pipeline code contains **zero character-specific content**. Every fact about a
