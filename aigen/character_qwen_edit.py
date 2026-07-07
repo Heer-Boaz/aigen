@@ -6,6 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aigen.character_instruction_models import (
+    CharacterInstructionError,
+    CharacterInstructionPlanSpec,
+    InstructionEnvelopeSpec,
+)
+from aigen.character_instruction_parser import (
+    CharacterInstructionParser,
+    CharacterInstructionParserConfig,
+    character_instruction_parser_config_json,
+)
 from aigen.character_reference_models import (
     CharacterReferenceError,
     CharacterReferencePackSpec,
@@ -19,6 +29,7 @@ from aigen.generation.qwen_image_edit_identity import (
 )
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 from aigen.progress import StatusReporter
+from aigen.text_llm import TextLlmError
 from aigen.vlm_qwen import QwenVlm, QwenVlmConfig, qwen_vlm_config_json
 
 
@@ -83,6 +94,7 @@ def qwen_character_edit_case_names() -> tuple[str, ...]:
 def plan_qwen_character_edit(
     *,
     pack_path: Path,
+    instruction_parser_config: CharacterInstructionParserConfig,
     vlm_config: QwenVlmConfig,
     cases: Sequence[str],
     instruction: str | None,
@@ -93,6 +105,7 @@ def plan_qwen_character_edit(
         "status": "planned",
         **_build_qwen_character_edit_plan(
             pack_path=pack_path,
+            instruction_parser_config=instruction_parser_config,
             vlm_config=vlm_config,
             cases=cases,
             instruction=instruction,
@@ -107,6 +120,7 @@ def run_qwen_character_edit(
     pack_path: Path,
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
+    instruction_parser_config: CharacterInstructionParserConfig,
     vlm_config: QwenVlmConfig,
     cases: Sequence[str],
     instruction: str | None,
@@ -123,6 +137,7 @@ def run_qwen_character_edit(
 ) -> dict[str, Any]:
     planned = _build_qwen_character_edit_plan(
         pack_path=pack_path,
+        instruction_parser_config=instruction_parser_config,
         vlm_config=vlm_config,
         cases=cases,
         instruction=instruction,
@@ -158,6 +173,7 @@ def run_qwen_character_edit(
 def _build_qwen_character_edit_plan(
     *,
     pack_path: Path,
+    instruction_parser_config: CharacterInstructionParserConfig,
     vlm_config: QwenVlmConfig,
     cases: Sequence[str],
     instruction: str | None,
@@ -172,6 +188,8 @@ def _build_qwen_character_edit_plan(
         phase="load qwen character edit reference pack",
     )
     templates = _selected_templates(cases)
+    progress.phase("parse qwen character user instruction")
+    instruction_parser = CharacterInstructionParser(instruction_parser_config)
     progress.phase("plan qwen character edit with VLM")
     with closing(QwenVlm(vlm_config)) as runner:
         edit_cases = tuple(
@@ -179,6 +197,7 @@ def _build_qwen_character_edit_plan(
                 template=template,
                 context=context,
                 instruction=instruction,
+                instruction_parser=instruction_parser,
                 runner=runner,
             )
             for template in templates
@@ -194,6 +213,7 @@ def _build_qwen_character_edit_plan(
             edit_cases=edit_cases,
             candidates_per_case=candidates_per_case,
             instruction=instruction,
+            instruction_parser=character_instruction_parser_config_json(instruction_parser.config),
             edit_planner=edit_planner,
         ),
     )
@@ -257,9 +277,20 @@ def _planned_case(
     template: QwenCharacterEditCaseTemplate,
     context: QwenCharacterReferenceContext,
     instruction: str | None,
+    instruction_parser: CharacterInstructionParser,
     runner: QwenVlm,
 ) -> QwenIdentityCase:
     instruction_request = _instruction_request(template, instruction)
+    try:
+        instruction_plan = instruction_parser.parse(
+            _instruction_envelope(
+                template=template,
+                context=context,
+                instruction_request=instruction_request,
+            )
+        )
+    except (CharacterInstructionError, TextLlmError) as error:
+        raise QwenCharacterEditError(str(error)) from error
     try:
         planned = parse_character_edit_plan(
             runner=runner,
@@ -267,6 +298,7 @@ def _planned_case(
             reference_paths=context.reference_paths,
             case_name=template.name,
             user_instruction=instruction_request,
+            instruction_plan=instruction_plan.model_dump(mode="json"),
             path_label=f"{context.pack_path.as_posix()}#{template.name}",
         )
     except CharacterReferenceError as error:
@@ -276,6 +308,7 @@ def _planned_case(
         reference_ids=planned.selected_refs,
         source_instruction=instruction,
         instruction_request=instruction_request,
+        instruction_plan=instruction_plan,
         edit_instruction=planned.edit_instruction,
         edit_planner_raw_response=planned.raw_text,
         selected_planner_refs=planned.selected_planner_refs,
@@ -296,12 +329,34 @@ def _instruction_request(template: QwenCharacterEditCaseTemplate, instruction: s
     return template.name
 
 
+def _instruction_envelope(
+    *,
+    template: QwenCharacterEditCaseTemplate,
+    context: QwenCharacterReferenceContext,
+    instruction_request: str,
+) -> InstructionEnvelopeSpec:
+    return InstructionEnvelopeSpec(
+        raw_instruction=instruction_request,
+        ui_mode="reference_conditioned_generation",
+        reference_count=len(context.pack.references),
+        source_image_present=False,
+        mask_present=False,
+        region_plan_present=False,
+        generation_panel_settings={"case": template.name},
+        requested_model_family="qwen-image-edit",
+        negative_prompt_present=False,
+        aspect_ratio_setting=None,
+        seed_setting=None,
+    )
+
+
 def _normalized_instruction(
     *,
     template: QwenCharacterEditCaseTemplate,
     reference_ids: Sequence[str],
     source_instruction: str | None,
     instruction_request: str,
+    instruction_plan: CharacterInstructionPlanSpec,
     edit_instruction: str,
     edit_planner_raw_response: str,
     selected_planner_refs: Sequence[str],
@@ -318,6 +373,7 @@ def _normalized_instruction(
         "refs_used": list(reference_ids),
         "source_instruction": source_instruction,
         "instruction_request": instruction_request,
+        "instruction_plan": instruction_plan.model_dump(mode="json"),
         "edit_instruction_source": "qwen_vlm_edit_planner",
         "edit_instruction": edit_instruction,
         "edit_planner_raw_response": edit_planner_raw_response,
@@ -340,6 +396,7 @@ def _plan_manifest(
     edit_cases: Sequence[QwenIdentityCase],
     candidates_per_case: int,
     instruction: str | None,
+    instruction_parser: Mapping[str, Any],
     edit_planner: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
@@ -347,7 +404,8 @@ def _plan_manifest(
         "character_id": pack.character_id,
         "reference_pack": pack_path.as_posix(),
         "source_instruction": instruction,
-        "normalizer": "qwen_vlm_edit_planner_v2",
+        "normalizer": "text_instruction_parser_plus_qwen_vlm_edit_planner_v1",
+        "instruction_parser": dict(instruction_parser),
         "edit_planner": dict(edit_planner),
         "reference_selector": "qwen_vlm_selected_refs_v1",
         "candidates_per_case": candidates_per_case,

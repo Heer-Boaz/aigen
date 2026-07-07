@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any, TextIO
 
+from aigen.character_instruction_parser import CharacterInstructionParserConfig
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import (
     build_character_reference_pack,
@@ -59,6 +60,7 @@ from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT, keyframe_profile_for_name
+from aigen.text_llm import TextLlmConfig
 from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
@@ -69,6 +71,87 @@ from aigen.vlm_qwen import (
     QwenVlmConfig,
     QwenVlmError,
 )
+
+
+DEFAULT_INSTRUCTION_PARSER_ID = "qwen3-8b-instruction-parser"
+DEFAULT_INSTRUCTION_PARSER_ENDPOINT = "http://127.0.0.1:8000/v1/chat/completions"
+DEFAULT_INSTRUCTION_PARSER_MODEL = "Qwen/Qwen3-8B"
+DEFAULT_INSTRUCTION_PARSER_API_KEY_ENV = "AIGEN_INSTRUCTION_PARSER_API_KEY"
+
+
+def add_instruction_parser_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--instruction-parser",
+        default=DEFAULT_INSTRUCTION_PARSER_ID,
+        help="Text instruction parser id recorded in outputs",
+    )
+    parser.add_argument(
+        "--instruction-parser-endpoint",
+        default=DEFAULT_INSTRUCTION_PARSER_ENDPOINT,
+        help="OpenAI-compatible chat completions endpoint for step-1 instruction parsing",
+    )
+    parser.add_argument(
+        "--instruction-parser-model",
+        default=DEFAULT_INSTRUCTION_PARSER_MODEL,
+        help="Text model name for step-1 instruction parsing",
+    )
+    parser.add_argument(
+        "--instruction-parser-server",
+        choices=("vllm", "llama.cpp", "openai-compatible"),
+        default="vllm",
+        help="OpenAI-compatible server behavior for parser request options",
+    )
+    parser.add_argument(
+        "--instruction-parser-api-key-env",
+        default=DEFAULT_INSTRUCTION_PARSER_API_KEY_ENV,
+        help="Environment variable containing the parser endpoint bearer token, when needed",
+    )
+    parser.add_argument(
+        "--instruction-parser-timeout",
+        type=float,
+        default=60.0,
+        help="Step-1 parser HTTP timeout in seconds",
+    )
+    parser.add_argument(
+        "--instruction-parser-max-new-tokens",
+        type=int,
+        default=700,
+        help="Step-1 parser response token budget",
+    )
+    parser.add_argument(
+        "--instruction-parser-temperature",
+        type=float,
+        default=0.0,
+        help="Step-1 parser sampling temperature",
+    )
+    parser.add_argument(
+        "--instruction-parser-structured-output",
+        choices=("json_object", "json_schema", "none"),
+        default="json_object",
+        help="Structured-output mode requested from the parser endpoint",
+    )
+    parser.add_argument(
+        "--instruction-parser-enable-thinking",
+        action="store_true",
+        help="Enable Qwen thinking mode for the parser; default is non-thinking",
+    )
+
+
+def instruction_parser_config_from_args(args: argparse.Namespace) -> CharacterInstructionParserConfig:
+    return CharacterInstructionParserConfig(
+        text_llm=TextLlmConfig(
+            parser_id=args.instruction_parser,
+            endpoint=args.instruction_parser_endpoint,
+            model=args.instruction_parser_model,
+            server_family=args.instruction_parser_server,
+            api_key_env=args.instruction_parser_api_key_env,
+            timeout_seconds=args.instruction_parser_timeout,
+            max_new_tokens=args.instruction_parser_max_new_tokens,
+            temperature=args.instruction_parser_temperature,
+            structured_output=args.instruction_parser_structured_output,
+            enable_thinking=args.instruction_parser_enable_thinking,
+        )
+    )
 
 
 def add_edit_planner_vlm_args(parser: argparse.ArgumentParser) -> None:
@@ -245,6 +328,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--instruction",
         help="Optional user request for the VLM edit planner; defaults to the selected case name",
     )
+    add_instruction_parser_args(qwen_edit_plan)
     add_edit_planner_vlm_args(qwen_edit_plan)
     qwen_edit_plan.add_argument("--candidates", type=int, default=2, help="Candidates per case")
     qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -264,6 +348,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--instruction",
         help="Optional user request for the VLM edit planner; defaults to the selected case name",
     )
+    add_instruction_parser_args(qwen_edit)
     add_edit_planner_vlm_args(qwen_edit)
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
@@ -530,6 +615,7 @@ def run_character_command(
                 stdout,
                 plan_qwen_character_edit(
                     pack_path=args.pack,
+                    instruction_parser_config=instruction_parser_config_from_args(args),
                     vlm_config=edit_planner_vlm_config_from_args(args),
                     cases=args.case or (),
                     instruction=args.instruction,
@@ -546,6 +632,7 @@ def run_character_command(
                     pack_path=args.pack,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
+                    instruction_parser_config=instruction_parser_config_from_args(args),
                     vlm_config=edit_planner_vlm_config_from_args(args),
                     cases=args.case or (),
                     instruction=args.instruction,

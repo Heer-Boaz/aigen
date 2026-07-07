@@ -8,10 +8,13 @@ from unittest.mock import patch
 
 from PIL import Image
 
+from aigen.character_instruction_models import CharacterInstructionPlanSpec, InstructionEnvelopeSpec
+from aigen.character_instruction_parser import CharacterInstructionParserConfig
 from aigen.character_qwen_edit import plan_qwen_character_edit
 from aigen.character_reference_pack import build_character_reference_pack
 from aigen.cli import build_parser
 from aigen.progress import SILENT_STATUS
+from aigen.text_llm import TextLlmConfig
 from aigen.vlm_qwen import QwenVlmConfig
 
 
@@ -34,6 +37,70 @@ def vlm_config(root: Path) -> QwenVlmConfig:
         max_new_tokens=600,
         temperature=0.0,
     )
+
+
+def instruction_parser_config() -> CharacterInstructionParserConfig:
+    return CharacterInstructionParserConfig(
+        text_llm=TextLlmConfig(
+            parser_id="fake-text-parser",
+            endpoint="http://127.0.0.1:8000/v1/chat/completions",
+            model="Qwen/Qwen3-8B",
+            server_family="vllm",
+            api_key_env="AIGEN_TEST_KEY",
+            timeout_seconds=1.0,
+            max_new_tokens=700,
+            temperature=0.0,
+            structured_output="json_object",
+            enable_thinking=False,
+        )
+    )
+
+
+class FakeInstructionParser:
+    last: FakeInstructionParser
+
+    def __init__(self, config: CharacterInstructionParserConfig) -> None:
+        type(self).last = self
+        self.config = config
+        self.envelopes: list[InstructionEnvelopeSpec] = []
+
+    def parse(self, envelope: InstructionEnvelopeSpec) -> CharacterInstructionPlanSpec:
+        self.envelopes.append(envelope)
+        return CharacterInstructionPlanSpec(
+            kind="character-instruction-plan",
+            raw_instruction=envelope.raw_instruction,
+            normalized_instruction_text=envelope.raw_instruction,
+            envelope=envelope,
+            language="en",
+            task_family="reference_character_portrait",
+            edit_scope="global",
+            subject_binding={
+                "kind": "referenced_character",
+                "reference_mentions": ["referenced images"],
+                "note": "use referenced character",
+            },
+            target_constraints={
+                "framing": ["right side profile"],
+                "camera_view": [],
+                "pose": [],
+                "gaze": [],
+                "expression": [],
+                "lighting": [],
+                "background": [],
+                "explicit_style_or_role": [],
+                "scene": [],
+                "action": [],
+                "mood_or_personality": [],
+                "composition": [],
+                "text_or_logo": [],
+            },
+            named_external_concepts=[],
+            downstream_requirements=["visual_identity_analysis", "multi_reference_alignment"],
+            ambiguities=[],
+            conflicts=[],
+            parser={"id": "fake-text-parser"},
+            raw_model_response={},
+        )
 
 
 class FakeEditPlanner:
@@ -98,9 +165,13 @@ class CharacterQwenEditTests(unittest.TestCase):
             )
             pack_path = root / "references" / "reference_pack.json"
 
-            with patch("aigen.character_qwen_edit.QwenVlm", FakeEditPlanner):
+            with (
+                patch("aigen.character_qwen_edit.CharacterInstructionParser", FakeInstructionParser),
+                patch("aigen.character_qwen_edit.QwenVlm", FakeEditPlanner),
+            ):
                 plan = plan_qwen_character_edit(
                     pack_path=pack_path,
+                    instruction_parser_config=instruction_parser_config(),
                     vlm_config=vlm_config(root),
                     cases=["right_profile"],
                     instruction="right side profile",
@@ -111,6 +182,12 @@ class CharacterQwenEditTests(unittest.TestCase):
             case = plan["cases"][0]
             self.assertEqual(case["refs_used"], ["asset_a", "asset_b"])
             self.assertEqual(case["prompt"], "VLM-authored right profile instruction")
+            self.assertEqual(case["normalized_instruction"]["instruction_plan"]["subject_binding"]["kind"], "referenced_character")
+            self.assertIn(
+                "visual_identity_analysis",
+                case["normalized_instruction"]["instruction_plan"]["downstream_requirements"],
+            )
+            self.assertEqual(FakeInstructionParser.last.envelopes[0].reference_count, 3)
             runner = FakeEditPlanner.last
             self.assertTrue(runner.closed)
             self.assertEqual(len(runner.image_paths[0]), 3)
