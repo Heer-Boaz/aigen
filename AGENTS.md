@@ -52,5 +52,3 @@ code change is needed, the code is wrong.
   Qwen-Image-Edit-2509 FP4/r32; escalation ladder in `docs/PLAN.md`.
 - FLUX/Kontext remains a separate pipeline next to Qwen edit; do not merge the
   two.
-- The human judges candidate quality via contact sheets; no model is the final
-  filter.

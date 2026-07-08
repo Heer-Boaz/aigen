@@ -313,7 +313,13 @@ def _edit_plan_parser_prompt(
     )
     reference_id_list = ", ".join(planner_reference_map)
     planner_context_json = json.dumps(planner_context, indent=2, sort_keys=True)
-    return f"""You are step 3, the route-aware visual reference planner for a local character image-edit pipeline.
+    return f"""You are the route-aware visual reference planner for a local character image-edit pipeline.
+In this single Qwen2.5-VL call, execute PixAI core steps 3 through 7:
+3. Encode all supplied reference images into compact visual evidence.
+4. Identify the relevant subject or subjects for the requested task.
+5. Extract task-relevant visual components from the references.
+6. Align the same components across references.
+7. Choose which components matter for this specific output.
 
 Images are supplied in this exact order:
 {reference_lines}
@@ -329,11 +335,10 @@ Planner context before image analysis:
 Your job:
 1. Look at all supplied images yourself.
 2. Use the planner context only as task focus and routing intent.
-3. Identify which reference images are visually useful for this task.
-4. Select 1 to 3 references for Qwen Image Edit.
+3. Write compact visual_analysis that explicitly covers reference encoding, subject mapping, component evidence, cross-reference alignment, and output component priorities.
+4. Select 1 to 3 references for Qwen Image Edit after that visual analysis.
 5. Write concise reference_semantics for the selected or relevant references.
-6. Write a compact visual_analysis object explaining the visual planning decision.
-7. Write one concise edit_instruction for Qwen Image Edit.
+6. Write one concise edit_instruction for Qwen Image Edit.
 
 Rules:
 - The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
@@ -352,15 +357,50 @@ Return exactly one JSON object with this shape:
     "reference id from the available reference id list": "short semantic label inferred from that image"
   }},
   "visual_analysis": {{
-    "global_reference_summary": "short summary",
-    "route_focus": "short task-specific focus",
-    "selected_reference_reasoning": [
+    "reference_encoding_summary": {{
+      "reference1": "short visual summary of this supplied image"
+    }},
+    "subject_map": {{
+      "primary_subject": {{
+        "evidence_refs": [
+          "reference1"
+        ],
+        "notes": "short subject-identification note"
+      }}
+    }},
+    "component_evidence": [
       {{
-        "reference": "reference1",
-        "reason": "short reason"
+        "component": "short component name",
+        "evidence_refs": [
+          "reference1"
+        ],
+        "task_relevance": "high, medium, or low",
+        "visibility": "clear, partial, or unclear"
       }}
     ],
-    "deferred_conditioning": []
+    "cross_reference_alignment": [
+      {{
+        "component": "short component name",
+        "aligned_refs": [
+          "reference1"
+        ],
+        "anchor_ref": "reference1",
+        "supporting_refs": [],
+        "conflicts": [],
+        "confidence": "high, medium, or low"
+      }}
+    ],
+    "output_component_priorities": [
+      {{
+        "component": "short component name",
+        "priority": "high, medium, or low",
+        "reason": "short task-specific reason"
+      }}
+    ],
+    "low_priority_components_for_this_output": [
+      "short component name"
+    ],
+    "unresolved_alignment_questions": []
   }},
   "edit_instruction": "one concise instruction"
 }}
@@ -369,7 +409,7 @@ Validation:
 - selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
 - selected_refs order is the order the image editor will receive the images.
 - reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
-- visual_analysis is a compact freeform JSON object for audit; keep it short.
+- visual_analysis is a compact freeform JSON object for audit; use the listed step-3-through-7 keys when they apply and keep values short.
 - edit_instruction must be a single non-empty string.
 """
 

@@ -109,13 +109,50 @@ class FakeEditPlanner:
         "selected_refs": ["reference1", "reference2"],
         "reference_semantics": {"reference1": "VLM semantic label", "reference2": "VLM semantic label"},
         "visual_analysis": {
-            "global_reference_summary": "fake planner saw three neutral references",
-            "route_focus": "fake portrait route focus",
-            "selected_reference_reasoning": [
-                {"reference": "reference1", "reason": "fake useful identity evidence"},
-                {"reference": "reference2", "reason": "fake useful view evidence"},
+            "reference_encoding_summary": {
+                "reference1": "fake visual summary",
+                "reference2": "fake visual summary",
+                "reference3": "fake visual summary",
+            },
+            "subject_map": {
+                "primary_subject": {
+                    "evidence_refs": ["reference1", "reference2"],
+                    "notes": "fake subject mapping",
+                }
+            },
+            "component_evidence": [
+                {
+                    "component": "face",
+                    "evidence_refs": ["reference1", "reference2"],
+                    "task_relevance": "high",
+                    "visibility": "clear",
+                },
+                {
+                    "component": "lower body",
+                    "evidence_refs": ["reference3"],
+                    "task_relevance": "low",
+                    "visibility": "partial",
+                },
             ],
-            "deferred_conditioning": [],
+            "cross_reference_alignment": [
+                {
+                    "component": "face",
+                    "aligned_refs": ["reference1", "reference2"],
+                    "anchor_ref": "reference2",
+                    "supporting_refs": ["reference1"],
+                    "conflicts": [],
+                    "confidence": "high",
+                }
+            ],
+            "output_component_priorities": [
+                {
+                    "component": "face",
+                    "priority": "high",
+                    "reason": "fake close portrait priority",
+                }
+            ],
+            "low_priority_components_for_this_output": ["lower body"],
+            "unresolved_alignment_questions": [],
         },
         "edit_instruction": "VLM-authored right profile instruction",
     }
@@ -200,10 +237,10 @@ class CharacterQwenEditTests(unittest.TestCase):
                 "visual_identity_analysis",
                 case["normalized_instruction"]["instruction_plan"]["downstream_requirements"],
             )
-            self.assertEqual(
-                case["normalized_instruction"]["visual_analysis"]["route_focus"],
-                "fake portrait route focus",
-            )
+            visual_analysis = case["normalized_instruction"]["visual_analysis"]
+            self.assertEqual(visual_analysis["component_evidence"][0]["component"], "face")
+            self.assertEqual(visual_analysis["cross_reference_alignment"][0]["anchor_ref"], "reference2")
+            self.assertEqual(visual_analysis["output_component_priorities"][0]["priority"], "high")
             planner_context = case["normalized_instruction"]["planner_context"]
             self.assertEqual(planner_context["task_route"]["route_kind"], "portrait_identity_generation")
             self.assertNotIn("raw_model_response", planner_context["instruction_context"])
@@ -219,6 +256,8 @@ class CharacterQwenEditTests(unittest.TestCase):
             self.assertEqual(len(runner.image_paths[0]), 3)
             self.assertIn("Planner context before image analysis", runner.prompts[0])
             self.assertIn("portrait_identity_generation", runner.prompts[0])
+            self.assertIn("component_evidence", runner.prompts[0])
+            self.assertIn("cross_reference_alignment", runner.prompts[0])
             self.assertNotIn("raw_model_response", runner.prompts[0])
             self.assertNotIn("endpoint", runner.prompts[0])
 
