@@ -1,222 +1,287 @@
-# AI51 Character Identity Pipeline — Plan
+# AI51 PixAI-Style Character Edit Pipeline Plan
 
 Status: authoritative design document for the PixAI-style character pipeline.
-If a task or instruction conflicts with this file, stop and ask — do not
-silently reinterpret. Hard behavioral rules for agents live in `AGENTS.md`
-at the repo root.
+If a task or instruction conflicts with this file, stop and ask. Do not
+silently reinterpret. Hard behavioral rules for agents live in `AGENTS.md` at
+the repo root.
 
 ## Goal
 
 A local, PixAI-style multi-reference character editing pipeline that runs on a
 16GB GPU (RTX 50-series / Blackwell). Scope:
 
-- character identity (same character across generations)
-- view/camera (front, back, left/right profile, three-quarter, portrait)
-- simple pose; platformer pose later
-- local identity repair (fix bow, skirt back, chest size, boots, face)
+- character identity across generations
+- view/camera changes such as front, back, profile, three-quarter, and portrait
+- simple pose and later platformer/poseplate outputs
+- local identity repair for task-requested regions or components
 
-North star: PixAI Edit Pro can take four reference images plus the single line
-*"Character as shown in referenced images. Generate reference card that
-illustrates the character's proportions as if it were annotated concept-art."*
-and return a near-perfect annotated reference card. All character understanding
-— what each image shows, the proportions, the outfit — happens inside the
-models. Our pipeline must have that same property: the intelligence lives in
-the models; our code only routes images, instructions and conditioning between
-them.
+North star: a PixAI/Edit Pro-like editor can take several reference images plus
+a natural-language request such as "Character as shown in referenced images.
+Close-up face, looking left, neutral expression, white background" and produce
+a result that preserves the referenced character. All character understanding
+comes from models inspecting the supplied images. Code routes images,
+instructions, model choices, and conditioning only.
 
-Research note to convert into a real implementation plan later:
+## Single Leading Map
 
-> Based on the official PixAI documentation of Edit Pro's architecture, here's
-> the analysis:
->
-> What Edit Pro Likely Does
-> Yes, multi-stage analysis typically happens in advanced editors like Edit Pro.
-> Here's the probable order:
->
-> Stage 1 — Global Scene Understanding VLM parses the whole image, identifies
-> main subjects (characters), background, composition. Gets the "big picture."
->
-> Stage 2 — Component/Region Parsing The VLM then segments the character into
-> parts — face, hair, clothing items like jacket, bow, boots. This is what
-> enables "precise controllable local edits without breaking composition."
->
-> Stage 3 — Feature Extraction per Component Each region gets its own feature
-> embedding — the ribbon bow's shape, color, position is captured separately
-> from the boots' leather texture, buckle details, etc.
->
-> Stage 4 — Cross-Reference Alignment Multi-image input: matches components
-> across uploaded references. So if your bow in Image 1 should match the bow in
-> Image 2, it aligns those features.
->
-> Practical Implication for Your Prompts
-> For Edit Pro to preserve specific details across edits, your prompts benefit
-> when:
->
-> ✓ What helps:
->
-> Naming specific components explicitly: "keep the blue ribbon bow, brown
-> leather jacket, buckle-strap boots"
-> Describing relationships: "swap the jacket but keep the bow and boots
-> unchanged"
-> Highlighting easily-confused elements: "flat knee-length skirt with side
-> pleats" (specific shape over generic)
-> Color + material + shape combinations: "satin-finish blue ribbon bow" vs just
-> "blue bow"
-> ✗ What doesn't help as much:
->
-> Overloading vague adjectives ("nice outfit," "cool style")
-> Mentioning things you want added or removed with negations — describe what
-> should be in the final image instead
-> Forcing fine details Edit Pro cannot reasonably preserve (tiny logo placement,
-> subtle fabric patterns)
-> For Your Jillian Seed Context
-> When using Edit Pro for Jillian, your prompts should explicitly mention her
-> signature components:
->
->
-> Keep the brown leather jacket with silver hardware, white collared shirt,
-> large blue ribbon bow tie, blue thigh-high stockings, brown leather boots
-> with buckle straps, and short brown hair with blue eyes.
-> These explicit markers help the VLM correctly parse which component is which
-> when it generates the edit. Vague prompts like "the detective outfit" force
-> the model to guess what that means.
->
-> Counter-Point
-> Edit Pro is trained on large volumes of fashion/character data. Common
-> clothing types (jacket, boots) get parsed well automatically. The
-> detail-matters-most when:
->
-> The component is unusual (your oversized blue ribbon bow is signature)
-> Multiple similar items exist (which "bow" do you mean?)
-> Survival across edits is critical (user might regenerate 5 times)
-> So for signature pieces like Jillian's bow — name them. For generic
-> jeans/boots — less necessary.
->
-> Think of it like labeling a diagram: the more specific the VLM's component
-> labels, the better downstream quality.
-
-## Golden rule: character-agnostic code
-
-Pipeline code contains **zero character-specific content**. Every fact about a
-character (hair, outfit, bow, chest size, silhouette, which image is the back
-view, …) is extracted at runtime by a model from the reference images, or read
-from a model-produced artifact. All JSON examples in this document illustrate
-the *shape* of model output — their values must never appear as constants,
-defaults, prompt fragments or fixtures in code.
-
-**Litmus test:** swap in a completely different character's reference pack. If
-any code change is needed to make the pipeline work, the code is wrong.
-
-## Architecture
+This plan is only for the PixAI core reverse-engineering track.
 
 ```text
-VLM/semantic parser
-→ normalized instruction JSON
-→ task-based reference selection
-→ Nunchaku Qwen-Image-Edit-2509 FP4/r32 (multi-image edit)
-→ Florence-2 / SAM2 / DWPose hidden region/pose conditioning (when needed)
-→ candidate contact sheet → human selection → selected-image refine
+PixAI core reverse-engineering pipeline
+Internal/model pipeline for one heavily conditioned generation.
 ```
 
-### 1. VLM / semantic parser
+Do not add workflow features to this plan. They are not part of the PixAI core
+track.
 
-Purpose: understand the reference images and produce a compact, machine-readable
-character dossier (`identity_profile.json`) that the rest of the pipeline
-consumes.
+## Golden Rule: Character-Agnostic Code
 
-- Model: the locally available Qwen-VL (Qwen2.5-VL class). It is strong at
-  visual recognition, object localization and structured JSON extraction —
-  parser work, not generation.
-- Input: all images in the reference pack (e.g. front, portrait, side, back,
-  optionally body_shape).
-- The VLM infers **itself** what each image is (reference roles). Role metadata
-  in a manifest is optional evidence, never required input.
+Pipeline code contains zero character-specific content. Every fact about a
+character (hair, outfit, body shape, silhouette, which image shows which view,
+and similar facts) is extracted at runtime by a model from the reference images
+or read from a model-produced artifact. JSON examples in this document
+illustrate shape only. Their values must never appear as constants, defaults,
+prompt fragments, or fixtures in code.
 
-Output shape (values below are *illustrations of model output*, never code
-constants):
+Litmus test: swap in a completely different character reference pack. If any
+code change is needed, the code is wrong.
 
-```json
-{
-  "identity": {
-    "hair": "…", "eyes": "…", "neckwear": "…", "top": "…",
-    "bottom": "…", "legwear": "…", "boots": "…", "style": "…"
-  },
-  "body_proportion": {
-    "chest_size": "…", "build": "…", "shoulder_width": "…", "waist": "…",
-    "hip_skirt_silhouette": "…", "side_body_thickness": "…",
-    "leg_proportion": "…", "skirt_back_shape": "…",
-    "do_not_change": ["…"],
-    "evidence_refs": ["…"]
-  },
-  "reference_roles": { "…": "…" }
-}
-```
+## PixAI Core Reverse-Engineering Pipeline
 
-#### body_proportion is a model-extracted invariant
+The PixAI core is the model/pipeline-internal path for a single requested
+output.
 
 ```text
-body_proportion = model-extracted identity invariant
-body_proportion ≠ required reference image role
-body_proportion ≠ generation case
+1. Read user instruction.
+2. Determine target task.
+3. Encode all reference images.
+4. Identify the relevant subject(s).
+5. Extract task-relevant components from references.
+6. Align same components across references.
+7. Choose which components matter for this specific output.
+8. Build a conditioning bundle.
+9. Run one heavily conditioned diffusion/edit generation.
+10. Optionally postprocess, upscale, or filter.
 ```
 
-- The VLM infers body proportion from all available refs.
-- An explicit `body_shape` reference image is **optional extra evidence**: use
-  it when present, never hard-fail when absent.
-- Every generation case consumes `identity_profile.body_proportion` as an
-  invariant.
-- Plan output must show: `refs_used`, `identity_profile_used`,
-  `body_proportion_source: "model_extracted_from_reference_pack"`, and
-  `optional_missing_refs` (e.g. `["body_shape"]`) when applicable — with no
-  hard failure for a missing optional ref.
+### 1. Read User Instruction
 
-A simple geometric measurement layer (segmentation → bbox → ratios) may be
-added **later, as supporting evidence only, and only when explicitly
-requested**. It is never the primary extraction path.
+Purpose: parse the user instruction plus request/UI context. This is text-only.
+It does not inspect reference images and does not add reference-derived visual
+facts.
 
-### 2. Prompt / instruction normalization
-
-The user's prompt stays simple (e.g. `same character, right profile, clean
-background`). The normalizer turns it into an unambiguous structured
-instruction:
-
-```json
-{
-  "task": "identity_edit",
-  "requested_view": "…",
-  "requested_pose": "…",
-  "background": "…",
-  "must_preserve": ["…"],
-  "avoid": ["…"]
-}
-```
-
-`must_preserve` / `avoid` are populated from `identity_profile.json` (model
-output), never hardcoded. No long prompt-craft, no creative reinterpretation —
-structural instruction only.
-
-### 3. Task-based reference selection
-
-Qwen-Image-Edit-2509 states 1–3 input images is currently optimal, so each case
-selects 1–3 refs. The case→role mapping is mechanism-level and may live in
-code (it references *roles*, which the VLM inferred, not characters):
+Input:
 
 ```text
-front            = front + portrait + side
-left_profile     = side + portrait + front
-right_profile    = side + portrait + front
-back             = back + portrait + front
-three_quarter    = front + side + portrait
-platformer_pose  = side + portrait + poseplate/keypoint
-repair           = relevant ref(s) + current image
+raw user instruction
+UI/request context
+generation panel settings
+available input counts
 ```
 
-Every case additionally consumes `identity_profile.body_proportion` (plus
-case-specific invariants such as `skirt_back_shape` for `back`).
+Output:
 
-### 4. Edit diffusion model
+```text
+instruction_plan
+```
 
-First concrete model:
+The plan keeps user-written style, role, scene, action, mood, text, and external
+concept requests. Reference phrases such as "as shown in referenced images" are
+bindings to visual inputs, not character descriptions.
+
+### 2. Determine Target Task
+
+Purpose: route the request before image analysis.
+
+Output:
+
+```text
+task_route_plan
+```
+
+Known route kinds:
+
+```text
+portrait_identity_generation
+full_body_identity_generation
+view_change
+pose_transfer
+scene_insertion
+local_repair_or_inpaint
+outfit_swap
+style_transfer
+layout_or_sheet
+text_or_label_heavy
+unknown_reference_edit
+```
+
+Text-heavy is a primary route only when text/layout is the main output. Scene
+requests with posters, signs, logos, or newspapers remain scene routes with a
+text-rendering risk marker.
+
+### 3. Encode All Reference Images
+
+Purpose: make every supplied reference image available to the visual planner or
+multimodal model. This step is about feeding the refs, not choosing a dossier
+or forcing static roles.
+
+Rules:
+
+- pass all references through neutral handles such as `reference1`,
+  `reference2`, and so on
+- preserve the image order used by the planner
+- do not rely on file names or reference labels as truth
+- do not preselect 1-3 refs before the VLM has looked at the pack
+
+### 4. Identify Relevant Subject(s)
+
+Purpose: the VLM identifies which visible subject(s) matter for the request.
+
+Examples:
+
+```text
+same referenced character
+subject from Image 2
+primary character plus requested object
+```
+
+This is visual analysis, not deterministic Python identity extraction.
+
+### 5. Extract Task-Relevant Components
+
+Purpose: the model extracts the visual evidence needed for this task. The
+component set depends on the route.
+
+Examples:
+
+```text
+portrait -> face, eyes, hair, expression, visible upper outfit, style
+full body -> face, outfit, silhouette, body proportions, footwear, style
+scene -> identity, visible outfit, action compatibility, scene integration
+local repair -> target component or region plus matching reference evidence
+pose transfer -> identity evidence plus pose source/body orientation
+```
+
+Do not build a persistent hand-written component taxonomy unless explicitly
+asked. The model owns component understanding.
+
+### 6. Align Same Components Across References
+
+Purpose: compare the same visual components across multiple refs.
+
+Examples:
+
+```text
+face identity across portrait/front/side refs
+outfit component consistency across front/back refs
+pose source separated from identity refs
+target repair region matched to the best supporting ref
+```
+
+Alignment is a model-produced visual planning result. It is not a geometry
+measurement path and not a static role table.
+
+### 7. Choose Relevant Components For This Output
+
+Purpose: decide which aligned evidence matters for the requested output.
+
+This is where a close-up portrait can down-rank lower-body evidence, while a
+full-body or repair request can prioritize it. This choice is case-specific.
+The same reference pack can produce a different component plan for a different
+instruction.
+
+Output may include:
+
+```text
+selected_refs
+reference_semantics
+visual_analysis
+edit_instruction
+```
+
+Qwen-Image-Edit-2509 currently performs best with 1-3 selected input images, so
+this is the point where the planner chooses the final reference subset.
+
+### 8. Build Conditioning Bundle
+
+Purpose: assemble the actual model inputs for generation.
+
+Inputs can include:
+
+```text
+selected reference images
+VLM-authored edit instruction
+optional mask/region condition
+optional keypoint/edge/depth/sketch condition
+runtime generation parameters
+```
+
+Identity-only portrait, view, full-body, and normal scene routes usually need
+no extra hidden conditioning. Local repair and pose transfer can require
+region/mask or pose/keypoint conditions. The planner may produce a
+conditioning plan first; heavy tools run only for routes that need them.
+
+### 9. Run Diffusion/Edit Generation
+
+Purpose: Qwen Image Edit consumes the step-8 bundle. It does not re-plan.
+
+Generation receives:
+
+```text
+selected refs in planner order
+VLM-authored edit_instruction
+model/runtime parameters
+seed/candidate settings
+```
+
+Generation must not load a separate character dossier, reselect references,
+reinterpret the task route, or enrich prompts with hardcoded character facts.
+
+### 10. Optional Postprocess/Upscale/Filter
+
+Purpose: optional local finishing after the core generation has produced an
+image. This may include technical postprocess, upscaling, filtering, or output
+packaging.
+
+## Current Implementation Alignment
+
+Current core-oriented pieces:
+
+```text
+Step 1:
+  CharacterInstructionParser
+  raw instruction + envelope -> instruction_plan
+
+Step 2:
+  CharacterTaskRouter
+  instruction_plan -> task_route_plan
+
+Steps 3-7, partially combined:
+  Qwen2.5-VL edit planner
+  all refs + planner_context -> selected_refs, reference_semantics,
+  visual_analysis, edit_instruction
+
+Step 8, early route-gated planning:
+  CharacterConditioningPlanner
+  task_route_plan + visual_analysis -> conditioning_plan
+
+Step 9:
+  qwen-edit generation handoff
+  selected refs + edit_instruction -> Qwen Image Edit
+```
+
+Important correction: the current VLM edit planner is a useful bridge, but it
+compresses PixAI core steps 3-7 into one prompt. Future work may split that
+into subject identification, component extraction, component alignment, and
+component relevance selection. Do not pretend that split already exists in
+code.
+
+Important correction: `CharacterConditioningPlanner` is conceptually step 8. It
+is not PixAI core step 5.
+
+## Concrete Model Route
+
+First concrete editor model:
 
 ```text
 nunchaku-ai/nunchaku-qwen-image-edit-2509
@@ -224,137 +289,67 @@ lightning-251115/svdq-fp4_r32-qwen-image-edit-2509-lightning-4steps-251115.safet
 ```
 
 - Pipeline class: `QwenImageEditPlusPipeline` with
-  `NunchakuQwenImageTransformer2DModel`; multi-image input via
-  `image=[image1, image2, image3]`.
-- FP4 for Blackwell/RTX 50-series; per-layer offload and sequential CPU offload
-  can bring VRAM down to roughly 3–4GB at a speed cost.
-- Escalation ladder (only when quality falls short at the current rung):
+  `NunchakuQwenImageTransformer2DModel`.
+- Multi-image input uses `image=[image1, image2, image3]`.
+- Qwen-Image-Edit-2509 target budget: 1-3 selected reference images.
+- FP4 for Blackwell/RTX 50-series; offload can reduce VRAM use at a speed cost.
+
+Escalation ladder, only when quality falls short at the current rung:
 
 ```text
-4-step r32 lightning → 8-step r32 lightning → full r32 → r128
+4-step r32 lightning -> 8-step r32 lightning -> full r32 -> r128
 ```
 
-Qwen-Image-Edit-2511 is better on paper (character consistency, geometric
-reasoning) but the full 2511 route is too heavy for 16GB — out of scope for now.
+Qwen-Image-Edit-2511 is stronger on paper but too heavy for this 16GB target
+route for now.
 
-### 5. Hidden pose / region / segmentation conditioning
+## FLUX/Kontext Boundary
 
-Full capability, but not a generative obligation on every run:
-
-- Identity-only views: **no pose/region conditioning needed**.
-- Poseplate/platformer cases: pose/keypoint map + edge/sketch map + mask/region
-  map. Qwen-Image-Edit-2509 natively supports ControlNet-like image conditions
-  (depth, edge, keypoint, sketch).
-
-Local tools and flow:
+FLUX/Kontext stays a separate pipeline next to Qwen edit.
 
 ```text
-VLM/parser names a region ("arm/fist region", "skirt back", "face", "bow")
-→ Florence-2 produces box/region (object detection, phrase grounding,
-  region proposals, referring-expression segmentation)
-→ SAM2 produces the mask (SAM2ImagePredictor / automatic mask generation)
-→ DWPose/OpenPose produces keypoint maps for body poses
-→ Qwen edit receives image refs + optional keypoint/sketch/mask condition images
+FLUX/Kontext: existing single-reference identity generator / polish path
+Qwen Edit:    multi-reference PixAI-style character edit core
 ```
 
-### 6. Candidate / refinement / filtering
+Do not merge Qwen into FLUX prompt-embedding code.
 
-- Per case: 2–4 candidates → contact sheet → **the human picks**. No model as
-  final judge.
-- Refinement is the same edit mechanism: selected image + original refs +
-  mask/region + instruction (e.g. fix bow shape, fix skirt back, reduce chest
-  size, fix boots, fix face).
-- This refine loop matters more than more seeds.
+## First Core Smoke Test
 
-## Explicitly out of scope
+First core smoke remains small:
 
 ```text
-collage/layout engine        magazine/poster generation
-text rendering module        product identity module
-OCR/text specialist          multilingual typography
-scene composition for ads
+instruction:
+  Character as shown in referenced images.
+  Close-up face, looking to the left with neutral expression.
+  Neutral lighting, white background.
+
+expected route:
+  portrait_identity_generation
+
+core behavior:
+  all refs are visible to the VLM planner
+  the planner selects 1-3 refs
+  Qwen receives the selected refs in planner order
+  Qwen receives the VLM-authored edit_instruction
+  no separate character dossier is loaded
 ```
 
-These make the scope muddy; do not build them.
-
-## Relationship to the existing FLUX/Kontext code
-
-FLUX/Kontext stays useful, but not as the PixAI clone. The two stand side by
-side:
-
-```text
-FLUX/Kontext: existing single-reference identity generator / fallback / polish
-Qwen Edit:    multi-reference identity/view/pose editing
-```
-
-Do not wedge Qwen into the FLUX prompt-embedding code.
-
-## Implementation phases
-
-### Phase 1 — Reference pack + parser (no generation)
-```text
-aigen characters reference-pack build
-aigen characters reference-pack parse
-→ reference_pack.json, identity_profile.json
-```
-
-### Phase 2 — Qwen edit runner
-```text
-aigen characters qwen-edit-run
-  --pack assets/characters/<name>/reference_pack.json
-  --case front|side|right_profile|back|three_quarter|portrait
-  --model nunchaku-qwen-edit-2509-r32-4step
-  --output-dir …
-→ contact_sheet.png, result.json, case PNGs
-```
-
-### Phase 3 — Region/mask helper (no generation)
-```text
-aigen characters region-plan
-  input:  image + request ("blue bow", "skirt back", "face", "boots")
-  output: region boxes, SAM2 masks, debug sheet
-```
-
-### Phase 4 — Refine runner
-```text
-aigen characters qwen-edit-refine
-  input:  selected image + reference pack + mask/region + instruction
-  output: fixed candidates + contact sheet
-```
-
-### Phase 5 — Platformer pose (only after identity/view works)
-```text
-aigen characters qwen-edit-pose
-  input:  side ref + portrait ref + poseplate/keypoint/sketch
-  output: platformer pose candidates
-```
-
-## First smoke test
-
-Not six features at once. First run:
-
-```text
-case: right_profile
-refs: side + portrait + front
-model: 2509 r32 4-step
-long side: 640
-candidates: 2
-```
-
-If that works: back, three_quarter, portrait. If 4-step identity is weak:
-8-step r32. If 8-step fits but is insufficient: full r32.
+This smoke does not assert exact real-model JSON.
 
 ## Sources
 
-- https://huggingface.co/Qwen/Qwen-Image-Edit-2509 — multi-image editing, 1–3
-  optimal inputs, person consistency, native depth/edge/keypoint conditions
-- https://huggingface.co/Qwen/Qwen-Image-Edit-2511 — better consistency/LoRA,
-  too heavy for 16GB
-- https://huggingface.co/Qwen/Qwen-Image-Edit — dual path: Qwen2.5-VL for
-  semantic control + VAE encoder for appearance control
-- https://nunchaku.tech/docs/nunchaku/usage/qwen-image-edit.html — Nunchaku
+- https://huggingface.co/Qwen/Qwen-Image-Edit-2509 - multi-image editing,
+  1-3 optimal inputs, person consistency, native depth/edge/keypoint conditions
+- https://github.com/huggingface/diffusers/blob/main/docs/source/en/api/pipelines/qwenimage.md -
+  QwenImageEditPlusPipeline multi-image reference usage
+- https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/qwenimage/pipeline_qwenimage_edit.py -
+  Qwen Image Edit pipeline implementation
+- https://github.com/QwenLM/Qwen-Image - Qwen image/edit model family
+- https://nunchaku.tech/docs/nunchaku/usage/qwen-image-edit.html - Nunchaku
   low-VRAM route, pipeline classes, lightning variants, offload options
-- https://arxiv.org/abs/2502.13923 — Qwen2.5-VL technical report
-- https://huggingface.co/docs/transformers/en/model_doc/florence2 — Florence-2
+- https://arxiv.org/abs/2502.13923 - Qwen2.5-VL technical report
+- https://huggingface.co/docs/transformers/en/model_doc/florence2 - Florence-2
   prompt-based detection/grounding/segmentation tasks
-- https://github.com/facebookresearch/sam2 — SAM2 promptable segmentation
+- https://github.com/facebookresearch/sam2 - SAM2 promptable segmentation
+- https://github.com/IDEA-Research/DWPose - pose/keypoint helper
