@@ -5,7 +5,7 @@ Fails (exit 1) when the character silhouette touches a canvas edge, i.e. the
 figure is cropped. Deterministic and GPU-free, so "done" is machine-checkable
 instead of an eyeball judgement.
 
-Method (documented in docs/pixai_perfection_route.md):
+Method:
   1. background colour = median RGB of the four 8x8 corners (the background is
      not pure white, so a fixed white threshold misreads it);
   2. content mask = pixels whose euclidean RGB distance to the background > 30;
