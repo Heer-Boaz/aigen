@@ -153,7 +153,7 @@ def parse_character_edit_plan(
     reference_paths: Mapping[str, Path],
     case_name: str,
     user_instruction: str,
-    instruction_plan: Mapping[str, Any],
+    planner_context: Mapping[str, Any],
     path_label: str,
 ) -> CharacterEditPlanParseResult:
     reference_ids = tuple(pack.references)
@@ -168,7 +168,7 @@ def parse_character_edit_plan(
         planner_reference_map=planner_reference_map,
         case_name=case_name,
         user_instruction=user_instruction,
-        instruction_plan=instruction_plan,
+        planner_context=planner_context,
     )
     raw_text = runner.describe_image(prompt, list(image_paths))
     response = _edit_plan_response_from_raw(raw_text, path_label, reference_ids=frozenset(planner_reference_ids))
@@ -296,7 +296,7 @@ def _edit_plan_parser_prompt(
     planner_reference_map: Mapping[str, str],
     case_name: str,
     user_instruction: str,
-    instruction_plan: Mapping[str, Any],
+    planner_context: Mapping[str, Any],
 ) -> str:
     reference_lines = "\n".join(
         _edit_plan_reference_line(
@@ -308,7 +308,7 @@ def _edit_plan_parser_prompt(
         for index, (planner_reference_id, pack_reference_id) in enumerate(planner_reference_map.items())
     )
     reference_id_list = ", ".join(planner_reference_map)
-    instruction_plan_json = json.dumps(instruction_plan, indent=2, sort_keys=True)
+    planner_context_json = json.dumps(planner_context, indent=2, sort_keys=True)
     return f"""You are the edit planner for a local character image-edit pipeline.
 
 Images are supplied in this exact order:
@@ -317,13 +317,13 @@ Images are supplied in this exact order:
 Available reference ids are exactly: {reference_id_list}.
 The requested output case is: {case_name}.
 The user's requested edit is exactly: {user_instruction!r}.
-The text-only instruction parser produced this plan before seeing the images:
-{instruction_plan_json}
+Planner context before image analysis:
+{planner_context_json}
 
 Look at the supplied images yourself. Choose the reference ids that should be sent to the image editor,
 then write the single instruction that should be sent with those images.
 The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
-Preserve the user-written intent from the instruction plan. Use visual facts only when they are visible in the supplied images.
+Use the planner context for task focus and routing intent. Use visual facts only when they are visible in the supplied images.
 If useful, add concise semantic labels that you infer yourself for the supplied references.
 Do not invent names, story, mood, annotations, text, props, scene details or extra outputs.
 Do not choose references that are irrelevant to the requested edit.

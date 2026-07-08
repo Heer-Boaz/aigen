@@ -22,6 +22,8 @@ from aigen.character_reference_models import (
     load_completed_character_reference_pack,
 )
 from aigen.character_reference_pack import parse_character_edit_plan
+from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
+from aigen.character_task_router import CharacterTaskRouter, compact_vlm_planner_context
 from aigen.generation.qwen_image_edit_identity import (
     QwenIdentityCase,
     QwenImageEditIdentityProfile,
@@ -291,6 +293,7 @@ def _planned_case(
         )
     except (CharacterInstructionError, TextLlmError) as error:
         raise QwenCharacterEditError(str(error)) from error
+    task_route_plan = CharacterTaskRouter().route(instruction_plan)
     try:
         planned = parse_character_edit_plan(
             runner=runner,
@@ -298,7 +301,7 @@ def _planned_case(
             reference_paths=context.reference_paths,
             case_name=template.name,
             user_instruction=instruction_request,
-            instruction_plan=instruction_plan.model_dump(mode="json"),
+            planner_context=compact_vlm_planner_context(instruction_plan, task_route_plan),
             path_label=f"{context.pack_path.as_posix()}#{template.name}",
         )
     except CharacterReferenceError as error:
@@ -309,6 +312,7 @@ def _planned_case(
         source_instruction=instruction,
         instruction_request=instruction_request,
         instruction_plan=instruction_plan,
+        task_route_plan=task_route_plan,
         edit_instruction=planned.edit_instruction,
         edit_planner_raw_response=planned.raw_text,
         selected_planner_refs=planned.selected_planner_refs,
@@ -357,6 +361,7 @@ def _normalized_instruction(
     source_instruction: str | None,
     instruction_request: str,
     instruction_plan: CharacterInstructionPlanSpec,
+    task_route_plan: CharacterTaskRoutePlanSpec,
     edit_instruction: str,
     edit_planner_raw_response: str,
     selected_planner_refs: Sequence[str],
@@ -374,6 +379,7 @@ def _normalized_instruction(
         "source_instruction": source_instruction,
         "instruction_request": instruction_request,
         "instruction_plan": instruction_plan.model_dump(mode="json"),
+        "task_route_plan": task_route_plan.model_dump(mode="json"),
         "edit_instruction_source": "qwen_vlm_edit_planner",
         "edit_instruction": edit_instruction,
         "edit_planner_raw_response": edit_planner_raw_response,

@@ -183,6 +183,10 @@ class CharacterQwenEditTests(unittest.TestCase):
             self.assertEqual(case["refs_used"], ["asset_a", "asset_b"])
             self.assertEqual(case["prompt"], "VLM-authored right profile instruction")
             self.assertEqual(case["normalized_instruction"]["instruction_plan"]["subject_binding"]["kind"], "referenced_character")
+            self.assertEqual(
+                case["normalized_instruction"]["task_route_plan"]["route_kind"],
+                "portrait_identity_generation",
+            )
             self.assertIn(
                 "visual_identity_analysis",
                 case["normalized_instruction"]["instruction_plan"]["downstream_requirements"],
@@ -191,6 +195,10 @@ class CharacterQwenEditTests(unittest.TestCase):
             runner = FakeEditPlanner.last
             self.assertTrue(runner.closed)
             self.assertEqual(len(runner.image_paths[0]), 3)
+            self.assertIn("Planner context before image analysis", runner.prompts[0])
+            self.assertIn("portrait_identity_generation", runner.prompts[0])
+            self.assertNotIn("raw_model_response", runner.prompts[0])
+            self.assertNotIn("endpoint", runner.prompts[0])
 
 
 if __name__ == "__main__":
