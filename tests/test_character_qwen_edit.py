@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -43,17 +45,17 @@ def instruction_parser_config() -> CharacterInstructionParserConfig:
     return CharacterInstructionParserConfig(
         text_llm=TextLlmConfig(
             parser_id="fake-text-parser",
-            endpoint="http://127.0.0.1:8000/v1/chat/completions",
-            model="Qwen/Qwen3-8B",
-            server_family="vllm",
-            api_key_env="AIGEN_TEST_KEY",
-            timeout_seconds=1.0,
+            model=Path("/models/fake-qwen3"),
+            dtype="bfloat16",
+            quantization="bitsandbytes-8bit",
             max_new_tokens=700,
             temperature=0.0,
-            structured_output="json_object",
             enable_thinking=False,
         )
     )
+
+
+CALL_EVENTS: list[str] = []
 
 
 class FakeInstructionParser:
@@ -65,6 +67,7 @@ class FakeInstructionParser:
         self.envelopes: list[InstructionEnvelopeSpec] = []
 
     def parse(self, envelope: InstructionEnvelopeSpec) -> CharacterInstructionPlanSpec:
+        CALL_EVENTS.append("instruction_parse")
         self.envelopes.append(envelope)
         return CharacterInstructionPlanSpec(
             kind="character-instruction-plan",
@@ -105,7 +108,7 @@ class FakeInstructionParser:
 
 class FakeEditPlanner:
     last: FakeEditPlanner
-    response: dict[str, object] = {
+    final_response: dict[str, object] = {
         "selected_refs": ["reference1", "reference2"],
         "reference_semantics": {"reference1": "VLM semantic label", "reference2": "VLM semantic label"},
         "visual_analysis": {
@@ -158,6 +161,7 @@ class FakeEditPlanner:
     }
 
     def __init__(self, _config: QwenVlmConfig) -> None:
+        CALL_EVENTS.append("vlm_init")
         type(self).last = self
         self.prompts: list[str] = []
         self.image_paths: list[list[Path]] = []
@@ -167,7 +171,34 @@ class FakeEditPlanner:
     def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
         self.prompts.append(prompt)
         self.image_paths.append(image_paths)
-        return json.dumps(type(self).response)
+        if "single-reference visual observation" in prompt:
+            reference_id = prompt.split("Reference id: ", 1)[1].splitlines()[0]
+            return json.dumps(
+                {
+                    "reference_id": reference_id,
+                    "visual_summary": f"single-image observation for {reference_id}",
+                    "visible_subjects": [
+                        {
+                            "label": "primary visible subject",
+                            "visibility": "clear",
+                            "notes": "fake visible subject note",
+                        }
+                    ],
+                    "view_or_framing": "fake view",
+                    "visible_components": [
+                        {
+                            "component": "face",
+                            "visibility": "clear",
+                            "task_relevance_hint": "high",
+                            "notes": "fake visible component note",
+                        }
+                    ],
+                    "occlusion_or_quality_notes": [],
+                    "text_or_symbol_notes": [],
+                    "uncertainties": [],
+                }
+            )
+        return json.dumps(type(self).final_response)
 
     def close(self) -> None:
         self.closed = True
@@ -192,6 +223,36 @@ class CharacterQwenEditTests(unittest.TestCase):
 
         self.assertEqual(args.profile, "nunchaku-qwen-edit-2509-r32-4step")
 
+    def test_qwen_edit_run_cli_rejects_instruction_parser_endpoint_flag(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                build_parser().parse_args(
+                    [
+                        "characters",
+                        "qwen-edit-run",
+                        "--pack",
+                        "references/reference_pack.json",
+                        "--instruction-parser-endpoint",
+                        "http://127.0.0.1:8000/v1/chat/completions",
+                        "--output-dir",
+                        "runs/right_profile",
+                    ]
+                )
+
+    def test_qwen_edit_plan_cli_rejects_vlm_model_flag(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                build_parser().parse_args(
+                    [
+                        "characters",
+                        "qwen-edit-plan",
+                        "--pack",
+                        "references/reference_pack.json",
+                        "--vlm-model",
+                        "aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+                    ]
+                )
+
     def test_qwen_edit_plan_uses_vlm_selected_refs_without_identity_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -210,6 +271,7 @@ class CharacterQwenEditTests(unittest.TestCase):
                 overwrite=False,
             )
             pack_path = root / "references" / "reference_pack.json"
+            CALL_EVENTS.clear()
 
             with (
                 patch("aigen.character_qwen_edit.CharacterInstructionParser", FakeInstructionParser),
@@ -223,9 +285,10 @@ class CharacterQwenEditTests(unittest.TestCase):
                     instruction="right side profile",
                     candidates_per_case=2,
                     progress=SILENT_STATUS,
-            )
+                )
 
             case = plan["cases"][0]
+            self.assertEqual(CALL_EVENTS[:2], ["instruction_parse", "vlm_init"])
             self.assertEqual(case["refs_used"], ["asset_a", "asset_b"])
             self.assertEqual(case["prompt"], "VLM-authored right profile instruction")
             self.assertEqual(case["normalized_instruction"]["instruction_plan"]["subject_binding"]["kind"], "referenced_character")
@@ -253,13 +316,25 @@ class CharacterQwenEditTests(unittest.TestCase):
             self.assertEqual(FakeInstructionParser.last.envelopes[0].reference_count, 3)
             runner = FakeEditPlanner.last
             self.assertTrue(runner.closed)
-            self.assertEqual(len(runner.image_paths[0]), 3)
-            self.assertIn("Planner context before image analysis", runner.prompts[0])
-            self.assertIn("portrait_identity_generation", runner.prompts[0])
-            self.assertIn("component_evidence", runner.prompts[0])
-            self.assertIn("cross_reference_alignment", runner.prompts[0])
-            self.assertNotIn("raw_model_response", runner.prompts[0])
-            self.assertNotIn("endpoint", runner.prompts[0])
+            self.assertEqual([len(paths) for paths in runner.image_paths], [1, 1, 1, 3])
+            reference_observations = case["normalized_instruction"]["reference_observations"]
+            self.assertEqual(
+                sorted(reference_observations["observations"]),
+                ["reference1", "reference2", "reference3"],
+            )
+            self.assertEqual(
+                reference_observations["observations"]["reference1"]["visual_summary"],
+                "single-image observation for reference1",
+            )
+            final_prompt = runner.prompts[-1]
+            self.assertIn("Planner context before image analysis", final_prompt)
+            self.assertIn("reference_observations", final_prompt)
+            self.assertIn("single-image observation for reference3", final_prompt)
+            self.assertIn("portrait_identity_generation", final_prompt)
+            self.assertIn("component_evidence", final_prompt)
+            self.assertIn("cross_reference_alignment", final_prompt)
+            self.assertNotIn("raw_model_response", final_prompt)
+            self.assertNotIn("endpoint", final_prompt)
 
 
 if __name__ == "__main__":

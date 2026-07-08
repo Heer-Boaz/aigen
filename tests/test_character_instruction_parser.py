@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from aigen.character_instruction_models import CharacterInstructionError, InstructionEnvelopeSpec
 from aigen.character_instruction_parser import CharacterInstructionParser, CharacterInstructionParserConfig
@@ -9,17 +11,15 @@ from aigen.text_llm import TextLlmConfig
 
 
 def parser_config() -> CharacterInstructionParserConfig:
+    model = Path(tempfile.gettempdir()) / "fake-qwen3-model"
     return CharacterInstructionParserConfig(
         text_llm=TextLlmConfig(
             parser_id="fake-text-parser",
-            endpoint="http://127.0.0.1:8000/v1/chat/completions",
-            model="Qwen/Qwen3-8B",
-            server_family="vllm",
-            api_key_env="AIGEN_TEST_KEY",
-            timeout_seconds=1.0,
+            model=model,
+            dtype="bfloat16",
+            quantization="bitsandbytes-8bit",
             max_new_tokens=700,
             temperature=0.0,
-            structured_output="json_object",
             enable_thinking=False,
         )
     )

@@ -156,21 +156,19 @@ def parse_character_edit_plan(
     case_name: str,
     user_instruction: str,
     planner_context: Mapping[str, Any],
+    reference_observations: Mapping[str, Any],
     path_label: str,
 ) -> CharacterEditPlanParseResult:
-    reference_ids = tuple(pack.references)
-    planner_reference_map = {
-        f"reference{index + 1}": reference_id
-        for index, reference_id in enumerate(reference_ids)
-    }
+    planner_reference_map = character_planner_reference_map(pack)
     planner_reference_ids = tuple(planner_reference_map)
-    image_paths = tuple(reference_paths[reference_id] for reference_id in reference_ids)
+    image_paths = tuple(reference_paths[reference_id] for reference_id in planner_reference_map.values())
     prompt = _edit_plan_parser_prompt(
         pack=pack,
         planner_reference_map=planner_reference_map,
         case_name=case_name,
         user_instruction=user_instruction,
         planner_context=planner_context,
+        reference_observations=reference_observations,
     )
     raw_text = runner.describe_image(prompt, list(image_paths))
     response = _edit_plan_response_from_raw(raw_text, path_label, reference_ids=frozenset(planner_reference_ids))
@@ -186,6 +184,13 @@ def parse_character_edit_plan(
         planner_image_paths=image_paths,
         raw_text=raw_text,
     )
+
+
+def character_planner_reference_map(pack: CharacterReferencePackSpec) -> dict[str, str]:
+    return {
+        f"reference{index + 1}": reference_id
+        for index, reference_id in enumerate(pack.references)
+    }
 
 
 def _identity_response_from_raw(
@@ -301,6 +306,7 @@ def _edit_plan_parser_prompt(
     case_name: str,
     user_instruction: str,
     planner_context: Mapping[str, Any],
+    reference_observations: Mapping[str, Any],
 ) -> str:
     reference_lines = "\n".join(
         _edit_plan_reference_line(
@@ -313,9 +319,10 @@ def _edit_plan_parser_prompt(
     )
     reference_id_list = ", ".join(planner_reference_map)
     planner_context_json = json.dumps(planner_context, indent=2, sort_keys=True)
-    return f"""You are the route-aware visual reference planner for a local character image-edit pipeline.
-In this single Qwen2.5-VL call, execute PixAI core steps 3 through 7:
-3. Encode all supplied reference images into compact visual evidence.
+    reference_observations_json = json.dumps(reference_observations, indent=2, sort_keys=True)
+    return f"""You are the route-aware multi-reference visual planner for a local character image-edit pipeline.
+Step 3 single-reference observation has already been run for every reference.
+In this Qwen2.5-VL call, inspect all supplied images yourself and execute PixAI core steps 4 through 7:
 4. Identify the relevant subject or subjects for the requested task.
 5. Extract task-relevant visual components from the references.
 6. Align the same components across references.
@@ -332,19 +339,28 @@ The user's requested edit is exactly: {user_instruction!r}.
 Planner context before image analysis:
 {planner_context_json}
 
+reference_observations:
+{reference_observations_json}
+
 Your job:
 1. Look at all supplied images yourself.
 2. Use the planner context only as task focus and routing intent.
-3. Write compact visual_analysis that explicitly covers reference encoding, subject mapping, component evidence, cross-reference alignment, and output component priorities.
-4. Select 1 to 3 references for Qwen Image Edit after that visual analysis.
-5. Write concise reference_semantics for the selected or relevant references.
-6. Write one concise edit_instruction for Qwen Image Edit.
+3. Use reference_observations to ensure every reference was considered.
+4. If an observation conflicts with the image, trust the image.
+5. Write compact visual_analysis covering subject mapping, component evidence, cross-reference alignment, output component priorities, and reference encoding summaries for every available reference.
+6. Select 1 to 3 references for Qwen Image Edit after that visual analysis.
+7. Write concise reference_semantics for the selected or relevant references.
+8. Write one concise edit_instruction for Qwen Image Edit.
 
 Rules:
 - The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
 - Use visual facts only when they are visible in the supplied images.
 - Do not add names, story, mood, annotations, text, props, scene details, or extra outputs unless they are explicitly requested by the user, present in the planner context, or visible in the supplied images.
+- Do not simply copy reference_observations; use them as audit context.
 - Do not choose references that are irrelevant to the requested edit.
+- selected_refs must be justified by output_component_priorities and cross_reference_alignment.
+- reference_encoding_summary must include every available reference id: {reference_id_list}.
+- low_priority_components_for_this_output must not include high or medium priority components from output_component_priorities.
 - Qwen Image Edit accepts one to three selected reference images for this path.
 - Return plain JSON only. No Markdown.
 
@@ -358,7 +374,8 @@ Return exactly one JSON object with this shape:
   }},
   "visual_analysis": {{
     "reference_encoding_summary": {{
-      "reference1": "short visual summary of this supplied image"
+      "reference1": "short visual summary of this supplied image",
+      "reference2": "short visual summary of this supplied image"
     }},
     "subject_map": {{
       "primary_subject": {{
@@ -409,7 +426,8 @@ Validation:
 - selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
 - selected_refs order is the order the image editor will receive the images.
 - reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
-- visual_analysis is a compact freeform JSON object for audit; use the listed step-3-through-7 keys when they apply and keep values short.
+- visual_analysis is a compact freeform JSON object for audit; use the listed reference-observation and step-4-through-7 keys when they apply and keep values short.
+- visual_analysis.reference_encoding_summary must contain every available reference id from exactly this list: {reference_id_list}.
 - edit_instruction must be a single non-empty string.
 """
 

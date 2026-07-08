@@ -20,7 +20,7 @@ from aigen.character_instruction_models import (
     character_instruction_model_response_schema,
     load_character_instruction_model_response,
 )
-from aigen.text_llm import OpenAICompatibleTextLlm, TextLlmConfig, text_llm_config_json
+from aigen.text_llm import TextLlmConfig, text_llm_config_json, text_llm_runner
 from aigen.vlm_json import VlmJsonError, json_object_from_vlm_response
 
 
@@ -53,7 +53,7 @@ class CharacterInstructionParser:
         runner: TextJsonRunner | None = None,
     ) -> None:
         self.config = config
-        self.runner = runner if runner is not None else OpenAICompatibleTextLlm(config.text_llm)
+        self.runner = runner if runner is not None else text_llm_runner(config.text_llm)
 
     def parse(self, envelope: InstructionEnvelopeSpec) -> CharacterInstructionPlanSpec:
         normalized_text = normalize_instruction_text(envelope.raw_instruction)
