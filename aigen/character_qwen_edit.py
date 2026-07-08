@@ -294,6 +294,7 @@ def _planned_case(
     except (CharacterInstructionError, TextLlmError) as error:
         raise QwenCharacterEditError(str(error)) from error
     task_route_plan = CharacterTaskRouter().route(instruction_plan)
+    planner_context = compact_vlm_planner_context(instruction_plan, task_route_plan)
     try:
         planned = parse_character_edit_plan(
             runner=runner,
@@ -301,7 +302,7 @@ def _planned_case(
             reference_paths=context.reference_paths,
             case_name=template.name,
             user_instruction=instruction_request,
-            planner_context=compact_vlm_planner_context(instruction_plan, task_route_plan),
+            planner_context=planner_context,
             path_label=f"{context.pack_path.as_posix()}#{template.name}",
         )
     except CharacterReferenceError as error:
@@ -318,6 +319,8 @@ def _planned_case(
         selected_planner_refs=planned.selected_planner_refs,
         planner_reference_map=planned.planner_reference_map,
         reference_semantics=planned.reference_semantics,
+        visual_analysis=planned.visual_analysis,
+        planner_context=planner_context,
     )
     return QwenIdentityCase(
         name=template.name,
@@ -367,6 +370,8 @@ def _normalized_instruction(
     selected_planner_refs: Sequence[str],
     planner_reference_map: Mapping[str, str],
     reference_semantics: Mapping[str, str],
+    visual_analysis: Mapping[str, Any],
+    planner_context: Mapping[str, Any],
 ) -> dict[str, Any]:
     normalized: dict[str, Any] = {
         "task": "identity_edit",
@@ -380,6 +385,8 @@ def _normalized_instruction(
         "instruction_request": instruction_request,
         "instruction_plan": instruction_plan.model_dump(mode="json"),
         "task_route_plan": task_route_plan.model_dump(mode="json"),
+        "planner_context": dict(planner_context),
+        "visual_analysis": dict(visual_analysis),
         "edit_instruction_source": "qwen_vlm_edit_planner",
         "edit_instruction": edit_instruction,
         "edit_planner_raw_response": edit_planner_raw_response,

@@ -68,6 +68,7 @@ class CharacterEditPlanVlmResponseSpec(StrictModel):
     selected_refs: list[str]
     edit_instruction: str
     reference_semantics: dict[str, str] = Field(default_factory=dict)
+    visual_analysis: dict[str, Any] = Field(default_factory=dict)
 
 
 class CharacterIdentityProfileOutputSpec(StrictModel):

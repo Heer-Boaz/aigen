@@ -39,6 +39,8 @@ class CharacterEditPlanParseResult:
     selected_planner_refs: tuple[str, ...]
     planner_reference_map: dict[str, str]
     reference_semantics: dict[str, str]
+    visual_analysis: dict[str, Any]
+    planner_context: dict[str, Any]
     edit_instruction: str
     prompt: str
     planner_image_paths: tuple[Path, ...]
@@ -177,6 +179,8 @@ def parse_character_edit_plan(
         selected_planner_refs=tuple(response.selected_refs),
         planner_reference_map=planner_reference_map,
         reference_semantics=dict(response.reference_semantics),
+        visual_analysis=dict(response.visual_analysis),
+        planner_context=dict(planner_context),
         edit_instruction=response.edit_instruction.strip(),
         prompt=prompt,
         planner_image_paths=image_paths,
@@ -309,25 +313,35 @@ def _edit_plan_parser_prompt(
     )
     reference_id_list = ", ".join(planner_reference_map)
     planner_context_json = json.dumps(planner_context, indent=2, sort_keys=True)
-    return f"""You are the edit planner for a local character image-edit pipeline.
+    return f"""You are step 3, the route-aware visual reference planner for a local character image-edit pipeline.
 
 Images are supplied in this exact order:
 {reference_lines}
 
-Available reference ids are exactly: {reference_id_list}.
+Available reference ids are exactly:
+{reference_id_list}
+
 The requested output case is: {case_name}.
 The user's requested edit is exactly: {user_instruction!r}.
 Planner context before image analysis:
 {planner_context_json}
 
-Look at the supplied images yourself. Choose the reference ids that should be sent to the image editor,
-then write the single instruction that should be sent with those images.
-The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
-Use the planner context for task focus and routing intent. Use visual facts only when they are visible in the supplied images.
-If useful, add concise semantic labels that you infer yourself for the supplied references.
-Do not invent names, story, mood, annotations, text, props, scene details or extra outputs.
-Do not choose references that are irrelevant to the requested edit.
-Qwen Image Edit accepts one to three selected reference images for this path.
+Your job:
+1. Look at all supplied images yourself.
+2. Use the planner context only as task focus and routing intent.
+3. Identify which reference images are visually useful for this task.
+4. Select 1 to 3 references for Qwen Image Edit.
+5. Write concise reference_semantics for the selected or relevant references.
+6. Write a compact visual_analysis object explaining the visual planning decision.
+7. Write one concise edit_instruction for Qwen Image Edit.
+
+Rules:
+- The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
+- Use visual facts only when they are visible in the supplied images.
+- Do not add names, story, mood, annotations, text, props, scene details, or extra outputs unless they are explicitly requested by the user, present in the planner context, or visible in the supplied images.
+- Do not choose references that are irrelevant to the requested edit.
+- Qwen Image Edit accepts one to three selected reference images for this path.
+- Return plain JSON only. No Markdown.
 
 Return exactly one JSON object with this shape:
 {{
@@ -337,15 +351,26 @@ Return exactly one JSON object with this shape:
   "reference_semantics": {{
     "reference id from the available reference id list": "short semantic label inferred from that image"
   }},
+  "visual_analysis": {{
+    "global_reference_summary": "short summary",
+    "route_focus": "short task-specific focus",
+    "selected_reference_reasoning": [
+      {{
+        "reference": "reference1",
+        "reason": "short reason"
+      }}
+    ],
+    "deferred_conditioning": []
+  }},
   "edit_instruction": "one concise instruction"
 }}
 
-Rules:
+Validation:
 - selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
 - selected_refs order is the order the image editor will receive the images.
 - reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
+- visual_analysis is a compact freeform JSON object for audit; keep it short.
 - edit_instruction must be a single non-empty string.
-- Use plain JSON only. No Markdown.
 """
 
 

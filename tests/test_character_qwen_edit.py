@@ -108,6 +108,15 @@ class FakeEditPlanner:
     response: dict[str, object] = {
         "selected_refs": ["reference1", "reference2"],
         "reference_semantics": {"reference1": "VLM semantic label", "reference2": "VLM semantic label"},
+        "visual_analysis": {
+            "global_reference_summary": "fake planner saw three neutral references",
+            "route_focus": "fake portrait route focus",
+            "selected_reference_reasoning": [
+                {"reference": "reference1", "reason": "fake useful identity evidence"},
+                {"reference": "reference2", "reason": "fake useful view evidence"},
+            ],
+            "deferred_conditioning": [],
+        },
         "edit_instruction": "VLM-authored right profile instruction",
     }
 
@@ -191,6 +200,15 @@ class CharacterQwenEditTests(unittest.TestCase):
                 "visual_identity_analysis",
                 case["normalized_instruction"]["instruction_plan"]["downstream_requirements"],
             )
+            self.assertEqual(
+                case["normalized_instruction"]["visual_analysis"]["route_focus"],
+                "fake portrait route focus",
+            )
+            planner_context = case["normalized_instruction"]["planner_context"]
+            self.assertEqual(planner_context["task_route"]["route_kind"], "portrait_identity_generation")
+            self.assertNotIn("raw_model_response", planner_context["instruction_context"])
+            self.assertNotIn("endpoint", json.dumps(planner_context))
+            self.assertFalse(case["normalized_instruction"]["identity_profile_used"])
             self.assertEqual(FakeInstructionParser.last.envelopes[0].reference_count, 3)
             runner = FakeEditPlanner.last
             self.assertTrue(runner.closed)
