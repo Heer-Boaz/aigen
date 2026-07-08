@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aigen.character_conditioning_models import CharacterConditioningPlanSpec
+from aigen.character_conditioning_planner import CharacterConditioningPlanner
 from aigen.character_instruction_models import (
     CharacterInstructionError,
     CharacterInstructionPlanSpec,
@@ -307,6 +309,11 @@ def _planned_case(
         )
     except CharacterReferenceError as error:
         raise QwenCharacterEditError(str(error)) from error
+    conditioning_plan = CharacterConditioningPlanner().plan(
+        instruction_plan=instruction_plan,
+        task_route_plan=task_route_plan,
+        visual_analysis=planned.visual_analysis,
+    )
     normalized_instruction = _normalized_instruction(
         template=template,
         reference_ids=planned.selected_refs,
@@ -321,6 +328,7 @@ def _planned_case(
         reference_semantics=planned.reference_semantics,
         visual_analysis=planned.visual_analysis,
         planner_context=planner_context,
+        conditioning_plan=conditioning_plan,
     )
     return QwenIdentityCase(
         name=template.name,
@@ -372,6 +380,7 @@ def _normalized_instruction(
     reference_semantics: Mapping[str, str],
     visual_analysis: Mapping[str, Any],
     planner_context: Mapping[str, Any],
+    conditioning_plan: CharacterConditioningPlanSpec,
 ) -> dict[str, Any]:
     normalized: dict[str, Any] = {
         "task": "identity_edit",
@@ -387,6 +396,7 @@ def _normalized_instruction(
         "task_route_plan": task_route_plan.model_dump(mode="json"),
         "planner_context": dict(planner_context),
         "visual_analysis": dict(visual_analysis),
+        "conditioning_plan": conditioning_plan.model_dump(mode="json"),
         "edit_instruction_source": "qwen_vlm_edit_planner",
         "edit_instruction": edit_instruction,
         "edit_planner_raw_response": edit_planner_raw_response,

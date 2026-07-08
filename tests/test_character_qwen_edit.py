@@ -208,6 +208,10 @@ class CharacterQwenEditTests(unittest.TestCase):
             self.assertEqual(planner_context["task_route"]["route_kind"], "portrait_identity_generation")
             self.assertNotIn("raw_model_response", planner_context["instruction_context"])
             self.assertNotIn("endpoint", json.dumps(planner_context))
+            self.assertEqual(
+                case["normalized_instruction"]["conditioning_plan"]["status"],
+                "no_extra_conditioning",
+            )
             self.assertFalse(case["normalized_instruction"]["identity_profile_used"])
             self.assertEqual(FakeInstructionParser.last.envelopes[0].reference_count, 3)
             runner = FakeEditPlanner.last
