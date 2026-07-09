@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 import gc
 from math import log
@@ -957,7 +958,11 @@ class QwenImageEditIdentitySession:
             device=str(self.pipeline._execution_device),
         )
         active_guidance_scale = guidance_scale if self.pipeline.transformer.config.guidance_embeds else None
-        with self.torch.inference_mode():
+        with self.torch.inference_mode(), _qwen_edit_plus_output_vae_dimensions(
+            self.pipeline,
+            width=width,
+            height=height,
+        ):
             output = self.pipeline(
                 image=reference_images,
                 prompt=None,
@@ -1247,10 +1252,42 @@ def _fit_image_to_max_side(image: Image.Image, *, max_side: int) -> Image.Image:
 
 
 def _case_canvas(case: QwenIdentityCase, *, anchor_image: Image.Image, max_side: int) -> tuple[int, int]:
-    height = _align_to_multiple(max_side, 16)
     if case.portrait_canvas:
-        return height, height
+        return _canvas_from_anchor_aspect(anchor_image, max_side=max_side)
     return anchor_image.size
+
+
+def _canvas_from_anchor_aspect(anchor_image: Image.Image, *, max_side: int) -> tuple[int, int]:
+    canvas_long_side = _align_to_multiple(max_side, 16)
+    width, height = anchor_image.size
+    if width >= height:
+        return canvas_long_side, _align_to_multiple(round(canvas_long_side * height / width), 16)
+    return _align_to_multiple(round(canvas_long_side * width / height), 16), canvas_long_side
+
+
+@contextmanager
+def _qwen_edit_plus_output_vae_dimensions(pipeline: Any, *, width: int, height: int) -> Iterator[None]:
+    call_globals = _qwen_edit_plus_call_globals(pipeline)
+    original_calculate_dimensions = call_globals["calculate_dimensions"]
+    vae_image_size = call_globals["VAE_IMAGE_SIZE"]
+
+    def calculate_dimensions_for_output_vae(target_area: int, ratio: float) -> tuple[int, int]:
+        if target_area == vae_image_size:
+            return width, height
+        return original_calculate_dimensions(target_area, ratio)
+
+    call_globals["calculate_dimensions"] = calculate_dimensions_for_output_vae
+    try:
+        yield
+    finally:
+        call_globals["calculate_dimensions"] = original_calculate_dimensions
+
+
+def _qwen_edit_plus_call_globals(pipeline: Any) -> dict[str, Any]:
+    call = pipeline.__class__.__call__
+    while "calculate_dimensions" not in call.__globals__:
+        call = call.__wrapped__
+    return call.__globals__
 
 
 def _align_to_multiple(value: int, multiple: int) -> int:
