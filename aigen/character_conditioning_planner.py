@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from aigen.character_conditioning_models import (
     CHARACTER_CONDITIONING_PLAN_KIND,
     CharacterConditioningPlanSpec,
@@ -17,26 +14,24 @@ class CharacterConditioningPlanner:
         *,
         instruction_plan: CharacterInstructionPlanSpec,
         task_route_plan: CharacterTaskRoutePlanSpec,
-        visual_analysis: Mapping[str, Any],
     ) -> CharacterConditioningPlanSpec:
         route_kind = task_route_plan.route_kind
         if route_kind == "local_repair_or_inpaint":
-            return _local_repair_plan(instruction_plan, task_route_plan, visual_analysis)
+            return _local_repair_plan(instruction_plan, task_route_plan)
         if route_kind == "pose_transfer":
-            return _pose_transfer_plan(task_route_plan, visual_analysis)
+            return _pose_transfer_plan(task_route_plan)
         if route_kind == "layout_or_sheet":
-            return _layout_plan(task_route_plan, visual_analysis)
+            return _layout_plan(task_route_plan)
         if route_kind == "text_or_label_heavy":
-            return _text_plan(task_route_plan, visual_analysis, supports_current_command=False)
+            return _text_plan(task_route_plan, supports_current_command=False)
         if _has_text_risk(task_route_plan):
-            return _text_plan(task_route_plan, visual_analysis, supports_current_command=True)
-        return _no_extra_conditioning_plan(task_route_plan, visual_analysis)
+            return _text_plan(task_route_plan, supports_current_command=True)
+        return _no_extra_conditioning_plan(task_route_plan)
 
 
 def _local_repair_plan(
     instruction_plan: CharacterInstructionPlanSpec,
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
 ) -> CharacterConditioningPlanSpec:
     missing_inputs: list[str] = []
     if not instruction_plan.envelope.source_image_present:
@@ -51,7 +46,6 @@ def _local_repair_plan(
         planned_tools.append("sam2_mask_generation")
     return _conditioning_plan(
         task_route_plan,
-        visual_analysis,
         status="ready" if ready else "required_but_missing_inputs",
         conditioning_modes=["region_mask"],
         required_inputs=_dedupe(missing_inputs),
@@ -66,11 +60,9 @@ def _local_repair_plan(
 
 def _pose_transfer_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
 ) -> CharacterConditioningPlanSpec:
     return _conditioning_plan(
         task_route_plan,
-        visual_analysis,
         status="deferred",
         conditioning_modes=["pose_keypoint"],
         required_inputs=["pose_source"],
@@ -85,11 +77,9 @@ def _pose_transfer_plan(
 
 def _layout_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
 ) -> CharacterConditioningPlanSpec:
     return _conditioning_plan(
         task_route_plan,
-        visual_analysis,
         status="deferred",
         conditioning_modes=["layout_planning"],
         required_inputs=[],
@@ -102,13 +92,11 @@ def _layout_plan(
 
 def _text_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
     *,
     supports_current_command: bool,
 ) -> CharacterConditioningPlanSpec:
     return _conditioning_plan(
         task_route_plan,
-        visual_analysis,
         status="deferred",
         conditioning_modes=["text_layout_risk"],
         required_inputs=[],
@@ -121,11 +109,9 @@ def _text_plan(
 
 def _no_extra_conditioning_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
 ) -> CharacterConditioningPlanSpec:
     return _conditioning_plan(
         task_route_plan,
-        visual_analysis,
         status="no_extra_conditioning",
         conditioning_modes=[],
         required_inputs=[],
@@ -138,7 +124,6 @@ def _no_extra_conditioning_plan(
 
 def _conditioning_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
-    visual_analysis: Mapping[str, Any],
     *,
     status: str,
     conditioning_modes: list[str],
@@ -157,7 +142,7 @@ def _conditioning_plan(
         planned_tools=_dedupe(planned_tools),
         deferred_to=deferred_to,
         supports_current_command=supports_current_command,
-        audit_notes=audit_notes + _visual_analysis_notes(visual_analysis),
+        audit_notes=audit_notes,
     )
 
 
@@ -166,13 +151,6 @@ def _has_text_risk(task_route_plan: CharacterTaskRoutePlanSpec) -> bool:
         "text_rendering_risk" in task_route_plan.conditioning_needs
         or task_route_plan.final_editor_constraints.text_rendering
     )
-
-
-def _visual_analysis_notes(visual_analysis: Mapping[str, Any]) -> list[str]:
-    deferred = visual_analysis.get("deferred_conditioning")
-    if not deferred:
-        return []
-    return ["Step 3 visual analysis reported deferred conditioning details."]
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import re
 import shutil
 from collections.abc import Mapping, Sequence
 from contextlib import closing
@@ -18,10 +18,10 @@ from aigen.character_reference_models import (
     CharacterReferencePackOutputSpec,
     CharacterReferencePackSpec,
     ImageAssetSpec,
-    load_character_edit_plan_vlm_response,
     load_completed_character_reference_pack,
     load_character_identity_vlm_response,
 )
+from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
 from aigen.image_assets import image_asset_json
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 from aigen.progress import StatusReporter
@@ -34,17 +34,19 @@ IDENTITY_PROFILE_FILENAME = "identity_profile.json"
 
 
 @dataclass(frozen=True)
-class CharacterEditPlanParseResult:
+class ReferenceSelection:
+    """Which reference images to feed the editor for one output.
+
+    The selector only ever chooses *indices*; it never describes the character.
+    Its worst-case failure is a slightly weaker subset, never a corrupted
+    character description.
+    """
+
     selected_refs: tuple[str, ...]
     selected_planner_refs: tuple[str, ...]
     planner_reference_map: dict[str, str]
-    reference_semantics: dict[str, str]
-    visual_analysis: dict[str, Any]
-    planner_context: dict[str, Any]
-    edit_instruction: str
-    prompt: str
-    planner_image_paths: tuple[Path, ...]
-    raw_text: str
+    selector: str
+    raw_text: str | None
 
 
 def parse_character_reference_args(reference_args: Sequence[str], base_dir: Path) -> dict[str, Path]:
@@ -148,40 +150,50 @@ def parse_character_reference_pack(
     return payload
 
 
-def parse_character_edit_plan(
+def select_reference_subset(
     *,
-    runner: QwenVlm,
+    runner: QwenVlm | None,
     pack: CharacterReferencePackSpec,
     reference_paths: Mapping[str, Path],
-    case_name: str,
-    user_instruction: str,
-    planner_context: Mapping[str, Any],
-    reference_observations: Mapping[str, Any],
+    route_plan: CharacterTaskRoutePlanSpec,
     path_label: str,
-) -> CharacterEditPlanParseResult:
+) -> ReferenceSelection:
+    """Choose the 1..budget reference images the editor receives for this output.
+
+    Packs within budget are fed whole with no model call. Only when a pack has
+    more references than the editor budget does the VLM look at the images and
+    return the best ``budget`` reference ids (indices only).
+    """
     planner_reference_map = character_planner_reference_map(pack)
-    planner_reference_ids = tuple(planner_reference_map)
-    image_paths = tuple(reference_paths[reference_id] for reference_id in planner_reference_map.values())
-    prompt = _edit_plan_parser_prompt(
-        pack=pack,
-        planner_reference_map=planner_reference_map,
-        case_name=case_name,
-        user_instruction=user_instruction,
-        planner_context=planner_context,
-        reference_observations=reference_observations,
+    pack_reference_ids = tuple(pack.references)
+    budget = route_plan.capability_registry.max_qwen_edit_refs
+    if len(pack_reference_ids) <= budget:
+        return ReferenceSelection(
+            selected_refs=pack_reference_ids,
+            selected_planner_refs=tuple(planner_reference_map),
+            planner_reference_map=planner_reference_map,
+            selector="all_refs_within_budget",
+            raw_text=None,
+        )
+    if runner is None:
+        raise CharacterReferenceError(
+            f"{path_label}: {len(pack_reference_ids)} references exceed the {budget}-reference editor budget "
+            "but no VLM runner was provided for reference selection"
+        )
+    image_paths = [reference_paths[pack_reference_id] for pack_reference_id in planner_reference_map.values()]
+    prompt = _reference_selector_prompt(planner_reference_map, route_plan, budget)
+    raw_text = runner.describe_image(prompt, image_paths)
+    selected_planner_refs = _parse_selected_reference_ids(
+        raw_text,
+        valid_ids=tuple(planner_reference_map),
+        budget=budget,
+        path_label=path_label,
     )
-    raw_text = runner.describe_image(prompt, list(image_paths))
-    response = _edit_plan_response_from_raw(raw_text, path_label, reference_ids=frozenset(planner_reference_ids))
-    return CharacterEditPlanParseResult(
-        selected_refs=tuple(planner_reference_map[reference_id] for reference_id in response.selected_refs),
-        selected_planner_refs=tuple(response.selected_refs),
+    return ReferenceSelection(
+        selected_refs=tuple(planner_reference_map[planner_ref] for planner_ref in selected_planner_refs),
+        selected_planner_refs=selected_planner_refs,
         planner_reference_map=planner_reference_map,
-        reference_semantics=dict(response.reference_semantics),
-        visual_analysis=dict(response.visual_analysis),
-        planner_context=dict(planner_context),
-        edit_instruction=response.edit_instruction.strip(),
-        prompt=prompt,
-        planner_image_paths=image_paths,
+        selector="qwen_vlm_reference_index_selection",
         raw_text=raw_text,
     )
 
@@ -210,23 +222,47 @@ def _identity_response_from_raw(
     )
 
 
-def _edit_plan_response_from_raw(
+def _reference_selector_prompt(
+    planner_reference_map: Mapping[str, str],
+    route_plan: CharacterTaskRoutePlanSpec,
+    budget: int,
+) -> str:
+    reference_lines = "\n".join(f"- {planner_ref}" for planner_ref in planner_reference_map)
+    focus = "; ".join(route_plan.reference_selection_intent) or route_plan.output_mode
+    return f"""You choose which reference images to feed to an image editor for one task.
+
+You see {len(planner_reference_map)} reference images in order, labelled:
+{reference_lines}
+
+Task focus: {focus}
+Requested output: {route_plan.output_mode}
+Instruction: {route_plan.source_instruction!r}
+
+Pick the reference images that best support this task, at most {budget}. Do not
+describe the character or the images. Reply with only the chosen ids, for example:
+reference1, reference3."""
+
+
+def _parse_selected_reference_ids(
     raw_text: str,
-    path_label: str,
     *,
-    reference_ids: frozenset[str],
-):
-    try:
-        generated = json_object_from_vlm_response(raw_text)
-    except VlmJsonError as error:
+    valid_ids: tuple[str, ...],
+    budget: int,
+    path_label: str,
+) -> tuple[str, ...]:
+    valid = set(valid_ids)
+    found: list[str] = []
+    for match in re.findall(r"reference\d+", raw_text):
+        if match in valid and match not in found:
+            found.append(match)
+        if len(found) == budget:
+            break
+    if not found:
         raise CharacterReferenceError(
-            f"Invalid character edit plan response {path_label}: {error}"
-        ) from error
-    return load_character_edit_plan_vlm_response(
-        generated,
-        path_label=path_label,
-        reference_ids=reference_ids,
-    )
+            f"{path_label}: reference selector returned no valid id from {sorted(valid)}; "
+            f"got: {raw_text.strip()[:200]!r}"
+        )
+    return tuple(found)
 
 
 def _identity_parser_prompt(pack: CharacterReferencePackSpec) -> str:
@@ -297,163 +333,6 @@ Rules:
 - Use concise strings, not paragraphs.
 - Use plain JSON only. No Markdown.
 """
-
-
-def _edit_plan_parser_prompt(
-    *,
-    pack: CharacterReferencePackSpec,
-    planner_reference_map: Mapping[str, str],
-    case_name: str,
-    user_instruction: str,
-    planner_context: Mapping[str, Any],
-    reference_observations: Mapping[str, Any],
-) -> str:
-    reference_lines = "\n".join(
-        _edit_plan_reference_line(
-            input_index=index + 1,
-            planner_reference_id=planner_reference_id,
-            pack_reference_id=pack_reference_id,
-            pack=pack,
-        )
-        for index, (planner_reference_id, pack_reference_id) in enumerate(planner_reference_map.items())
-    )
-    reference_id_list = ", ".join(planner_reference_map)
-    planner_context_json = json.dumps(planner_context, indent=2, sort_keys=True)
-    reference_observations_json = json.dumps(reference_observations, indent=2, sort_keys=True)
-    return f"""You are the route-aware multi-reference visual planner for a local character image-edit pipeline.
-Step 3 single-reference observation has already been run for every reference.
-In this Qwen2.5-VL call, inspect all supplied images yourself and execute PixAI core steps 4 through 7:
-4. Identify the relevant subject or subjects for the requested task.
-5. Extract task-relevant visual components from the references.
-6. Align the same components across references.
-7. Choose which components matter for this specific output.
-
-Images are supplied in this exact order:
-{reference_lines}
-
-Available reference ids are exactly:
-{reference_id_list}
-
-The requested output case is: {case_name}.
-The user's requested edit is exactly: {user_instruction!r}.
-Planner context before image analysis:
-{planner_context_json}
-
-reference_observations:
-{reference_observations_json}
-
-Your job:
-1. Look at all supplied images yourself.
-2. Use the planner context only as task focus and routing intent.
-3. Use reference_observations to ensure every reference was considered.
-4. If an observation conflicts with the image, trust the image.
-5. Write compact visual_analysis covering subject mapping, component evidence, cross-reference alignment, output component priorities, and reference encoding summaries for every available reference.
-6. Select 1 to 3 references for Qwen Image Edit after that visual analysis.
-7. Write concise reference_semantics for the selected or relevant references.
-8. Write one concise edit_instruction for Qwen Image Edit.
-
-Rules:
-- The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
-- Use visual facts only when they are visible in the supplied images.
-- Separate user-requested output constraints from reference evidence. Requested background, lighting, gaze, expression, scene, action, or camera view are output constraints; they are not reference evidence unless visible in a supplied image.
-- Treat reference backgrounds as context, not automatic identity/component evidence.
-- art_style or rendering_style is possible visual evidence; decide its relevance from the images and the task route, and explain it when used.
-- Do not add names, story, mood, annotations, text, props, scene details, or extra outputs unless they are explicitly requested by the user, present in the planner context, or visible in the supplied images.
-- Do not simply copy reference_observations; use them as audit context.
-- Do not choose references that are irrelevant to the requested edit.
-- selected_refs must be justified by output_component_priorities and cross_reference_alignment.
-- selected_refs must support the high-priority output evidence you choose within the 1 to 3 reference limit.
-- If important evidence is taken from a reference that is not selected, explain why in visual_analysis.unselected_important_evidence.
-- reference_encoding_summary must include every available reference id: {reference_id_list}.
-- low_priority_components_for_this_output must not include high or medium priority components from output_component_priorities.
-- Qwen Image Edit accepts one to three selected reference images for this path.
-- Keep visual_analysis compact: at most 6 component_evidence items, at most 6 cross_reference_alignment items, at most 6 output_component_priorities, and at most 3 unselected_important_evidence items.
-- Use single-line JSON string values. Do not put unescaped quotation marks inside string values.
-- Do not include trailing commas.
-- Return plain JSON only. No Markdown.
-
-Return exactly one JSON object with this shape:
-{{
-  "selected_refs": [
-    "reference id from the available reference id list"
-  ],
-  "reference_semantics": {{
-    "reference id from the available reference id list": "short semantic label inferred from that image"
-  }},
-  "visual_analysis": {{
-    "reference_encoding_summary": {{
-      "reference1": "short visual summary of this supplied image",
-      "reference2": "short visual summary of this supplied image"
-    }},
-    "subject_map": {{
-      "primary_subject": {{
-        "evidence_refs": [
-          "reference1"
-        ],
-        "notes": "short subject-identification note"
-      }}
-    }},
-    "component_evidence": [
-      {{
-        "component": "short component name",
-        "evidence_refs": [
-          "reference1"
-        ],
-        "task_relevance": "high, medium, or low",
-        "visibility": "clear, partial, or unclear"
-      }}
-    ],
-    "cross_reference_alignment": [
-      {{
-        "component": "short component name",
-        "aligned_refs": [
-          "reference1"
-        ],
-        "anchor_ref": "reference1",
-        "supporting_refs": [],
-        "conflicts": [],
-        "confidence": "high, medium, or low"
-      }}
-    ],
-    "output_component_priorities": [
-      {{
-        "component": "short component name",
-        "priority": "high, medium, or low",
-        "reason": "short task-specific reason"
-      }}
-    ],
-    "unselected_important_evidence": [],
-    "low_priority_components_for_this_output": [
-      "short component name"
-    ],
-    "unresolved_alignment_questions": []
-  }},
-  "edit_instruction": "one concise instruction"
-}}
-
-Validation:
-- selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
-- selected_refs order is the order the image editor will receive the images.
-- selected_refs must be explainable from visual_analysis.output_component_priorities and visual_analysis.cross_reference_alignment.
-- reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
-- visual_analysis is a compact freeform JSON object for audit; use the listed reference-observation and step-4-through-7 keys when they apply and keep values short.
-- visual_analysis.reference_encoding_summary must contain every available reference id from exactly this list: {reference_id_list}.
-- visual_analysis.output_component_priorities and visual_analysis.low_priority_components_for_this_output must not contradict each other.
-- Use visual_analysis.unselected_important_evidence when a reference contributes important evidence but cannot be selected.
-- edit_instruction must be a single non-empty string.
-- Output must be valid JSON parseable by Python json.loads.
-"""
-
-
-def _edit_plan_reference_line(
-    *,
-    input_index: int,
-    planner_reference_id: str,
-    pack_reference_id: str,
-    pack: CharacterReferencePackSpec,
-) -> str:
-    asset = pack.references[pack_reference_id]
-    return f"- input {input_index}: reference id {planner_reference_id} ({asset.width}x{asset.height}, {asset.mode})"
 
 
 def _identity_output_path(pack_path: Path, output_path: Path | None) -> Path:

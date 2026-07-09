@@ -105,7 +105,7 @@ def default_instruction_parser_config() -> CharacterInstructionParserConfig:
     )
 
 
-def default_edit_planner_vlm_config() -> QwenVlmConfig:
+def default_reference_selector_vlm_config() -> QwenVlmConfig:
     return QwenVlmConfig(
         judge_id=DEFAULT_EDIT_PLANNER_ID,
         model=DEFAULT_EDIT_PLANNER_MODEL,
@@ -255,7 +255,7 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit_plan.add_argument(
         "--instruction",
-        help="Optional user request for the VLM edit planner; defaults to the selected case name",
+        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
     )
     qwen_edit_plan.add_argument("--candidates", type=int, default=2, help="Candidates per case")
     qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -273,7 +273,7 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument(
         "--instruction",
-        help="Optional user request for the VLM edit planner; defaults to the selected case name",
+        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
     )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
@@ -541,7 +541,7 @@ def run_character_command(
                 plan_qwen_character_edit(
                     pack_path=args.pack,
                     instruction_parser_config=default_instruction_parser_config(),
-                    vlm_config=default_edit_planner_vlm_config(),
+                    vlm_config=default_reference_selector_vlm_config(),
                     cases=args.case or (),
                     instruction=args.instruction,
                     candidates_per_case=args.candidates,
@@ -558,7 +558,7 @@ def run_character_command(
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
                     instruction_parser_config=default_instruction_parser_config(),
-                    vlm_config=default_edit_planner_vlm_config(),
+                    vlm_config=default_reference_selector_vlm_config(),
                     cases=args.case or (),
                     instruction=args.instruction,
                     max_side=args.max_side,

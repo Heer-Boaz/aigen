@@ -23,15 +23,14 @@ from aigen.character_reference_models import (
     CharacterReferencePackSpec,
     load_completed_character_reference_pack,
 )
-from aigen.character_reference_observation_models import (
-    CharacterReferenceObservationError,
-    CharacterReferenceObservationSetSpec,
+from aigen.character_reference_pack import (
+    ReferenceSelection,
+    select_reference_subset,
 )
-from aigen.character_reference_observer import observe_character_references
-from aigen.character_reference_pack import character_planner_reference_map, parse_character_edit_plan
 from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
 from aigen.character_task_router import CharacterTaskRouter, compact_vlm_planner_context
 from aigen.generation.qwen_image_edit_identity import (
+    QWEN_IDENTITY_CASES,
     QwenIdentityCase,
     QwenImageEditIdentityProfile,
     run_qwen_image_edit_cases,
@@ -218,17 +217,25 @@ def _build_qwen_character_edit_plan(
         )
         for template in templates
     )
-    progress.phase("plan qwen character edit with VLM")
-    with closing(QwenVlm(vlm_config)) as runner:
-        edit_cases = tuple(
-            _planned_case(
-                parsed_case=parsed_case,
-                context=context,
-                runner=runner,
+    needs_selection = _needs_reference_selection(context.pack, parsed_cases)
+    if needs_selection:
+        progress.phase("select qwen character edit references with VLM")
+        with closing(QwenVlm(vlm_config)) as runner:
+            edit_cases = tuple(
+                _planned_case(parsed_case=parsed_case, context=context, runner=runner)
+                for parsed_case in parsed_cases
             )
+            reference_selector = qwen_vlm_config_json(vlm_config) | {
+                "device_report": runner.device_report,
+                "selector": "qwen_vlm_reference_index_selection",
+            }
+    else:
+        progress.phase("select qwen character edit references")
+        edit_cases = tuple(
+            _planned_case(parsed_case=parsed_case, context=context, runner=None)
             for parsed_case in parsed_cases
         )
-        edit_planner = qwen_vlm_config_json(vlm_config) | {"device_report": runner.device_report}
+        reference_selector = {"selector": "all_refs_within_budget", "vlm_loaded": False}
     _validate_planned_references(context.pack, edit_cases)
     return PlannedQwenCharacterEdit(
         reference_paths=context.reference_paths,
@@ -240,7 +247,7 @@ def _build_qwen_character_edit_plan(
             candidates_per_case=candidates_per_case,
             instruction=instruction,
             instruction_parser=character_instruction_parser_config_json(instruction_parser.config),
-            edit_planner=edit_planner,
+            reference_selector=reference_selector,
         ),
     )
 
@@ -328,62 +335,64 @@ def _parsed_case(
     )
 
 
+def _needs_reference_selection(
+    pack: CharacterReferencePackSpec,
+    parsed_cases: Sequence[ParsedQwenCharacterEditCase],
+) -> bool:
+    reference_count = len(pack.references)
+    return any(
+        reference_count > parsed_case.task_route_plan.capability_registry.max_qwen_edit_refs
+        for parsed_case in parsed_cases
+    )
+
+
 def _planned_case(
     *,
     parsed_case: ParsedQwenCharacterEditCase,
     context: QwenCharacterReferenceContext,
-    runner: QwenVlm,
+    runner: QwenVlm | None,
 ) -> QwenIdentityCase:
     try:
-        planner_reference_map = character_planner_reference_map(context.pack)
-        reference_observations = observe_character_references(
+        selection = select_reference_subset(
             runner=runner,
             pack=context.pack,
             reference_paths=context.reference_paths,
-            planner_reference_map=planner_reference_map,
-            planner_context=parsed_case.planner_context,
+            route_plan=parsed_case.task_route_plan,
             path_label=f"{context.pack_path.as_posix()}#{parsed_case.template.name}",
         )
-        planned = parse_character_edit_plan(
-            runner=runner,
-            pack=context.pack,
-            reference_paths=context.reference_paths,
-            case_name=parsed_case.template.name,
-            user_instruction=parsed_case.instruction_request,
-            planner_context=parsed_case.planner_context,
-            reference_observations=reference_observations.model_dump(mode="json"),
-            path_label=f"{context.pack_path.as_posix()}#{parsed_case.template.name}",
-        )
-    except (CharacterReferenceError, CharacterReferenceObservationError) as error:
+    except CharacterReferenceError as error:
         raise QwenCharacterEditError(str(error)) from error
     conditioning_plan = CharacterConditioningPlanner().plan(
         instruction_plan=parsed_case.instruction_plan,
         task_route_plan=parsed_case.task_route_plan,
-        visual_analysis=planned.visual_analysis,
     )
+    prompt, portrait_canvas = _thin_prompt(parsed_case)
     normalized_instruction = _normalized_instruction(
         template=parsed_case.template,
-        reference_ids=planned.selected_refs,
+        selection=selection,
         source_instruction=parsed_case.source_instruction,
         instruction_request=parsed_case.instruction_request,
         instruction_plan=parsed_case.instruction_plan,
         task_route_plan=parsed_case.task_route_plan,
-        edit_instruction=planned.edit_instruction,
-        edit_planner_raw_response=planned.raw_text,
-        selected_planner_refs=planned.selected_planner_refs,
-        planner_reference_map=planned.planner_reference_map,
-        reference_semantics=planned.reference_semantics,
-        reference_observations=reference_observations,
-        visual_analysis=planned.visual_analysis,
+        prompt=prompt,
         planner_context=parsed_case.planner_context,
         conditioning_plan=conditioning_plan,
     )
     return QwenIdentityCase(
         name=parsed_case.template.name,
-        references=planned.selected_refs,
-        prompt=planned.edit_instruction,
+        references=selection.selected_refs,
+        prompt=prompt,
+        portrait_canvas=portrait_canvas,
         normalized_instruction=normalized_instruction,
     )
+
+
+def _thin_prompt(parsed_case: ParsedQwenCharacterEditCase) -> tuple[str, bool]:
+    fallback = QWEN_IDENTITY_CASES[parsed_case.template.name]
+    source_instruction = parsed_case.source_instruction
+    if source_instruction is not None and source_instruction.strip():
+        return source_instruction.strip(), fallback.portrait_canvas
+    return fallback.prompt, fallback.portrait_canvas
 
 
 def _instruction_request(template: QwenCharacterEditCaseTemplate, instruction: str | None) -> str:
@@ -416,40 +425,32 @@ def _instruction_envelope(
 def _normalized_instruction(
     *,
     template: QwenCharacterEditCaseTemplate,
-    reference_ids: Sequence[str],
+    selection: ReferenceSelection,
     source_instruction: str | None,
     instruction_request: str,
     instruction_plan: CharacterInstructionPlanSpec,
     task_route_plan: CharacterTaskRoutePlanSpec,
-    edit_instruction: str,
-    edit_planner_raw_response: str,
-    selected_planner_refs: Sequence[str],
-    planner_reference_map: Mapping[str, str],
-    reference_semantics: Mapping[str, str],
-    reference_observations: CharacterReferenceObservationSetSpec,
-    visual_analysis: Mapping[str, Any],
+    prompt: str,
     planner_context: Mapping[str, Any],
     conditioning_plan: CharacterConditioningPlanSpec,
 ) -> dict[str, Any]:
+    used_user_instruction = bool(source_instruction and source_instruction.strip())
     normalized: dict[str, Any] = {
         "task": "identity_edit",
         "case": template.name,
-        "planner_input_refs": list(planner_reference_map),
-        "selected_planner_refs": list(selected_planner_refs),
-        "planner_reference_map": dict(planner_reference_map),
-        "reference_semantics": dict(reference_semantics),
-        "reference_observations": reference_observations.model_dump(mode="json"),
-        "refs_used": list(reference_ids),
+        "reference_selector": selection.selector,
+        "planner_input_refs": list(selection.planner_reference_map),
+        "planner_reference_map": dict(selection.planner_reference_map),
+        "selected_planner_refs": list(selection.selected_planner_refs),
+        "refs_used": list(selection.selected_refs),
         "source_instruction": source_instruction,
         "instruction_request": instruction_request,
         "instruction_plan": instruction_plan.model_dump(mode="json"),
         "task_route_plan": task_route_plan.model_dump(mode="json"),
         "planner_context": dict(planner_context),
-        "visual_analysis": dict(visual_analysis),
         "conditioning_plan": conditioning_plan.model_dump(mode="json"),
-        "edit_instruction_source": "qwen_vlm_edit_planner",
-        "edit_instruction": edit_instruction,
-        "edit_planner_raw_response": edit_planner_raw_response,
+        "prompt_source": "user_instruction" if used_user_instruction else "generic_case_prompt",
+        "prompt": prompt,
         "identity_profile_used": False,
     }
     return normalized
@@ -470,17 +471,16 @@ def _plan_manifest(
     candidates_per_case: int,
     instruction: str | None,
     instruction_parser: Mapping[str, Any],
-    edit_planner: Mapping[str, Any],
+    reference_selector: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
         "kind": "qwen-character-edit-plan",
         "character_id": pack.character_id,
         "reference_pack": pack_path.as_posix(),
         "source_instruction": instruction,
-        "normalizer": "text_instruction_parser_plus_qwen_vlm_edit_planner_v1",
+        "normalizer": "text_instruction_parser_plus_reference_index_selector_v1",
         "instruction_parser": dict(instruction_parser),
-        "edit_planner": dict(edit_planner),
-        "reference_selector": "qwen_vlm_selected_refs_v1",
+        "reference_selector": dict(reference_selector),
         "candidates_per_case": candidates_per_case,
         "cases": [
             {
