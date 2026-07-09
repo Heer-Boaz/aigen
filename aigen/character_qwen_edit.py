@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +16,6 @@ from aigen.character_instruction_models import (
 from aigen.character_instruction_parser import (
     CharacterInstructionParser,
     CharacterInstructionParserConfig,
-    character_instruction_parser_config_json,
 )
 from aigen.character_reference_models import (
     CharacterReferenceError,
@@ -28,7 +27,7 @@ from aigen.character_reference_pack import (
     select_reference_subset,
 )
 from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
-from aigen.character_task_router import CharacterTaskRouter, compact_vlm_planner_context
+from aigen.character_task_router import CharacterTaskRouter
 from aigen.generation.qwen_image_edit_identity import (
     QWEN_IDENTITY_CASES,
     QwenIdentityCase,
@@ -38,7 +37,7 @@ from aigen.generation.qwen_image_edit_identity import (
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 from aigen.progress import StatusReporter
 from aigen.text_llm import TextLlmError
-from aigen.vlm_qwen import QwenVlm, QwenVlmConfig, qwen_vlm_config_json
+from aigen.vlm_qwen import QwenVlm, QwenVlmConfig
 
 
 class QwenCharacterEditError(RuntimeError):
@@ -57,14 +56,12 @@ class ParsedQwenCharacterEditCase:
     instruction_request: str
     instruction_plan: CharacterInstructionPlanSpec
     task_route_plan: CharacterTaskRoutePlanSpec
-    planner_context: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class PlannedQwenCharacterEdit:
     reference_paths: dict[str, Path]
     edit_cases: tuple[QwenIdentityCase, ...]
-    manifest: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -109,30 +106,6 @@ def qwen_character_edit_case_names() -> tuple[str, ...]:
     return tuple(QWEN_CHARACTER_EDIT_CASES) + tuple(QWEN_CHARACTER_EDIT_CASE_ALIASES)
 
 
-def plan_qwen_character_edit(
-    *,
-    pack_path: Path,
-    instruction_parser_config: CharacterInstructionParserConfig,
-    vlm_config: QwenVlmConfig,
-    cases: Sequence[str],
-    instruction: str | None,
-    candidates_per_case: int,
-    progress: StatusReporter,
-) -> dict[str, Any]:
-    return {
-        "status": "planned",
-        **_build_qwen_character_edit_plan(
-            pack_path=pack_path,
-            instruction_parser_config=instruction_parser_config,
-            vlm_config=vlm_config,
-            cases=cases,
-            instruction=instruction,
-            candidates_per_case=candidates_per_case,
-            progress=progress,
-        ).manifest,
-    }
-
-
 def run_qwen_character_edit(
     *,
     pack_path: Path,
@@ -149,6 +122,8 @@ def run_qwen_character_edit(
     seed: int,
     max_sequence_length: int,
     candidates_per_case: int,
+    output_format: str,
+    resolution: str,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
     progress: StatusReporter,
@@ -160,6 +135,8 @@ def run_qwen_character_edit(
         cases=cases,
         instruction=instruction,
         candidates_per_case=candidates_per_case,
+        output_format=output_format,
+        resolution=resolution,
         progress=progress,
     )
     output_dir = output_dir.resolve()
@@ -177,13 +154,12 @@ def run_qwen_character_edit(
         candidates_per_case=candidates_per_case,
         overwrite=overwrite,
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
+        output_format=output_format,
+        resolution=resolution,
         result_kind="qwen-character-edit-result",
-        manifest_context=planned.manifest,
+        manifest_context=None,
         progress=progress,
     )
-    edit_plan_path = output_dir / "edit_plan.json"
-    write_json(edit_plan_path, {"status": "completed", **planned.manifest})
-    result["output"]["edit_plan"] = edit_plan_path.as_posix()
     write_json(output_dir / "result.json", result)
     return result
 
@@ -196,10 +172,14 @@ def _build_qwen_character_edit_plan(
     cases: Sequence[str],
     instruction: str | None,
     candidates_per_case: int,
+    output_format: str | None,
+    resolution: str | None,
     progress: StatusReporter,
 ) -> PlannedQwenCharacterEdit:
     if candidates_per_case < 1:
         raise QwenCharacterEditError("candidates_per_case must be at least 1")
+    if (output_format is None) != (resolution is None):
+        raise QwenCharacterEditError("output_format and resolution must be provided together")
     context = load_qwen_character_reference_context(
         pack_path=pack_path,
         progress=progress,
@@ -214,6 +194,8 @@ def _build_qwen_character_edit_plan(
             context=context,
             instruction=instruction,
             instruction_parser=instruction_parser,
+            output_format=output_format,
+            resolution=resolution,
         )
         for template in templates
     )
@@ -225,30 +207,16 @@ def _build_qwen_character_edit_plan(
                 _planned_case(parsed_case=parsed_case, context=context, runner=runner)
                 for parsed_case in parsed_cases
             )
-            reference_selector = qwen_vlm_config_json(vlm_config) | {
-                "device_report": runner.device_report,
-                "selector": "qwen_vlm_reference_index_selection",
-            }
     else:
         progress.phase("select qwen character edit references")
         edit_cases = tuple(
             _planned_case(parsed_case=parsed_case, context=context, runner=None)
             for parsed_case in parsed_cases
         )
-        reference_selector = {"selector": "all_refs_within_budget", "vlm_loaded": False}
     _validate_planned_references(context.pack, edit_cases)
     return PlannedQwenCharacterEdit(
         reference_paths=context.reference_paths,
         edit_cases=edit_cases,
-        manifest=_plan_manifest(
-            pack_path=context.pack_path,
-            pack=context.pack,
-            edit_cases=edit_cases,
-            candidates_per_case=candidates_per_case,
-            instruction=instruction,
-            instruction_parser=character_instruction_parser_config_json(instruction_parser.config),
-            reference_selector=reference_selector,
-        ),
     )
 
 
@@ -311,6 +279,8 @@ def _parsed_case(
     context: QwenCharacterReferenceContext,
     instruction: str | None,
     instruction_parser: CharacterInstructionParser,
+    output_format: str | None,
+    resolution: str | None,
 ) -> ParsedQwenCharacterEditCase:
     instruction_request = _instruction_request(template, instruction)
     try:
@@ -319,19 +289,19 @@ def _parsed_case(
                 template=template,
                 context=context,
                 instruction_request=instruction_request,
+                output_format=output_format,
+                resolution=resolution,
             )
         )
     except (CharacterInstructionError, TextLlmError) as error:
         raise QwenCharacterEditError(str(error)) from error
     task_route_plan = CharacterTaskRouter().route(instruction_plan)
-    planner_context = compact_vlm_planner_context(instruction_plan, task_route_plan)
     return ParsedQwenCharacterEditCase(
         template=template,
         source_instruction=instruction,
         instruction_request=instruction_request,
         instruction_plan=instruction_plan,
         task_route_plan=task_route_plan,
-        planner_context=planner_context,
     )
 
 
@@ -367,15 +337,11 @@ def _planned_case(
         task_route_plan=parsed_case.task_route_plan,
     )
     prompt, portrait_canvas = _thin_prompt(parsed_case)
-    normalized_instruction = _normalized_instruction(
+    edit_context = _edit_context(
         template=parsed_case.template,
         selection=selection,
         source_instruction=parsed_case.source_instruction,
-        instruction_request=parsed_case.instruction_request,
-        instruction_plan=parsed_case.instruction_plan,
         task_route_plan=parsed_case.task_route_plan,
-        prompt=prompt,
-        planner_context=parsed_case.planner_context,
         conditioning_plan=conditioning_plan,
     )
     return QwenIdentityCase(
@@ -383,7 +349,7 @@ def _planned_case(
         references=selection.selected_refs,
         prompt=prompt,
         portrait_canvas=portrait_canvas,
-        normalized_instruction=normalized_instruction,
+        edit_context=edit_context,
     )
 
 
@@ -406,7 +372,14 @@ def _instruction_envelope(
     template: QwenCharacterEditCaseTemplate,
     context: QwenCharacterReferenceContext,
     instruction_request: str,
+    output_format: str | None,
+    resolution: str | None,
 ) -> InstructionEnvelopeSpec:
+    generation_panel_settings: dict[str, Any] = {"case": template.name}
+    if output_format is not None:
+        generation_panel_settings["output_format"] = output_format
+    if resolution is not None:
+        generation_panel_settings["resolution"] = resolution
     return InstructionEnvelopeSpec(
         raw_instruction=instruction_request,
         ui_mode="reference_conditioned_generation",
@@ -414,83 +387,42 @@ def _instruction_envelope(
         source_image_present=False,
         mask_present=False,
         region_plan_present=False,
-        generation_panel_settings={"case": template.name},
+        generation_panel_settings=generation_panel_settings,
         requested_model_family="qwen-image-edit",
         negative_prompt_present=False,
-        aspect_ratio_setting=None,
+        aspect_ratio_setting=output_format,
         seed_setting=None,
     )
 
 
-def _normalized_instruction(
+def _edit_context(
     *,
     template: QwenCharacterEditCaseTemplate,
     selection: ReferenceSelection,
     source_instruction: str | None,
-    instruction_request: str,
-    instruction_plan: CharacterInstructionPlanSpec,
     task_route_plan: CharacterTaskRoutePlanSpec,
-    prompt: str,
-    planner_context: Mapping[str, Any],
     conditioning_plan: CharacterConditioningPlanSpec,
 ) -> dict[str, Any]:
     used_user_instruction = bool(source_instruction and source_instruction.strip())
-    normalized: dict[str, Any] = {
+    return {
         "task": "identity_edit",
         "case": template.name,
         "reference_selector": selection.selector,
-        "planner_input_refs": list(selection.planner_reference_map),
-        "planner_reference_map": dict(selection.planner_reference_map),
         "selected_planner_refs": list(selection.selected_planner_refs),
         "refs_used": list(selection.selected_refs),
-        "source_instruction": source_instruction,
-        "instruction_request": instruction_request,
-        "instruction_plan": instruction_plan.model_dump(mode="json"),
-        "task_route_plan": task_route_plan.model_dump(mode="json"),
-        "planner_context": dict(planner_context),
-        "conditioning_plan": conditioning_plan.model_dump(mode="json"),
         "prompt_source": "user_instruction" if used_user_instruction else "generic_case_prompt",
-        "prompt": prompt,
+        "route_kind": task_route_plan.route_kind,
+        "output_mode": task_route_plan.output_mode,
+        "editor_route": task_route_plan.editor_route,
+        "conditioning_status": conditioning_plan.status,
+        "conditioning_modes": list(conditioning_plan.conditioning_modes),
+        "conditioning_deferred_to": conditioning_plan.deferred_to,
         "identity_profile_used": False,
     }
-    return normalized
 
 
 def _reference_paths(pack: CharacterReferencePackSpec, pack_path: Path) -> dict[str, Path]:
     return {
         name: resolve_existing_path(asset.path, pack_path.parent)
         for name, asset in pack.references.items()
-    }
-
-
-def _plan_manifest(
-    *,
-    pack_path: Path,
-    pack: CharacterReferencePackSpec,
-    edit_cases: Sequence[QwenIdentityCase],
-    candidates_per_case: int,
-    instruction: str | None,
-    instruction_parser: Mapping[str, Any],
-    reference_selector: Mapping[str, Any],
-) -> dict[str, Any]:
-    return {
-        "kind": "qwen-character-edit-plan",
-        "character_id": pack.character_id,
-        "reference_pack": pack_path.as_posix(),
-        "source_instruction": instruction,
-        "normalizer": "text_instruction_parser_plus_reference_index_selector_v1",
-        "instruction_parser": dict(instruction_parser),
-        "reference_selector": dict(reference_selector),
-        "candidates_per_case": candidates_per_case,
-        "cases": [
-            {
-                "name": case.name,
-                "references": list(case.references),
-                "refs_used": list(case.references),
-                "identity_profile_used": False,
-                "normalized_instruction": case.normalized_instruction,
-                "prompt": case.prompt,
-            }
-            for case in edit_cases
-        ],
     }

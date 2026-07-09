@@ -35,6 +35,7 @@ generation = [
   "safetensors>=0.4",
   "segment-anything==1.0",
   "sentencepiece",
+  "spandrel>=0.4",
   "tensorboard",
   "torch==2.12.1",
   "transformers>=4.44",

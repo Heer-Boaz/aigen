@@ -18,7 +18,6 @@ from aigen.character_region_plan import (
 )
 from aigen.character_qwen_edit import (
     QwenCharacterEditError,
-    plan_qwen_character_edit,
     qwen_character_edit_case_names,
     run_qwen_character_edit,
 )
@@ -51,6 +50,8 @@ from aigen.generation.qwen_image_edit_identity import (
     qwen_image_edit_identity_profile_for_name,
     qwen_image_edit_identity_model_names,
     qwen_image_edit_identity_profile_names,
+    qwen_output_format_names,
+    qwen_output_resolution_names,
     run_qwen_image_edit_identity,
 )
 from aigen.keyframe_memory import KeyframeMemoryError
@@ -213,6 +214,16 @@ def add_character_commands(subparsers: Any) -> None:
         help="Longest generated/reference side for the smoke run",
     )
     qwen_identity.add_argument(
+        "--output-format",
+        choices=qwen_output_format_names(),
+        help="Final output aspect ratio; requires --resolution",
+    )
+    qwen_identity.add_argument(
+        "--resolution",
+        choices=qwen_output_resolution_names(),
+        help="Final output long-edge resolution; requires --output-format",
+    )
+    qwen_identity.add_argument(
         "--steps",
         type=int,
         help="Qwen Image Edit denoising steps; defaults to the selected profile",
@@ -242,24 +253,6 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_identity.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_identity.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    qwen_edit_plan = character_subparsers.add_parser(
-        "qwen-edit-plan",
-        help="Plan pack/profile-driven Qwen Image Edit character cases without loading generation models",
-    )
-    qwen_edit_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
-    qwen_edit_plan.add_argument(
-        "--case",
-        action="append",
-        choices=qwen_character_edit_case_names(),
-        help="Edit case to plan; defaults to identity view cases",
-    )
-    qwen_edit_plan.add_argument(
-        "--instruction",
-        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
-    )
-    qwen_edit_plan.add_argument("--candidates", type=int, default=2, help="Candidates per case")
-    qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
-
     qwen_edit = character_subparsers.add_parser(
         "qwen-edit-run",
         help="Run pack/profile-driven Qwen Image Edit character cases",
@@ -288,6 +281,18 @@ def add_character_commands(subparsers: Any) -> None:
         type=int,
         default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
         help="Longest generated/reference side",
+    )
+    qwen_edit.add_argument(
+        "--output-format",
+        required=True,
+        choices=qwen_output_format_names(),
+        help="Final output aspect ratio",
+    )
+    qwen_edit.add_argument(
+        "--resolution",
+        required=True,
+        choices=qwen_output_resolution_names(),
+        help="Final output long-edge resolution",
     )
     qwen_edit.add_argument(
         "--steps",
@@ -530,21 +535,8 @@ def run_character_command(
                     max_sequence_length=args.max_sequence_length,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
-                    progress=progress,
-                ),
-                pretty=not args.compact,
-            )
-            return 0
-        if args.characters_command == "qwen-edit-plan":
-            dump_json(
-                stdout,
-                plan_qwen_character_edit(
-                    pack_path=args.pack,
-                    instruction_parser_config=default_instruction_parser_config(),
-                    vlm_config=default_reference_selector_vlm_config(),
-                    cases=args.case or (),
-                    instruction=args.instruction,
-                    candidates_per_case=args.candidates,
+                    output_format=args.output_format,
+                    resolution=args.resolution,
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -568,6 +560,8 @@ def run_character_command(
                     seed=args.seed,
                     max_sequence_length=args.max_sequence_length,
                     candidates_per_case=args.candidates,
+                    output_format=args.output_format,
+                    resolution=args.resolution,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
                     progress=progress,
