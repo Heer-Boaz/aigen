@@ -66,6 +66,11 @@ class CharacterReferenceObserverTests(unittest.TestCase):
         self.assertEqual(observations.observations["reference1"].reference_id, "reference1")
         self.assertIn("single-reference visual observation", runner.prompts[0])
         self.assertIn("portrait_identity_generation", runner.prompts[0])
+        self.assertIn("Determine view_or_framing only from the pixels", runner.prompts[0])
+        self.assertIn("Do not use filename, pack reference label, neutral reference id, user request, or planner context as truth", runner.prompts[0])
+        self.assertIn("Separate visible reference evidence from user-requested output constraints", runner.prompts[0])
+        self.assertIn("art_style or rendering_style", runner.prompts[0])
+        self.assertIn("reference background as context", runner.prompts[0])
 
     def test_observer_rejects_mismatched_reference_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -84,9 +84,13 @@ Planner context:
 Your job:
 1. Inspect exactly this one supplied reference image.
 2. Do not compare this image with other references.
-3. Do not infer facts from file names or labels.
-4. Use only visible evidence in this image.
-5. Use planner context only to decide which evidence may be relevant later.
+3. Determine view_or_framing only from the pixels in this image.
+4. Do not use filename, pack reference label, neutral reference id, user request, or planner context as truth about what this image shows.
+5. Use only visible reference evidence in this image.
+6. Use planner context only to decide which visible evidence may be relevant later.
+7. Separate visible reference evidence from user-requested output constraints such as requested background, lighting, gaze, expression, scene, or action.
+8. Treat the reference background as context, not automatic identity or component evidence.
+9. Include art_style or rendering_style as possible visible evidence when it is present.
 
 Return exactly one JSON object with this shape:
 {{
@@ -116,6 +120,9 @@ Return exactly one JSON object with this shape:
 Rules:
 - reference_id must be exactly "{planner_reference_id}".
 - visual_summary must be non-empty.
+- view_or_framing must describe this image, not the requested output.
+- visible_components may include art_style or rendering_style when visible.
+- Do not list user-requested output constraints as visible components unless they are also visible in this reference image.
 - Keep values compact.
 - Return plain JSON only. No Markdown.
 """

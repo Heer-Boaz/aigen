@@ -355,13 +355,21 @@ Your job:
 Rules:
 - The image editor redraws the character; it is not a bitmap rotation, crop, resize or file transform tool.
 - Use visual facts only when they are visible in the supplied images.
+- Separate user-requested output constraints from reference evidence. Requested background, lighting, gaze, expression, scene, action, or camera view are output constraints; they are not reference evidence unless visible in a supplied image.
+- Treat reference backgrounds as context, not automatic identity/component evidence.
+- art_style or rendering_style is possible visual evidence; decide its relevance from the images and the task route, and explain it when used.
 - Do not add names, story, mood, annotations, text, props, scene details, or extra outputs unless they are explicitly requested by the user, present in the planner context, or visible in the supplied images.
 - Do not simply copy reference_observations; use them as audit context.
 - Do not choose references that are irrelevant to the requested edit.
 - selected_refs must be justified by output_component_priorities and cross_reference_alignment.
+- selected_refs must support the high-priority output evidence you choose within the 1 to 3 reference limit.
+- If important evidence is taken from a reference that is not selected, explain why in visual_analysis.unselected_important_evidence.
 - reference_encoding_summary must include every available reference id: {reference_id_list}.
 - low_priority_components_for_this_output must not include high or medium priority components from output_component_priorities.
 - Qwen Image Edit accepts one to three selected reference images for this path.
+- Keep visual_analysis compact: at most 6 component_evidence items, at most 6 cross_reference_alignment items, at most 6 output_component_priorities, and at most 3 unselected_important_evidence items.
+- Use single-line JSON string values. Do not put unescaped quotation marks inside string values.
+- Do not include trailing commas.
 - Return plain JSON only. No Markdown.
 
 Return exactly one JSON object with this shape:
@@ -414,6 +422,7 @@ Return exactly one JSON object with this shape:
         "reason": "short task-specific reason"
       }}
     ],
+    "unselected_important_evidence": [],
     "low_priority_components_for_this_output": [
       "short component name"
     ],
@@ -425,10 +434,14 @@ Return exactly one JSON object with this shape:
 Validation:
 - selected_refs must contain 1 to 3 ids from exactly this list: {reference_id_list}.
 - selected_refs order is the order the image editor will receive the images.
+- selected_refs must be explainable from visual_analysis.output_component_priorities and visual_analysis.cross_reference_alignment.
 - reference_semantics is optional evidence authored by you; its keys, when present, must be from exactly this list: {reference_id_list}.
 - visual_analysis is a compact freeform JSON object for audit; use the listed reference-observation and step-4-through-7 keys when they apply and keep values short.
 - visual_analysis.reference_encoding_summary must contain every available reference id from exactly this list: {reference_id_list}.
+- visual_analysis.output_component_priorities and visual_analysis.low_priority_components_for_this_output must not contradict each other.
+- Use visual_analysis.unselected_important_evidence when a reference contributes important evidence but cannot be selected.
 - edit_instruction must be a single non-empty string.
+- Output must be valid JSON parseable by Python json.loads.
 """
 
 

@@ -137,6 +137,12 @@ class FakeEditPlanner:
                     "task_relevance": "low",
                     "visibility": "partial",
                 },
+                {
+                    "component": "art_style",
+                    "evidence_refs": ["reference1", "reference2", "reference3"],
+                    "task_relevance": "medium",
+                    "visibility": "clear",
+                },
             ],
             "cross_reference_alignment": [
                 {
@@ -155,6 +161,7 @@ class FakeEditPlanner:
                     "reason": "fake close portrait priority",
                 }
             ],
+            "unselected_important_evidence": [],
             "low_priority_components_for_this_output": ["lower body"],
             "unresolved_alignment_questions": [],
         },
@@ -306,6 +313,7 @@ class CharacterQwenEditTests(unittest.TestCase):
             )
             visual_analysis = case["normalized_instruction"]["visual_analysis"]
             self.assertEqual(visual_analysis["component_evidence"][0]["component"], "face")
+            self.assertEqual(visual_analysis["component_evidence"][2]["component"], "art_style")
             self.assertEqual(visual_analysis["cross_reference_alignment"][0]["anchor_ref"], "reference2")
             self.assertEqual(visual_analysis["output_component_priorities"][0]["priority"], "high")
             planner_context = case["normalized_instruction"]["planner_context"]
@@ -337,6 +345,11 @@ class CharacterQwenEditTests(unittest.TestCase):
             self.assertIn("portrait_identity_generation", final_prompt)
             self.assertIn("component_evidence", final_prompt)
             self.assertIn("cross_reference_alignment", final_prompt)
+            self.assertIn("reference_encoding_summary must include every available reference id", final_prompt)
+            self.assertIn("output constraints", final_prompt)
+            self.assertIn("not reference evidence unless visible", final_prompt)
+            self.assertIn("art_style or rendering_style", final_prompt)
+            self.assertIn("unselected_important_evidence", final_prompt)
             self.assertNotIn("raw_model_response", final_prompt)
             self.assertNotIn("endpoint", final_prompt)
 

@@ -1,9 +1,9 @@
 # Local PixAI Edit Pro — Implementation Blueprint
 
 Status: authoritative build blueprint for the local, <=16GB PixAI-Edit-Pro-style
-character edit pipeline. This is THE plan: it fully replaces the previous
-step 3–7 "external VLM planner / identity dossier" design. `AGENTS.md`
-behavioral rules still hold.
+character edit pipeline. This supersedes the data-flow of `docs/PLAN.md` steps
+3–7. Where this file and `PLAN.md` disagree, this file wins. `AGENTS.md` behavioral
+rules still hold.
 
 Goal restated: a **local** editor that behaves like PixAI Edit Pro. Lower quality
 and slower are acceptable. Lower quality **must not** come from a thinner
