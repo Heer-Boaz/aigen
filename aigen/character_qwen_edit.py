@@ -8,6 +8,12 @@ from typing import Any
 
 from aigen.character_conditioning_models import CharacterConditioningPlanSpec
 from aigen.character_conditioning_planner import CharacterConditioningPlanner
+from aigen.character_edit_plan_models import (
+    CHARACTER_EDIT_PLAN_KIND,
+    CharacterEditPlanError,
+    CharacterEditPlanSpec,
+    load_character_edit_plan,
+)
 from aigen.character_instruction_models import (
     CharacterInstructionError,
     CharacterInstructionPlanSpec,
@@ -34,6 +40,7 @@ from aigen.generation.qwen_image_edit_identity import (
     QwenImageEditIdentityProfile,
     run_qwen_image_edit_cases,
 )
+from aigen.image_assets import image_asset_json
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 from aigen.progress import StatusReporter
 from aigen.text_llm import TextLlmError
@@ -60,8 +67,12 @@ class ParsedQwenCharacterEditCase:
 
 @dataclass(frozen=True)
 class PlannedQwenCharacterEdit:
-    reference_paths: dict[str, Path]
+    context: QwenCharacterReferenceContext
     edit_cases: tuple[QwenIdentityCase, ...]
+
+    @property
+    def reference_paths(self) -> dict[str, Path]:
+        return self.context.reference_paths
 
 
 @dataclass(frozen=True)
@@ -126,19 +137,29 @@ def run_qwen_character_edit(
     resolution: str,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
+    plan_path: Path | None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
-    planned = _build_qwen_character_edit_plan(
-        pack_path=pack_path,
-        instruction_parser_config=instruction_parser_config,
-        vlm_config=vlm_config,
-        cases=cases,
-        instruction=instruction,
-        candidates_per_case=candidates_per_case,
-        output_format=output_format,
-        resolution=resolution,
-        progress=progress,
-    )
+    if plan_path is not None:
+        if instruction is not None or cases:
+            raise QwenCharacterEditError("--plan replaces --instruction and --case; do not combine them")
+        planned = _planned_edit_from_plan_file(
+            pack_path=pack_path,
+            plan_path=plan_path,
+            progress=progress,
+        )
+    else:
+        planned = _build_qwen_character_edit_plan(
+            pack_path=pack_path,
+            instruction_parser_config=instruction_parser_config,
+            vlm_config=vlm_config,
+            cases=cases,
+            instruction=instruction,
+            candidates_per_case=candidates_per_case,
+            output_format=output_format,
+            resolution=resolution,
+            progress=progress,
+        )
     output_dir = output_dir.resolve()
     result = run_qwen_image_edit_cases(
         references=planned.reference_paths,
@@ -215,9 +236,125 @@ def _build_qwen_character_edit_plan(
         )
     _validate_planned_references(context.pack, edit_cases)
     return PlannedQwenCharacterEdit(
-        reference_paths=context.reference_paths,
+        context=context,
         edit_cases=edit_cases,
     )
+
+
+def plan_qwen_character_edit(
+    *,
+    pack_path: Path,
+    instruction_parser_config: CharacterInstructionParserConfig,
+    vlm_config: QwenVlmConfig,
+    cases: Sequence[str],
+    instruction: str | None,
+    output_path: Path,
+    overwrite: bool,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    output_path = output_path.resolve()
+    if output_path.exists() and not overwrite:
+        raise QwenCharacterEditError(f"Edit plan exists and overwrite=false: {output_path.as_posix()}")
+    planned = _build_qwen_character_edit_plan(
+        pack_path=pack_path,
+        instruction_parser_config=instruction_parser_config,
+        vlm_config=vlm_config,
+        cases=cases,
+        instruction=instruction,
+        candidates_per_case=1,
+        output_format=None,
+        resolution=None,
+        progress=progress,
+    )
+    pack = planned.context.pack
+    payload = {
+        "status": "completed",
+        "kind": CHARACTER_EDIT_PLAN_KIND,
+        "character_id": pack.character_id,
+        "reference_pack": planned.context.pack_path.as_posix(),
+        "reference_sha256": {name: asset.sha256 for name, asset in pack.references.items()},
+        "source_instruction": instruction,
+        "cases": [
+            {
+                "name": case.name,
+                "references": list(case.references),
+                "prompt": case.prompt,
+                "prompt_source": case.edit_context["prompt_source"],
+                "portrait_canvas": case.portrait_canvas,
+                "reference_selector": case.edit_context["reference_selector"],
+                "route_kind": case.edit_context["route_kind"],
+            }
+            for case in planned.edit_cases
+        ],
+    }
+    load_character_edit_plan(payload, path_label=output_path.as_posix())
+    write_json(output_path, payload)
+    return payload
+
+
+def _planned_edit_from_plan_file(
+    *,
+    pack_path: Path,
+    plan_path: Path,
+    progress: StatusReporter,
+) -> PlannedQwenCharacterEdit:
+    plan_path = plan_path.resolve()
+    context = load_qwen_character_reference_context(
+        pack_path=pack_path,
+        progress=progress,
+        phase="load qwen character edit reference pack",
+    )
+    progress.phase("load qwen character edit plan")
+    try:
+        plan = load_character_edit_plan(
+            read_json(plan_path, label="character edit plan"),
+            path_label=plan_path.as_posix(),
+        )
+    except CharacterEditPlanError as error:
+        raise QwenCharacterEditError(str(error)) from error
+    _validate_plan_against_pack(plan, context=context, plan_path=plan_path)
+    edit_cases = tuple(
+        QwenIdentityCase(
+            name=case.name,
+            references=tuple(case.references),
+            prompt=case.prompt,
+            portrait_canvas=case.portrait_canvas,
+            edit_context={
+                "task": "identity_edit",
+                "case": case.name,
+                "reference_selector": case.reference_selector,
+                "refs_used": list(case.references),
+                "prompt_source": case.prompt_source,
+                "route_kind": case.route_kind,
+                "edit_plan": plan_path.as_posix(),
+                "identity_profile_used": False,
+            },
+        )
+        for case in plan.cases
+    )
+    return PlannedQwenCharacterEdit(context=context, edit_cases=edit_cases)
+
+
+def _validate_plan_against_pack(
+    plan: CharacterEditPlanSpec,
+    *,
+    context: QwenCharacterReferenceContext,
+    plan_path: Path,
+) -> None:
+    plan_label = plan_path.as_posix()
+    pack_names = set(context.pack.references)
+    plan_names = set(plan.reference_sha256)
+    if pack_names != plan_names:
+        raise QwenCharacterEditError(
+            f"Edit plan {plan_label} is stale: pack references {sorted(pack_names)} do not match plan references "
+            f"{sorted(plan_names)}; re-run qwen-edit-plan"
+        )
+    for name, planned_sha in plan.reference_sha256.items():
+        current_sha = image_asset_json(context.reference_paths[name])["sha256"]
+        if current_sha != planned_sha:
+            raise QwenCharacterEditError(
+                f"Edit plan {plan_label} is stale: reference {name!r} changed since planning; re-run qwen-edit-plan"
+            )
 
 
 def load_qwen_character_reference_context(
@@ -364,7 +501,9 @@ def _thin_prompt(parsed_case: ParsedQwenCharacterEditCase) -> tuple[str, bool]:
 def _instruction_request(template: QwenCharacterEditCaseTemplate, instruction: str | None) -> str:
     if instruction is not None and instruction.strip():
         return instruction.strip()
-    return template.name
+    # Without a user instruction the generic case prompt IS the instruction;
+    # feeding the parser the bare case name breaks routing and ref selection.
+    return QWEN_IDENTITY_CASES[template.name].prompt
 
 
 def _instruction_envelope(

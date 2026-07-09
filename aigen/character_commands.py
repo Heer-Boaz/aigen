@@ -16,8 +16,10 @@ from aigen.character_region_plan import (
     parse_character_region_args,
     plan_character_regions,
 )
+from aigen.character_edit_plan_models import CharacterEditPlanError
 from aigen.character_qwen_edit import (
     QwenCharacterEditError,
+    plan_qwen_character_edit,
     qwen_character_edit_case_names,
     run_qwen_character_edit,
 )
@@ -253,6 +255,25 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_identity.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_identity.add_argument("--compact", action="store_true", help="Write compact JSON")
 
+    qwen_edit_plan = character_subparsers.add_parser(
+        "qwen-edit-plan",
+        help="Run parser and reference selection once and write a reusable edit plan",
+    )
+    qwen_edit_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_edit_plan.add_argument(
+        "--case",
+        action="append",
+        choices=qwen_character_edit_case_names(),
+        help="Edit case to plan; defaults to identity view cases",
+    )
+    qwen_edit_plan.add_argument(
+        "--instruction",
+        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
+    )
+    qwen_edit_plan.add_argument("--output", type=Path, required=True, help="Path for the reusable edit_plan.json")
+    qwen_edit_plan.add_argument("--overwrite", action="store_true", help="Replace an existing edit plan")
+    qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
+
     qwen_edit = character_subparsers.add_parser(
         "qwen-edit-run",
         help="Run pack/profile-driven Qwen Image Edit character cases",
@@ -267,6 +288,11 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--instruction",
         help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
+    )
+    qwen_edit.add_argument(
+        "--plan",
+        type=Path,
+        help="Reusable edit_plan.json from qwen-edit-plan; skips the parser and reference selector",
     )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
@@ -542,6 +568,22 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
+        if args.characters_command == "qwen-edit-plan":
+            dump_json(
+                stdout,
+                plan_qwen_character_edit(
+                    pack_path=args.pack,
+                    instruction_parser_config=default_instruction_parser_config(),
+                    vlm_config=default_reference_selector_vlm_config(),
+                    cases=args.case or (),
+                    instruction=args.instruction,
+                    output_path=args.output,
+                    overwrite=args.overwrite,
+                    progress=progress,
+                ),
+                pretty=not args.compact,
+            )
+            return 0
         if args.characters_command == "qwen-edit-run":
             dump_json(
                 stdout,
@@ -553,6 +595,7 @@ def run_character_command(
                     vlm_config=default_reference_selector_vlm_config(),
                     cases=args.case or (),
                     instruction=args.instruction,
+                    plan_path=args.plan,
                     max_side=args.max_side,
                     steps=args.steps,
                     true_cfg_scale=args.true_cfg_scale,
@@ -640,6 +683,7 @@ def run_character_command(
             )
             return 0
     except (
+        CharacterEditPlanError,
         CharacterReferenceError,
         CharacterRegionPlanError,
         QwenCharacterEditError,
