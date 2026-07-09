@@ -466,6 +466,7 @@ def _planned_case(
             reference_paths=context.reference_paths,
             route_plan=parsed_case.task_route_plan,
             path_label=f"{context.pack_path.as_posix()}#{parsed_case.template.name}",
+            required_refs=(parsed_case.template.name,),
         )
     except CharacterReferenceError as error:
         raise QwenCharacterEditError(str(error)) from error

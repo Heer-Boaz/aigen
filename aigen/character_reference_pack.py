@@ -157,6 +157,7 @@ def select_reference_subset(
     reference_paths: Mapping[str, Path],
     route_plan: CharacterTaskRoutePlanSpec,
     path_label: str,
+    required_refs: Sequence[str] = (),
 ) -> ReferenceSelection:
     """Choose the 1..budget reference images the editor receives for this output.
 
@@ -167,6 +168,12 @@ def select_reference_subset(
     planner_reference_map = character_planner_reference_map(pack)
     pack_reference_ids = tuple(pack.references)
     budget = route_plan.capability_registry.max_qwen_edit_refs
+    selected_required_refs = tuple(ref for ref in required_refs if ref in pack.references)
+    if len(selected_required_refs) > budget:
+        raise CharacterReferenceError(
+            f"{path_label}: required references exceed the {budget}-reference editor budget: "
+            f"{', '.join(selected_required_refs)}"
+        )
     if len(pack_reference_ids) <= budget:
         return ReferenceSelection(
             selected_refs=pack_reference_ids,
@@ -175,25 +182,57 @@ def select_reference_subset(
             selector="all_refs_within_budget",
             raw_text=None,
         )
+    remaining_budget = budget - len(selected_required_refs)
+    required_planner_refs = tuple(
+        planner_ref for planner_ref, pack_ref in planner_reference_map.items() if pack_ref in selected_required_refs
+    )
+    selectable_planner_map = {
+        planner_ref: pack_ref
+        for planner_ref, pack_ref in planner_reference_map.items()
+        if pack_ref not in selected_required_refs
+    }
+    if remaining_budget == 0:
+        return ReferenceSelection(
+            selected_refs=selected_required_refs,
+            selected_planner_refs=required_planner_refs,
+            planner_reference_map=planner_reference_map,
+            selector="required_refs_fill_budget",
+            raw_text=None,
+        )
+    if len(selectable_planner_map) <= remaining_budget:
+        selected_planner_refs = tuple(selectable_planner_map)
+        return ReferenceSelection(
+            selected_refs=selected_required_refs
+            + tuple(selectable_planner_map[planner_ref] for planner_ref in selected_planner_refs),
+            selected_planner_refs=required_planner_refs + selected_planner_refs,
+            planner_reference_map=planner_reference_map,
+            selector="required_refs_plus_all_remaining_within_budget",
+            raw_text=None,
+        )
     if runner is None:
         raise CharacterReferenceError(
             f"{path_label}: {len(pack_reference_ids)} references exceed the {budget}-reference editor budget "
             "but no VLM runner was provided for reference selection"
         )
-    image_paths = [reference_paths[pack_reference_id] for pack_reference_id in planner_reference_map.values()]
-    prompt = _reference_selector_prompt(planner_reference_map, route_plan, budget)
+    image_paths = [reference_paths[pack_reference_id] for pack_reference_id in selectable_planner_map.values()]
+    prompt = _reference_selector_prompt(selectable_planner_map, route_plan, remaining_budget)
     raw_text = runner.describe_image(prompt, image_paths)
     selected_planner_refs = _parse_selected_reference_ids(
         raw_text,
-        valid_ids=tuple(planner_reference_map),
-        budget=budget,
+        valid_ids=tuple(selectable_planner_map),
+        budget=remaining_budget,
         path_label=path_label,
     )
     return ReferenceSelection(
-        selected_refs=tuple(planner_reference_map[planner_ref] for planner_ref in selected_planner_refs),
-        selected_planner_refs=selected_planner_refs,
+        selected_refs=selected_required_refs
+        + tuple(selectable_planner_map[planner_ref] for planner_ref in selected_planner_refs),
+        selected_planner_refs=required_planner_refs + selected_planner_refs,
         planner_reference_map=planner_reference_map,
-        selector="qwen_vlm_reference_index_selection",
+        selector=(
+            "required_refs_plus_qwen_vlm_reference_index_selection"
+            if selected_required_refs
+            else "qwen_vlm_reference_index_selection"
+        ),
         raw_text=raw_text,
     )
 

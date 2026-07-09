@@ -13,32 +13,32 @@
   },
   "references": {
     "back": {
-      "height": 2240,
+      "height": 5056,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/reference03.png",
-      "sha256": "28ed4f9a8cf697468eeee1eb98b6fb9f0ac5f58f45c133670bf118f1b12fd4dd",
-      "width": 1680
+      "path": "/home/boaz/aigen/assets/characters/jillian/back-full.png",
+      "sha256": "384272649f8abe0d9a82b439433f08a4c302b7f8d0d3acbd7021add309c0fd2f",
+      "width": 3392
     },
     "front": {
-      "height": 2240,
+      "height": 5056,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/reference02.png",
-      "sha256": "b543dfefaa41bdd5d91c39fa006ceafdb9cfe1a65172d7e0b118a69aefb7e4ab",
-      "width": 1680
+      "path": "/home/boaz/aigen/assets/characters/jillian/front-full.png",
+      "sha256": "aa2c61fe7cd25bd8008381b2f6f0f6965ab1543a9e5e528dbaaf96cb8cfdae9e",
+      "width": 3392
     },
     "portrait": {
-      "height": 2528,
+      "height": 5056,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/reference01.jpg",
-      "sha256": "1f6f4e30e2c9358be0bafea42a9932889f0396f13431a54c3594f3378ce0d052",
-      "width": 1696
+      "path": "/home/boaz/aigen/assets/characters/jillian/front-upperbody.png",
+      "sha256": "72e3095c8b90344f076373a311e828e7253023dd0440d52a4d5152b2e98ece70",
+      "width": 3392
     },
     "side": {
-      "height": 2240,
+      "height": 5056,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/reference05.png",
-      "sha256": "d91b857e171739b74488d9eef0ddfc3c744233c1e8658045f50d38e693facfd8",
-      "width": 1680
+      "path": "/home/boaz/aigen/assets/characters/jillian/side-full.png",
+      "sha256": "ecceeaa93f1536aaeb42238d39a0582855f3bbb24ad2c252690c8307330d9413",
+      "width": 3392
     }
   },
   "status": "completed"

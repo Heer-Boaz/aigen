@@ -5,7 +5,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import gc
-from math import log
+from math import gcd, lcm, log
 from pathlib import Path
 from time import perf_counter
 from types import MethodType
@@ -477,6 +477,7 @@ def run_qwen_image_edit_cases(
             references=references,
             selected_cases=selected_cases,
             max_side=max_side,
+            output_spec=output_spec,
             progress=progress,
         )
         prompt_step = _encode_qwen_identity_prompts(
@@ -744,14 +745,17 @@ def _prepare_qwen_identity_references(
     references: Mapping[str, Path],
     selected_cases: Sequence[QwenIdentityCase],
     max_side: int,
+    output_spec: QwenOutputSpec | None,
     progress: StatusReporter,
 ) -> QwenIdentityReferenceStep:
     progress.phase("prepare qwen identity references")
     used_reference_names = _used_reference_names(selected_cases)
+    target_size = None if output_spec is None else (output_spec.raw_width, output_spec.raw_height)
     return QwenIdentityReferenceStep(
         cases=tuple(selected_cases),
         reference_images={
-            name: _load_reference_image(references[name], max_side=max_side) for name in used_reference_names
+            name: _load_reference_image(references[name], max_side=max_side, target_size=target_size)
+            for name in used_reference_names
         },
     )
 
@@ -919,10 +923,23 @@ def _postprocess_qwen_identity_outputs(
             progress.step(f"copied qwen raw image {output['name']}")
         return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=elapsed_ms(start, perf_counter()))
 
+    target_size = (output_spec.final_width, output_spec.final_height)
+    for raw_output in raw_outputs:
+        raw_size = (raw_output["raw_width"], raw_output["raw_height"])
+        if raw_size != (output_spec.raw_width, output_spec.raw_height):
+            raise QwenImageEditIdentityError(
+                f"Raw output {raw_output['name']} has size {raw_size[0]}x{raw_size[1]}, "
+                f"expected {output_spec.raw_width}x{output_spec.raw_height}"
+            )
+        if raw_size[0] * target_size[1] != raw_size[1] * target_size[0]:
+            raise QwenImageEditIdentityError(
+                f"Postprocess target {target_size[0]}x{target_size[1]} changes the aspect ratio of "
+                f"raw output {raw_output['name']} ({raw_size[0]}x{raw_size[1]})"
+            )
+
     progress.phase("load anime upscaler")
     upscaler = RealESRGANAnimeUpscaler()
     outputs = []
-    target_size = (output_spec.final_width, output_spec.final_height)
     for raw_output in raw_outputs:
         output = dict(raw_output)
         raw_path = Path(output["raw_image"]["path"])
@@ -1352,10 +1369,41 @@ def _used_reference_names(cases: Sequence[QwenIdentityCase]) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _load_reference_image(path: Path, *, max_side: int) -> Image.Image:
+def _load_reference_image(
+    path: Path,
+    *,
+    max_side: int,
+    target_size: tuple[int, int] | None = None,
+) -> Image.Image:
     with Image.open(path) as image:
         rgb = image.convert("RGB")
+    if target_size is not None:
+        return _fit_image_to_canvas(rgb, target_size=target_size)
     return _fit_image_to_max_side(rgb, max_side=max_side)
+
+
+def _fit_image_to_canvas(image: Image.Image, *, target_size: tuple[int, int]) -> Image.Image:
+    target_width, target_height = target_size
+    ratio_divisor = gcd(target_width, target_height)
+    width_ratio = target_width // ratio_divisor
+    height_ratio = target_height // ratio_divisor
+    canvas_scale = max(
+        (image.width + width_ratio - 1) // width_ratio,
+        (image.height + height_ratio - 1) // height_ratio,
+    )
+    canvas_size = (width_ratio * canvas_scale, height_ratio * canvas_scale)
+    if image.size == canvas_size:
+        padded = image
+    else:
+        padded = Image.new("RGB", canvas_size, "white")
+        padded.paste(image, ((canvas_size[0] - image.width) // 2, (canvas_size[1] - image.height) // 2))
+    if padded.size == target_size:
+        return padded
+    if padded.width < target_width:
+        canvas = Image.new("RGB", target_size, "white")
+        canvas.paste(padded, ((target_width - padded.width) // 2, (target_height - padded.height) // 2))
+        return canvas
+    return padded.resize(target_size, Image.Resampling.LANCZOS)
 
 
 def _load_mask_image(path: Path, *, target_size: tuple[int, int]) -> Image.Image:
@@ -1369,13 +1417,22 @@ def _load_mask_image(path: Path, *, target_size: tuple[int, int]) -> Image.Image
 
 
 def _fit_image_to_max_side(image: Image.Image, *, max_side: int) -> Image.Image:
-    longest_side = max(image.size)
-    if longest_side <= max_side:
+    aligned_max_side = _align_to_multiple(max_side, 16)
+    width, height = image.size
+    if max(width, height) > aligned_max_side:
+        if width >= height:
+            content_size = (aligned_max_side, max(1, round(height * aligned_max_side / width)))
+        else:
+            content_size = (max(1, round(width * aligned_max_side / height)), aligned_max_side)
+        image = image.resize(content_size, Image.Resampling.LANCZOS)
+
+    canvas_width = _align_up_to_multiple(image.width, 16)
+    canvas_height = _align_up_to_multiple(image.height, 16)
+    if image.size == (canvas_width, canvas_height):
         return image
-    scale = max_side / longest_side
-    width = max(16, _align_to_multiple(round(image.width * scale), 16))
-    height = max(16, _align_to_multiple(round(image.height * scale), 16))
-    return image.resize((width, height), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
+    canvas.paste(image, ((canvas_width - image.width) // 2, (canvas_height - image.height) // 2))
+    return canvas
 
 
 def _case_canvas(
@@ -1429,7 +1486,16 @@ def _align_to_multiple(value: int, multiple: int) -> int:
     return max(multiple, value // multiple * multiple)
 
 
-def _qwen_output_spec(*, output_format: str | None, resolution: str | None, max_side: int) -> QwenOutputSpec | None:
+def _align_up_to_multiple(value: int, multiple: int) -> int:
+    return max(multiple, (value + multiple - 1) // multiple * multiple)
+
+
+def _qwen_output_spec(
+    *,
+    output_format: str | None,
+    resolution: str | None,
+    max_side: int,
+) -> QwenOutputSpec | None:
     if output_format is None and resolution is None:
         return None
     if output_format is None or resolution is None:
@@ -1467,15 +1533,18 @@ def _size_for_output_format(
     align_to_multiple: int | None,
 ) -> tuple[int, int]:
     width_ratio, height_ratio = QWEN_OUTPUT_FORMATS[output_format]
-    if width_ratio >= height_ratio:
-        width = long_side
-        height = round(long_side * height_ratio / width_ratio)
-    else:
-        width = round(long_side * width_ratio / height_ratio)
-        height = long_side
+    scale = long_side // max(width_ratio, height_ratio)
     if align_to_multiple is not None:
-        return _align_to_multiple(width, align_to_multiple), _align_to_multiple(height, align_to_multiple)
-    return max(1, width), max(1, height)
+        scale_multiple = lcm(
+            align_to_multiple // gcd(width_ratio, align_to_multiple),
+            align_to_multiple // gcd(height_ratio, align_to_multiple),
+        )
+        scale = scale // scale_multiple * scale_multiple
+    if scale < 1:
+        raise QwenImageEditIdentityError(
+            f"Output format {output_format} does not fit within a {long_side}px long side"
+        )
+    return width_ratio * scale, height_ratio * scale
 
 
 def _output_spec_json(output_spec: QwenOutputSpec) -> dict[str, Any]:
