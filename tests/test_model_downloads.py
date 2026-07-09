@@ -119,6 +119,18 @@ class ModelDownloadTests(unittest.TestCase):
         self.assertEqual(download.revision, "cc594898137f460bfe9f0759e9844b3ce807cfb5")
         self.assertIn("*.safetensors", download.include)
 
+    def test_qwen3_manifest_downloads_instruction_parser(self) -> None:
+        manifest = load_download_manifest(Path("model_sources/qwen3_8b_instruction_parser.json"))
+        download = manifest.downloads[0]
+
+        self.assertEqual(download.name, "qwen3-8b-character-instruction-parser")
+        self.assertEqual(download.repo_id, "Qwen/Qwen3-8B")
+        self.assertEqual(download.local_path, "llm/Qwen/Qwen3-8B")
+        self.assertEqual(download.revision, "b968826d9c46dd6066d109eabc6255188de91218")
+        self.assertIn("*.safetensors", download.include)
+        self.assertIn("*.json", download.include)
+        self.assertIn(".gitattributes", download.exclude)
+
     def test_keyframe_pose_manifest_downloads_dwpose_onnx_models(self) -> None:
         manifest = load_download_manifest(Path("model_sources/keyframe_pose_dwpose_onnx.json"))
         download = manifest.downloads[0]

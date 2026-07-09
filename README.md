@@ -23,10 +23,10 @@ scripts/install.sh
 ```
 
 The installer is modular internally and always installs the current production
-stack: FLUX Kontext, Shakker Union Pro ControlNet, Nunchaku, Qwen judge, DWPose
-pose scoring models, SAM foreground segmentation, GroundingDINO polish
-grounding, Florence-2 polish grounding, SAM2 character region masks and
-validation checks.
+stack: FLUX Kontext, Shakker Union Pro ControlNet, Nunchaku, Qwen3 instruction
+parser, Qwen2.5-VL judge/planner, DWPose pose scoring models, SAM foreground
+segmentation, GroundingDINO polish grounding, Florence-2 polish grounding,
+SAM2 character region masks and validation checks.
 
 ```bash
 scripts/check_system.sh
@@ -40,6 +40,7 @@ The model manifests used by the installer are:
 
 - `model_sources/keyframe_generation_kontext_controlnet.json`
 - `model_sources/keyframe_generation_nunchaku_transformer.json`
+- `model_sources/qwen3_8b_instruction_parser.json`
 - `model_sources/keyframe_segmentation_sam_vit_b.json`
 - `model_sources/character_region_sam2_tiny.json`
 - `model_sources/keyframe_grounding_dino.json`

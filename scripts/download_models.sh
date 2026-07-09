@@ -14,6 +14,7 @@ Downloads the fixed production model set:
 - FLUX Kontext 4-bit model and Union ControlNet
 - Nunchaku FLUX Kontext FP4 transformer
 - Nunchaku FLUX.1-dev FP4 transformer for LoRA ControlNet audits
+- Qwen3-8B local instruction parser
 - SAM ViT-B checkpoint for keyframe foreground segmentation
 - SAM2.1 tiny checkpoint for character region masks
 - GroundingDINO base model for polish region grounding
@@ -41,6 +42,7 @@ manifest_args=(
   "model_sources/keyframe_generation_kontext_controlnet.json"
   "model_sources/keyframe_generation_nunchaku_transformer.json"
   "model_sources/lora_control_audit_nunchaku_transformer.json"
+  "model_sources/qwen3_8b_instruction_parser.json"
   "model_sources/keyframe_segmentation_sam_vit_b.json"
   "model_sources/character_region_sam2_tiny.json"
   "model_sources/keyframe_grounding_dino.json"

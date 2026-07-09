@@ -1,0 +1,26 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "PixAI-style character instruction parsing",
+    "runtime": "local one-shot Transformers subprocess before VLM/edit model load"
+  },
+  "downloads": [
+    {
+      "name": "qwen3-8b-character-instruction-parser",
+      "repo_id": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "local_path": "llm/Qwen/Qwen3-8B",
+      "include": [
+        "*.json",
+        "*.safetensors",
+        "*.txt",
+        "LICENSE",
+        "README.md"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}

@@ -10,7 +10,8 @@ Usage: scripts/install.sh
 One-shot installer for aigen. It keeps the steps modular by calling the scripts
 next to this file. It always installs the Nunchaku backend, downloads the
 keyframe generation models, downloads the local LoRA trainer, downloads the
-Qwen judge model, and runs the final install check.
+Qwen3 instruction parser, downloads the Qwen2.5-VL judge/planner, and runs the
+final install check.
 
 Environment:
   PYTHON=/path/to/python3.12         Python used to create .venv

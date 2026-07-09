@@ -12,6 +12,7 @@ from PIL import Image
 
 from aigen.character_instruction_models import CharacterInstructionPlanSpec, InstructionEnvelopeSpec
 from aigen.character_instruction_parser import CharacterInstructionParserConfig
+from aigen.character_commands import default_edit_planner_vlm_config
 from aigen.character_qwen_edit import plan_qwen_character_edit
 from aigen.character_reference_pack import build_character_reference_pack
 from aigen.cli import build_parser
@@ -252,6 +253,9 @@ class CharacterQwenEditTests(unittest.TestCase):
                         "aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
                     ]
                 )
+
+    def test_qwen_edit_planner_default_token_budget_matches_real_smoke(self) -> None:
+        self.assertEqual(default_edit_planner_vlm_config().max_new_tokens, 2200)
 
     def test_qwen_edit_plan_uses_vlm_selected_refs_without_identity_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
