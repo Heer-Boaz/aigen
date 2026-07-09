@@ -294,6 +294,11 @@ def add_character_commands(subparsers: Any) -> None:
         type=Path,
         help="Reusable edit_plan.json from qwen-edit-plan; skips the parser and reference selector",
     )
+    qwen_edit.add_argument(
+        "--pose-control",
+        type=Path,
+        help="Keypoint-map image required by pose_transfer plans",
+    )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
         "--model",
@@ -607,6 +612,7 @@ def run_character_command(
                     resolution=args.resolution,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
+                    pose_control_path=args.pose_control,
                     progress=progress,
                 ),
                 pretty=not args.compact,

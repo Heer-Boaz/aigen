@@ -52,10 +52,11 @@ QWEN_OUTPUT_FORMATS: dict[str, tuple[int, int]] = {
     "3:2": (3, 2),
     "3:4": (3, 4),
     "4:3": (4, 3),
+    "8:11": (8, 11),
     "9:16": (9, 16),
     "16:9": (16, 9),
 }
-QWEN_OUTPUT_FORMAT_ORDER = ("1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9")
+QWEN_OUTPUT_FORMAT_ORDER = ("1:1", "2:3", "3:2", "3:4", "4:3", "8:11", "9:16", "16:9")
 QWEN_OUTPUT_RESOLUTIONS = {
     "1k": 1024,
     "2k": 2048,
@@ -94,6 +95,7 @@ class QwenIdentityCase:
     name: str
     references: tuple[str, ...]
     prompt: str
+    controls: tuple[str, ...] = ()
     portrait_canvas: bool = False
     edit_context: dict[str, Any] | None = None
 
@@ -102,6 +104,7 @@ class QwenIdentityCase:
 class QwenIdentityReferenceStep:
     cases: tuple[QwenIdentityCase, ...]
     reference_images: dict[str, Image.Image]
+    control_images: dict[str, Image.Image]
 
 
 @dataclass(frozen=True)
@@ -402,6 +405,7 @@ def run_qwen_image_edit_identity(
     selected_cases = _selected_cases(cases)
     return run_qwen_image_edit_cases(
         references=references,
+        controls={},
         output_dir=output_dir,
         profile=profile,
         edit_cases=selected_cases,
@@ -425,6 +429,7 @@ def run_qwen_image_edit_identity(
 def run_qwen_image_edit_cases(
     *,
     references: Mapping[str, Path],
+    controls: Mapping[str, Path],
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
     edit_cases: Sequence[QwenIdentityCase],
@@ -458,7 +463,7 @@ def run_qwen_image_edit_cases(
     output_spec = _qwen_output_spec(output_format=output_format, resolution=resolution, max_side=max_side)
     selected_cases = tuple(edit_cases)
     _validate_edit_cases(selected_cases)
-    _validate_reference_pack(references, selected_cases)
+    _validate_image_inputs(references, controls, selected_cases)
     output_dir = output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         if not overwrite:
@@ -475,6 +480,7 @@ def run_qwen_image_edit_cases(
     try:
         reference_step = _prepare_qwen_identity_references(
             references=references,
+            controls=controls,
             selected_cases=selected_cases,
             max_side=max_side,
             output_spec=output_spec,
@@ -537,7 +543,12 @@ def run_qwen_image_edit_cases(
             "generation": {
                 "max_side": max_side,
                 "num_images_per_case": candidates_per_case,
-                "max_references_per_case": 3,
+                "max_references_per_case": max(len(case.references) for case in selected_cases),
+                "max_controls_per_case": max(len(case.controls) for case in selected_cases),
+                "max_inputs_per_case": max(
+                    len(case.references) + len(case.controls)
+                    for case in selected_cases
+                ),
                 "steps": resolved_steps,
                 "true_cfg_scale": resolved_true_cfg_scale,
                 "guidance_scale": resolved_guidance_scale,
@@ -547,6 +558,7 @@ def run_qwen_image_edit_cases(
                 "output_canvas": _output_spec_json(output_spec) if output_spec is not None else {"mode": "reference_anchor"},
             },
             "references": {name: image_asset_json(path) for name, path in sorted(references.items())},
+            "controls": {name: image_asset_json(path) for name, path in sorted(controls.items())},
             "outputs": postprocess_step.outputs,
             "timings_ms": {
                 "prompt_encode_ms": prompt_step.elapsed_ms,
@@ -743,6 +755,7 @@ def run_qwen_image_edit_inpaint_candidates(
 def _prepare_qwen_identity_references(
     *,
     references: Mapping[str, Path],
+    controls: Mapping[str, Path],
     selected_cases: Sequence[QwenIdentityCase],
     max_side: int,
     output_spec: QwenOutputSpec | None,
@@ -750,12 +763,17 @@ def _prepare_qwen_identity_references(
 ) -> QwenIdentityReferenceStep:
     progress.phase("prepare qwen identity references")
     used_reference_names = _used_reference_names(selected_cases)
+    used_control_names = _used_control_names(selected_cases)
     target_size = None if output_spec is None else (output_spec.raw_width, output_spec.raw_height)
     return QwenIdentityReferenceStep(
         cases=tuple(selected_cases),
         reference_images={
             name: _load_reference_image(references[name], max_side=max_side, target_size=target_size)
             for name in used_reference_names
+        },
+        control_images={
+            name: _load_control_image(controls[name], max_side=max_side, target_size=target_size)
+            for name in used_control_names
         },
     )
 
@@ -774,7 +792,7 @@ def _encode_qwen_identity_prompts(
             QwenImageEditPromptRequest(
                 name=case.name,
                 prompt=case.prompt,
-                reference_images=tuple(reference_step.reference_images[name] for name in case.references),
+                reference_images=_case_input_images(reference_step, case),
             )
             for case in reference_step.cases
         ],
@@ -839,7 +857,7 @@ def _run_qwen_identity_denoise_step(
             case_seed = seed + index * candidates_per_case + candidate_index
             output_name = _case_output_name(case.name, candidate_index, candidates_per_case)
             latents, timings = session.denoise_to_latents(
-                reference_images=[reference_step.reference_images[name] for name in case.references],
+                reference_images=list(_case_input_images(reference_step, case)),
                 prompt_embedding=prompt_step.embeddings[case.name],
                 case_name=output_name,
                 width=width,
@@ -888,6 +906,7 @@ def _run_qwen_identity_denoise_step(
             "raw_width": denoised_result.width,
             "raw_height": denoised_result.height,
             "references": list(case.references),
+            "controls": list(case.controls),
             "prompt": case.prompt,
             "raw_image": image_asset_json(raw_image_path),
             "timings_ms": denoised_result.timings_ms | {"vae_decode_ms": decode_ms},
@@ -1303,10 +1322,19 @@ def _selected_cases(case_names: Sequence[str]) -> list[QwenIdentityCase]:
     return selected
 
 
-def _validate_reference_pack(references: Mapping[str, Path], cases: Sequence[QwenIdentityCase]) -> None:
-    missing = sorted({name for case in cases for name in case.references if name not in references})
-    if missing:
-        raise QwenImageEditIdentityError(f"Missing Qwen identity reference(s): {', '.join(missing)}")
+def _validate_image_inputs(
+    references: Mapping[str, Path],
+    controls: Mapping[str, Path],
+    cases: Sequence[QwenIdentityCase],
+) -> None:
+    missing_references = sorted({name for case in cases for name in case.references if name not in references})
+    if missing_references:
+        raise QwenImageEditIdentityError(
+            f"Missing Qwen identity reference(s): {', '.join(missing_references)}"
+        )
+    missing_controls = sorted({name for case in cases for name in case.controls if name not in controls})
+    if missing_controls:
+        raise QwenImageEditIdentityError(f"Missing Qwen control image(s): {', '.join(missing_controls)}")
 
 
 def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
@@ -1317,8 +1345,10 @@ def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
     if duplicates:
         raise QwenImageEditIdentityError(f"Duplicate Qwen edit case(s): {', '.join(duplicates)}")
     for case in cases:
-        if len(case.references) > 3:
-            raise QwenImageEditIdentityError(f"Qwen edit case {case.name} uses more than 3 references")
+        if not case.references:
+            raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has no identity references")
+        if len(case.controls) > 1:
+            raise QwenImageEditIdentityError(f"Qwen edit case {case.name} uses more than one control image")
 
 
 def _validate_generation_settings(
@@ -1369,6 +1399,25 @@ def _used_reference_names(cases: Sequence[QwenIdentityCase]) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _used_control_names(cases: Sequence[QwenIdentityCase]) -> tuple[str, ...]:
+    names: list[str] = []
+    for case in cases:
+        for name in case.controls:
+            if name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def _case_input_images(
+    reference_step: QwenIdentityReferenceStep,
+    case: QwenIdentityCase,
+) -> tuple[Image.Image, ...]:
+    return tuple(reference_step.control_images[name] for name in case.controls) + tuple(
+        reference_step.reference_images[name]
+        for name in case.references
+    )
+
+
 def _load_reference_image(
     path: Path,
     *,
@@ -1382,7 +1431,25 @@ def _load_reference_image(
     return _fit_image_to_max_side(rgb, max_side=max_side)
 
 
-def _fit_image_to_canvas(image: Image.Image, *, target_size: tuple[int, int]) -> Image.Image:
+def _load_control_image(
+    path: Path,
+    *,
+    max_side: int,
+    target_size: tuple[int, int] | None = None,
+) -> Image.Image:
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+    if target_size is not None:
+        return _fit_image_to_canvas(rgb, target_size=target_size, fill="black")
+    return _fit_image_to_max_side(rgb, max_side=max_side, fill="black")
+
+
+def _fit_image_to_canvas(
+    image: Image.Image,
+    *,
+    target_size: tuple[int, int],
+    fill: str = "white",
+) -> Image.Image:
     target_width, target_height = target_size
     ratio_divisor = gcd(target_width, target_height)
     width_ratio = target_width // ratio_divisor
@@ -1395,12 +1462,12 @@ def _fit_image_to_canvas(image: Image.Image, *, target_size: tuple[int, int]) ->
     if image.size == canvas_size:
         padded = image
     else:
-        padded = Image.new("RGB", canvas_size, "white")
+        padded = Image.new("RGB", canvas_size, fill)
         padded.paste(image, ((canvas_size[0] - image.width) // 2, (canvas_size[1] - image.height) // 2))
     if padded.size == target_size:
         return padded
     if padded.width < target_width:
-        canvas = Image.new("RGB", target_size, "white")
+        canvas = Image.new("RGB", target_size, fill)
         canvas.paste(padded, ((target_width - padded.width) // 2, (target_height - padded.height) // 2))
         return canvas
     return padded.resize(target_size, Image.Resampling.LANCZOS)
@@ -1416,7 +1483,7 @@ def _load_mask_image(path: Path, *, target_size: tuple[int, int]) -> Image.Image
     return mask
 
 
-def _fit_image_to_max_side(image: Image.Image, *, max_side: int) -> Image.Image:
+def _fit_image_to_max_side(image: Image.Image, *, max_side: int, fill: str = "white") -> Image.Image:
     aligned_max_side = _align_to_multiple(max_side, 16)
     width, height = image.size
     if max(width, height) > aligned_max_side:
@@ -1430,7 +1497,7 @@ def _fit_image_to_max_side(image: Image.Image, *, max_side: int) -> Image.Image:
     canvas_height = _align_up_to_multiple(image.height, 16)
     if image.size == (canvas_width, canvas_height):
         return image
-    canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
+    canvas = Image.new("RGB", (canvas_width, canvas_height), fill)
     canvas.paste(image, ((canvas_width - image.width) // 2, (canvas_height - image.height) // 2))
     return canvas
 

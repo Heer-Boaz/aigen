@@ -28,6 +28,7 @@ CHARACTER_CONDITIONING_INPUTS = (
     "mask",
     "region_plan",
     "pose_source",
+    "pose_keypoint_map",
 )
 
 CHARACTER_CONDITIONING_TOOLS = (
@@ -79,7 +80,7 @@ class CharacterConditioningPlanSpec(StrictModel):
         ]
     ] = Field(default_factory=list)
     required_inputs: list[
-        Literal["source_image", "mask", "region_plan", "pose_source"]
+        Literal["source_image", "mask", "region_plan", "pose_source", "pose_keypoint_map"]
     ] = Field(default_factory=list)
     planned_tools: list[
         Literal["florence2_region_grounding", "sam2_mask_generation", "dwpose_keypoint_map"]

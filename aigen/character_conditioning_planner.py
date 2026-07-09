@@ -14,12 +14,13 @@ class CharacterConditioningPlanner:
         *,
         instruction_plan: CharacterInstructionPlanSpec,
         task_route_plan: CharacterTaskRoutePlanSpec,
+        pose_keypoint_map_present: bool,
     ) -> CharacterConditioningPlanSpec:
         route_kind = task_route_plan.route_kind
         if route_kind == "local_repair_or_inpaint":
             return _local_repair_plan(instruction_plan, task_route_plan)
         if route_kind == "pose_transfer":
-            return _pose_transfer_plan(task_route_plan)
+            return _pose_transfer_plan(task_route_plan, pose_keypoint_map_present=pose_keypoint_map_present)
         if route_kind == "layout_or_sheet":
             return _layout_plan(task_route_plan)
         if route_kind == "text_or_label_heavy":
@@ -60,18 +61,18 @@ def _local_repair_plan(
 
 def _pose_transfer_plan(
     task_route_plan: CharacterTaskRoutePlanSpec,
+    *,
+    pose_keypoint_map_present: bool,
 ) -> CharacterConditioningPlanSpec:
     return _conditioning_plan(
         task_route_plan,
-        status="deferred",
+        status="ready" if pose_keypoint_map_present else "required_but_missing_inputs",
         conditioning_modes=["pose_keypoint"],
-        required_inputs=["pose_source"],
-        planned_tools=["dwpose_keypoint_map"],
-        deferred_to="qwen-edit-pose",
-        supports_current_command=False,
-        audit_notes=[
-            "Pose transfer needs a later keypoint/control asset path; qwen-edit-run does not create it.",
-        ],
+        required_inputs=[] if pose_keypoint_map_present else ["pose_keypoint_map"],
+        planned_tools=[],
+        deferred_to="none",
+        supports_current_command=pose_keypoint_map_present,
+        audit_notes=[],
     )
 
 

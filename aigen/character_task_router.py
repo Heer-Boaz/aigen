@@ -279,7 +279,13 @@ def _pose_transfer_route(
             "mark the pose source for downstream keypoint or edge conditioning",
         ],
         conditioning_needs=_base_conditioning_needs(plan) + ["pose_conditioning", "possible_keypoint_map"],
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=True, text_rendering=_text_risk(plan), layout="simple"),
+        constraints=_constraints(
+            registry,
+            mask_required=False,
+            pose_conditioning=True,
+            text_rendering=_text_risk(plan),
+            layout="simple",
+        ),
     )
 
 

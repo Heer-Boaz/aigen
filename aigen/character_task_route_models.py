@@ -66,7 +66,7 @@ class FinalEditorConstraintsSpec(StrictModel):
 
 
 class ModelCapabilityRegistrySpec(StrictModel):
-    max_qwen_edit_refs: int = Field(default=3, ge=1)
+    max_qwen_edit_refs: int = Field(default=4, ge=1)
     supports_multi_image_edit: bool = True
     supports_keypoint_condition: bool = True
     supports_depth_condition: bool = True

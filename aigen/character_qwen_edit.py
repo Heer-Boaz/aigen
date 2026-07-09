@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +49,9 @@ from aigen.vlm_qwen import QwenVlm, QwenVlmConfig
 
 class QwenCharacterEditError(RuntimeError):
     pass
+
+
+QWEN_POSE_CONTROL_NAME = "pose_keypoint"
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,7 @@ def run_qwen_character_edit(
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
     plan_path: Path | None,
+    pose_control_path: Path | None = None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     if plan_path is not None:
@@ -160,12 +164,14 @@ def run_qwen_character_edit(
             resolution=resolution,
             progress=progress,
         )
+    edit_cases, controls = _attach_pose_control(planned.edit_cases, pose_control_path)
     output_dir = output_dir.resolve()
     result = run_qwen_image_edit_cases(
         references=planned.reference_paths,
+        controls=controls,
         output_dir=output_dir,
         profile=profile,
-        edit_cases=planned.edit_cases,
+        edit_cases=edit_cases,
         max_side=max_side,
         steps=steps,
         true_cfg_scale=true_cfg_scale,
@@ -473,6 +479,7 @@ def _planned_case(
     conditioning_plan = CharacterConditioningPlanner().plan(
         instruction_plan=parsed_case.instruction_plan,
         task_route_plan=parsed_case.task_route_plan,
+        pose_keypoint_map_present=False,
     )
     prompt, portrait_canvas = _thin_prompt(parsed_case)
     edit_context = _edit_context(
@@ -488,6 +495,53 @@ def _planned_case(
         prompt=prompt,
         portrait_canvas=portrait_canvas,
         edit_context=edit_context,
+    )
+
+
+def _attach_pose_control(
+    edit_cases: Sequence[QwenIdentityCase],
+    pose_control_path: Path | None,
+) -> tuple[tuple[QwenIdentityCase, ...], dict[str, Path]]:
+    requires_pose_control = any(_case_route_kind(case) == "pose_transfer" for case in edit_cases)
+    if pose_control_path is None:
+        if requires_pose_control:
+            raise QwenCharacterEditError("pose_transfer requires --pose-control with a keypoint-map image")
+        return tuple(edit_cases), {}
+
+    resolved_control = resolve_existing_path(pose_control_path.as_posix(), Path.cwd())
+    controlled_cases = tuple(
+        replace(
+            case,
+            controls=(QWEN_POSE_CONTROL_NAME,),
+            prompt=_pose_control_prompt(case.prompt, reference_count=len(case.references)),
+            edit_context=case.edit_context
+            | {
+                "conditioning_status": "ready",
+                "conditioning_modes": ["pose_keypoint"],
+                "conditioning_deferred_to": "none",
+                "controls_used": [QWEN_POSE_CONTROL_NAME],
+                "route_kind": "pose_transfer",
+                "editor_route": "qwen_image_edit_with_control_condition",
+                "output_mode": "single_image_pose",
+            },
+        )
+        for case in edit_cases
+    )
+    return controlled_cases, {QWEN_POSE_CONTROL_NAME: resolved_control}
+
+
+def _case_route_kind(case: QwenIdentityCase) -> str:
+    if case.edit_context is None:
+        raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
+    return str(case.edit_context["route_kind"])
+
+
+def _pose_control_prompt(prompt: str, *, reference_count: int) -> str:
+    last_reference_image = reference_count + 1
+    reference_label = "Image 2" if last_reference_image == 2 else f"Images 2 through {last_reference_image}"
+    return (
+        f"Use Image 1 as the keypoint pose control. "
+        f"Use {reference_label} as visual references for the same character. {prompt}"
     )
 
 
