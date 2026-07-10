@@ -62,21 +62,10 @@ class FinalEditorConstraintsSpec(StrictModel):
     pose_conditioning: bool
     text_rendering: bool
     layout_complexity: Literal["simple", "moderate", "layout_heavy"]
-    supports_route_now: bool
 
 
 class ModelCapabilityRegistrySpec(StrictModel):
-    max_qwen_edit_refs: int = Field(default=3, ge=1)
-    supports_multi_image_edit: bool = True
-    supports_keypoint_condition: bool = True
-    supports_depth_condition: bool = True
-    supports_edge_condition: bool = True
-    supports_masked_refine: bool = True
-    supports_text_heavy_generation: Literal["supported", "experimental", "weak_or_experimental", "route_only"] = (
-        "weak_or_experimental"
-    )
-    supports_layout_sheet: Literal["supported", "experimental", "route_only"] = "route_only"
-    supports_external_web_resolution: bool = False
+    max_qwen_edit_images: int = Field(default=3, ge=1)
 
 
 class CharacterTaskRoutePlanSpec(StrictModel):
@@ -114,12 +103,7 @@ class CharacterTaskRoutePlanSpec(StrictModel):
         "text_or_label_image",
         "single_image_reference_edit",
     ]
-    visual_analysis_focus: list[str]
-    reference_selection_intent: list[str]
-    conditioning_needs: list[str]
     final_editor_constraints: FinalEditorConstraintsSpec
-    unsupported_or_deferred: list[str]
-    audit_notes: list[str]
     capability_registry: ModelCapabilityRegistrySpec
 
 
@@ -135,13 +119,6 @@ def load_character_task_route_plan(
     path_label: str,
 ) -> CharacterTaskRoutePlanSpec:
     try:
-        route_plan = CharacterTaskRoutePlanSpec.model_validate(data)
+        return CharacterTaskRoutePlanSpec.model_validate(data)
     except ValidationError as error:
         raise CharacterTaskRouteError(f"Invalid character task route plan {path_label}: {error}") from error
-    if not route_plan.visual_analysis_focus:
-        raise CharacterTaskRouteError(f"Invalid character task route plan {path_label}: visual_analysis_focus is empty")
-    if not route_plan.reference_selection_intent:
-        raise CharacterTaskRouteError(
-            f"Invalid character task route plan {path_label}: reference_selection_intent is empty"
-        )
-    return route_plan

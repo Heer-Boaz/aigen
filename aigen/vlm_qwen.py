@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,6 +79,64 @@ class QwenVlm:
     def describe_image(self, prompt: str, image_paths: list[Path]) -> str:
         return self._generate(prompt, image_paths)
 
+    def select_indices(
+        self,
+        prompt: str,
+        image_paths: list[Path],
+        choices: Sequence[tuple[int, ...]],
+    ) -> tuple[int, ...]:
+        if not choices:
+            raise QwenVlmError("Qwen VLM index selection requires at least one valid choice")
+
+        inputs = self._prepare_inputs(prompt, image_paths)
+        prompt_length = inputs.input_ids.shape[1]
+        tokenizer = self.processor.tokenizer
+        eos_token_id = tokenizer.eos_token_id
+        if eos_token_id is None:
+            raise QwenVlmError("Qwen VLM tokenizer has no EOS token for constrained index selection")
+
+        choice_by_tokens: dict[tuple[int, ...], tuple[int, ...]] = {}
+        allowed_by_prefix: dict[tuple[int, ...], set[int]] = {}
+        max_new_tokens = 0
+        for choice in choices:
+            choice_text = f"[{','.join(str(index) for index in choice)}]"
+            choice_tokens = tuple(tokenizer.encode(choice_text, add_special_tokens=False))
+            choice_by_tokens[choice_tokens] = choice
+            constrained_tokens = choice_tokens + (eos_token_id,)
+            max_new_tokens = max(max_new_tokens, len(constrained_tokens))
+            for offset, token_id in enumerate(constrained_tokens):
+                allowed_by_prefix.setdefault(constrained_tokens[:offset], set()).add(token_id)
+
+        def allowed_tokens(_batch_id: int, input_ids: Any) -> list[int]:
+            generated_prefix = tuple(input_ids[prompt_length:].tolist())
+            try:
+                return list(allowed_by_prefix[generated_prefix])
+            except KeyError as error:
+                raise QwenVlmError(
+                    f"Qwen VLM produced an invalid constrained index prefix: {generated_prefix}"
+                ) from error
+
+        with self.torch.inference_mode():
+            generated_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                num_beams=min(4, len(choices)),
+                early_stopping=True,
+                renormalize_logits=True,
+                eos_token_id=eos_token_id,
+                prefix_allowed_tokens_fn=allowed_tokens,
+            )
+        selected_tokens = tuple(generated_ids[0, prompt_length:].tolist())
+        if selected_tokens and selected_tokens[-1] == eos_token_id:
+            selected_tokens = selected_tokens[:-1]
+        try:
+            return choice_by_tokens[selected_tokens]
+        except KeyError as error:
+            raise QwenVlmError(
+                f"Qwen VLM produced an invalid constrained index selection: {selected_tokens}"
+            ) from error
+
     def close(self) -> None:
         del self.model
         del self.processor
@@ -85,6 +144,25 @@ class QwenVlm:
             self.torch.cuda.empty_cache()
 
     def _generate(self, prompt: str, image_paths: list[Path]) -> str:
+        inputs = self._prepare_inputs(prompt, image_paths)
+        generate_kwargs: dict[str, Any] = {"max_new_tokens": self.config.max_new_tokens}
+        if self.config.temperature > 0.0:
+            generate_kwargs["do_sample"] = True
+            generate_kwargs["temperature"] = self.config.temperature
+        else:
+            generate_kwargs["do_sample"] = False
+        with self.torch.inference_mode():
+            generated_ids = self.model.generate(**inputs, **generate_kwargs)
+        trimmed_ids = [
+            output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids, strict=True)
+        ]
+        return self.processor.batch_decode(
+            trimmed_ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0]
+
+    def _prepare_inputs(self, prompt: str, image_paths: list[Path]) -> Any:
         messages = [
             {
                 "role": "user",
@@ -109,23 +187,7 @@ class QwenVlm:
             padding=True,
             return_tensors="pt",
         )
-        inputs = inputs.to(next(self.model.parameters()).device)
-        generate_kwargs: dict[str, Any] = {"max_new_tokens": self.config.max_new_tokens}
-        if self.config.temperature > 0.0:
-            generate_kwargs["do_sample"] = True
-            generate_kwargs["temperature"] = self.config.temperature
-        else:
-            generate_kwargs["do_sample"] = False
-        with self.torch.inference_mode():
-            generated_ids = self.model.generate(**inputs, **generate_kwargs)
-        trimmed_ids = [
-            output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids, strict=True)
-        ]
-        return self.processor.batch_decode(
-            trimmed_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )[0]
+        return inputs.to(next(self.model.parameters()).device)
 
 
 def qwen_vlm_config_json(config: QwenVlmConfig) -> dict[str, Any]:

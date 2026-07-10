@@ -102,32 +102,26 @@ run evidence.
 
 ## Reference Packs
 
-PixAI-style character editing starts with a named reference pack and a compact
-identity profile. The pack builder records image metadata only; the parser uses
-the local Qwen VLM to turn those references into machine-readable identity
-facts, reference roles and body-proportion invariants for later edit and refine
-runs. Reference names are pack-local ids and optional hints; the VLM-inferred
-roles in `identity_profile.json` are the source of truth.
+PixAI-style character editing starts with a named reference pack. The pack stores
+image metadata and stable pack-local handles; it never serializes the character
+into an identity dossier. Qwen-Image-Edit receives the selected references as
+images and resolves identity and appearance inside the edit model.
 
 ```bash
 .venv/bin/python -m aigen.cli characters reference-pack build \
   --character-id <character-id> \
-  --reference front=path/to/front.png \
-  --reference portrait=path/to/portrait.png \
-  --reference side=path/to/side.png \
-  --reference back=path/to/back.png \
+  --reference reference1=path/to/reference1.png \
+  --reference reference2=path/to/reference2.png \
+  --reference reference3=path/to/reference3.png \
+  --reference reference4=path/to/reference4.png \
   --output-dir assets/characters/<character-id>/references
-
-.venv/bin/python -m aigen.cli characters reference-pack parse \
-  assets/characters/<character-id>/references/reference_pack.json
 ```
 
-This writes `reference_pack.json` and `identity_profile.json`. The generation
-view runner selects 1-3 references per case from the VLM-inferred roles. Refine
-keeps the full reference pack and identity profile as standing context, then
-routes 1-4 pack references into each Qwen call with per-reference purposes.
-Every path consumes `identity_profile.body_proportion`; a dedicated
-`body_shape` reference is optional evidence, not a hard requirement.
+This writes `reference_pack.json`. Packs of one to three images bypass the
+external VLM entirely. For larger packs, the narrow Qwen2.5-VL selector returns
+only up to three 1-based image indices, unloads, and then Qwen-Image-Edit receives
+those images plus the user's instruction. No image descriptions or inferred
+reference roles enter the generation prompt.
 
 ```bash
 .venv/bin/python -m aigen.cli characters qwen-edit-run \
@@ -135,28 +129,6 @@ Every path consumes `identity_profile.body_proportion`; a dedicated
   --case right_profile \
   --model nunchaku-qwen-edit-2509-r32-4step \
   --output-dir runs/characters/<character-id>/qwen_edit/right_profile_smoke
-
-.venv/bin/python -m aigen.cli characters region-plan \
-  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
-  --region face="visible face" \
-  --region outfit_detail="requested outfit detail" \
-  --output-dir runs/characters/<character-id>/region_plan/right_profile_candidate_01
-
-.venv/bin/python -m aigen.cli characters qwen-edit-refine-plan \
-  --pack assets/characters/<character-id>/references/reference_pack.json \
-  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
-  --region-plan runs/characters/<character-id>/region_plan/right_profile_candidate_01/result.json \
-  --region face \
-  --instruction "repair the selected local detail"
-
-.venv/bin/python -m aigen.cli characters qwen-edit-refine \
-  --pack assets/characters/<character-id>/references/reference_pack.json \
-  --image runs/characters/<character-id>/qwen_edit/right_profile_smoke/images/right_profile_candidate_01.png \
-  --region-plan runs/characters/<character-id>/region_plan/right_profile_candidate_01/result.json \
-  --region face \
-  --instruction "repair the selected local detail" \
-  --model nunchaku-qwen-edit-2509-r32-4step \
-  --output-dir runs/characters/<character-id>/qwen_refine/right_profile_candidate_01
 ```
 
 ## Qwen Identity Smoke

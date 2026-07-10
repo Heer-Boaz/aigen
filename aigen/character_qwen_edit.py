@@ -6,7 +6,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from aigen.character_conditioning_models import CharacterConditioningPlanSpec
+from PIL import Image
+
+from aigen.character_conditioning_models import CharacterConditioningPlanError, CharacterConditioningPlanSpec
 from aigen.character_conditioning_planner import CharacterConditioningPlanner
 from aigen.character_edit_plan_models import (
     CHARACTER_EDIT_PLAN_KIND,
@@ -28,12 +30,13 @@ from aigen.character_reference_models import (
     CharacterReferencePackSpec,
     load_completed_character_reference_pack,
 )
-from aigen.character_reference_pack import (
+from aigen.character_reference_selector import (
     ReferenceSelection,
     select_reference_subset,
 )
 from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
 from aigen.character_task_router import CharacterTaskRouter
+from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.qwen_image_edit_identity import (
     QWEN_IDENTITY_CASES,
     QwenIdentityCase,
@@ -136,12 +139,12 @@ def run_qwen_character_edit(
     seed: int,
     max_sequence_length: int,
     candidates_per_case: int,
-    output_format: str,
-    resolution: str,
+    output_format: str | None,
+    resolution: str | None,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
     plan_path: Path | None,
-    pose_control_path: Path | None = None,
+    pose_source_path: Path | None = None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     if plan_path is not None:
@@ -162,9 +165,25 @@ def run_qwen_character_edit(
             candidates_per_case=candidates_per_case,
             output_format=output_format,
             resolution=resolution,
+            source_image_present=False,
+            pose_source_present=pose_source_path is not None,
             progress=progress,
         )
-    edit_cases, controls = _attach_pose_control(planned.edit_cases, pose_control_path)
+    conditioning_plans = _plan_route_conditioning(
+        planned.edit_cases,
+        pose_source_present=pose_source_path is not None,
+    )
+    pose_conditioning = (
+        _render_pose_conditioning(pose_source_path, progress)
+        if pose_source_path is not None
+        else None
+    )
+    edit_cases = _apply_route_conditioning(conditioning_plans)
+    controls = (
+        {QWEN_POSE_CONTROL_NAME: pose_conditioning[1].image}
+        if pose_conditioning is not None
+        else {}
+    )
     output_dir = output_dir.resolve()
     result = run_qwen_image_edit_cases(
         references=planned.reference_paths,
@@ -187,6 +206,21 @@ def run_qwen_character_edit(
         manifest_context=None,
         progress=progress,
     )
+    if pose_conditioning is not None:
+        source_path, pose_control = pose_conditioning
+        result["conditioning"] = {
+            QWEN_POSE_CONTROL_NAME: {
+                "source_image": image_asset_json(source_path),
+                "control_image": result["controls"][QWEN_POSE_CONTROL_NAME],
+                "preprocessor": pose_control.metadata
+                | {
+                    "tool": "dwpose_keypoint_map",
+                    "device": pose_control.device,
+                    "det_model": pose_control.det_model.as_posix(),
+                    "pose_model": pose_control.pose_model.as_posix(),
+                },
+            }
+        }
     write_json(output_dir / "result.json", result)
     return result
 
@@ -201,6 +235,8 @@ def _build_qwen_character_edit_plan(
     candidates_per_case: int,
     output_format: str | None,
     resolution: str | None,
+    source_image_present: bool,
+    pose_source_present: bool,
     progress: StatusReporter,
 ) -> PlannedQwenCharacterEdit:
     if candidates_per_case < 1:
@@ -223,6 +259,8 @@ def _build_qwen_character_edit_plan(
             instruction_parser=instruction_parser,
             output_format=output_format,
             resolution=resolution,
+            source_image_present=source_image_present,
+            pose_source_present=pose_source_present,
         )
         for template in templates
     )
@@ -270,6 +308,8 @@ def plan_qwen_character_edit(
         candidates_per_case=1,
         output_format=None,
         resolution=None,
+        source_image_present=False,
+        pose_source_present=False,
         progress=progress,
     )
     pack = planned.context.pack
@@ -333,7 +373,6 @@ def _planned_edit_from_plan_file(
                 "prompt_source": case.prompt_source,
                 "route_kind": case.route_kind,
                 "edit_plan": plan_path.as_posix(),
-                "identity_profile_used": False,
             },
         )
         for case in plan.cases
@@ -424,6 +463,8 @@ def _parsed_case(
     instruction_parser: CharacterInstructionParser,
     output_format: str | None,
     resolution: str | None,
+    source_image_present: bool,
+    pose_source_present: bool,
 ) -> ParsedQwenCharacterEditCase:
     instruction_request = _instruction_request(template, instruction)
     try:
@@ -434,11 +475,15 @@ def _parsed_case(
                 instruction_request=instruction_request,
                 output_format=output_format,
                 resolution=resolution,
+                source_image_present=source_image_present,
             )
         )
     except (CharacterInstructionError, TextLlmError) as error:
         raise QwenCharacterEditError(str(error)) from error
-    task_route_plan = CharacterTaskRouter().route(instruction_plan)
+    task_route_plan = CharacterTaskRouter().route(
+        instruction_plan,
+        pose_source_present=pose_source_present,
+    )
     return ParsedQwenCharacterEditCase(
         template=template,
         source_instruction=instruction,
@@ -454,7 +499,7 @@ def _needs_reference_selection(
 ) -> bool:
     reference_count = len(pack.references)
     return any(
-        reference_count > parsed_case.task_route_plan.capability_registry.max_qwen_edit_refs
+        reference_count > parsed_case.task_route_plan.final_editor_constraints.reference_budget.max
         for parsed_case in parsed_cases
     )
 
@@ -470,23 +515,20 @@ def _planned_case(
             runner=runner,
             pack=context.pack,
             reference_paths=context.reference_paths,
-            route_plan=parsed_case.task_route_plan,
+            instruction=parsed_case.task_route_plan.source_instruction,
+            route_kind=parsed_case.task_route_plan.route_kind,
+            output_mode=parsed_case.task_route_plan.output_mode,
+            budget=parsed_case.task_route_plan.final_editor_constraints.reference_budget.max,
             path_label=f"{context.pack_path.as_posix()}#{parsed_case.template.name}",
         )
     except CharacterReferenceError as error:
         raise QwenCharacterEditError(str(error)) from error
-    conditioning_plan = CharacterConditioningPlanner().plan(
-        instruction_plan=parsed_case.instruction_plan,
-        task_route_plan=parsed_case.task_route_plan,
-        pose_keypoint_map_present=False,
-    )
     prompt, portrait_canvas = _thin_prompt(parsed_case)
     edit_context = _edit_context(
         template=parsed_case.template,
         selection=selection,
         source_instruction=parsed_case.source_instruction,
         task_route_plan=parsed_case.task_route_plan,
-        conditioning_plan=conditioning_plan,
     )
     return QwenIdentityCase(
         name=parsed_case.template.name,
@@ -497,40 +539,77 @@ def _planned_case(
     )
 
 
-def _attach_pose_control(
+def _plan_route_conditioning(
     edit_cases: Sequence[QwenIdentityCase],
-    pose_control_path: Path | None,
-) -> tuple[tuple[QwenIdentityCase, ...], dict[str, Path]]:
-    routed_cases = tuple((case, _case_route_kind(case)) for case in edit_cases)
-    if pose_control_path is None:
-        for case, route_kind in routed_cases:
+    *,
+    pose_source_present: bool,
+) -> tuple[tuple[QwenIdentityCase, CharacterConditioningPlanSpec], ...]:
+    planner = CharacterConditioningPlanner()
+    available_modes = ("pose_keypoint",) if pose_source_present else ()
+
+    planned_cases = []
+    for case in edit_cases:
+        route_kind = _case_route_kind(case)
+        try:
+            conditioning_plan = planner.plan(
+                route_kind=route_kind,
+                available_modes=available_modes,
+            )
+        except CharacterConditioningPlanError as error:
             if route_kind == "pose_transfer":
                 raise QwenCharacterEditError(
-                    f"Qwen edit case {case.name} uses pose_transfer and requires --pose-control with a keypoint-map image"
-                )
-        return tuple(edit_cases), {}
+                    f"Qwen edit case {case.name} uses pose_transfer and requires --pose-source with a source image"
+                ) from error
+            if route_kind == "local_repair_or_inpaint":
+                raise QwenCharacterEditError(
+                    f"Qwen edit case {case.name} uses local_repair_or_inpaint and requires a source image and region mask"
+                ) from error
+            raise QwenCharacterEditError(f"Qwen edit case {case.name}: {error}") from error
+        planned_cases.append((case, conditioning_plan))
+    return tuple(planned_cases)
 
-    for case, route_kind in routed_cases:
-        if route_kind != "pose_transfer":
-            raise QwenCharacterEditError(
-                f"--pose-control requires pose_transfer; Qwen edit case {case.name} uses {route_kind}"
+
+def _apply_route_conditioning(
+    planned_cases: Sequence[tuple[QwenIdentityCase, CharacterConditioningPlanSpec]],
+) -> tuple[QwenIdentityCase, ...]:
+    conditioned_cases = []
+    for case, conditioning_plan in planned_cases:
+        modes = list(conditioning_plan.conditioning_modes)
+        case_controls: tuple[str, ...] = ()
+        if "pose_keypoint" in modes:
+            case_controls = (QWEN_POSE_CONTROL_NAME,)
+        if case.edit_context is None:
+            raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
+        conditioned_cases.append(
+            replace(
+                case,
+                controls=case_controls,
+                edit_context=case.edit_context
+                | {
+                    "conditioning_modes": modes,
+                    "conditioning_tools": list(conditioning_plan.planned_tools),
+                    "controls_used": list(case_controls),
+                },
             )
-    resolved_control = resolve_existing_path(pose_control_path.as_posix(), Path.cwd())
-    controlled_cases = tuple(
-        replace(
-            case,
-            controls=(QWEN_POSE_CONTROL_NAME,),
-            edit_context=case.edit_context
-            | {
-                "conditioning_status": "ready",
-                "conditioning_modes": ["pose_keypoint"],
-                "conditioning_deferred_to": "none",
-                "controls_used": [QWEN_POSE_CONTROL_NAME],
-            },
         )
-        for case in edit_cases
-    )
-    return controlled_cases, {QWEN_POSE_CONTROL_NAME: resolved_control}
+    return tuple(conditioned_cases)
+
+
+def _render_pose_conditioning(
+    pose_source_path: Path,
+    progress: StatusReporter,
+) -> tuple[Path, DWPoseControl]:
+    source_path = resolve_existing_path(pose_source_path.as_posix(), Path.cwd())
+    progress.phase("build DWPose keypoint control")
+    try:
+        with Image.open(source_path) as source_image:
+            control = render_dwpose_control(
+                source_image,
+                source_label=source_path.as_posix(),
+            )
+    except (OSError, DWPoseControlError) as error:
+        raise QwenCharacterEditError(str(error)) from error
+    return source_path, control
 
 
 def _case_route_kind(case: QwenIdentityCase) -> str:
@@ -562,6 +641,7 @@ def _instruction_envelope(
     instruction_request: str,
     output_format: str | None,
     resolution: str | None,
+    source_image_present: bool,
 ) -> InstructionEnvelopeSpec:
     generation_panel_settings: dict[str, Any] = {"case": template.name}
     if output_format is not None:
@@ -572,7 +652,7 @@ def _instruction_envelope(
         raw_instruction=instruction_request,
         ui_mode="reference_conditioned_generation",
         reference_count=len(context.pack.references),
-        source_image_present=False,
+        source_image_present=source_image_present,
         mask_present=False,
         region_plan_present=False,
         generation_panel_settings=generation_panel_settings,
@@ -589,23 +669,18 @@ def _edit_context(
     selection: ReferenceSelection,
     source_instruction: str | None,
     task_route_plan: CharacterTaskRoutePlanSpec,
-    conditioning_plan: CharacterConditioningPlanSpec,
 ) -> dict[str, Any]:
     used_user_instruction = bool(source_instruction and source_instruction.strip())
     return {
         "task": "identity_edit",
         "case": template.name,
         "reference_selector": selection.selector,
-        "selected_planner_refs": list(selection.selected_planner_refs),
+        "selected_ref_indices": list(selection.selected_ref_indices),
         "refs_used": list(selection.selected_refs),
         "prompt_source": "user_instruction" if used_user_instruction else "generic_case_prompt",
         "route_kind": task_route_plan.route_kind,
         "output_mode": task_route_plan.output_mode,
         "editor_route": task_route_plan.editor_route,
-        "conditioning_status": conditioning_plan.status,
-        "conditioning_modes": list(conditioning_plan.conditioning_modes),
-        "conditioning_deferred_to": conditioning_plan.deferred_to,
-        "identity_profile_used": False,
     }
 
 

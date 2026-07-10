@@ -9,7 +9,6 @@ from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import (
     build_character_reference_pack,
     parse_character_reference_args,
-    parse_character_reference_pack,
 )
 from aigen.character_region_plan import (
     CharacterRegionPlanError,
@@ -59,7 +58,6 @@ from aigen.generation.qwen_image_edit_identity import (
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.keyframe_grounding import GroundingConfig, KeyframeGroundingError
 from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmentationError
-from aigen.judge_cli import add_judge_runtime_args, judge_config_from_args
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT, keyframe_profile_for_name
@@ -83,15 +81,15 @@ DEFAULT_INSTRUCTION_PARSER_QUANTIZATION = "bitsandbytes-8bit"
 DEFAULT_INSTRUCTION_PARSER_MAX_NEW_TOKENS = 700
 DEFAULT_INSTRUCTION_PARSER_TEMPERATURE = 0.0
 DEFAULT_INSTRUCTION_PARSER_ENABLE_THINKING = False
-DEFAULT_EDIT_PLANNER_ID = DEFAULT_JUDGE_ID
-DEFAULT_EDIT_PLANNER_MODEL = MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct"
-DEFAULT_EDIT_PLANNER_DTYPE = "bfloat16"
-DEFAULT_EDIT_PLANNER_ATTENTION_IMPL = "sdpa"
-DEFAULT_EDIT_PLANNER_QUANTIZATION = DEFAULT_JUDGE_QUANTIZATION
-DEFAULT_EDIT_PLANNER_MIN_PIXELS = DEFAULT_MIN_PIXELS
-DEFAULT_EDIT_PLANNER_MAX_PIXELS = DEFAULT_MAX_PIXELS
-DEFAULT_EDIT_PLANNER_MAX_NEW_TOKENS = 2200
-DEFAULT_EDIT_PLANNER_TEMPERATURE = 0.0
+DEFAULT_REFERENCE_SELECTOR_ID = DEFAULT_JUDGE_ID
+DEFAULT_REFERENCE_SELECTOR_MODEL = MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct"
+DEFAULT_REFERENCE_SELECTOR_DTYPE = "bfloat16"
+DEFAULT_REFERENCE_SELECTOR_ATTENTION_IMPL = "sdpa"
+DEFAULT_REFERENCE_SELECTOR_QUANTIZATION = DEFAULT_JUDGE_QUANTIZATION
+DEFAULT_REFERENCE_SELECTOR_MIN_PIXELS = DEFAULT_MIN_PIXELS
+DEFAULT_REFERENCE_SELECTOR_MAX_PIXELS = DEFAULT_MAX_PIXELS
+DEFAULT_REFERENCE_SELECTOR_MAX_NEW_TOKENS = 64
+DEFAULT_REFERENCE_SELECTOR_TEMPERATURE = 0.0
 
 
 def default_instruction_parser_config() -> CharacterInstructionParserConfig:
@@ -110,17 +108,17 @@ def default_instruction_parser_config() -> CharacterInstructionParserConfig:
 
 def default_reference_selector_vlm_config() -> QwenVlmConfig:
     return QwenVlmConfig(
-        judge_id=DEFAULT_EDIT_PLANNER_ID,
-        model=DEFAULT_EDIT_PLANNER_MODEL,
+        judge_id=DEFAULT_REFERENCE_SELECTOR_ID,
+        model=DEFAULT_REFERENCE_SELECTOR_MODEL,
         repo_id=DEFAULT_JUDGE_REPO_ID,
         revision=DEFAULT_JUDGE_REVISION,
-        dtype=DEFAULT_EDIT_PLANNER_DTYPE,
-        attention_impl=DEFAULT_EDIT_PLANNER_ATTENTION_IMPL,
-        quantization=DEFAULT_EDIT_PLANNER_QUANTIZATION,
-        min_pixels=DEFAULT_EDIT_PLANNER_MIN_PIXELS,
-        max_pixels=DEFAULT_EDIT_PLANNER_MAX_PIXELS,
-        max_new_tokens=DEFAULT_EDIT_PLANNER_MAX_NEW_TOKENS,
-        temperature=DEFAULT_EDIT_PLANNER_TEMPERATURE,
+        dtype=DEFAULT_REFERENCE_SELECTOR_DTYPE,
+        attention_impl=DEFAULT_REFERENCE_SELECTOR_ATTENTION_IMPL,
+        quantization=DEFAULT_REFERENCE_SELECTOR_QUANTIZATION,
+        min_pixels=DEFAULT_REFERENCE_SELECTOR_MIN_PIXELS,
+        max_pixels=DEFAULT_REFERENCE_SELECTOR_MAX_PIXELS,
+        max_new_tokens=DEFAULT_REFERENCE_SELECTOR_MAX_NEW_TOKENS,
+        temperature=DEFAULT_REFERENCE_SELECTOR_TEMPERATURE,
     )
 
 
@@ -157,7 +155,7 @@ def add_character_commands(subparsers: Any) -> None:
 
     reference_pack = character_subparsers.add_parser(
         "reference-pack",
-        help="Build and parse multi-reference character identity packs",
+        help="Build multi-reference character image packs",
     )
     reference_pack_subparsers = reference_pack.add_subparsers(dest="reference_pack_command", required=True)
 
@@ -170,21 +168,11 @@ def add_character_commands(subparsers: Any) -> None:
         "--reference",
         action="append",
         required=True,
-        help="Named reference image as name=path; names are pack-local ids and optional role hints",
+        help="Named reference image as name=path; names are stable pack-local handles",
     )
     reference_pack_build.add_argument("--output-dir", type=Path, required=True, help="Reference pack directory")
     reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     reference_pack_build.add_argument("--compact", action="store_true", help="Write compact JSON")
-
-    reference_pack_parse = reference_pack_subparsers.add_parser(
-        "parse",
-        help="Use the local Qwen VLM to write an identity profile from a reference pack",
-    )
-    reference_pack_parse.add_argument("pack", type=Path, help="reference_pack.json")
-    reference_pack_parse.add_argument("--output", type=Path, help="Generated identity_profile.json")
-    reference_pack_parse.add_argument("--overwrite", action="store_true", help="Replace an existing identity profile")
-    add_judge_runtime_args(reference_pack_parse, role="reference parser", max_new_tokens=1600)
-    reference_pack_parse.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     qwen_identity = character_subparsers.add_parser(
         "qwen-identity-run",
@@ -295,9 +283,9 @@ def add_character_commands(subparsers: Any) -> None:
         help="Reusable edit_plan.json from qwen-edit-plan; skips the parser and reference selector",
     )
     qwen_edit.add_argument(
-        "--pose-control",
+        "--pose-source",
         type=Path,
-        help="Keypoint-map image required by pose_transfer plans",
+        help="Source image whose pose DWPose extracts for pose_transfer",
     )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
@@ -315,15 +303,13 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument(
         "--output-format",
-        required=True,
         choices=qwen_output_format_names(),
-        help="Final output aspect ratio",
+        help="Optional final output aspect ratio; requires --resolution",
     )
     qwen_edit.add_argument(
         "--resolution",
-        required=True,
         choices=qwen_output_resolution_names(),
-        help="Final output long-edge resolution",
+        help="Optional final output long-edge resolution; requires --output-format",
     )
     qwen_edit.add_argument(
         "--steps",
@@ -366,11 +352,6 @@ def add_character_commands(subparsers: Any) -> None:
         help="Plan a masked Qwen Image Edit repair from a selected candidate and reference pack",
     )
     qwen_refine_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
-    qwen_refine_plan.add_argument(
-        "--identity-profile",
-        type=Path,
-        help="identity_profile.json; defaults to identity_profile.json next to the pack",
-    )
     qwen_refine_plan.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
     qwen_refine_plan.add_argument("--mask", type=Path, help="White-on-black repaint mask")
     qwen_refine_plan.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
@@ -384,11 +365,6 @@ def add_character_commands(subparsers: Any) -> None:
         help="Run masked Qwen Image Edit repair candidates from a selected image and reference pack",
     )
     qwen_refine.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
-    qwen_refine.add_argument(
-        "--identity-profile",
-        type=Path,
-        help="identity_profile.json; defaults to identity_profile.json next to the pack",
-    )
     qwen_refine.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
     qwen_refine.add_argument("--mask", type=Path, help="White-on-black repaint mask")
     qwen_refine.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
@@ -462,12 +438,9 @@ def add_character_commands(subparsers: Any) -> None:
         help="Region request as NAME=TEXT, for example face='visible face'",
     )
     region_plan.add_argument("--output-dir", type=Path, required=True, help="Output directory for masks and debug sheet")
-    region_plan.add_argument("--dino-model", type=Path, default=GroundingConfig.dino_model, help="GroundingDINO model dir")
     region_plan.add_argument("--florence-model", type=Path, default=GroundingConfig.florence_model, help="Florence-2 model dir")
     region_plan.add_argument("--sam2-model", type=Path, default=Sam2SegmentationConfig.model, help="SAM2 model dir")
-    region_plan.add_argument("--device", default="cuda", help="Device for grounding and SAM2")
-    region_plan.add_argument("--grounding-threshold", type=float, default=GroundingConfig.threshold, help="GroundingDINO box threshold")
-    region_plan.add_argument("--text-threshold", type=float, default=GroundingConfig.text_threshold, help="GroundingDINO text threshold")
+    region_plan.add_argument("--device", default="cuda", help="Device for Florence-2 and SAM2")
     region_plan.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     region_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
@@ -537,19 +510,6 @@ def run_character_command(
                     pretty=not args.compact,
                 )
                 return 0
-            if args.reference_pack_command == "parse":
-                dump_json(
-                    stdout,
-                    parse_character_reference_pack(
-                        args.pack,
-                        judge_config_from_args(args),
-                        output_path=args.output,
-                        overwrite=args.overwrite,
-                        progress=progress,
-                    ),
-                    pretty=not args.compact,
-                )
-                return 0
         if args.characters_command == "qwen-identity-run":
             dump_json(
                 stdout,
@@ -612,7 +572,7 @@ def run_character_command(
                     resolution=args.resolution,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
-                    pose_control_path=args.pose_control,
+                    pose_source_path=args.pose_source,
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -623,13 +583,13 @@ def run_character_command(
                 stdout,
                 plan_qwen_character_refine(
                     pack_path=args.pack,
-                    identity_profile_path=args.identity_profile,
                     source_image_path=args.image,
                     mask_path=args.mask,
                     region_plan_path=args.region_plan,
                     region_name=args.region,
                     instruction=args.instruction,
                     candidates=args.candidates,
+                    vlm_config=default_reference_selector_vlm_config(),
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -640,7 +600,6 @@ def run_character_command(
                 stdout,
                 run_qwen_character_refine(
                     pack_path=args.pack,
-                    identity_profile_path=args.identity_profile,
                     source_image_path=args.image,
                     mask_path=args.mask,
                     region_plan_path=args.region_plan,
@@ -659,6 +618,7 @@ def run_character_command(
                     candidates=args.candidates,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
+                    vlm_config=default_reference_selector_vlm_config(),
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -673,11 +633,8 @@ def run_character_command(
                     output_dir=args.output_dir,
                     overwrite=args.overwrite,
                     grounding_config=GroundingConfig(
-                        dino_model=args.dino_model,
                         florence_model=args.florence_model,
                         device=args.device,
-                        threshold=args.grounding_threshold,
-                        text_threshold=args.text_threshold,
                     ),
                     segmentation_config=Sam2SegmentationConfig(
                         model=args.sam2_model,

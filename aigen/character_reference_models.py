@@ -39,7 +39,6 @@ class CharacterReferencePackSpec(StrictModel):
     kind: Literal["character-reference-pack"]
     character_id: str
     references: dict[str, ImageAssetSpec]
-    reference_hints: dict[str, str]
     output: CharacterReferencePackOutputSpec
 
 
@@ -101,11 +100,6 @@ def load_character_reference_pack_payload(data: dict[str, Any], *, path_label: s
     except ValidationError as error:
         raise CharacterReferenceError(f"Invalid character reference pack {path_label}: {error}") from error
     _validate_reference_ids(pack.references, path_label=path_label)
-    _validate_reference_ids(pack.reference_hints, path_label=path_label)
-    if set(pack.reference_hints) != set(pack.references):
-        raise CharacterReferenceError(
-            f"Invalid character reference pack {path_label}: reference_hints must match references"
-        )
     return pack
 
 

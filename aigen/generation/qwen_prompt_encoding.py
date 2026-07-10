@@ -14,7 +14,7 @@ from aigen.progress import StatusReporter
 
 
 QWEN_IMAGE_EDIT_NEGATIVE_PROMPT = " "
-QWEN_IMAGE_EDIT_PROMPT_ENCODER_QUANTIZATION = "bitsandbytes-8bit"
+QWEN_IMAGE_EDIT_PROMPT_ENCODER_SUBFOLDER = "text_encoder_bnb8"
 QWEN_IMAGE_EDIT_ATTENTION_IMPL = "sdpa"
 
 
@@ -51,7 +51,6 @@ def encode_qwen_image_edit_prompts(
     true_cfg_scale: float,
     max_sequence_length: int,
     device: str = "cuda",
-    quantization: str = QWEN_IMAGE_EDIT_PROMPT_ENCODER_QUANTIZATION,
     attention_impl: str = QWEN_IMAGE_EDIT_ATTENTION_IMPL,
     progress: StatusReporter | None = None,
 ) -> tuple[dict[str, QwenImageEditPromptEmbedding], float]:
@@ -60,7 +59,6 @@ def encode_qwen_image_edit_prompts(
         pipeline_class,
         text_encoder_class,
         processor_class,
-        bitsandbytes_config_class,
         condition_image_size,
         calculate_dimensions,
     ) = _load_qwen_prompt_encoding_dependencies()
@@ -79,11 +77,9 @@ def encode_qwen_image_edit_prompts(
     _phase(progress, "load qwen prompt encoder")
     text_encoder = _load_qwen_text_encoder(
         text_encoder_class,
-        bitsandbytes_config_class,
         model,
         torch_dtype=torch_dtype,
         torch_device=torch_device,
-        quantization=quantization,
         attention_impl=attention_impl,
     )
     _step(progress, "loaded qwen prompt encoder")
@@ -211,36 +207,23 @@ def _suppress_known_prompt_encoder_warnings() -> None:
 
 def _load_qwen_text_encoder(
     text_encoder_class: Any,
-    bitsandbytes_config_class: Any,
     model: str,
     *,
     torch_dtype: Any,
     torch_device: Any,
-    quantization: str,
     attention_impl: str,
 ) -> Any:
-    if quantization == QWEN_IMAGE_EDIT_PROMPT_ENCODER_QUANTIZATION:
-        return text_encoder_class.from_pretrained(
-            model,
-            subfolder="text_encoder",
-            torch_dtype=torch_dtype,
-            attn_implementation=attention_impl,
-            quantization_config=bitsandbytes_config_class(load_in_8bit=True),
-            device_map={"": torch_device.index if torch_device.index is not None else 0},
-            local_files_only=True,
-        )
-    if quantization == "none":
-        return text_encoder_class.from_pretrained(
-            model,
-            subfolder="text_encoder",
-            torch_dtype=torch_dtype,
-            attn_implementation=attention_impl,
-            local_files_only=True,
-        ).to(torch_device)
-    raise QwenPromptEncodingError(f"Unsupported Qwen prompt encoder quantization: {quantization}")
+    return text_encoder_class.from_pretrained(
+        model,
+        subfolder=QWEN_IMAGE_EDIT_PROMPT_ENCODER_SUBFOLDER,
+        torch_dtype=torch_dtype,
+        attn_implementation=attention_impl,
+        device_map={"": torch_device.index if torch_device.index is not None else 0},
+        local_files_only=True,
+    )
 
 
-def _load_qwen_prompt_encoding_dependencies() -> tuple[Any, Any, Any, Any, Any, int, Any]:
+def _load_qwen_prompt_encoding_dependencies() -> tuple[Any, Any, Any, Any, int, Any]:
     try:
         import torch
         from diffusers import QwenImageEditPlusPipeline
@@ -248,7 +231,7 @@ def _load_qwen_prompt_encoding_dependencies() -> tuple[Any, Any, Any, Any, Any, 
             CONDITION_IMAGE_SIZE,
             calculate_dimensions,
         )
-        from transformers import BitsAndBytesConfig, Qwen2_5_VLForConditionalGeneration, Qwen2VLProcessor
+        from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2VLProcessor
     except ImportError as exc:
         raise QwenPromptEncodingDependencyError(
             "Qwen prompt encoding requires `pip install -e .[generation]`"
@@ -258,7 +241,6 @@ def _load_qwen_prompt_encoding_dependencies() -> tuple[Any, Any, Any, Any, Any, 
         QwenImageEditPlusPipeline,
         Qwen2_5_VLForConditionalGeneration,
         Qwen2VLProcessor,
-        BitsAndBytesConfig,
         CONDITION_IMAGE_SIZE,
         calculate_dimensions,
     )

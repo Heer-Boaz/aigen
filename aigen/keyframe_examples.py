@@ -8,8 +8,13 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
+from aigen.dwpose_control import (
+    DEFAULT_DWPOSE_DET_MODEL,
+    DEFAULT_DWPOSE_POSE_MODEL,
+    DWPoseControlError,
+    render_dwpose_control,
+)
 from aigen.image_assets import image_asset_json
-from aigen.keyframe_pose import DEFAULT_DWPOSE_DET_MODEL, DEFAULT_DWPOSE_POSE_MODEL
 from aigen.keyframe_segmentation import foreground_box_mask
 from aigen.manifest_io import file_manifest, write_json
 
@@ -208,27 +213,16 @@ def _dwpose_control_image(
     pose_model: Path,
 ) -> tuple[Image.Image, dict[str, Any]]:
     try:
-        from controlnet_dwpose import DWposeDetector
-        from controlnet_dwpose.util import draw_pose
-    except ImportError as error:
-        raise KeyframeExampleError("Example extraction requires the controlnet-dwpose package.") from error
-
-    detector = DWposeDetector(det_model.as_posix(), pose_model.as_posix(), device=device)
-    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
-    pose = detector(rgb)
-    if len(pose["bodies"]["subset"]) == 0:
-        raise KeyframeExampleError("DWPose found no body in the example image")
-
-    control = draw_pose(pose, image.height, image.width)
-    if control.shape[0] == 3:
-        control = np.transpose(control, (1, 2, 0))
-    control_image = Image.fromarray(control.astype(np.uint8), mode="RGB")
-    body_scores = np.asarray(pose["bodies"]["score"], dtype=np.float32)
-    return control_image, {
-        "body_count": int(len(pose["bodies"]["subset"])),
-        "visible_body_keypoints": int((body_scores[0, :18] > 0.30).sum()),
-        "mean_body_score": float(body_scores[0, :18].mean()),
-    }
+        control = render_dwpose_control(
+            image,
+            source_label="the example image",
+            device=device,
+            det_model=det_model,
+            pose_model=pose_model,
+        )
+    except DWPoseControlError as error:
+        raise KeyframeExampleError(str(error)) from error
+    return control.image, control.metadata
 
 
 def _clean_foreground_image(image: Image.Image, foreground: np.ndarray) -> Image.Image:

@@ -7,6 +7,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw
 
+from aigen.dwpose_control import DEFAULT_DWPOSE_DET_MODEL, DEFAULT_DWPOSE_POSE_MODEL
+
 
 OPENPOSE_BODY_COLORS = np.asarray(
     [
@@ -33,9 +35,6 @@ OPENPOSE_BODY_COLORS = np.asarray(
 )
 
 BODY_KEYPOINT_COUNT = len(OPENPOSE_BODY_COLORS)
-DEFAULT_MODELS_ROOT = Path(__file__).resolve().parent / "models"
-DEFAULT_DWPOSE_DET_MODEL = DEFAULT_MODELS_ROOT / "annotators/yzd-v/DWPose/yolox_l.onnx"
-DEFAULT_DWPOSE_POSE_MODEL = DEFAULT_MODELS_ROOT / "annotators/yzd-v/DWPose/dw-ll_ucoco_384.onnx"
 
 
 class KeyframePoseError(RuntimeError):

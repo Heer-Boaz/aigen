@@ -21,26 +21,6 @@ CHARACTER_INSTRUCTION_TASK_FAMILIES = (
     "unknown",
 )
 CHARACTER_INSTRUCTION_EDIT_SCOPES = ("global", "local", "mixed", "unknown")
-CHARACTER_INSTRUCTION_SUBJECT_BINDINGS = (
-    "referenced_character",
-    "image_index_binding",
-    "source_image_subject",
-    "multiple_subjects",
-    "unspecified",
-)
-CHARACTER_INSTRUCTION_DOWNSTREAM_REQUIREMENTS = (
-    "visual_identity_analysis",
-    "multi_reference_alignment",
-    "region_grounding",
-    "mask_generation",
-    "pose_conditioning",
-    "text_rendering_risk",
-    "external_concept_resolution",
-    "clarification_needed",
-    "visual_disambiguation",
-)
-
-
 class CharacterInstructionError(RuntimeError):
     pass
 
@@ -63,12 +43,6 @@ class InstructionEnvelopeSpec(StrictModel):
     seed_setting: int | None = None
 
 
-class InstructionSubjectBindingSpec(StrictModel):
-    kind: str
-    reference_mentions: list[str] = Field(default_factory=list)
-    note: str = ""
-
-
 class InstructionTargetConstraintsSpec(StrictModel):
     framing: list[str] = Field(default_factory=list)
     camera_view: list[str] = Field(default_factory=list)
@@ -86,15 +60,9 @@ class InstructionTargetConstraintsSpec(StrictModel):
 
 
 class CharacterInstructionModelResponseSpec(StrictModel):
-    language: str
     task_family: str
     edit_scope: str
-    subject_binding: InstructionSubjectBindingSpec
     target_constraints: InstructionTargetConstraintsSpec
-    named_external_concepts: list[str] = Field(default_factory=list)
-    downstream_requirements: list[str] = Field(default_factory=list)
-    ambiguities: list[str] = Field(default_factory=list)
-    conflicts: list[str] = Field(default_factory=list)
 
 
 class CharacterInstructionPlanSpec(StrictModel):
@@ -102,7 +70,6 @@ class CharacterInstructionPlanSpec(StrictModel):
     raw_instruction: str
     normalized_instruction_text: str
     envelope: InstructionEnvelopeSpec
-    language: str
     task_family: Literal[
         "reference_character_portrait",
         "reference_character_full_body",
@@ -117,14 +84,9 @@ class CharacterInstructionPlanSpec(StrictModel):
         "unknown",
     ]
     edit_scope: Literal["global", "local", "mixed", "unknown"]
-    subject_binding: InstructionSubjectBindingSpec
     target_constraints: InstructionTargetConstraintsSpec
-    named_external_concepts: list[str]
-    downstream_requirements: list[str]
-    ambiguities: list[str]
-    conflicts: list[str]
     parser: dict[str, Any]
-    raw_model_response: dict[str, Any]
+    raw_model_response: str
 
 
 def character_instruction_model_response_schema() -> dict[str, Any]:
@@ -149,9 +111,5 @@ def load_character_instruction_model_response(
     if not response.edit_scope.strip():
         raise CharacterInstructionError(
             f"Invalid character instruction parser response {path_label}: edit_scope is empty"
-        )
-    if not response.subject_binding.kind.strip():
-        raise CharacterInstructionError(
-            f"Invalid character instruction parser response {path_label}: subject_binding.kind is empty"
         )
     return response

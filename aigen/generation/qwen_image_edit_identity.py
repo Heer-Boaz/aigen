@@ -45,6 +45,7 @@ DEFAULT_QWEN_IDENTITY_MAX_SIDE = 640
 DEFAULT_QWEN_IDENTITY_SEED = 0
 DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH = 512
 QWEN_IDENTITY_PREFLIGHT_LIMIT_MB = 4096
+QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES = 3
 QWEN_IDENTITY_REFERENCE_NAMES = CHARACTER_REFERENCE_NAME_SET
 QWEN_OUTPUT_FORMATS: dict[str, tuple[int, int]] = {
     "1:1": (1, 1),
@@ -148,14 +149,6 @@ class QwenImageEditLatentResult:
 
 
 @dataclass(frozen=True)
-class QwenImageEditInpaintReference:
-    name: str
-    role: str
-    purpose: str
-    path: Path
-
-
-@dataclass(frozen=True)
 class QwenImageEditInpaintDenoiseStep:
     outputs: list[dict[str, Any]]
     elapsed_ms: float
@@ -170,6 +163,12 @@ class QwenImageEditInpaintCanvas:
     overlay_source_image: Image.Image | None = None
     overlay_mask_image: Image.Image | None = None
     crop_coords: tuple[int, int, int, int] | None = None
+
+
+@dataclass(frozen=True)
+class QwenImageEditInpaintReferenceLatents:
+    packed_latents: Any
+    shapes: tuple[tuple[int, int, int], ...]
 
 
 QWEN_EDIT_2509_REVISION = "d3968ef930e841f4c73640fb8afa3b306a78167e"
@@ -429,7 +428,7 @@ def run_qwen_image_edit_identity(
 def run_qwen_image_edit_cases(
     *,
     references: Mapping[str, Path],
-    controls: Mapping[str, Path],
+    controls: Mapping[str, Image.Image],
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
     edit_cases: Sequence[QwenIdentityCase],
@@ -471,6 +470,7 @@ def run_qwen_image_edit_cases(
         shutil.rmtree(output_dir)
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
+    control_paths = _materialize_qwen_control_images(controls, output_dir)
 
     preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
     memory_sampler = NvidiaSmiMemorySampler(preflight)
@@ -558,7 +558,7 @@ def run_qwen_image_edit_cases(
                 "output_canvas": _output_spec_json(output_spec) if output_spec is not None else {"mode": "reference_anchor"},
             },
             "references": {name: image_asset_json(path) for name, path in sorted(references.items())},
-            "controls": {name: image_asset_json(path) for name, path in sorted(controls.items())},
+            "controls": {name: image_asset_json(path) for name, path in sorted(control_paths.items())},
             "outputs": postprocess_step.outputs,
             "timings_ms": {
                 "prompt_encode_ms": prompt_step.elapsed_ms,
@@ -572,7 +572,7 @@ def run_qwen_image_edit_cases(
             | {
                 "postprocess": "realesrgan_anime_upscale"
                 if output_spec is not None
-                else "raw_image_copy",
+                else "none",
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -596,7 +596,7 @@ def run_qwen_image_edit_inpaint_candidates(
     *,
     source_image: Path,
     mask_image: Path,
-    reference_images: Sequence[QwenImageEditInpaintReference],
+    reference_images: Mapping[str, Path],
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
     prompt: str,
@@ -615,6 +615,11 @@ def run_qwen_image_edit_inpaint_candidates(
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
+    if len(reference_images) + 1 > QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES:
+        raise QwenImageEditIdentityError(
+            f"Qwen inpaint uses the source image plus {len(reference_images)} reference images; "
+            f"maximum is {QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES} input images"
+        )
     resolved_steps = profile.default_steps if steps is None else steps
     resolved_true_cfg_scale = profile.default_true_cfg_scale if true_cfg_scale is None else true_cfg_scale
     resolved_guidance_scale = profile.default_guidance_scale if guidance_scale is None else guidance_scale
@@ -647,10 +652,11 @@ def run_qwen_image_edit_inpaint_candidates(
         progress.phase("prepare qwen refine images")
         source = _load_reference_image(source_image, max_side=max_side)
         mask = _load_mask_image(mask_image, target_size=source.size)
-        prompt_references = [source] + [
-            _load_reference_image(reference.path, max_side=max_side)
-            for reference in reference_images
+        loaded_reference_images = [
+            _load_reference_image(reference_path, max_side=max_side)
+            for reference_path in reference_images.values()
         ]
+        prompt_references = [source, *loaded_reference_images]
         prompt_step = _encode_qwen_inpaint_prompt(
             profile=profile,
             prompt=prompt,
@@ -673,6 +679,7 @@ def run_qwen_image_edit_inpaint_candidates(
             session=session,
             source=source,
             mask=mask,
+            reference_images=loaded_reference_images,
             prompt_step=prompt_step,
             images_dir=images_dir,
             steps=resolved_steps,
@@ -717,12 +724,10 @@ def run_qwen_image_edit_inpaint_candidates(
             },
             "reference_images": [
                 {
-                    "name": reference.name,
-                    "role": reference.role,
-                    "purpose": reference.purpose,
-                    "image": image_asset_json(reference.path),
+                    "name": reference_name,
+                    "image": image_asset_json(reference_path),
                 }
-                for reference in reference_images
+                for reference_name, reference_path in reference_images.items()
             ],
             "prompt": prompt,
             "outputs": denoise_step.outputs,
@@ -755,7 +760,7 @@ def run_qwen_image_edit_inpaint_candidates(
 def _prepare_qwen_identity_references(
     *,
     references: Mapping[str, Path],
-    controls: Mapping[str, Path],
+    controls: Mapping[str, Image.Image],
     selected_cases: Sequence[QwenIdentityCase],
     max_side: int,
     output_spec: QwenOutputSpec | None,
@@ -768,7 +773,7 @@ def _prepare_qwen_identity_references(
     return QwenIdentityReferenceStep(
         cases=tuple(selected_cases),
         reference_images={
-            name: _load_reference_image(references[name], max_side=max_side, target_size=target_size)
+            name: _load_reference_image(references[name], max_side=max_side)
             for name in used_reference_names
         },
         control_images={
@@ -927,19 +932,16 @@ def _postprocess_qwen_identity_outputs(
 ) -> QwenIdentityPostprocessStep:
     start = perf_counter()
     if output_spec is None:
-        progress.begin(len(raw_outputs), "copy qwen raw images")
+        progress.begin(len(raw_outputs), "register qwen raw images")
         outputs = []
         for raw_output in raw_outputs:
             output = dict(raw_output)
-            raw_path = Path(output["raw_image"]["path"])
-            image_path = output_dir / f"{output['name']}.png"
-            shutil.copyfile(raw_path, image_path)
             output["width"] = output["raw_width"]
             output["height"] = output["raw_height"]
-            output["image"] = image_asset_json(image_path)
-            output["postprocess"] = {"mode": "raw_copy"}
+            output["image"] = output["raw_image"]
+            output["postprocess"] = {"mode": "none"}
             outputs.append(output)
-            progress.step(f"copied qwen raw image {output['name']}")
+            progress.step(f"registered qwen raw image {output['name']}")
         return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=elapsed_ms(start, perf_counter()))
 
     target_size = (output_spec.final_width, output_spec.final_height)
@@ -993,6 +995,7 @@ def _run_qwen_inpaint_denoise_step(
     session: QwenImageEditInpaintSession,
     source: Image.Image,
     mask: Image.Image,
+    reference_images: Sequence[Image.Image],
     prompt_step: QwenIdentityPromptConditioningStep,
     images_dir: Path,
     steps: int,
@@ -1008,6 +1011,7 @@ def _run_qwen_inpaint_denoise_step(
     start = synchronized_time(session.torch)
     denoised: list[QwenImageEditLatentResult] = []
     canvas = _prepare_qwen_inpaint_canvas(session.pipeline, source, mask, padding_mask_crop)
+    reference_latents = session.encode_reference_latents(reference_images, progress=progress)
     denoise_steps = _effective_qwen_inpaint_steps(steps=steps, strength=strength)
     progress.begin(candidates * denoise_steps, "denoise qwen refine candidates")
     for candidate_index in range(candidates):
@@ -1016,6 +1020,7 @@ def _run_qwen_inpaint_denoise_step(
         latents, timings = session.denoise_to_latents(
             source_image=canvas.source_image,
             mask_image=canvas.mask_image,
+            reference_latents=reference_latents,
             prompt_embedding=prompt_step.embeddings["refine"],
             output_name=output_name,
             steps=steps,
@@ -1215,11 +1220,25 @@ class QwenImageEditInpaintSession:
         )
         self.model_load_ms = elapsed_ms(model_load_start, synchronized_time(torch))
 
+    def encode_reference_latents(
+        self,
+        reference_images: Sequence[Image.Image],
+        *,
+        progress: StatusReporter,
+    ) -> QwenImageEditInpaintReferenceLatents:
+        progress.phase("encode qwen refine reference latents")
+        return _encode_qwen_inpaint_reference_latents(
+            self.torch,
+            self.pipeline,
+            reference_images,
+        )
+
     def denoise_to_latents(
         self,
         *,
         source_image: Image.Image,
         mask_image: Image.Image,
+        reference_latents: QwenImageEditInpaintReferenceLatents,
         prompt_embedding: QwenImageEditPromptEmbedding,
         output_name: str,
         steps: int,
@@ -1241,33 +1260,34 @@ class QwenImageEditInpaintSession:
             device=str(self.pipeline._execution_device),
         )
         active_guidance_scale = guidance_scale if self.pipeline.transformer.config.guidance_embeds else None
-        with self.torch.inference_mode():
-            output = self.pipeline(
-                image=source_image,
-                mask_image=mask_image,
-                prompt=None,
-                negative_prompt=None,
-                prompt_embeds=active_embedding.prompt_embeds,
-                prompt_embeds_mask=active_embedding.prompt_embeds_mask,
-                negative_prompt_embeds=active_embedding.negative_prompt_embeds,
-                negative_prompt_embeds_mask=active_embedding.negative_prompt_embeds_mask,
-                true_cfg_scale=true_cfg_scale,
-                guidance_scale=active_guidance_scale,
-                strength=strength,
-                padding_mask_crop=None,
-                num_inference_steps=steps,
-                num_images_per_prompt=1,
-                generator=generator,
-                max_sequence_length=max_sequence_length,
-                callback_on_step_end=_denoise_progress_callback(
-                    progress,
-                    case_name=output_name,
-                    case_index=candidate_index,
-                    case_total=candidate_total,
-                    steps=denoise_progress_steps,
-                ),
-                output_type="latent",
-            )
+        with _qwen_inpaint_reference_latent_conditioning(self.torch, self.pipeline, reference_latents):
+            with self.torch.inference_mode():
+                output = self.pipeline(
+                    image=source_image,
+                    mask_image=mask_image,
+                    prompt=None,
+                    negative_prompt=None,
+                    prompt_embeds=active_embedding.prompt_embeds,
+                    prompt_embeds_mask=active_embedding.prompt_embeds_mask,
+                    negative_prompt_embeds=active_embedding.negative_prompt_embeds,
+                    negative_prompt_embeds_mask=active_embedding.negative_prompt_embeds_mask,
+                    true_cfg_scale=true_cfg_scale,
+                    guidance_scale=active_guidance_scale,
+                    strength=strength,
+                    padding_mask_crop=None,
+                    num_inference_steps=steps,
+                    num_images_per_prompt=1,
+                    generator=generator,
+                    max_sequence_length=max_sequence_length,
+                    callback_on_step_end=_denoise_progress_callback(
+                        progress,
+                        case_name=output_name,
+                        case_index=candidate_index,
+                        case_total=candidate_total,
+                        steps=denoise_progress_steps,
+                    ),
+                    output_type="latent",
+                )
         latents = _detach_latents_to_cpu(output.images)
         del output, active_embedding
         if self.torch.cuda.is_available():
@@ -1324,7 +1344,7 @@ def _selected_cases(case_names: Sequence[str]) -> list[QwenIdentityCase]:
 
 def _validate_image_inputs(
     references: Mapping[str, Path],
-    controls: Mapping[str, Path],
+    controls: Mapping[str, Image.Image],
     cases: Sequence[QwenIdentityCase],
 ) -> None:
     missing_references = sorted({name for case in cases for name in case.references if name not in references})
@@ -1349,6 +1369,12 @@ def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
             raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has no identity references")
         if len(case.controls) > 1:
             raise QwenImageEditIdentityError(f"Qwen edit case {case.name} uses more than one control image")
+        input_image_count = len(case.references) + len(case.controls)
+        if input_image_count > QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES:
+            raise QwenImageEditIdentityError(
+                f"Qwen edit case {case.name} uses {input_image_count} input images; "
+                f"maximum is {QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES}"
+            )
 
 
 def _validate_generation_settings(
@@ -1422,26 +1448,36 @@ def _load_reference_image(
     path: Path,
     *,
     max_side: int,
-    target_size: tuple[int, int] | None = None,
 ) -> Image.Image:
     with Image.open(path) as image:
         rgb = image.convert("RGB")
-    if target_size is not None:
-        return _fit_image_to_canvas(rgb, target_size=target_size)
     return _fit_image_to_max_side(rgb, max_side=max_side)
 
 
 def _load_control_image(
-    path: Path,
+    image: Image.Image,
     *,
     max_side: int,
     target_size: tuple[int, int] | None = None,
 ) -> Image.Image:
-    with Image.open(path) as image:
-        rgb = image.convert("RGB")
+    rgb = image.convert("RGB")
     if target_size is not None:
         return _fit_image_to_canvas(rgb, target_size=target_size, fill="black")
     return _fit_image_to_max_side(rgb, max_side=max_side, fill="black")
+
+
+def _materialize_qwen_control_images(
+    controls: Mapping[str, Image.Image],
+    output_dir: Path,
+) -> dict[str, Path]:
+    if not controls:
+        return {}
+    controls_dir = output_dir / "controls"
+    controls_dir.mkdir(parents=True, exist_ok=True)
+    paths = {name: controls_dir / f"{name}.png" for name in controls}
+    for name, path in paths.items():
+        controls[name].convert("RGB").save(path)
+    return paths
 
 
 def _fit_image_to_canvas(
@@ -1637,6 +1673,74 @@ def _qwen_inpaint_canvas_size(pipeline: Any, image: Image.Image) -> tuple[int, i
     return width, height
 
 
+def _encode_qwen_inpaint_reference_latents(
+    torch: Any,
+    pipeline: Any,
+    reference_images: Sequence[Image.Image],
+) -> QwenImageEditInpaintReferenceLatents:
+    from diffusers import QwenImageEditPlusPipeline
+
+    device = next(pipeline.vae.parameters()).device
+    dtype = pipeline.vae.dtype
+    num_channels_latents = pipeline.transformer.config.in_channels // 4
+    packed_latents = []
+    shapes = []
+    with torch.inference_mode():
+        for image in reference_images:
+            width, height = _qwen_inpaint_canvas_size(pipeline, image)
+            image_tensor = pipeline.image_processor.preprocess(
+                image,
+                height=height,
+                width=width,
+            ).unsqueeze(2).to(device=device, dtype=dtype)
+            image_latents = QwenImageEditPlusPipeline._encode_vae_image(
+                pipeline,
+                image_tensor,
+                generator=None,
+            )
+            latent_height, latent_width = image_latents.shape[3:]
+            packed_latents.append(
+                pipeline._pack_latents(
+                    image_latents,
+                    1,
+                    num_channels_latents,
+                    latent_height,
+                    latent_width,
+                )
+            )
+            shapes.append((1, latent_height // 2, latent_width // 2))
+    return QwenImageEditInpaintReferenceLatents(
+        packed_latents=torch.cat(packed_latents, dim=1),
+        shapes=tuple(shapes),
+    )
+
+
+@contextmanager
+def _qwen_inpaint_reference_latent_conditioning(
+    torch: Any,
+    pipeline: Any,
+    reference_latents: QwenImageEditInpaintReferenceLatents,
+) -> Iterator[None]:
+    original_forward = pipeline.transformer.forward
+
+    def forward_with_reference_latents(_transformer: Any, *args: Any, **kwargs: Any) -> Any:
+        kwargs["hidden_states"] = torch.cat(
+            (kwargs["hidden_states"], reference_latents.packed_latents),
+            dim=1,
+        )
+        kwargs["img_shapes"] = [
+            [*image_shapes, *reference_latents.shapes]
+            for image_shapes in kwargs["img_shapes"]
+        ]
+        return original_forward(*args, **kwargs)
+
+    pipeline.transformer.forward = MethodType(forward_with_reference_latents, pipeline.transformer)
+    try:
+        yield
+    finally:
+        pipeline.transformer.forward = original_forward
+
+
 def _prepare_qwen_inpaint_canvas(
     pipeline: Any,
     source: Image.Image,
@@ -1717,7 +1821,7 @@ def _decode_qwen_image_latents(
 ) -> tuple[Image.Image, float]:
     progress.phase(f"decode qwen latents {output_name}")
     start = synchronized_time(torch)
-    device = _module_device(pipeline.vae)
+    device = next(pipeline.vae.parameters()).device
     with torch.inference_mode():
         latents = latents.to(device=device, dtype=pipeline.vae.dtype)
         latents = pipeline._unpack_latents(latents, height, width, pipeline.vae_scale_factor)
@@ -1737,13 +1841,6 @@ def _decode_qwen_image_latents(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return images[0], elapsed_ms(start, synchronized_time(torch))
-
-
-def _module_device(module: Any) -> Any:
-    try:
-        return next(module.parameters()).device
-    except StopIteration as error:
-        raise QwenImageEditIdentityError("Cannot determine Qwen VAE device") from error
 
 
 def _profile_json(

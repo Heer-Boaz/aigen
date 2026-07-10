@@ -10,9 +10,11 @@ from typing import Any
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 
+from aigen.character_conditioning_planner import CharacterConditioningPlanner
 from aigen.image_assets import image_asset_json
-from aigen.keyframe_grounding import GroundingConfig, GroundingRequest, KeyframeRegionGrounder
+from aigen.keyframe_grounding import Florence2RegionGrounder, GroundingConfig, KeyframeGroundingError
 from aigen.keyframe_image_ops import mask_overlay, save_contact_sheet
 from aigen.keyframe_segmentation import Sam2RegionSegmenter, Sam2SegmentationConfig
 from aigen.manifest_io import resolve_existing_path, write_json
@@ -20,6 +22,7 @@ from aigen.progress import StatusReporter
 
 
 CHARACTER_REGION_PLAN_KIND = "character-region-plan"
+CHARACTER_INPAINT_MASK_EXPANSION = 4
 REGION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -64,6 +67,10 @@ def plan_character_regions(
 ) -> dict[str, Any]:
     if not regions:
         raise CharacterRegionPlanError("characters region-plan requires at least one region request")
+    conditioning_plan = CharacterConditioningPlanner().plan(
+        route_kind="local_repair_or_inpaint",
+        available_modes=("region_mask",),
+    )
     image_path = resolve_existing_path(image_path.as_posix(), Path.cwd())
     output_dir = output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -80,12 +87,14 @@ def plan_character_regions(
         image = source_image.convert("RGB")
     image_array = np.asarray(image, dtype=np.uint8)
 
-    progress.phase("ground character regions")
-    grounder = KeyframeRegionGrounder(grounding_config)
-    grounded_regions = grounder.ground_regions(
-        image,
-        [GroundingRequest(prompt=region.prompt) for region in regions],
-    )
+    progress.phase("ground character regions with Florence-2")
+    with closing(Florence2RegionGrounder(grounding_config)) as grounder:
+        grounded_regions = []
+        for region in regions:
+            boxes = grounder.ground_boxes(image, region.prompt)
+            if not boxes:
+                raise KeyframeGroundingError(f"Florence-2 produced no region for '{region.prompt}'")
+            grounded_regions.append(boxes[0])
 
     progress.phase("segment character regions with SAM2")
     with closing(Sam2RegionSegmenter(segmentation_config)) as segmenter:
@@ -100,6 +109,10 @@ def plan_character_regions(
             )
         if not mask_array.any():
             raise CharacterRegionPlanError(f"SAM2 produced no usable mask for region {region.name}")
+        mask_array = ndimage.binary_dilation(
+            mask_array,
+            iterations=CHARACTER_INPAINT_MASK_EXPANSION,
+        )
         mask_path = masks_dir / f"{region.name}.png"
         overlay_path = overlays_dir / f"{region.name}.png"
         mask_image = Image.fromarray(mask_array.astype(np.uint8) * 255, mode="L")
@@ -114,6 +127,7 @@ def plan_character_regions(
                 "segmentation": {
                     "method": f"{grounding.source}-box-to-sam2-mask",
                     "model": segmentation_config.model.as_posix(),
+                    "inpaint_mask_expansion": CHARACTER_INPAINT_MASK_EXPANSION,
                     "mask": image_asset_json(mask_path),
                     "overlay": image_asset_json(overlay_path),
                 },
@@ -127,9 +141,9 @@ def plan_character_regions(
         "status": "completed",
         "kind": CHARACTER_REGION_PLAN_KIND,
         "image": image_asset_json(image_path),
+        "conditioning": conditioning_plan.model_dump(mode="json"),
         "regions": planned_regions,
         "models": {
-            "grounding_dino": grounding_config.dino_model.as_posix(),
             "florence2": grounding_config.florence_model.as_posix(),
             "sam2": segmentation_config.model.as_posix(),
         },
