@@ -137,6 +137,7 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 | **Edit backbone (core)** | `Qwen/Qwen-Image-Edit-2509` | Multi-image (1–3 optimal), person/text consistency, **native** depth/edge/keypoint control. This is the whole engine. |
 | **Backbone, quantized for 16GB** | `nunchaku-tech/nunchaku-qwen-image-edit-2509` (SVDQuant **FP4**, r32) + a Lightning 4/8-step variant | FP4 for Blackwell. Pipeline: `QwenImageEditPlusPipeline` + `NunchakuQwenImageTransformer2DModel`. Multi-image via `image=[img1,img2,img3]`. Verify exact lightning filename on the org (weights churn). Escalation: 4-step → 8-step → full r32 → r128. |
 | **Ref-selector VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (or `-3B-Instruct`) | **Only** job: when >3 refs supplied, return the ≤3 best indices for the route. Optionally a one-word route hint. **Never** a character description. Anime-domain worries mostly evaporate here — "which image is the full-body front view" is robust even on anime. |
+| **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit; same runner as the selector) | **Only** job: stage 11 — compare the candidate image against the selected reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. |
 | Pose preprocessor | DWPose (via `IDEA-Research/DWPose`, or `controlnet_aux`) | Produces the keypoint control image for `pose_transfer`. Feeds 2509's native keypoint control. |
 | Depth preprocessor | `depth-anything/Depth-Anything-V2-Large` | Depth control image for structured scene routes. Feeds 2509's native depth control. |
 | Edge preprocessor | Canny (OpenCV) or `controlnet_aux` | Edge control image. Feeds 2509's native edge control. |
@@ -182,6 +183,7 @@ sources the user supplied), **not** off `visual_analysis` text.
 | `scene_insertion` | optional depth/edge | Depth-Anything-V2 / Canny |
 | `pose_transfer` | pose keypoints | DWPose → 2509 keypoint control |
 | `local_repair_or_inpaint` | region mask | Florence-2 (box) → SAM2 (mask) |
+| `object_removal` (future, route-gated) | none (maskless) | full-image "remove X" edit + diff-composite: accept only the changed zone, restore everything else pixel-exact from the source. Until this route exists, removals run as `local_repair_or_inpaint` and residual artifacts are the audit loop's job. |
 | `outfit_swap` | optional region mask | SAM2 if regional; else refs + instruction |
 | `style_transfer` | style ref as image (+ opt. style LoRA) | — |
 | `layout_or_sheet` | feed the sheet whole | — |
@@ -190,6 +192,13 @@ sources the user supplied), **not** off `visual_analysis` text.
 Identity/portrait/view/normal-scene routes need **no** extra conditioning — the
 backbone handles them. That is not "too simple"; it is the model doing its job.
 Sophistication appears exactly where a route genuinely needs geometry.
+
+**Pose-control fit rule.** The DWPose control image must be fitted to the
+generation canvas aspect **without black letterbox bars** — crop around the
+skeleton content (pure geometry) so the control canvas matches the output
+canvas aspect. Never heuristically enlarge the figure; the source framing owns
+composition. Black padding bars are spurious control input and shrink the
+figure on the canvas.
 
 ---
 
@@ -204,10 +213,46 @@ Sophistication appears exactly where a route genuinely needs geometry.
 | 8 | Conditioning build (route-gated) | selected refs + user structural sources | control image(s): pose/mask/depth | image |
 | 9 | Generate | ≤3 ref images (+ control imgs) + **thin prompt** | edited image | latent→image |
 | 10 | Postprocess (optional) | edited image | upscaled/anime-refined image | image |
+| 11 | **Audit loop (bounded)** | candidate + selected refs (+ repair mask if any) | pass, **or** region pointers → rerun stages 8–9 on those regions | image → verdict + region pointers |
 
 The **prompt** at stage 9 is the user's instruction, lightly normalized (and, only
 for scene/style, optionally expanded on the *scene* — never the character). It is
 **not** VLM-authored from ref analysis.
+
+### Stage 11: the audit loop (M5)
+
+The pipeline must find its own errors instead of relying on a human to point at
+the broken skirt or notice the missing glove. Two complementary tracks, both
+character-agnostic:
+
+- **Deterministic pixel-diff track (no model).** For masked repairs, zero
+  changed pixels outside the mask is a **hard assert**. Changed-pixel clusters
+  outside the intended zone become region candidates themselves. This catches
+  preservation violations and boundary/contour artifacts mechanically.
+- **Semantic VLM track.** The audit VLM (see §3) receives the selected
+  reference images plus the candidate and is asked, generically, where the
+  candidate visually deviates (construction, missing items, artifacts) — or
+  "none". No checklist, no character constants. This catches errors with no
+  diff signature, e.g. a glove missing relative to the references.
+
+Combined verdict is pass only if both tracks pass. On fail, region pointers
+feed the existing Florence-2 → SAM2 → refine path (stages 8–9); the repair
+instruction stays thin ("make the <region> match the references") — appearance
+comes from the reference images again, never from audit text. The loop is
+bounded (default 2 iterations); each iteration logs its mask and verdict into
+the run directory. If the audit still fails after N iterations, the run **fails
+visibly with the report** — no pending states, no silent downgrade to "good
+enough".
+
+### Resolution policy
+
+`--max-side` is a **cap** for VRAM escalation, never a target. The refine
+canvas is the native source size (×16-aligned) — no ~1MP area bucketing — and
+the source is never downscaled below the generation canvas size. Measured on
+the pistol repair: a 1008 max-side default caused a double resize
+(down to ~672×1008, back up to 832×1248) and 114,603 changed pixels outside the
+mask; native 1248 gave exactly 0, at the same denoise canvas and VRAM. Small
+defaults (640/1008) are silent quality killers, not optimizations.
 
 ---
 
@@ -221,7 +266,18 @@ not coexist on 16GB.** Run stages sequentially:
    DWPose / SAM2 / Florence-2 — each load→run→unload).
 3. Load Nunchaku FP4 backbone (+ Lightning) with CPU offload enabled → generate →
    unload.
-4. (Optional) load upscaler/refiner → finish.
+4. Audit loop (stage 11): pixel-diff track is model-free; then load audit VLM
+   (8-bit) → verdict + region pointers → **unload**. On fail, rerun the
+   preprocessors + backbone for the flagged regions (bounded).
+5. (Optional) load upscaler/refiner → finish.
+
+**Known offload bug (must fix to close M4b):** under sequential Accelerate
+offload (`--nunchaku-blocks-on-gpu`), reference-VAE encoding and latent decode
+use `next(pipeline.vae.parameters()).device`, which can be `cpu`/meta while the
+real execution device is CUDA. Use the execution device instead (the prompt
+embedding path already does: `pipeline._execution_device`), and for decode,
+capture `pipeline._execution_device` **before** `pipeline.transformer.to("cpu")`
+and pass it through.
 
 For the common case (≤3 refs, identity/portrait/view/scene) stage 1 and 2 are
 skipped entirely: **load backbone, feed refs + instruction, generate.** That is
@@ -273,9 +329,16 @@ Keep the routing/conditioning scaffolding; excise the text-serialization organs.
 2. Wire the router (step 2) so `route_kind` selects the conditioning path.
 3. Add the **index selector** VLM path, active only when N>3.
 4. Add route-gated structural conditioning: `pose_transfer` (DWPose) first, then
-   `local_repair` (Florence-2 → SAM2), then depth/edge for scenes.
+   `local_repair` (Florence-2 → SAM2), then depth/edge for scenes. Closing this
+   rung (M4b) requires the sequential-offload device fix (§6) and the
+   native-resolution defaults (§5 resolution policy) — not wider masks.
 5. Add §10 postprocess (upscale, optional anime refine).
-6. Only then, if anime fidelity is short: backbone style LoRA.
+6. **Audit loop (M5):** stage 11 as described in §5 — pixel-diff track, audit
+   VLM track, bounded repair loop wired through the existing region-plan and
+   refine paths.
+7. **Object-removal route:** maskless full-image edit + diff-composite,
+   route-gated (removals only; construction repairs stay masked inpaint).
+8. Only then, if anime fidelity is short: backbone style LoRA.
 
 Do not advance a rung until the previous one renders.
 
@@ -297,7 +360,10 @@ assert:      an image is produced; NO identity_profile.json, NO
 
 1. **Never serialize the character to text.** No dossier, no `visual_analysis`,
    no per-ref observations, no VLM-authored `edit_instruction`.
-2. The selector VLM returns **indices** (and at most a route hint). Nothing else.
+2. VLMs return **indices** (selector; at most a route hint), **verdicts and
+   short region pointers** (audit). Nothing else. Region pointers feed
+   Florence-2 grounding and the thin repair instruction only — never appearance
+   descriptions that condition generation.
 3. No GFPGAN/CodeFormer. No IP-Adapter as identity mechanism. No deep nested JSON
    from any VLM. No line-protocol/free-text substitutes.
 4. Structural conditioning is **image-domain** (pose/mask/depth maps), route-gated,
@@ -306,4 +372,12 @@ assert:      an image is produced; NO identity_profile.json, NO
    *holds naturally*: there is no character text anywhere to hardcode.
 6. Lower quality is allowed only from smaller/quantized models — never from
    removing a conditioning path that a route needs.
-```
+7. **No artifact-driven constants.** Never raise mask expansion, margins, or
+   similar knobs to paper over one failing case (e.g. 4→8 px dilation to hide a
+   leftover contour). A small fixed dilation is edge-uncertainty margin only;
+   residual artifacts are the audit loop's job (re-ground on the artifact,
+   second repair pass).
+8. **No pending states, no silent simplification.** When the audit loop
+   exhausts its iterations without a pass, the run fails visibly with the
+   audit report. Checklists, warnings, or "known issue" markers are not a
+   substitute for the repair actually happening.
