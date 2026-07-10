@@ -30,11 +30,10 @@ code change is needed, the code is wrong.
 5. `body_proportion` is a model-extracted identity invariant — not a required
    reference role and not a generation case. A missing `body_shape` reference
    is never a hard failure.
-6. Never silently simplify or reinterpret the plan. If something seems too
-   complex or contradictory: stop and ask. A silent simplification counts as a
-   failed task.
-7. Create no files beyond the list approved in the plan step below.
-8. Do not commit, revert or delete anything without explicit instruction.
+6. Never silently simplify or reinterpret the plan. If a real contradiction
+   with the plan blocks implementation: stop and ask. A silent simplification
+   counts as a failed task.
+7. Do not commit, revert or delete anything without explicit instruction.
 
 ## Workflow for every change under `aigen/`
 
@@ -42,9 +41,10 @@ code change is needed, the code is wrong.
    exact list of files you will create/modify (and anything you propose to
    delete or revert), (c) 2–3 lines per file describing its contents, (d) every
    assumption you had to make.
-2. Wait for an explicit "GO". No code before GO.
-3. After GO, implement fully. Anything that does not fit the plan: stop and
-   ask — do not pick a direction yourself.
+2. After presenting that disclosure, proceed immediately. Do not wait for an
+   explicit "GO".
+3. Implement fully. If a real contradiction with the plan blocks
+   implementation, stop and ask; do not pick a direction yourself.
 
 ## Fixed facts
 

@@ -66,9 +66,9 @@ def load_character_edit_plan(data: dict[str, Any], *, path_label: str) -> Charac
     for case in plan.cases:
         if not case.prompt.strip():
             raise CharacterEditPlanError(f"Invalid character edit plan {path_label}: case {case.name} prompt is empty")
-        if not 1 <= len(case.references) <= 4:
+        if not 1 <= len(case.references) <= 3:
             raise CharacterEditPlanError(
-                f"Invalid character edit plan {path_label}: case {case.name} must use 1 to 4 references"
+                f"Invalid character edit plan {path_label}: case {case.name} must use 1 to 3 references"
             )
         unknown = sorted(ref for ref in case.references if ref not in plan.reference_sha256)
         if unknown:

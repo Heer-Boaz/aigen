@@ -29,6 +29,23 @@ IP-Adapter — is one symptom: **visual reasoning was pushed through a text
 bottleneck.** All the "workarounds" (JSON → line-protocol → free-text →
 IP-Adapter) tried to repair the bottleneck instead of deleting it.
 
+### Quality invariants
+
+These are visual, system-level quality targets. They are not pixel-exact test
+contracts and must never be translated into per-character fixtures or special
+cases:
+
+- Identity remains visually consistent across pose, view, and shot changes.
+- Body proportions, outfit construction, palette, and ink/line style remain
+  visually faithful to the supplied references.
+- Large pose changes follow the user's intent without sacrificing identity.
+- A local edit preserves the visual content and composition outside the intended
+  target region.
+- Detail level must match the shot scale and the available raw-generation pixel
+  budget. Postprocessing cannot substitute for missing raw detail.
+- Pipeline code and tests contain zero character-specific constants, prompts,
+  geometry, reference-role assumptions, or fixtures.
+
 ---
 
 ## 1. What PixAI Edit Pro actually is (de-hallucinated)

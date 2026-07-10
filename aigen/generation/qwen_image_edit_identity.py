@@ -1412,10 +1412,10 @@ def _case_input_images(
     reference_step: QwenIdentityReferenceStep,
     case: QwenIdentityCase,
 ) -> tuple[Image.Image, ...]:
-    return tuple(reference_step.control_images[name] for name in case.controls) + tuple(
+    return tuple(
         reference_step.reference_images[name]
         for name in case.references
-    )
+    ) + tuple(reference_step.control_images[name] for name in case.controls)
 
 
 def _load_reference_image(
