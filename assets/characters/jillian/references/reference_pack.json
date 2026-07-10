@@ -5,12 +5,6 @@
     "directory": "/home/boaz/aigen/assets/characters/jillian/references",
     "reference_pack": "/home/boaz/aigen/assets/characters/jillian/references/reference_pack.json"
   },
-  "reference_hints": {
-    "back": "back",
-    "front": "front",
-    "portrait": "portrait",
-    "side": "side"
-  },
   "references": {
     "back": {
       "height": 5056,
