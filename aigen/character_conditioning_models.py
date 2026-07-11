@@ -9,6 +9,7 @@ CHARACTER_CONDITIONING_PLAN_KIND = "character-conditioning-plan"
 
 CHARACTER_CONDITIONING_MODES = (
     "region_mask",
+    "pose_reference",
     "pose_keypoint",
     "edge_or_sketch",
     "depth",
@@ -17,6 +18,7 @@ CHARACTER_CONDITIONING_MODES = (
 CHARACTER_CONDITIONING_TOOLS = (
     "florence2_region_grounding",
     "sam2_mask_generation",
+    "qwen_native_pose_reference",
     "dwpose_keypoint_map",
     "depth_anything_v2_map",
     "canny_edge_map",
@@ -48,6 +50,7 @@ class CharacterConditioningPlanSpec(StrictModel):
     conditioning_modes: list[
         Literal[
             "region_mask",
+            "pose_reference",
             "pose_keypoint",
             "edge_or_sketch",
             "depth",
@@ -57,6 +60,7 @@ class CharacterConditioningPlanSpec(StrictModel):
         Literal[
             "florence2_region_grounding",
             "sam2_mask_generation",
+            "qwen_native_pose_reference",
             "dwpose_keypoint_map",
             "depth_anything_v2_map",
             "canny_edge_map",

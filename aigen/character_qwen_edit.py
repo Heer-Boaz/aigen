@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -40,6 +40,7 @@ from aigen.character_task_router import CharacterTaskRouter
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.qwen_image_edit_identity import (
+    QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES,
     QWEN_IDENTITY_CASES,
     QwenControlImage,
     QwenIdentityCase,
@@ -57,7 +58,9 @@ class QwenCharacterEditError(RuntimeError):
     pass
 
 
-QWEN_POSE_CONTROL_NAME = "pose_keypoint"
+QWEN_DEFAULT_POSE_SOURCE_NAME = "default"
+QWEN_POSE_MODES = ("native", "keypoint")
+DEFAULT_QWEN_POSE_MODE = "native"
 QWEN_DEPTH_CONTROL_NAME = "depth"
 QWEN_EDGE_CONTROL_NAME = "edge"
 QWEN_STRUCTURE_CONTROL_NAMES = ("depth", "edge")
@@ -66,15 +69,25 @@ QWEN_STRUCTURE_MODE_BY_CONTROL = {
     "edge": "edge_or_sketch",
 }
 QWEN_CONTROL_NAME_BY_MODE = {
-    "pose_keypoint": QWEN_POSE_CONTROL_NAME,
     "depth": QWEN_DEPTH_CONTROL_NAME,
     "edge_or_sketch": QWEN_EDGE_CONTROL_NAME,
+}
+QWEN_POSE_CONDITIONING_MODE = {
+    "native": "pose_reference",
+    "keypoint": "pose_keypoint",
 }
 
 
 @dataclass(frozen=True)
 class QwenCharacterEditCaseTemplate:
     name: str
+
+
+@dataclass(frozen=True)
+class QwenCharacterPoseSource:
+    name: str
+    path: Path
+    mode: str
 
 
 @dataclass(frozen=True)
@@ -160,6 +173,7 @@ def run_qwen_character_edit(
     nunchaku_blocks_on_gpu: int | None,
     plan_path: Path | None,
     pose_source_path: Path | None = None,
+    pose_mode: str = DEFAULT_QWEN_POSE_MODE,
     structure_source_path: Path | None = None,
     structure_control: str | None = None,
     progress: StatusReporter,
@@ -169,11 +183,9 @@ def run_qwen_character_edit(
     if structure_control is not None and structure_control not in QWEN_STRUCTURE_MODE_BY_CONTROL:
         allowed = ", ".join(QWEN_STRUCTURE_CONTROL_NAMES)
         raise QwenCharacterEditError(f"Unknown structure control {structure_control}; expected one of: {allowed}")
-    available_modes = []
-    if pose_source_path is not None:
-        available_modes.append("pose_keypoint")
-    if structure_control is not None:
-        available_modes.append(QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control])
+    if pose_mode not in QWEN_POSE_CONDITIONING_MODE:
+        allowed = ", ".join(QWEN_POSE_MODES)
+        raise QwenCharacterEditError(f"Unknown pose mode {pose_mode}; expected one of: {allowed}")
     if plan_path is not None:
         if instruction is not None or cases:
             raise QwenCharacterEditError("--plan replaces --instruction and --case; do not combine them")
@@ -194,36 +206,126 @@ def run_qwen_character_edit(
             resolution=resolution,
             source_image_present=False,
             pose_source_present=pose_source_path is not None,
+            native_pose_reference_present=pose_source_path is not None and pose_mode == "native",
             progress=progress,
         )
+    if (
+        plan_path is not None
+        and pose_source_path is not None
+        and pose_mode == "native"
+        and any(len(case.references) >= QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES for case in planned.edit_cases)
+    ):
+        raise QwenCharacterEditError(
+            "A frozen edit plan selecting three references cannot also accept a native pose guide. "
+            "Run without --plan so reference selection reserves the guide slot."
+        )
+    pose_sources: dict[str, QwenCharacterPoseSource] = {}
+    if pose_source_path is not None:
+        pose_source = QwenCharacterPoseSource(
+            name=QWEN_DEFAULT_POSE_SOURCE_NAME,
+            path=pose_source_path,
+            mode=pose_mode,
+        )
+        pose_sources = {case.name: pose_source for case in planned.edit_cases}
+    return run_planned_qwen_character_edit(
+        planned=planned,
+        pose_sources=pose_sources,
+        structure_source_path=structure_source_path,
+        structure_control=structure_control,
+        output_dir=output_dir,
+        profile=profile,
+        max_side=max_side,
+        steps=steps,
+        true_cfg_scale=true_cfg_scale,
+        guidance_scale=guidance_scale,
+        seed=seed,
+        max_sequence_length=max_sequence_length,
+        candidates_per_case=candidates_per_case,
+        overwrite=overwrite,
+        nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
+        output_format=output_format,
+        resolution=resolution,
+        result_kind="qwen-character-edit-result",
+        manifest_context=None,
+        postprocess=True,
+        progress=progress,
+    )
+
+
+def run_planned_qwen_character_edit(
+    *,
+    planned: PlannedQwenCharacterEdit,
+    pose_sources: Mapping[str, QwenCharacterPoseSource],
+    structure_source_path: Path | None,
+    structure_control: str | None,
+    output_dir: Path,
+    profile: QwenImageEditIdentityProfile,
+    max_side: int,
+    steps: int | None,
+    true_cfg_scale: float | None,
+    guidance_scale: float | None,
+    seed: int,
+    max_sequence_length: int,
+    candidates_per_case: int,
+    overwrite: bool,
+    nunchaku_blocks_on_gpu: int | None,
+    output_format: str | None,
+    resolution: str | None,
+    result_kind: str,
+    manifest_context: dict[str, Any] | None,
+    postprocess: bool,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    available_modes_by_case = {
+        case.name: tuple(
+            [QWEN_POSE_CONDITIONING_MODE[pose_sources[case.name].mode]]
+            if case.name in pose_sources
+            else []
+        )
+        + (
+            (QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control],)
+            if structure_control is not None
+            else ()
+        )
+        for case in planned.edit_cases
+    }
     conditioning_plans = _plan_route_conditioning(
         planned.edit_cases,
-        available_modes=available_modes,
+        available_modes_by_case=available_modes_by_case,
     )
-    pose_conditioning = (
-        _render_pose_conditioning(pose_source_path, progress)
-        if pose_source_path is not None
-        else None
+    guides, controls, conditioning_result = _prepare_pose_inputs(
+        pose_sources,
+        progress=progress,
     )
     structure_conditioning = (
         _render_structure_conditioning(structure_source_path, structure_control, progress)
         if structure_source_path is not None and structure_control is not None
         else None
     )
-    edit_cases = _apply_route_conditioning(conditioning_plans)
-    controls: dict[str, QwenControlImage] = {}
-    if pose_conditioning is not None:
-        controls[QWEN_POSE_CONTROL_NAME] = QwenControlImage(
-            image=pose_conditioning[1].image,
-            content_box=pose_conditioning[1].content_box,
-        )
     if structure_conditioning is not None:
-        controls[QWEN_CONTROL_NAME_BY_MODE[QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control]]] = QwenControlImage(
-            image=structure_conditioning[1].image,
-        )
+        source_path, structure_control_result = structure_conditioning
+        control_name = QWEN_CONTROL_NAME_BY_MODE[QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control]]
+        controls[control_name] = QwenControlImage(image=structure_control_result.image)
+        preprocessor = structure_control_result.metadata | {
+            "tool": "depth_anything_v2_map" if structure_control == "depth" else "canny_edge_map",
+        }
+        if isinstance(structure_control_result, DepthV2Control):
+            preprocessor |= {
+                "device": structure_control_result.device,
+                "model": structure_control_result.model.as_posix(),
+            }
+        conditioning_result[control_name] = {
+            "source_image": image_asset_json(source_path),
+            "preprocessor": preprocessor,
+        }
+    edit_cases = _apply_route_conditioning(
+        conditioning_plans,
+        pose_sources=pose_sources,
+    )
     output_dir = output_dir.resolve()
     result = run_qwen_image_edit_cases(
         references=planned.reference_paths,
+        guides=guides,
         controls=controls,
         output_dir=output_dir,
         profile=profile,
@@ -239,40 +341,13 @@ def run_qwen_character_edit(
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
         output_format=output_format,
         resolution=resolution,
-        result_kind="qwen-character-edit-result",
-        manifest_context=None,
+        result_kind=result_kind,
+        manifest_context=manifest_context,
+        postprocess=postprocess,
         progress=progress,
     )
-    conditioning_result: dict[str, Any] = {}
-    if pose_conditioning is not None:
-        source_path, pose_control = pose_conditioning
-        conditioning_result[QWEN_POSE_CONTROL_NAME] = {
-            "source_image": image_asset_json(source_path),
-            "control_image": result["controls"][QWEN_POSE_CONTROL_NAME],
-            "preprocessor": pose_control.metadata
-            | {
-                "tool": "dwpose_keypoint_map",
-                "device": pose_control.device,
-                "det_model": pose_control.det_model.as_posix(),
-                "pose_model": pose_control.pose_model.as_posix(),
-            },
-        }
-    if structure_conditioning is not None:
-        source_path, structure_control_result = structure_conditioning
-        control_name = QWEN_CONTROL_NAME_BY_MODE[QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control]]
-        preprocessor = structure_control_result.metadata | {
-            "tool": "depth_anything_v2_map" if structure_control == "depth" else "canny_edge_map",
-        }
-        if isinstance(structure_control_result, DepthV2Control):
-            preprocessor |= {
-                "device": structure_control_result.device,
-                "model": structure_control_result.model.as_posix(),
-            }
-        conditioning_result[control_name] = {
-            "source_image": image_asset_json(source_path),
-            "control_image": result["controls"][control_name],
-            "preprocessor": preprocessor,
-        }
+    for control_name in controls:
+        conditioning_result[control_name]["control_image"] = result["controls"][control_name]
     if conditioning_result:
         result["conditioning"] = conditioning_result
     write_json(output_dir / "result.json", result)
@@ -291,6 +366,7 @@ def _build_qwen_character_edit_plan(
     resolution: str | None,
     source_image_present: bool,
     pose_source_present: bool,
+    native_pose_reference_present: bool,
     progress: StatusReporter,
 ) -> PlannedQwenCharacterEdit:
     if candidates_per_case < 1:
@@ -315,6 +391,7 @@ def _build_qwen_character_edit_plan(
             resolution=resolution,
             source_image_present=source_image_present,
             pose_source_present=pose_source_present,
+            native_pose_reference_present=native_pose_reference_present,
         )
         for template in templates
     )
@@ -364,6 +441,7 @@ def plan_qwen_character_edit(
         resolution=None,
         source_image_present=False,
         pose_source_present=False,
+        native_pose_reference_present=False,
         progress=progress,
     )
     pack = planned.context.pack
@@ -519,6 +597,7 @@ def _parsed_case(
     resolution: str | None,
     source_image_present: bool,
     pose_source_present: bool,
+    native_pose_reference_present: bool,
 ) -> ParsedQwenCharacterEditCase:
     instruction_request = _instruction_request(template, instruction)
     try:
@@ -537,6 +616,7 @@ def _parsed_case(
     task_route_plan = CharacterTaskRouter().route(
         instruction_plan,
         pose_source_present=pose_source_present,
+        native_pose_reference_present=native_pose_reference_present,
     )
     return ParsedQwenCharacterEditCase(
         template=template,
@@ -596,7 +676,7 @@ def _planned_case(
 def _plan_route_conditioning(
     edit_cases: Sequence[QwenIdentityCase],
     *,
-    available_modes: Sequence[str],
+    available_modes_by_case: Mapping[str, Sequence[str]],
 ) -> tuple[tuple[QwenIdentityCase, CharacterConditioningPlanSpec], ...]:
     planner = CharacterConditioningPlanner()
 
@@ -606,7 +686,7 @@ def _plan_route_conditioning(
         try:
             conditioning_plan = planner.plan(
                 route_kind=route_kind,
-                available_modes=available_modes,
+                available_modes=available_modes_by_case[case.name],
             )
         except CharacterConditioningPlanError as error:
             if route_kind == "pose_transfer":
@@ -624,26 +704,101 @@ def _plan_route_conditioning(
 
 def _apply_route_conditioning(
     planned_cases: Sequence[tuple[QwenIdentityCase, CharacterConditioningPlanSpec]],
+    *,
+    pose_sources: Mapping[str, QwenCharacterPoseSource],
 ) -> tuple[QwenIdentityCase, ...]:
     conditioned_cases = []
     for case, conditioning_plan in planned_cases:
         modes = list(conditioning_plan.conditioning_modes)
-        case_controls = tuple(QWEN_CONTROL_NAME_BY_MODE[mode] for mode in modes)
+        pose_source = pose_sources.get(case.name)
+        case_guides = tuple(
+            _pose_guide_name(pose_source.name)
+            for mode in modes
+            if mode == "pose_reference" and pose_source is not None
+        )
+        case_controls = tuple(
+            _pose_control_name(pose_source.name)
+            if mode == "pose_keypoint" and pose_source is not None
+            else QWEN_CONTROL_NAME_BY_MODE[mode]
+            for mode in modes
+            if mode == "pose_keypoint" or mode in QWEN_CONTROL_NAME_BY_MODE
+        )
         if case.edit_context is None:
             raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
+        prompt = case.prompt
+        if "pose_reference" in modes or "pose_keypoint" in modes:
+            prompt = (
+                f"{prompt.rstrip()} Use the last input image only for pose and framing; "
+                "preserve identity from the preceding reference images."
+            )
         conditioned_cases.append(
             replace(
                 case,
+                prompt=prompt,
+                guides=case_guides,
                 controls=case_controls,
                 edit_context=case.edit_context
                 | {
                     "conditioning_modes": modes,
                     "conditioning_tools": list(conditioning_plan.planned_tools),
+                    "guides_used": list(case_guides),
                     "controls_used": list(case_controls),
                 },
             )
         )
     return tuple(conditioned_cases)
+
+
+def _prepare_pose_inputs(
+    pose_sources: Mapping[str, QwenCharacterPoseSource],
+    *,
+    progress: StatusReporter,
+) -> tuple[dict[str, Path], dict[str, QwenControlImage], dict[str, Any]]:
+    guides: dict[str, Path] = {}
+    controls: dict[str, QwenControlImage] = {}
+    conditioning_result: dict[str, Any] = {}
+    prepared_sources: set[tuple[str, str]] = set()
+    for pose_source in pose_sources.values():
+        source_key = (pose_source.name, pose_source.mode)
+        if source_key in prepared_sources:
+            continue
+        prepared_sources.add(source_key)
+        if pose_source.mode == "native":
+            source_path = resolve_existing_path(pose_source.path.as_posix(), Path.cwd())
+            guide_name = _pose_guide_name(pose_source.name)
+            guides[guide_name] = source_path
+            conditioning_result[guide_name] = {
+                "source_image": image_asset_json(source_path),
+                "preprocessor": {
+                    "tool": "qwen_native_pose_reference",
+                },
+            }
+            continue
+        source_path, pose_control = _render_pose_conditioning(pose_source.path, progress)
+        control_name = _pose_control_name(pose_source.name)
+        controls[control_name] = QwenControlImage(
+            image=pose_control.image,
+            content_box=pose_control.content_box,
+        )
+        conditioning_result[control_name] = {
+            "source_image": image_asset_json(source_path),
+            "preprocessor": pose_control.metadata
+            | {
+                "tool": "dwpose_keypoint_map",
+                "device": pose_control.device,
+                "det_model": pose_control.det_model.as_posix(),
+                "pose_model": pose_control.pose_model.as_posix(),
+            },
+        }
+    return guides, controls, conditioning_result
+
+
+def _pose_guide_name(source_name: str) -> str:
+    return f"pose_reference_{source_name}"
+
+
+def _pose_control_name(source_name: str) -> str:
+    return f"pose_keypoint_{source_name}"
 
 
 def _render_pose_conditioning(

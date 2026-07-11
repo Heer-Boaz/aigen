@@ -19,11 +19,16 @@ class CharacterTaskRouter:
         instruction_plan: CharacterInstructionPlanSpec,
         *,
         pose_source_present: bool = False,
+        native_pose_reference_present: bool = False,
     ) -> CharacterTaskRoutePlanSpec:
         if _is_local_repair(instruction_plan):
             return _local_repair_route(instruction_plan, self.capability_registry)
         if pose_source_present or _is_pose_transfer(instruction_plan):
-            return _pose_transfer_route(instruction_plan, self.capability_registry)
+            return _pose_transfer_route(
+                instruction_plan,
+                self.capability_registry,
+                native_pose_reference_present=native_pose_reference_present,
+            )
         if _is_layout_or_sheet(instruction_plan):
             return _layout_or_sheet_route(instruction_plan, self.capability_registry)
         if _is_scene_insertion(instruction_plan):
@@ -175,12 +180,18 @@ def _scene_insertion_route(
 def _pose_transfer_route(
     plan: CharacterInstructionPlanSpec,
     registry: ModelCapabilityRegistrySpec,
+    *,
+    native_pose_reference_present: bool,
 ) -> CharacterTaskRoutePlanSpec:
     return _route_plan(
         plan,
         registry,
         route_kind="pose_transfer",
-        editor_route="qwen_image_edit_with_control_condition",
+        editor_route=(
+            "qwen_image_edit_multi_reference"
+            if native_pose_reference_present
+            else "qwen_image_edit_with_control_condition"
+        ),
         output_mode="single_image_pose",
         constraints=_constraints(
             registry,
@@ -188,6 +199,7 @@ def _pose_transfer_route(
             pose_conditioning=True,
             text_rendering=_text_risk(plan),
             layout="simple",
+            reserved_image_inputs=int(native_pose_reference_present),
         ),
     )
 
@@ -303,11 +315,12 @@ def _constraints(
     pose_conditioning: bool,
     text_rendering: bool,
     layout: str,
+    reserved_image_inputs: int = 0,
 ) -> FinalEditorConstraintsSpec:
     return FinalEditorConstraintsSpec(
         reference_budget=ReferenceBudgetSpec(
             min=1,
-            max=registry.max_qwen_edit_images,
+            max=registry.max_qwen_edit_images - reserved_image_inputs,
         ),
         mask_required=mask_required,
         pose_conditioning=pose_conditioning,

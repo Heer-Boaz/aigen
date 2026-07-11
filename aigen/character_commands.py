@@ -17,12 +17,16 @@ from aigen.character_region_plan import (
 )
 from aigen.character_edit_plan_models import CharacterEditPlanError
 from aigen.character_qwen_edit import (
+    DEFAULT_QWEN_POSE_MODE,
+    QWEN_POSE_MODES,
     QWEN_STRUCTURE_CONTROL_NAMES,
     QwenCharacterEditError,
     plan_qwen_character_edit,
     qwen_character_edit_case_names,
     run_qwen_character_edit,
 )
+from aigen.character_verification import run_character_verification_matrix
+from aigen.character_verification_models import CharacterVerificationError
 from aigen.character_qwen_refine import (
     QwenCharacterRefineError,
     plan_qwen_character_refine,
@@ -286,7 +290,13 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--pose-source",
         type=Path,
-        help="Source image whose pose DWPose extracts for pose_transfer",
+        help="Source image used natively or through DWPose for pose_transfer",
+    )
+    qwen_edit.add_argument(
+        "--pose-mode",
+        choices=QWEN_POSE_MODES,
+        default=DEFAULT_QWEN_POSE_MODE,
+        help=f"Pose transfer strategy; defaults to {DEFAULT_QWEN_POSE_MODE}",
     )
     qwen_edit.add_argument(
         "--structure-source",
@@ -357,6 +367,22 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_edit.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    qwen_matrix = character_subparsers.add_parser(
+        "qwen-matrix-run",
+        help="Run the visual Qwen backbone verification matrix",
+    )
+    qwen_matrix.set_defaults(compact=False)
+    qwen_matrix.add_argument("--matrix", type=Path, required=True, help="Character verification matrix")
+    qwen_matrix.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
+    qwen_matrix.add_argument(
+        "--model",
+        dest="profile",
+        default=DEFAULT_QWEN_IDENTITY_PROFILE,
+        choices=qwen_image_edit_identity_model_names(),
+        help="Qwen Image Edit model",
+    )
+    qwen_matrix.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
 
     qwen_refine_plan = character_subparsers.add_parser(
         "qwen-edit-refine-plan",
@@ -583,11 +609,25 @@ def run_character_command(
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
                     pose_source_path=args.pose_source,
+                    pose_mode=args.pose_mode,
                     structure_source_path=args.structure_source,
                     structure_control=args.structure_control,
                     progress=progress,
                 ),
                 pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "qwen-matrix-run":
+            dump_json(
+                stdout,
+                run_character_verification_matrix(
+                    matrix_path=args.matrix,
+                    output_dir=args.output_dir,
+                    profile=qwen_image_edit_identity_profile_for_name(args.profile),
+                    overwrite=args.overwrite,
+                    progress=progress,
+                ),
+                pretty=True,
             )
             return 0
         if args.characters_command == "qwen-edit-refine-plan":
@@ -670,6 +710,7 @@ def run_character_command(
         KeyframeMemoryError,
         ManifestIOError,
         QwenVlmError,
+        CharacterVerificationError,
     ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1
