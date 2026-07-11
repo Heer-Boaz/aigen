@@ -109,7 +109,7 @@ reference images ──▶│ 3. select ≤3 ref indices (only if >3 supplied)  
                                           │  · relevance weighting · identity-consistent redraw    │
                                           └──────────────────────────────────────────────────────┘
                                                                      │
-                                                          10. optional postprocess (upscale / anime refine)
+                                                10. audit loop (raw, bounded) → 11. optional postprocess (upscale)
 ```
 
 - **Steps 4–7 of `PLAN.md` are not deleted — they move into the model.** That is
@@ -135,16 +135,18 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 | Role | Model (HF) | Notes |
 |------|------------|-------|
 | **Edit backbone (core)** | `Qwen/Qwen-Image-Edit-2509` | Multi-image (1–3 optimal), person/text consistency, **native** depth/edge/keypoint control. This is the whole engine. |
-| **Backbone, quantized for 16GB** | `nunchaku-tech/nunchaku-qwen-image-edit-2509` (SVDQuant **FP4**, r32) + a Lightning 4/8-step variant | FP4 for Blackwell. Pipeline: `QwenImageEditPlusPipeline` + `NunchakuQwenImageTransformer2DModel`. Multi-image via `image=[img1,img2,img3]`. Verify exact lightning filename on the org (weights churn). Escalation: 4-step → 8-step → full r32 → r128. |
+| **Backbone, quantized for 16GB (baseline)** | `nunchaku-tech/nunchaku-qwen-image-edit-2509` (SVDQuant **FP4**, r32) + a Lightning 4/8-step variant | FP4 for Blackwell. Pipeline: `QwenImageEditPlusPipeline` + `NunchakuQwenImageTransformer2DModel`. Multi-image via `image=[img1,img2,img3]`. Verify exact lightning filename on the org (weights churn). Escalation: 4-step → 8-step → full r32 → r128. Proven; stays the baseline until a candidate beats it on the §8 verification matrix. |
+| **Backbone, next candidate (primary)** | `Qwen/Qwen-Image-Edit-2511` via **LightX2V** (official scaled FP8 + 4/8-step Lightning) | Same family and reference semantics as 2509; reports better consistency and multi-image editing. This is a **separate backend adapter** (LightX2V engine + its own offload), *not* a Nunchaku weight swap — official Nunchaku supports 2509, not 2511. Community FP4/SVDQ 2511 builds are experimental-only (third-party provenance, ~40GB-RAM-class guidance). Test order: 8-step FP8 (quality) → 4-step FP8 (speed) → BF16 + distilled LoRA as quality reference if FP8 artifacts show. Judged on the §8 matrix, never on public benchmark ELOs — none of those measure anime character fidelity. |
+| **Backbone, later candidate (evidence-gated)** | FLUX.2 **klein** (NVFP4-class quant) | Multi-reference editor, consumer-GPU positioning. New pipeline class + conditioning API = a real adapter build; anime-character fidelity unproven. Only after the matrix shows gaps the Qwen line does not close. |
 | **Ref-selector VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (or `-3B-Instruct`) | **Only** job: when >3 refs supplied, return the ≤3 best indices for the route. Optionally a one-word route hint. **Never** a character description. Anime-domain worries mostly evaporate here — "which image is the full-body front view" is robust even on anime. |
-| **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit; same runner as the selector) | **Only** job: stage 11 — compare the candidate image against the selected reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. |
+| **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit; same runner as the selector) | **Only** job: stage 10 — compare the candidate image against the selected reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. It also receives the user instruction, route, and pose/scene context (output intent — allowed text-lane input) so intent-consistent changes (a flaring skirt mid-jump, open fingertips) are not flagged as identity errors. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. An integrated pipeline stage, **not** a separate CLI product layer. |
 | Pose preprocessor | DWPose (via `IDEA-Research/DWPose`, or `controlnet_aux`) | Produces the keypoint control image for `pose_transfer`. Feeds 2509's native keypoint control. |
 | Depth preprocessor | `depth-anything/Depth-Anything-V2-Large` | Depth control image for structured scene routes. Feeds 2509's native depth control. |
 | Edge preprocessor | Canny (OpenCV) or `controlnet_aux` | Edge control image. Feeds 2509's native edge control. |
-| Mask / segmentation | `facebook/sam2` (SAM2) | Region mask for `local_repair_or_inpaint` / regional outfit swap. |
-| Region grounding (text→box) | `microsoft/Florence-2-large` | Turn "fix her left glove" into a box/region to seed SAM2. Image-domain output (a region), not a character description. |
-| Upscale (postprocess) | Real-ESRGAN anime (`RealESRGAN_x4plus_anime_6B`) | Safe, stable anime upscaler. Step 10 only. |
-| Anime polish (optional) | A current SOTA anime **SDXL** checkpoint (Illustrious-XL / NoobAI-XL family) as **low-denoise img2img refine** | Optional §10 finish for anime crispness. It is a *refiner*, never the identity carrier. Pick the current best checkpoint; this space moves fast. |
+| Mask / segmentation | `facebook/sam2` (SAM2) | **Preservation/compositing boundary only** for `local_repair_or_inpaint` / regional outfit swap — the exact-pixel guarantee, never the carrier of character semantics (see §4 defect response ladder). |
+| Region grounding (text→box) | `microsoft/Florence-2-large` | Ground a region pointer ("her left glove") to a box in the candidate **and** in the selected references, to build close-up conditioning crops and to seed SAM2. Image-domain output (regions), not a character description. |
+| Upscale (postprocess) | Real-ESRGAN anime (`RealESRGAN_x4plus_anime_6B`) | Safe, stable anime upscaler. Stage 11 only, after the audit loop passes. |
+| Anime polish (optional) | A current SOTA anime **SDXL** checkpoint (Illustrious-XL / NoobAI-XL family) as **low-denoise img2img refine** | Optional stage-11 finish for anime crispness. It is a *refiner*, never the identity carrier. Pick the current best checkpoint; this space moves fast. |
 
 ### Explicit anti-recommendations (these are the traps)
 
@@ -162,7 +164,7 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 
 Qwen-Image is trained with heavy illustration data, so 2509 is a reasonable anime
 editor, but not elite. If anime fidelity falls short, the lever is a **style LoRA
-on the backbone** or the **§10 anime SDXL refine pass** — *not* a pipeline rewrite
+on the backbone** or the **stage-11 anime SDXL refine pass** — *not* a pipeline rewrite
 and *not* an external VLM. Keep it as a model-swap slot behind the same boundary.
 
 ---
@@ -182,7 +184,7 @@ sources the user supplied), **not** off `visual_analysis` text.
 | `view_change` | none | refs + instruction only |
 | `scene_insertion` | optional depth/edge | Depth-Anything-V2 / Canny |
 | `pose_transfer` | pose keypoints | DWPose → 2509 keypoint control |
-| `local_repair_or_inpaint` | region mask | Florence-2 (box) → SAM2 (mask) |
+| `local_repair_or_inpaint` | region mask (user-directed); close-up variant is an evidence-gated reserve (see defect ladder below) | Florence-2 (box) → SAM2 (**boundary only**) |
 | `object_removal` (future, route-gated) | none (maskless) | full-image "remove X" edit + diff-composite: accept only the changed zone, restore everything else pixel-exact from the source. Until this route exists, removals run as `local_repair_or_inpaint` and residual artifacts are the audit loop's job. |
 | `outfit_swap` | optional region mask | SAM2 if regional; else refs + instruction |
 | `style_transfer` | style ref as image (+ opt. style LoRA) | — |
@@ -193,12 +195,78 @@ Identity/portrait/view/normal-scene routes need **no** extra conditioning — th
 backbone handles them. That is not "too simple"; it is the model doing its job.
 Sophistication appears exactly where a route genuinely needs geometry.
 
+### Defect response ladder (single-pass first)
+
+The proven root cause of nearly every quality defect so far — small figure,
+bare finger, unconvincing hands — was **generation-time raw pixel budget**,
+fixed by single-pass measures (canvas fill, native resolution), not by
+patching. Modern editors resolve semantics in one holistic pass; iterative
+surgery is the exception, never the architecture. When the audit (stage 10)
+or the user flags a defect, respond in this order:
+
+1. **Select.** Pick the best of the N candidates already generated.
+2. **Re-run the single pass, escalated.** Other seeds, more steps,
+   r32 → r128, larger canvas, or the §3 backbone ladder — model-native levers
+   only. Slower is explicitly acceptable.
+3. **Targeted close-up repair (evidence-gated reserve).** Only for a defect
+   class that demonstrably survives a fully escalated single pass. Flow:
+   Florence-2 grounds the region pointer in the candidate **and** in the
+   originally selected references (same refs, no re-selection) → image-only
+   close-up crops (the one legitimate motivation: references are far
+   higher-res than the ~1MP conditioning canvas, so a ref close-up carries
+   detail the full-frame pass physically destroys) → Qwen inpaints the
+   candidate crop with the ref close-ups as native visual conditioning, thin
+   prompt ("make this region match the references") → SAM2 provides **only**
+   the preservation/compositing boundary → paste back; the hard pixel-diff
+   assert outside the boundary stands. If the pointer grounds in no
+   reference, the repair runs with the full selected references — an explicit
+   route condition, not a fallback. **Do not build or invoke this rung
+   pre-emptively.**
+
+`local_repair_or_inpaint` as a *user-directed* route (explicit region/mask
+from the user) keeps its existing mechanics: masked inpaint, SAM2 as boundary
+only, exact preservation outside. The alternative for *removals* (maskless
+full-image edit + diff-composite) remains the `object_removal` route —
+deletions, not construction repairs.
+
+### Structural-source composition rules
+
+**Scene-source ownership.** For `scene_insertion` depth/edge conditioning, the
+scene source **owns the composition**: never crop it — its framing *is* the
+intent. Only pose controls use the content-box crop. A pose sheet is not a
+scene source; feeding one as the depth/edge source is a routing error, not a
+reason to add composition heuristics.
+
 **Pose-control fit rule.** The DWPose control image must be fitted to the
 generation canvas aspect **without black letterbox bars** — crop around the
 skeleton content (pure geometry) so the control canvas matches the output
 canvas aspect. Never heuristically enlarge the figure; the source framing owns
 composition. Black padding bars are spurious control input and shrink the
-figure on the canvas.
+figure on the canvas. If the target-aspect window around the skeleton content
+exceeds the source bounds, extend the canvas with the control's own background
+(a DWPose render is skeleton-on-black, so extension is background continuation
+at unchanged skeleton scale — not a letterboxed, shrunken figure). Pure
+geometry; this case is never a hard failure and never an enlargement
+heuristic.
+
+**Pose-proportion rule.** A keypoint control encodes the *source body's
+proportions* as well as the pose; a pose source with off-character
+head-to-body-to-legs ratios will override the references (keypoint control
+wins over refs by design). The fix is model-owned retargeting, in this order:
+
+1. **Native pose transfer** — feed the pose source as a plain input image
+   ("match the pose of image N; identity from the references"), no keypoint
+   control. The model reconciles pose and proportions from the refs
+   in-model.
+2. **Self-derived skeleton lock** (when the pose must be exact, e.g.
+   keyframes) — extract DWPose from the accepted native-transfer result and
+   use that skeleton as the strict keypoint control for the final
+   high-quality run. Correct anatomy by construction; no hand-written bone
+   math — the model did the retargeting, geometry only locks in what the
+   model decided.
+3. **Bone-length retargeting** (source joint angles + per-run, ref-derived
+   bone ratios; keypoints→keypoints, image-domain, character-agnostic) is a
+   last-resort reserve, never the default.
 
 ---
 
@@ -212,37 +280,63 @@ figure on the canvas.
 | 3b | Select (only if N>3) | ref images + route | **≤3 indices** | indices |
 | 8 | Conditioning build (route-gated) | selected refs + user structural sources | control image(s): pose/mask/depth | image |
 | 9 | Generate | ≤3 ref images (+ control imgs) + **thin prompt** | edited image | latent→image |
-| 10 | Postprocess (optional) | edited image | upscaled/anime-refined image | image |
-| 11 | **Audit loop (bounded)** | candidate + selected refs (+ repair mask if any) | pass, **or** region pointers → rerun stages 8–9 on those regions | image → verdict + region pointers |
+| 10 | **Audit loop (bounded, on raw)** | raw candidates + selected refs + user instruction/route context (+ repair mask if any) | pass (best candidate selected), **or** defect report → §4 defect response ladder | image → verdict + region pointers |
+| 11 | Postprocess (optional, after audit passes) | audited raw image | upscaled/anime-refined image | image |
 
 The **prompt** at stage 9 is the user's instruction, lightly normalized (and, only
 for scene/style, optionally expanded on the *scene* — never the character). It is
 **not** VLM-authored from ref analysis.
 
-### Stage 11: the audit loop (M5)
+### Stage 10: the audit loop (M5)
 
 The pipeline must find its own errors instead of relying on a human to point at
-the broken skirt or notice the missing glove. Two complementary tracks, both
-character-agnostic:
+the broken skirt or notice the missing glove. It is an **integrated pipeline
+stage** inside the edit/refine flow — not a separate CLI product layer. Two
+complementary tracks, both character-agnostic:
 
 - **Deterministic pixel-diff track (no model).** For masked repairs, zero
   changed pixels outside the mask is a **hard assert**. Changed-pixel clusters
   outside the intended zone become region candidates themselves. This catches
   preservation violations and boundary/contour artifacts mechanically.
 - **Semantic VLM track.** The audit VLM (see §3) receives the selected
-  reference images plus the candidate and is asked, generically, where the
-  candidate visually deviates (construction, missing items, artifacts) — or
-  "none". No checklist, no character constants. This catches errors with no
-  diff signature, e.g. a glove missing relative to the references.
+  reference images plus the candidate, **and** the user instruction, route,
+  and pose/scene context, and is asked, generically, where the candidate
+  visually deviates from the references *given the requested change* — or
+  "none". No checklist, no character constants. The intent context is what
+  keeps a flaring skirt mid-jump, open fingertips, or any other legitimate
+  consequence of the instruction from being flagged as an identity error.
+  This track catches errors with no diff signature, e.g. a glove missing
+  relative to the references.
 
-Combined verdict is pass only if both tracks pass. On fail, region pointers
-feed the existing Florence-2 → SAM2 → refine path (stages 8–9); the repair
-instruction stays thin ("make the <region> match the references") — appearance
-comes from the reference images again, never from audit text. The loop is
-bounded (default 2 iterations); each iteration logs its mask and verdict into
-the run directory. If the audit still fails after N iterations, the run **fails
-visibly with the report** — no pending states, no silent downgrade to "good
-enough".
+The audit's primary role is **detector and best-of-N selector** — the
+automated pair of eyes that a human operator is today. Combined verdict is
+pass only if both tracks pass on the selected candidate. On fail, follow the
+**§4 defect response ladder**: select a better candidate, else re-run the
+single pass escalated (seeds / steps / rank / canvas); targeted close-up
+repair only for defect classes proven to survive full escalation. The loop is
+bounded (default 2 iterations); each iteration logs its verdict and chosen
+response into the run directory. If the audit still fails after N iterations,
+the run **fails visibly with the report** — no pending states, no silent
+downgrade to "good enough".
+
+**Ordering: audit before postprocess.** The loop runs on the **raw**
+generation at native resolution; Real-ESRGAN runs **once**, after the loop
+passes. Repairing raw pixels is what the backbone conditions on; upscaling
+first would launder missing raw detail (quality invariant §0) and force every
+repair iteration through a re-upscale. The upscaled result gets no semantic
+re-audit — the upscaler is deterministic and a second VLM load buys nothing.
+
+**Tiled detail refine (optional stage-11 extension, to validate).** For
+2K–4K final outputs the anime polish pass may run **tiled**: ESRGAN upscale,
+then overlapping-tile low-denoise img2img with the SDXL anime refiner —
+overlap blending, identity anchored by the upscaled base image. This raises
+detail crispness only; it cannot correct structure and is no substitute for
+generation-time pixel budget. Per-tile prompts stay empty or the global thin
+instruction — **never per-tile captions** (that is the text bottleneck
+through the back door). Be wary of using the Qwen editor itself as tile
+refiner: every tile re-enters its VL encoder, and an ambiguous body-part tile
+invites hallucination; the SDXL refiner slot is the ecosystem-proven tool for
+this job. Validate visually before adopting.
 
 ### Resolution policy
 
@@ -266,18 +360,25 @@ not coexist on 16GB.** Run stages sequentially:
    DWPose / SAM2 / Florence-2 — each load→run→unload).
 3. Load Nunchaku FP4 backbone (+ Lightning) with CPU offload enabled → generate →
    unload.
-4. Audit loop (stage 11): pixel-diff track is model-free; then load audit VLM
+4. Audit loop (stage 10): pixel-diff track is model-free; then load audit VLM
    (8-bit) → verdict + region pointers → **unload**. On fail, rerun the
-   preprocessors + backbone for the flagged regions (bounded).
+   preprocessors + backbone on the region **close-ups** (§4) — a crop canvas,
+   cheaper than a full-frame pass (bounded iterations).
 5. (Optional) load upscaler/refiner → finish.
 
-**Known offload bug (must fix to close M4b):** under sequential Accelerate
-offload (`--nunchaku-blocks-on-gpu`), reference-VAE encoding and latent decode
-use `next(pipeline.vae.parameters()).device`, which can be `cpu`/meta while the
-real execution device is CUDA. Use the execution device instead (the prompt
-embedding path already does: `pipeline._execution_device`), and for decode,
-capture `pipeline._execution_device` **before** `pipeline.transformer.to("cpu")`
-and pass it through.
+**Device ownership rule (implemented):** under sequential Accelerate offload
+(`--nunchaku-blocks-on-gpu`), never derive a device from
+`next(module.parameters()).device` — offloaded parameters can sit on `cpu`/meta
+while the real execution device is CUDA. The owner is
+`pipeline._execution_device`; for decode, capture it **before**
+`pipeline.transformer.to("cpu")` and pass it through.
+
+**2511/LightX2V route (FP8, ~20.5GB transformer):** weights stream from
+pinned system RAM. Every timing run records seconds/step, peak VRAM, WSL RAM,
+and swap usage — the moment swap grows, the measurement is invalid as a
+normal offload figure. Nunchaku
+flags (`--nunchaku-blocks-on-gpu`) do not project onto this backend;
+LightX2V owns its own offload mechanism.
 
 For the common case (≤3 refs, identity/portrait/view/scene) stage 1 and 2 are
 skipped entirely: **load backbone, feed refs + instruction, generate.** That is
@@ -330,15 +431,34 @@ Keep the routing/conditioning scaffolding; excise the text-serialization organs.
 3. Add the **index selector** VLM path, active only when N>3.
 4. Add route-gated structural conditioning: `pose_transfer` (DWPose) first, then
    `local_repair` (Florence-2 → SAM2), then depth/edge for scenes. Closing this
-   rung (M4b) requires the sequential-offload device fix (§6) and the
-   native-resolution defaults (§5 resolution policy) — not wider masks.
-5. Add §10 postprocess (upscale, optional anime refine).
-6. **Audit loop (M5):** stage 11 as described in §5 — pixel-diff track, audit
-   VLM track, bounded repair loop wired through the existing region-plan and
-   refine paths.
-7. **Object-removal route:** maskless full-image edit + diff-composite,
-   route-gated (removals only; construction repairs stay masked inpaint).
-8. Only then, if anime fidelity is short: backbone style LoRA.
+   rung (M4b) required the sequential-offload device fix (§6, implemented) and
+   the native-resolution defaults (§5 resolution policy, implemented) — not
+   wider masks.
+5. Add stage-11 postprocess (upscale, optional anime refine), gated behind the
+   audit once stage 10 exists.
+6. **Verification matrix (proof rung — next):** routes × a handful of poses,
+   emotions, and camera angles on the **current reference pack**, fixed
+   seeds, judged visually only. Include the §4 pose-proportion ladder
+   (native pose transfer vs. keypoint control) as matrix cases. This matrix
+   is the permanent backbone-eval harness — build once, reuse for every
+   candidate; keep it small enough to rerun per backbone. It exists to make
+   rung 7 judgeable.
+7. **Backbone rung (prioritized):** Qwen-Image-Edit-2511 via LightX2V as a
+   separate backend adapter (8-step FP8 → 4-step FP8; BF16 + distilled LoRA
+   as quality reference), measured per §6, judged on the matrix against the
+   2509 baseline. FLUX.2 klein only after the matrix shows gaps the Qwen
+   line does not close.
+8. **Audit (M5):** stage 10 as described in §5 — pixel-diff track, audit VLM
+   track as detector + best-of-N selector, bounded response per the §4
+   defect ladder (select/regenerate/escalate; no surgery by default).
+9. **Second character pack + matrix rerun:** the acid test of the golden
+   rule — zero code, pure assets. Deliberately deferred until after the
+   backbone switch.
+10. **Evidence-gated reserves** (build only on proven need): close-up repair
+    (§4 ladder step 3), object-removal route (maskless edit +
+    diff-composite), bone-length pose retargeting, tiled detail refine
+    (§5, validate visually first).
+11. Only then, if anime fidelity is short: backbone style LoRA.
 
 Do not advance a rung until the previous one renders.
 
@@ -363,7 +483,11 @@ assert:      an image is produced; NO identity_profile.json, NO
 2. VLMs return **indices** (selector; at most a route hint), **verdicts and
    short region pointers** (audit). Nothing else. Region pointers feed
    Florence-2 grounding and the thin repair instruction only — never appearance
-   descriptions that condition generation.
+   descriptions that condition generation. The audit is **intent-aware**: it
+   receives the user instruction, route, and pose/scene context (output
+   intent — allowed text-lane input, not character text) and judges against
+   references *and* the requested change; deviations the instruction asked for
+   are not defects.
 3. No GFPGAN/CodeFormer. No IP-Adapter as identity mechanism. No deep nested JSON
    from any VLM. No line-protocol/free-text substitutes.
 4. Structural conditioning is **image-domain** (pose/mask/depth maps), route-gated,
@@ -375,9 +499,16 @@ assert:      an image is produced; NO identity_profile.json, NO
 7. **No artifact-driven constants.** Never raise mask expansion, margins, or
    similar knobs to paper over one failing case (e.g. 4→8 px dilation to hide a
    leftover contour). A small fixed dilation is edge-uncertainty margin only;
-   residual artifacts are the audit loop's job (re-ground on the artifact,
-   second repair pass).
+   residual artifacts are handled per the §4 defect response ladder
+   (select / regenerate escalated), not by wider masks.
 8. **No pending states, no silent simplification.** When the audit loop
    exhausts its iterations without a pass, the run fails visibly with the
    audit report. Checklists, warnings, or "known issue" markers are not a
    substitute for the repair actually happening.
+9. **No per-tile captions** in any tiled pass — tile prompts stay empty or
+   carry the global thin instruction. Describing tile content is the text
+   bottleneck through the back door.
+10. **Single-pass first.** Iterative surgery (close-up repair, retargeting
+    math) is an evidence-gated exception, never the architecture. If the
+    pipeline routinely needs repair loops, the single pass is misconfigured
+    or the model slot is too small — fix that instead.
