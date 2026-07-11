@@ -6,32 +6,18 @@
     "reference_pack": "/home/boaz/aigen/assets/characters/jillian/references/reference_pack.json"
   },
   "references": {
-    "back": {
-      "height": 5056,
+    "fullbody_multiview": {
+      "height": 3890,
       "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/back-full.png",
-      "sha256": "384272649f8abe0d9a82b439433f08a4c302b7f8d0d3acbd7021add309c0fd2f",
-      "width": 3392
-    },
-    "front": {
-      "height": 5056,
-      "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/front-full.png",
-      "sha256": "aa2c61fe7cd25bd8008381b2f6f0f6965ab1543a9e5e528dbaaf96cb8cfdae9e",
-      "width": 3392
+      "path": "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png",
+      "sha256": "c0a0fe8818985ed05320c22881e6da9da3243c6cb736c7c91019b20addbd7d8d",
+      "width": 3840
     },
     "portrait": {
       "height": 5056,
       "mode": "RGB",
       "path": "/home/boaz/aigen/assets/characters/jillian/front-upperbody.png",
       "sha256": "72e3095c8b90344f076373a311e828e7253023dd0440d52a4d5152b2e98ece70",
-      "width": 3392
-    },
-    "side": {
-      "height": 5056,
-      "mode": "RGB",
-      "path": "/home/boaz/aigen/assets/characters/jillian/side-full.png",
-      "sha256": "ecceeaa93f1536aaeb42238d39a0582855f3bbb24ad2c252690c8307330d9413",
       "width": 3392
     }
   },

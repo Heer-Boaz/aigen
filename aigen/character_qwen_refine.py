@@ -10,7 +10,7 @@ from aigen.character_qwen_edit import load_qwen_character_reference_context
 from aigen.character_reference_models import CharacterReferenceError, CharacterReferencePackSpec
 from aigen.character_reference_selector import ReferenceSelection, select_reference_subset
 from aigen.generation.qwen_image_edit_identity import (
-    QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES,
+    QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES,
     QwenImageEditIdentityProfile,
     run_qwen_image_edit_inpaint_candidates,
 )
@@ -24,7 +24,7 @@ QWEN_CHARACTER_REFINE_KIND = "qwen-character-refine-result"
 QWEN_CHARACTER_REFINE_PLAN_KIND = "qwen-character-refine-plan"
 QWEN_CHARACTER_REFINE_ROUTE = "local_repair_or_inpaint"
 QWEN_CHARACTER_REFINE_OUTPUT_MODE = "masked_refine_candidates"
-QWEN_CHARACTER_REFINE_MAX_PACK_REFS = QWEN_IMAGE_EDIT_MAX_INPUT_IMAGES - 1
+QWEN_CHARACTER_REFINE_MAX_PACK_REFS = QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES
 
 
 class QwenCharacterRefineError(RuntimeError):
@@ -78,7 +78,7 @@ def run_qwen_character_refine(
     instruction: str,
     output_dir: Path,
     profile: QwenImageEditIdentityProfile,
-    max_side: int,
+    max_side: int | None,
     steps: int | None,
     true_cfg_scale: float | None,
     guidance_scale: float | None,

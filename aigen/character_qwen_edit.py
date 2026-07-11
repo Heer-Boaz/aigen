@@ -39,6 +39,7 @@ from aigen.character_task_router import CharacterTaskRouter
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.qwen_image_edit_identity import (
     QWEN_IDENTITY_CASES,
+    QwenControlImage,
     QwenIdentityCase,
     QwenImageEditIdentityProfile,
     run_qwen_image_edit_cases,
@@ -180,7 +181,12 @@ def run_qwen_character_edit(
     )
     edit_cases = _apply_route_conditioning(conditioning_plans)
     controls = (
-        {QWEN_POSE_CONTROL_NAME: pose_conditioning[1].image}
+        {
+            QWEN_POSE_CONTROL_NAME: QwenControlImage(
+                image=pose_conditioning[1].image,
+                content_box=pose_conditioning[1].content_box,
+            )
+        }
         if pose_conditioning is not None
         else {}
     )

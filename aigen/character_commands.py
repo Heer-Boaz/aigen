@@ -201,7 +201,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--max-side",
         type=int,
         default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
-        help="Longest generated/reference side for the smoke run",
+        help="Upper cap for the generated/reference long side",
     )
     qwen_identity.add_argument(
         "--output-format",
@@ -299,7 +299,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--max-side",
         type=int,
         default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
-        help="Longest generated/reference side",
+        help="Upper cap for the generated/reference long side",
     )
     qwen_edit.add_argument(
         "--output-format",
@@ -381,8 +381,7 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_refine.add_argument(
         "--max-side",
         type=int,
-        default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
-        help="Longest source/reference side before prompt conditioning",
+        help="Optional upper cap for the native source long side",
     )
     qwen_refine.add_argument(
         "--steps",

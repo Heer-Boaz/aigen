@@ -188,7 +188,6 @@ def _pose_transfer_route(
             pose_conditioning=True,
             text_rendering=_text_risk(plan),
             layout="simple",
-            reserved_control_images=1,
         ),
     )
 
@@ -304,12 +303,11 @@ def _constraints(
     pose_conditioning: bool,
     text_rendering: bool,
     layout: str,
-    reserved_control_images: int = 0,
 ) -> FinalEditorConstraintsSpec:
     return FinalEditorConstraintsSpec(
         reference_budget=ReferenceBudgetSpec(
             min=1,
-            max=registry.max_qwen_edit_images - reserved_control_images,
+            max=registry.max_qwen_edit_images,
         ),
         mask_required=mask_required,
         pose_conditioning=pose_conditioning,
