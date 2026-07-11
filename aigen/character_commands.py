@@ -17,6 +17,7 @@ from aigen.character_region_plan import (
 )
 from aigen.character_edit_plan_models import CharacterEditPlanError
 from aigen.character_qwen_edit import (
+    QWEN_STRUCTURE_CONTROL_NAMES,
     QwenCharacterEditError,
     plan_qwen_character_edit,
     qwen_character_edit_case_names,
@@ -286,6 +287,16 @@ def add_character_commands(subparsers: Any) -> None:
         "--pose-source",
         type=Path,
         help="Source image whose pose DWPose extracts for pose_transfer",
+    )
+    qwen_edit.add_argument(
+        "--structure-source",
+        type=Path,
+        help="Scene composition image used to derive a depth or edge control",
+    )
+    qwen_edit.add_argument(
+        "--structure-control",
+        choices=QWEN_STRUCTURE_CONTROL_NAMES,
+        help="Structural scene control to derive from --structure-source",
     )
     qwen_edit.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
     qwen_edit.add_argument(
@@ -572,6 +583,8 @@ def run_character_command(
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
                     pose_source_path=args.pose_source,
+                    structure_source_path=args.structure_source,
+                    structure_control=args.structure_control,
                     progress=progress,
                 ),
                 pretty=not args.compact,

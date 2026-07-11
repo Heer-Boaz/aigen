@@ -13,8 +13,11 @@ from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
 
-REALESRGAN_ANIME_X4_MODEL_NAME = "realesrganX4plusAnime_v1"
-REALESRGAN_ANIME_X4_MODEL = MODELS_ROOT / "upscale_models/realesrganX4plusAnime_v1.pt"
+REALESRGAN_ANIME_X4_MODEL_NAME = "RealESRGAN_x4plus_anime_6B"
+REALESRGAN_ANIME_X4_MODEL = (
+    MODELS_ROOT
+    / "upscale_models/amd/realesrgan-x4plus-anime-6b/RealESRGAN_x4plus_anime_6B.pth"
+)
 UPSCALE_TILE_SIZE = 512
 UPSCALE_TILE_OVERLAP = 32
 

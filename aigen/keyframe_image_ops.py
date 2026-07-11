@@ -5,6 +5,10 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
+from scipy import ndimage
+
+
+_PIXEL_DIFF_CONNECTIVITY = np.ones((3, 3), dtype=bool)
 
 
 def mask_overlay(base: Image.Image, mask: Image.Image) -> Image.Image:
@@ -45,6 +49,38 @@ def outside_mask_change(base: Image.Image, refined: Image.Image, feather_mask: I
         "hard_rejects": {
             "outside_feather_changed": bool(changed_pixels > 0 or max_delta > 1),
         },
+    }
+
+
+def exact_outside_mask_diff(base: Image.Image, refined: Image.Image, repaint_mask: Image.Image) -> dict[str, Any]:
+    base_array = np.asarray(base.convert("RGB"), dtype=np.uint8)
+    refined_array = np.asarray(refined.convert("RGB"), dtype=np.uint8)
+    repaint = np.asarray(repaint_mask.convert("L"), dtype=np.uint8) > 0
+    outside = ~repaint
+    changed = np.any(base_array != refined_array, axis=2) & outside
+    changed_pixels = int(changed.sum())
+    regions: list[dict[str, Any]] = []
+    if changed_pixels:
+        labels, _ = ndimage.label(changed, structure=_PIXEL_DIFF_CONNECTIVITY)
+        component_sizes = np.bincount(labels.ravel())
+        for label, component_slice in enumerate(ndimage.find_objects(labels), start=1):
+            if component_slice is None:
+                continue
+            y_slice, x_slice = component_slice
+            regions.append(
+                {
+                    "box": [x_slice.start, y_slice.start, x_slice.stop, y_slice.stop],
+                    "changed_pixels": int(component_sizes[label]),
+                }
+            )
+        regions.sort(key=lambda region: region["changed_pixels"], reverse=True)
+    outside_pixels = int(outside.sum())
+    return {
+        "passed": changed_pixels == 0,
+        "outside_mask_pixels": outside_pixels,
+        "outside_mask_changed_pixels": changed_pixels,
+        "outside_mask_changed_ratio": float(changed_pixels / max(outside_pixels, 1)),
+        "outside_change_regions": regions,
     }
 
 

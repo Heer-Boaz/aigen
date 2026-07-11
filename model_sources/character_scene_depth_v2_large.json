@@ -1,0 +1,25 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "character scene structural conditioning",
+    "runtime": "Depth Anything V2 preprocessor before Qwen Image Edit"
+  },
+  "downloads": [
+    {
+      "name": "depth-anything-v2-large-character-scene-control",
+      "repo_id": "depth-anything/Depth-Anything-V2-Large-hf",
+      "revision": "7581137eff8d4e94f6e796d3baea0e9fa79b22d2",
+      "local_path": "depth/depth-anything/Depth-Anything-V2-Large-hf",
+      "include": [
+        "README.md",
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}

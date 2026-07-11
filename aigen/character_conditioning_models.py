@@ -18,6 +18,8 @@ CHARACTER_CONDITIONING_TOOLS = (
     "florence2_region_grounding",
     "sam2_mask_generation",
     "dwpose_keypoint_map",
+    "depth_anything_v2_map",
+    "canny_edge_map",
 )
 
 class CharacterConditioningPlanError(RuntimeError):
@@ -52,7 +54,13 @@ class CharacterConditioningPlanSpec(StrictModel):
         ]
     ] = Field(default_factory=list)
     planned_tools: list[
-        Literal["florence2_region_grounding", "sam2_mask_generation", "dwpose_keypoint_map"]
+        Literal[
+            "florence2_region_grounding",
+            "sam2_mask_generation",
+            "dwpose_keypoint_map",
+            "depth_anything_v2_map",
+            "canny_edge_map",
+        ]
     ] = Field(default_factory=list)
 
 

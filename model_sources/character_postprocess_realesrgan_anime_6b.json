@@ -1,0 +1,24 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "optional character image postprocess",
+    "runtime": "Spandrel Real-ESRGAN anime 6B after Qwen Image Edit unload"
+  },
+  "downloads": [
+    {
+      "name": "realesrgan-x4plus-anime-6b-character-postprocess",
+      "repo_id": "amd/realesrgan-x4plus-anime-6b",
+      "revision": "b14ff5f8ecb5a4b56ce4049a58d0bca1f8814690",
+      "local_path": "upscale_models/amd/realesrgan-x4plus-anime-6b",
+      "include": [
+        "LICENSE",
+        "README.md",
+        "RealESRGAN_x4plus_anime_6B.pth"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}

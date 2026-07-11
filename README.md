@@ -26,7 +26,8 @@ The installer is modular internally and always installs the current production
 stack: FLUX Kontext, Shakker Union Pro ControlNet, Nunchaku, Qwen3 instruction
 parser, Qwen2.5-VL judge/planner, DWPose pose scoring models, SAM foreground
 segmentation, GroundingDINO polish grounding, Florence-2 polish grounding,
-SAM2 character region masks and validation checks.
+SAM2 character region masks, Depth Anything V2 scene controls, Real-ESRGAN
+anime postprocessing and validation checks.
 
 ```bash
 scripts/check_system.sh
@@ -46,6 +47,8 @@ The model manifests used by the installer are:
 - `model_sources/keyframe_grounding_dino.json`
 - `model_sources/keyframe_grounding_florence2.json`
 - `model_sources/keyframe_pose_dwpose_onnx.json`
+- `model_sources/character_scene_depth_v2_large.json`
+- `model_sources/character_postprocess_realesrgan_anime_6b.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 
 Optional Qwen identity smoke assets are intentionally separate from the default

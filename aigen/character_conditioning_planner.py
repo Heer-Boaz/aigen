@@ -24,6 +24,8 @@ _NO_REQUIRED_MODES = frozenset()
 _TOOLS_BY_MODE = {
     "region_mask": ("florence2_region_grounding", "sam2_mask_generation"),
     "pose_keypoint": ("dwpose_keypoint_map",),
+    "depth": ("depth_anything_v2_map",),
+    "edge_or_sketch": ("canny_edge_map",),
 }
 
 

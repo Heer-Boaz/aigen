@@ -28,6 +28,7 @@ generation = [
   "diffusers[torch]>=0.38",
   "ftfy",
   "Jinja2",
+  "opencv-python-headless>=4.10",
   "onnxruntime-gpu==1.26.0",
   "peft>=0.17",
   "protobuf",

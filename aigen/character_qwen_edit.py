@@ -8,6 +8,7 @@ from typing import Any
 
 from PIL import Image
 
+from aigen.canny_control import CannyControl, CannyControlError, render_canny_control
 from aigen.character_conditioning_models import CharacterConditioningPlanError, CharacterConditioningPlanSpec
 from aigen.character_conditioning_planner import CharacterConditioningPlanner
 from aigen.character_edit_plan_models import (
@@ -36,6 +37,7 @@ from aigen.character_reference_selector import (
 )
 from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
 from aigen.character_task_router import CharacterTaskRouter
+from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.qwen_image_edit_identity import (
     QWEN_IDENTITY_CASES,
@@ -56,6 +58,18 @@ class QwenCharacterEditError(RuntimeError):
 
 
 QWEN_POSE_CONTROL_NAME = "pose_keypoint"
+QWEN_DEPTH_CONTROL_NAME = "depth"
+QWEN_EDGE_CONTROL_NAME = "edge"
+QWEN_STRUCTURE_CONTROL_NAMES = ("depth", "edge")
+QWEN_STRUCTURE_MODE_BY_CONTROL = {
+    "depth": "depth",
+    "edge": "edge_or_sketch",
+}
+QWEN_CONTROL_NAME_BY_MODE = {
+    "pose_keypoint": QWEN_POSE_CONTROL_NAME,
+    "depth": QWEN_DEPTH_CONTROL_NAME,
+    "edge_or_sketch": QWEN_EDGE_CONTROL_NAME,
+}
 
 
 @dataclass(frozen=True)
@@ -146,8 +160,20 @@ def run_qwen_character_edit(
     nunchaku_blocks_on_gpu: int | None,
     plan_path: Path | None,
     pose_source_path: Path | None = None,
+    structure_source_path: Path | None = None,
+    structure_control: str | None = None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
+    if (structure_source_path is None) != (structure_control is None):
+        raise QwenCharacterEditError("--structure-source and --structure-control must be provided together")
+    if structure_control is not None and structure_control not in QWEN_STRUCTURE_MODE_BY_CONTROL:
+        allowed = ", ".join(QWEN_STRUCTURE_CONTROL_NAMES)
+        raise QwenCharacterEditError(f"Unknown structure control {structure_control}; expected one of: {allowed}")
+    available_modes = []
+    if pose_source_path is not None:
+        available_modes.append("pose_keypoint")
+    if structure_control is not None:
+        available_modes.append(QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control])
     if plan_path is not None:
         if instruction is not None or cases:
             raise QwenCharacterEditError("--plan replaces --instruction and --case; do not combine them")
@@ -172,24 +198,29 @@ def run_qwen_character_edit(
         )
     conditioning_plans = _plan_route_conditioning(
         planned.edit_cases,
-        pose_source_present=pose_source_path is not None,
+        available_modes=available_modes,
     )
     pose_conditioning = (
         _render_pose_conditioning(pose_source_path, progress)
         if pose_source_path is not None
         else None
     )
-    edit_cases = _apply_route_conditioning(conditioning_plans)
-    controls = (
-        {
-            QWEN_POSE_CONTROL_NAME: QwenControlImage(
-                image=pose_conditioning[1].image,
-                content_box=pose_conditioning[1].content_box,
-            )
-        }
-        if pose_conditioning is not None
-        else {}
+    structure_conditioning = (
+        _render_structure_conditioning(structure_source_path, structure_control, progress)
+        if structure_source_path is not None and structure_control is not None
+        else None
     )
+    edit_cases = _apply_route_conditioning(conditioning_plans)
+    controls: dict[str, QwenControlImage] = {}
+    if pose_conditioning is not None:
+        controls[QWEN_POSE_CONTROL_NAME] = QwenControlImage(
+            image=pose_conditioning[1].image,
+            content_box=pose_conditioning[1].content_box,
+        )
+    if structure_conditioning is not None:
+        controls[QWEN_CONTROL_NAME_BY_MODE[QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control]]] = QwenControlImage(
+            image=structure_conditioning[1].image,
+        )
     output_dir = output_dir.resolve()
     result = run_qwen_image_edit_cases(
         references=planned.reference_paths,
@@ -212,21 +243,38 @@ def run_qwen_character_edit(
         manifest_context=None,
         progress=progress,
     )
+    conditioning_result: dict[str, Any] = {}
     if pose_conditioning is not None:
         source_path, pose_control = pose_conditioning
-        result["conditioning"] = {
-            QWEN_POSE_CONTROL_NAME: {
-                "source_image": image_asset_json(source_path),
-                "control_image": result["controls"][QWEN_POSE_CONTROL_NAME],
-                "preprocessor": pose_control.metadata
-                | {
-                    "tool": "dwpose_keypoint_map",
-                    "device": pose_control.device,
-                    "det_model": pose_control.det_model.as_posix(),
-                    "pose_model": pose_control.pose_model.as_posix(),
-                },
-            }
+        conditioning_result[QWEN_POSE_CONTROL_NAME] = {
+            "source_image": image_asset_json(source_path),
+            "control_image": result["controls"][QWEN_POSE_CONTROL_NAME],
+            "preprocessor": pose_control.metadata
+            | {
+                "tool": "dwpose_keypoint_map",
+                "device": pose_control.device,
+                "det_model": pose_control.det_model.as_posix(),
+                "pose_model": pose_control.pose_model.as_posix(),
+            },
         }
+    if structure_conditioning is not None:
+        source_path, structure_control_result = structure_conditioning
+        control_name = QWEN_CONTROL_NAME_BY_MODE[QWEN_STRUCTURE_MODE_BY_CONTROL[structure_control]]
+        preprocessor = structure_control_result.metadata | {
+            "tool": "depth_anything_v2_map" if structure_control == "depth" else "canny_edge_map",
+        }
+        if isinstance(structure_control_result, DepthV2Control):
+            preprocessor |= {
+                "device": structure_control_result.device,
+                "model": structure_control_result.model.as_posix(),
+            }
+        conditioning_result[control_name] = {
+            "source_image": image_asset_json(source_path),
+            "control_image": result["controls"][control_name],
+            "preprocessor": preprocessor,
+        }
+    if conditioning_result:
+        result["conditioning"] = conditioning_result
     write_json(output_dir / "result.json", result)
     return result
 
@@ -548,10 +596,9 @@ def _planned_case(
 def _plan_route_conditioning(
     edit_cases: Sequence[QwenIdentityCase],
     *,
-    pose_source_present: bool,
+    available_modes: Sequence[str],
 ) -> tuple[tuple[QwenIdentityCase, CharacterConditioningPlanSpec], ...]:
     planner = CharacterConditioningPlanner()
-    available_modes = ("pose_keypoint",) if pose_source_present else ()
 
     planned_cases = []
     for case in edit_cases:
@@ -581,9 +628,7 @@ def _apply_route_conditioning(
     conditioned_cases = []
     for case, conditioning_plan in planned_cases:
         modes = list(conditioning_plan.conditioning_modes)
-        case_controls: tuple[str, ...] = ()
-        if "pose_keypoint" in modes:
-            case_controls = (QWEN_POSE_CONTROL_NAME,)
+        case_controls = tuple(QWEN_CONTROL_NAME_BY_MODE[mode] for mode in modes)
         if case.edit_context is None:
             raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
         conditioned_cases.append(
@@ -614,6 +659,32 @@ def _render_pose_conditioning(
                 source_label=source_path.as_posix(),
             )
     except (OSError, DWPoseControlError) as error:
+        raise QwenCharacterEditError(str(error)) from error
+    return source_path, control
+
+
+def _render_structure_conditioning(
+    structure_source_path: Path,
+    structure_control: str,
+    progress: StatusReporter,
+) -> tuple[Path, DepthV2Control | CannyControl]:
+    source_path = resolve_existing_path(structure_source_path.as_posix(), Path.cwd())
+    progress.phase(f"build {structure_control} scene control")
+    try:
+        with Image.open(source_path) as source_image:
+            if structure_control == "depth":
+                control = render_depth_v2_control(
+                    source_image,
+                    source_label=source_path.as_posix(),
+                )
+            elif structure_control == "edge":
+                control = render_canny_control(
+                    source_image,
+                    source_label=source_path.as_posix(),
+                )
+            else:
+                raise QwenCharacterEditError(f"Unknown structure control {structure_control}")
+    except (OSError, DepthV2ControlError, CannyControlError) as error:
         raise QwenCharacterEditError(str(error)) from error
     return source_path, control
 

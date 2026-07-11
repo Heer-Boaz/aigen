@@ -33,7 +33,7 @@ from aigen.generation.runtime_diagnostics import (
 )
 from aigen.generation.runtime_types import resolve_torch_dtype
 from aigen.image_assets import image_asset_json
-from aigen.keyframe_image_ops import save_contact_sheet
+from aigen.keyframe_image_ops import exact_outside_mask_diff, save_contact_sheet
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight_limit
 from aigen.manifest_io import resolve_existing_path, write_json
 from aigen.progress import StatusReporter
@@ -707,9 +707,14 @@ def run_qwen_image_edit_inpaint_candidates(
             thumb_width=192,
             max_label_chars=24,
         )
+        preservation_failures = [
+            output["name"]
+            for output in denoise_step.outputs
+            if not output["pixel_diff"]["passed"]
+        ]
         memory = memory_sampler.stop()
         result = {
-            "status": "completed",
+            "status": "failed" if preservation_failures else "completed",
             "kind": result_kind,
             "profile": _profile_json(profile, nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu)
             | {"pipeline": "diffusers.QwenImageEditInpaintPipeline"},
@@ -739,6 +744,10 @@ def run_qwen_image_edit_inpaint_candidates(
             ],
             "prompt": prompt,
             "outputs": denoise_step.outputs,
+            "preservation": {
+                "outside_mask_unchanged": not preservation_failures,
+                "failed_outputs": preservation_failures,
+            },
             "timings_ms": {
                 "prompt_encode_ms": prompt_step.elapsed_ms,
                 "model_load_ms": session.model_load_ms,
@@ -756,7 +765,13 @@ def run_qwen_image_edit_inpaint_candidates(
         }
         if manifest_context is not None:
             result["plan"] = dict(manifest_context)
-        write_json(output_dir / "result.json", result)
+        result_path = output_dir / "result.json"
+        write_json(result_path, result)
+        if preservation_failures:
+            failed = ", ".join(preservation_failures)
+            raise QwenImageEditIdentityError(
+                f"Qwen refine changed pixels outside the repaint mask for {failed}; see {result_path.as_posix()}"
+            )
         return result
     finally:
         if session is not None:
@@ -1086,6 +1101,11 @@ def _run_qwen_inpaint_denoise_step(
         )
         progress.phase(f"apply qwen refine mask overlay {denoised_result.name}")
         image = _apply_qwen_inpaint_overlay(session.pipeline, image, canvas)
+        pixel_diff = exact_outside_mask_diff(
+            canvas.overlay_source_image,
+            image,
+            canvas.overlay_mask_image,
+        )
         progress.phase(f"save qwen refine candidate {denoised_result.name}")
         image_path = images_dir / f"{denoised_result.name}.png"
         image.save(image_path)
@@ -1096,6 +1116,7 @@ def _run_qwen_inpaint_denoise_step(
                 "seed": denoised_result.seed,
                 "prompt": prompt_step.embeddings["refine"].prompt,
                 "image": image_asset_json(image_path),
+                "pixel_diff": pixel_diff,
                 "timings_ms": denoised_result.timings_ms | {"vae_decode_ms": decode_ms},
             }
         )
