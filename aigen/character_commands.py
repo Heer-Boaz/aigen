@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 from typing import Any, TextIO
 
-from aigen.character_instruction_parser import CharacterInstructionParserConfig
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import (
     build_character_reference_pack,
@@ -15,14 +14,11 @@ from aigen.character_region_plan import (
     parse_character_region_args,
     plan_character_regions,
 )
-from aigen.character_edit_plan_models import CharacterEditPlanError
 from aigen.character_qwen_edit import (
     DEFAULT_QWEN_POSE_MODE,
     QWEN_POSE_MODES,
     QWEN_STRUCTURE_CONTROL_NAMES,
     QwenCharacterEditError,
-    plan_qwen_character_edit,
-    qwen_character_edit_case_names,
     run_qwen_character_edit,
 )
 from aigen.character_verification import run_character_verification_matrix
@@ -53,15 +49,11 @@ from aigen.generation.qwen_image_edit_identity import (
     DEFAULT_QWEN_IDENTITY_SEED,
     DEFAULT_QWEN_INPAINT_PROFILE,
     QwenImageEditIdentityError,
-    parse_qwen_identity_reference_args,
-    qwen_identity_cli_case_names,
     qwen_image_edit_identity_profile_for_name,
     qwen_image_edit_inpaint_model_names,
     qwen_image_edit_identity_model_names,
-    qwen_image_edit_identity_profile_names,
     qwen_output_format_names,
     qwen_output_resolution_names,
-    run_qwen_image_edit_identity,
 )
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.keyframe_grounding import GroundingConfig, KeyframeGroundingError
@@ -69,7 +61,6 @@ from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmenta
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT, keyframe_profile_for_name
-from aigen.text_llm import TextLlmConfig
 from aigen.vlm_qwen import (
     DEFAULT_JUDGE_ID,
     DEFAULT_JUDGE_QUANTIZATION,
@@ -82,13 +73,6 @@ from aigen.vlm_qwen import (
 )
 
 
-DEFAULT_INSTRUCTION_PARSER_ID = "qwen3-8b-instruction-parser"
-DEFAULT_INSTRUCTION_PARSER_MODEL = MODELS_ROOT / "llm/Qwen/Qwen3-8B"
-DEFAULT_INSTRUCTION_PARSER_DTYPE = "bfloat16"
-DEFAULT_INSTRUCTION_PARSER_QUANTIZATION = "bitsandbytes-8bit"
-DEFAULT_INSTRUCTION_PARSER_MAX_NEW_TOKENS = 700
-DEFAULT_INSTRUCTION_PARSER_TEMPERATURE = 0.0
-DEFAULT_INSTRUCTION_PARSER_ENABLE_THINKING = False
 DEFAULT_REFERENCE_SELECTOR_ID = DEFAULT_JUDGE_ID
 DEFAULT_REFERENCE_SELECTOR_MODEL = MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct"
 DEFAULT_REFERENCE_SELECTOR_DTYPE = "bfloat16"
@@ -98,20 +82,6 @@ DEFAULT_REFERENCE_SELECTOR_MIN_PIXELS = DEFAULT_MIN_PIXELS
 DEFAULT_REFERENCE_SELECTOR_MAX_PIXELS = DEFAULT_MAX_PIXELS
 DEFAULT_REFERENCE_SELECTOR_MAX_NEW_TOKENS = 64
 DEFAULT_REFERENCE_SELECTOR_TEMPERATURE = 0.0
-
-
-def default_instruction_parser_config() -> CharacterInstructionParserConfig:
-    return CharacterInstructionParserConfig(
-        text_llm=TextLlmConfig(
-            parser_id=DEFAULT_INSTRUCTION_PARSER_ID,
-            model=DEFAULT_INSTRUCTION_PARSER_MODEL,
-            dtype=DEFAULT_INSTRUCTION_PARSER_DTYPE,
-            quantization=DEFAULT_INSTRUCTION_PARSER_QUANTIZATION,
-            max_new_tokens=DEFAULT_INSTRUCTION_PARSER_MAX_NEW_TOKENS,
-            temperature=DEFAULT_INSTRUCTION_PARSER_TEMPERATURE,
-            enable_thinking=DEFAULT_INSTRUCTION_PARSER_ENABLE_THINKING,
-        )
-    )
 
 
 def default_reference_selector_vlm_config() -> QwenVlmConfig:
@@ -182,113 +152,21 @@ def add_character_commands(subparsers: Any) -> None:
     reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     reference_pack_build.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    qwen_identity = character_subparsers.add_parser(
-        "qwen-identity-run",
-        help="Run fixed multi-reference Qwen Image Edit identity cases from explicit refs",
-    )
-    qwen_identity.add_argument(
-        "--reference",
-        action="append",
-        required=True,
-        help="Explicit role reference image as role=path; supported roles: front, portrait, side, back, body_shape",
-    )
-    qwen_identity.add_argument(
-        "--case",
-        action="append",
-        choices=qwen_identity_cli_case_names(),
-        help="Identity case to generate; defaults to all fixed cases",
-    )
-    qwen_identity.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
-    qwen_identity.add_argument(
-        "--profile",
-        default=DEFAULT_QWEN_IDENTITY_PROFILE,
-        choices=qwen_image_edit_identity_profile_names(),
-        help="Qwen Image Edit model profile",
-    )
-    qwen_identity.add_argument(
-        "--max-side",
-        type=int,
-        default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
-        help="Upper cap for the generated/reference long side",
-    )
-    qwen_identity.add_argument(
-        "--output-format",
-        choices=qwen_output_format_names(),
-        help="Final output aspect ratio; requires --resolution",
-    )
-    qwen_identity.add_argument(
-        "--resolution",
-        choices=qwen_output_resolution_names(),
-        help="Final output long-edge resolution; requires --output-format",
-    )
-    qwen_identity.add_argument(
-        "--steps",
-        type=int,
-        help="Qwen Image Edit denoising steps; defaults to the selected profile",
-    )
-    qwen_identity.add_argument(
-        "--true-cfg-scale",
-        type=float,
-        help="Classifier-free guidance scale; defaults to the selected profile",
-    )
-    qwen_identity.add_argument(
-        "--guidance-scale",
-        type=float,
-        help="Guidance-distilled model scale; defaults to the selected profile",
-    )
-    qwen_identity.add_argument("--seed", type=int, default=DEFAULT_QWEN_IDENTITY_SEED, help="Base seed")
-    qwen_identity.add_argument(
-        "--max-sequence-length",
-        type=int,
-        default=DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH,
-        help="Maximum prompt token sequence length",
-    )
-    qwen_identity.add_argument(
-        "--nunchaku-blocks-on-gpu",
-        type=int,
-        help="Explicit slow-fit Nunchaku layer offload; leave unset for direct GPU execution",
-    )
-    qwen_identity.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
-    qwen_identity.add_argument("--compact", action="store_true", help="Write compact JSON")
-
-    qwen_edit_plan = character_subparsers.add_parser(
-        "qwen-edit-plan",
-        help="Run parser and reference selection once and write a reusable edit plan",
-    )
-    qwen_edit_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
-    qwen_edit_plan.add_argument(
-        "--case",
-        action="append",
-        choices=qwen_character_edit_case_names(),
-        help="Edit case to plan; defaults to identity view cases",
-    )
-    qwen_edit_plan.add_argument(
-        "--instruction",
-        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
-    )
-    qwen_edit_plan.add_argument("--output", type=Path, required=True, help="Path for the reusable edit_plan.json")
-    qwen_edit_plan.add_argument("--overwrite", action="store_true", help="Replace an existing edit plan")
-    qwen_edit_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
-
     qwen_edit = character_subparsers.add_parser(
         "qwen-edit-run",
-        help="Run pack/profile-driven Qwen Image Edit character cases",
+        help="Run one free-instruction Qwen Image Edit request",
     )
-    qwen_edit.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_edit.add_argument("--pack", type=Path, help="Reference pack for reference-conditioned generation")
     qwen_edit.add_argument(
-        "--case",
+        "--image",
         action="append",
-        choices=qwen_character_edit_case_names(),
-        help="Edit case to generate; defaults to identity view cases",
+        type=Path,
+        help="Model input image in Picture order; repeat up to three times",
     )
     qwen_edit.add_argument(
         "--instruction",
-        help="Optional user instruction used verbatim as the edit prompt; defaults to a generic per-case prompt",
-    )
-    qwen_edit.add_argument(
-        "--plan",
-        type=Path,
-        help="Reusable edit_plan.json from qwen-edit-plan; skips the parser and reference selector",
+        required=True,
+        help="Free edit or generation instruction",
     )
     qwen_edit.add_argument(
         "--pose-source",
@@ -328,12 +206,12 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--output-format",
         choices=qwen_output_format_names(),
-        help="Optional final output aspect ratio; requires --resolution",
+        help="Override output aspect ratio; requires --resolution",
     )
     qwen_edit.add_argument(
         "--resolution",
         choices=qwen_output_resolution_names(),
-        help="Optional final output long-edge resolution; requires --output-format",
+        help="Postprocess output resolution; requires --output-format",
     )
     qwen_edit.add_argument(
         "--postprocess-model",
@@ -360,8 +238,8 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--candidates",
         type=int,
-        default=2,
-        help="Candidates per case",
+        default=1,
+        help="Number of outputs; defaults to one",
     )
     qwen_edit.add_argument(
         "--max-sequence-length",
@@ -555,45 +433,6 @@ def run_character_command(
                     pretty=not args.compact,
                 )
                 return 0
-        if args.characters_command == "qwen-identity-run":
-            dump_json(
-                stdout,
-                run_qwen_image_edit_identity(
-                    references=parse_qwen_identity_reference_args(args.reference, Path.cwd()),
-                    output_dir=args.output_dir,
-                    profile=qwen_image_edit_identity_profile_for_name(args.profile),
-                    cases=args.case or (),
-                    max_side=args.max_side,
-                    steps=args.steps,
-                    true_cfg_scale=args.true_cfg_scale,
-                    guidance_scale=args.guidance_scale,
-                    seed=args.seed,
-                    max_sequence_length=args.max_sequence_length,
-                    overwrite=args.overwrite,
-                    nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
-                    output_format=args.output_format,
-                    resolution=args.resolution,
-                    progress=progress,
-                ),
-                pretty=not args.compact,
-            )
-            return 0
-        if args.characters_command == "qwen-edit-plan":
-            dump_json(
-                stdout,
-                plan_qwen_character_edit(
-                    pack_path=args.pack,
-                    instruction_parser_config=default_instruction_parser_config(),
-                    vlm_config=default_reference_selector_vlm_config(),
-                    cases=args.case or (),
-                    instruction=args.instruction,
-                    output_path=args.output,
-                    overwrite=args.overwrite,
-                    progress=progress,
-                ),
-                pretty=not args.compact,
-            )
-            return 0
         if args.characters_command == "qwen-edit-run":
             dump_json(
                 stdout,
@@ -601,11 +440,9 @@ def run_character_command(
                     pack_path=args.pack,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
-                    instruction_parser_config=default_instruction_parser_config(),
                     vlm_config=default_reference_selector_vlm_config(),
-                    cases=args.case or (),
                     instruction=args.instruction,
-                    plan_path=args.plan,
+                    source_image_paths=args.image or (),
                     max_side=args.max_side,
                     steps=args.steps,
                     true_cfg_scale=args.true_cfg_scale,
@@ -708,7 +545,6 @@ def run_character_command(
             )
             return 0
     except (
-        CharacterEditPlanError,
         CharacterReferenceError,
         CharacterRegionPlanError,
         QwenCharacterEditError,

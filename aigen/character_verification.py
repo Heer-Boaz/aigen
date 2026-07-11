@@ -62,7 +62,10 @@ def run_character_verification_matrix(
         reference_names=selected_reference_names,
     )
     result = run_planned_qwen_character_edit(
-        planned=PlannedQwenCharacterEdit(context=context, edit_cases=cases),
+        planned=PlannedQwenCharacterEdit(
+            edit_cases=cases,
+            reference_paths=context.reference_paths,
+        ),
         pose_sources=case_pose_sources,
         structure_source_path=None,
         structure_control=None,

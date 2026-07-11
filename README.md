@@ -51,8 +51,8 @@ The model manifests used by the installer are:
 - `model_sources/character_postprocess_realesrgan_anime_6b.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 
-Optional Qwen identity smoke assets are intentionally separate from the default
-installer:
+Legacy Qwen-Image-Edit-2509 baseline manifests remain separate from the 2511
+LightX2V runtime:
 
 - `model_sources/qwen_identity_2509_fp4_r32_lightning_4step.json`
 - `model_sources/qwen_identity_2509_fp4_r32_lightning_8step.json`
@@ -127,46 +127,31 @@ those images plus the user's instruction. No image descriptions or inferred
 reference roles enter the generation prompt.
 
 ```bash
-.venv/bin/python -m aigen.cli characters qwen-edit-run \
+.venv/bin/aigen characters qwen-edit-run \
   --pack assets/characters/<character-id>/references/reference_pack.json \
-  --case right_profile \
-  --model nunchaku-qwen-edit-2509-r32-4step \
-  --output-dir runs/characters/<character-id>/qwen_edit/right_profile_smoke
+  --instruction "Full-body three-quarter view. Keep the entire character and footwear visible." \
+  --output-dir runs/characters/<character-id>/qwen_edit/three_quarter
 ```
 
-## Qwen Identity Smoke
+## Qwen Image Edit 2511
 
-The local Qwen route starts with Nunchaku-quantized Qwen-Image-Edit-2509. Do
-not download or run full Qwen-Image-Edit-2511 for the native aigen smoke path.
-Each Qwen 2509 manifest allowlists exactly one Nunchaku checkpoint.
+`qwen-edit-run` runs exactly one free-instruction request by default. Its default
+model is `lightx2v-qwen-edit-2511-fp8-lightning-8step`; no case name or reusable
+JSON plan is involved. The 2511 backend targets the proven approximately
+1.77-megapixel raw canvas while preserving the visual anchor's aspect ratio;
+`--output-format` overrides that aspect when needed. Use `--candidates N` only
+when multiple outputs are intentional.
+
+To edit an existing image, pass it as Image 1. The source image owns the output
+aspect and native canvas within the configured cap. Repeat `--image` only when
+the instruction deliberately refers to additional pictures:
 
 ```bash
-.venv/bin/python -m aigen.cli models download \
-  --manifest model_sources/qwen_identity_2509_fp4_r32_lightning_4step.json \
-  --models-root aigen/models
-
-.venv/bin/python tools/smoke_qwen_image_edit_2509_nunchaku.py \
-  --input-image path/to/front.png \
-  --output-dir runs/qwen_identity/fit_4step
+.venv/bin/aigen characters qwen-edit-run \
+  --image path/to/source.png \
+  --instruction "Change only the expression to a subtle smile. Keep everything else unchanged." \
+  --output-dir runs/characters/<character-id>/qwen_edit/smile
 ```
-
-Only after the single-image fit smoke succeeds, run the multi-reference identity
-smoke. It does not train LoRAs, use ControlNet, score outputs or judge with a
-VLM.
-
-```bash
-.venv/bin/python -m aigen.cli characters qwen-identity-run \
-  --reference front=path/to/front.png \
-  --reference portrait=path/to/portrait.png \
-  --reference side=path/to/side.png \
-  --reference back=path/to/back.png \
-  --output-dir runs/qwen_identity/smoke
-```
-
-The default model is `nunchaku-qwen-edit-2509-r32-4step`.
-`--nunchaku-blocks-on-gpu` explicitly enables the slower layer-offload path for
-the multi-reference runner. The standalone fit script uses `--offload-mode auto`
-by default on 18GB-or-smaller GPUs.
 
 For non-interactive shells such as Codex tool runs, progress falls back to
 stderr and includes elapsed time, ETA, GPU utilization and VRAM. Use
