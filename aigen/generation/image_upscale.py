@@ -18,8 +18,34 @@ REALESRGAN_ANIME_X4_MODEL = (
     MODELS_ROOT
     / "upscale_models/amd/realesrgan-x4plus-anime-6b/RealESRGAN_x4plus_anime_6B.pth"
 )
+UPSCALE_MODELS: dict[str, Path] = {
+    "realesrgan-anime-6b": REALESRGAN_ANIME_X4_MODEL,
+    "illustrationjanai-dat2": (
+        MODELS_ROOT
+        / "upscale_models/halllooo/4x_illustrationJaNaiV1/4x_IllustrationJaNai_V1_DAT2_190k.pth"
+    ),
+    "illustrationjanai-esrgan": (
+        MODELS_ROOT
+        / "upscale_models/halllooo/4x_illustrationJaNaiV1/4x_IllustrationJaNai_V1_ESRGAN_135k.pth"
+    ),
+    "animesharp-x4": (
+        MODELS_ROOT / "upscale_models/Kim2091/AnimeSharp/4x-AnimeSharp.safetensors"
+    ),
+}
+DEFAULT_UPSCALE_MODEL = "realesrgan-anime-6b"
 UPSCALE_TILE_SIZE = 512
 UPSCALE_TILE_OVERLAP = 32
+
+
+def upscale_model_names() -> tuple[str, ...]:
+    return tuple(sorted(UPSCALE_MODELS))
+
+
+def upscale_model_path(name: str) -> Path:
+    if name not in UPSCALE_MODELS:
+        allowed = ", ".join(sorted(UPSCALE_MODELS))
+        raise ImageUpscaleError(f"Unknown upscale model {name}; expected one of: {allowed}")
+    return UPSCALE_MODELS[name]
 
 
 class ImageUpscaleError(RuntimeError):
@@ -104,7 +130,7 @@ class RealESRGANAnimeUpscaler:
         return UpscaledImage(
             image=output,
             elapsed_ms=(perf_counter() - start) * 1000.0,
-            model_name=REALESRGAN_ANIME_X4_MODEL_NAME,
+            model_name=self.model_path.stem,
             model_path=self.model_path,
             scale=self.scale,
             device=device,
@@ -125,7 +151,12 @@ def _load_spandrel_image_model(model_path: Path) -> tuple[Any, Any]:
         from spandrel import ImageModelDescriptor, ModelLoader
     except ModuleNotFoundError as error:
         raise ImageUpscaleDependencyError("Anime upscaling requires spandrel from the generation extra") from error
-    state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
+    if model_path.suffix == ".safetensors":
+        from safetensors.torch import load_file
+
+        state_dict = load_file(model_path, device="cpu")
+    else:
+        state_dict = torch.load(model_path, map_location="cpu", weights_only=True)
     if "state_dict" in state_dict:
         state_dict = state_dict["state_dict"]
     elif len(state_dict) == 1:

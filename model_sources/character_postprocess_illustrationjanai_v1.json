@@ -1,0 +1,23 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "optional character image postprocess",
+    "runtime": "Spandrel IllustrationJaNai V1 (DAT2 or ESRGAN flavor) after Qwen Image Edit unload"
+  },
+  "downloads": [
+    {
+      "name": "illustrationjanai-v1-character-postprocess",
+      "repo_id": "halllooo/4x_illustrationJaNaiV1",
+      "revision": "7e7020a37441d93707db30f17fba14bf8c993a51",
+      "local_path": "upscale_models/halllooo/4x_illustrationJaNaiV1",
+      "include": [
+        "4x_IllustrationJaNai_V1_DAT2_190k.pth",
+        "4x_IllustrationJaNai_V1_ESRGAN_135k.pth"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}

@@ -154,6 +154,9 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     runner.model.set_scheduler(runner.scheduler)
     torch.cuda.synchronize()
     timings["transformer_load_ms"] = _elapsed_ms(transformer_load_start)
+    resident_upload_start = time.perf_counter()
+    resident_buffers = _enable_resident_blocks(torch, runner, cases)
+    timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
 
     latent_outputs: list[dict[str, Any]] = []
     denoise_total_start = time.perf_counter()
@@ -205,6 +208,8 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             _release_cuda(torch)
     timings["denoise_ms"] = _elapsed_ms(denoise_total_start)
     phase_peaks["denoise"] = _cuda_peak_mib(torch)
+    resident_block_count = len(resident_buffers)
+    _release_resident_blocks(torch, runner, resident_buffers)
     runner.end_run()
     _release_cuda(torch)
 
@@ -279,9 +284,121 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             "attention": "flash_attn2",
             "rope": "torch",
             "host_buffers": "regular_cpu",
+            "resident_blocks": resident_block_count,
             "phase_order": "conditioner->vae_encode->transformer->vae_decode",
         },
     }
+
+
+def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]) -> list[Any]:
+    """Keep as many transformer blocks permanently on the GPU as VRAM allows.
+
+    The 60-block fp8 transformer does not fit in VRAM, so LightX2V streams every
+    block from CPU each step. Pinned host memory is not usable on this WSL2 host,
+    which makes that streaming the step-time bottleneck; parking part of the
+    blocks on the GPU cuts the per-step transfer volume proportionally. Uses the
+    engine's preallocated-buffer copy path instead of WeightModule.to_cuda():
+    per-tensor .to() reallocation runs an order of magnitude slower here.
+    """
+    import copy
+    import types
+
+    infer = runner.model.transformer_infer
+    if getattr(infer, "offload_manager", None) is None:
+        return []
+    blocks = runner.model.transformer_weights.blocks
+    # Clone the engine's own stream buffer: it went through load(weight_dict) at
+    # checkpoint time, which sets attributes (bias, scale buffers) that a freshly
+    # constructed QwenImageTransformerAttentionBlock never receives. The shared
+    # LockableDict config refuses deepcopy, so pre-seed the memo to keep every
+    # config reference pointing at the original instead of copying it.
+    buffer_template = infer.offload_manager.cuda_buffers[0]
+    shared = [runner.config, getattr(runner.model, "config", None), buffer_template.config]
+    deepcopy_memo = {id(obj): obj for obj in shared if obj is not None}
+    max_pixels = max(case["width"] * case["height"] for case in cases)
+    free_bytes, _ = torch.cuda.mem_get_info()
+    # Activation reserve scales from the measured ~2.4 GiB denoise peak at ~1.11 MP,
+    # plus a fixed safety margin for fragmentation and the double stream buffers.
+    reserve_bytes = int(2.4 * 1024**3 * max_pixels / 1_110_000) + int(2.2 * 1024**3)
+    budget = free_bytes - reserve_bytes
+    resident_buffers: list[Any] = []
+    block_bytes = 0
+    for block_idx in range(len(blocks)):
+        if resident_buffers and budget < block_bytes:
+            break
+        before = torch.cuda.memory_allocated()
+        with runner.config.temporarily_unlocked():
+            buffer = copy.deepcopy(buffer_template, dict(deepcopy_memo))
+        buffer.load_state_dict(blocks[block_idx].state_dict(), block_idx, None)
+        block_bytes = torch.cuda.memory_allocated() - before
+        budget -= block_bytes
+        resident_buffers.append(buffer)
+        if budget < 0:
+            break
+    torch.cuda.synchronize()
+    if not resident_buffers:
+        return []
+    resident = len(resident_buffers)
+
+    def infer_with_resident_blocks(
+        self: Any,
+        blocks: Any,
+        hidden_states: Any,
+        encoder_hidden_states: Any,
+        temb_img_silu: Any,
+        temb_txt_silu: Any,
+        image_rotary_emb: Any,
+        modulate_index: Any,
+    ) -> Any:
+        manager = self.offload_manager
+        streamed_start = min(resident, self.num_blocks)
+        manager.compute_stream.wait_stream(torch.cuda.current_stream())
+        if streamed_start < self.num_blocks:
+            with torch.cuda.stream(manager.init_stream):
+                manager.cuda_buffers[0].load_state_dict(blocks[streamed_start].state_dict(), streamed_start, None)
+        for block_idx in range(streamed_start):
+            self.block_idx = block_idx
+            with torch.cuda.stream(manager.compute_stream):
+                encoder_hidden_states, hidden_states = self.infer_block(
+                    block=resident_buffers[block_idx],
+                    hidden_states=hidden_states,
+                    encoder_hidden_states=encoder_hidden_states,
+                    temb_img_silu=temb_img_silu,
+                    temb_txt_silu=temb_txt_silu,
+                    image_rotary_emb=image_rotary_emb,
+                    modulate_index=modulate_index,
+                )
+        if streamed_start < self.num_blocks:
+            manager._sync()
+            for block_idx in range(streamed_start, self.num_blocks):
+                self.block_idx = block_idx
+                next_idx = block_idx + 1 if block_idx + 1 < self.num_blocks else streamed_start
+                manager.prefetch_weights(next_idx, blocks)
+                with torch.cuda.stream(manager.compute_stream):
+                    encoder_hidden_states, hidden_states = self.infer_block(
+                        block=manager.cuda_buffers[0],
+                        hidden_states=hidden_states,
+                        encoder_hidden_states=encoder_hidden_states,
+                        temb_img_silu=temb_img_silu,
+                        temb_txt_silu=temb_txt_silu,
+                        image_rotary_emb=image_rotary_emb,
+                        modulate_index=modulate_index,
+                    )
+                manager.swap_blocks()
+        manager.compute_stream.synchronize()
+        return hidden_states
+
+    infer.infer_func = types.MethodType(infer_with_resident_blocks, infer)
+    return resident_buffers
+
+
+def _release_resident_blocks(torch: Any, runner: Any, resident_buffers: list[Any]) -> None:
+    if not resident_buffers:
+        return
+    infer = runner.model.transformer_infer
+    infer.infer_func = infer.infer_with_blocks_offload
+    resident_buffers.clear()
+    _release_cuda(torch)
 
 
 def _input_info(pipe: Any, case: dict[str, Any], seed: int, init_empty_input_info: Any, update_input_info_from_dict: Any) -> Any:

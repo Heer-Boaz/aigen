@@ -26,6 +26,7 @@ from aigen.character_qwen_edit import (
     run_qwen_character_edit,
 )
 from aigen.character_verification import run_character_verification_matrix
+from aigen.generation.image_upscale import DEFAULT_UPSCALE_MODEL, upscale_model_names
 from aigen.character_verification_models import CharacterVerificationError
 from aigen.character_qwen_refine import (
     QwenCharacterRefineError,
@@ -335,6 +336,12 @@ def add_character_commands(subparsers: Any) -> None:
         help="Optional final output long-edge resolution; requires --output-format",
     )
     qwen_edit.add_argument(
+        "--postprocess-model",
+        choices=upscale_model_names(),
+        default=DEFAULT_UPSCALE_MODEL,
+        help="Upscale model for the raw-to-final postprocess step",
+    )
+    qwen_edit.add_argument(
         "--steps",
         type=int,
         help="Qwen Image Edit denoising steps; defaults to the selected profile",
@@ -614,6 +621,7 @@ def run_character_command(
                     pose_mode=args.pose_mode,
                     structure_source_path=args.structure_source,
                     structure_control=args.structure_control,
+                    postprocess_model=args.postprocess_model,
                     progress=progress,
                 ),
                 pretty=not args.compact,

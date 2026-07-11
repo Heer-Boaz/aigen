@@ -16,8 +16,9 @@ from PIL import Image
 
 from aigen.character_reference_models import CHARACTER_REFERENCE_NAME_SET
 from aigen.generation.image_upscale import (
-    REALESRGAN_ANIME_X4_MODEL_NAME,
+    DEFAULT_UPSCALE_MODEL,
     RealESRGANAnimeUpscaler,
+    upscale_model_path,
 )
 from aigen.generation.qwen_image_edit_lightx2v import (
     LIGHTX2V_QWEN_EDIT_2511_PROFILE,
@@ -487,6 +488,7 @@ def run_qwen_image_edit_cases(
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     postprocess: bool,
+    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     resolved_steps = profile.default_steps if steps is None else steps
@@ -543,6 +545,7 @@ def run_qwen_image_edit_cases(
                 candidates_per_case=candidates_per_case,
                 output_spec=output_spec,
                 postprocess=postprocess,
+                postprocess_model=postprocess_model,
                 result_kind=result_kind,
                 manifest_context=manifest_context,
                 progress=progress,
@@ -604,6 +607,7 @@ def run_qwen_image_edit_cases(
             output_dir=output_dir,
             output_spec=output_spec,
             enabled=postprocess,
+            model=postprocess_model,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -640,7 +644,7 @@ def run_qwen_image_edit_cases(
                 "seed": seed,
                 "max_sequence_length": max_sequence_length,
                 "output_canvas": (
-                    _output_spec_json(output_spec, postprocess=postprocess)
+                    _output_spec_json(output_spec, postprocess=postprocess, postprocess_model=postprocess_model)
                     if output_spec is not None
                     else {"mode": "reference_anchor", "postprocess": "none"}
                 ),
@@ -659,7 +663,7 @@ def run_qwen_image_edit_cases(
             "memory": cuda_memory_stats(torch, "cuda") | memory,
             "environment": environment
             | {
-                "postprocess": "realesrgan_anime_upscale"
+                "postprocess": f"{postprocess_model}_upscale"
                 if output_spec is not None and postprocess
                 else "none",
             },
@@ -700,6 +704,7 @@ def _run_qwen_image_edit_cases_lightx2v(
     candidates_per_case: int,
     output_spec: QwenOutputSpec | None,
     postprocess: bool,
+    postprocess_model: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
@@ -791,6 +796,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             output_dir=output_dir,
             output_spec=output_spec,
             enabled=postprocess,
+            model=postprocess_model,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -827,7 +833,7 @@ def _run_qwen_image_edit_cases_lightx2v(
                 "seed": seed,
                 "max_sequence_length": max_sequence_length,
                 "output_canvas": (
-                    _output_spec_json(output_spec, postprocess=postprocess)
+                    _output_spec_json(output_spec, postprocess=postprocess, postprocess_model=postprocess_model)
                     if output_spec is not None
                     else {"mode": "reference_anchor", "postprocess": "none"}
                 ),
@@ -844,7 +850,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             "memory": memory,
             "environment": backend_result.environment
             | {
-                "postprocess": "realesrgan_anime_upscale"
+                "postprocess": f"{postprocess_model}_upscale"
                 if output_spec is not None and postprocess
                 else "none",
             },
@@ -1269,6 +1275,7 @@ def _postprocess_qwen_identity_outputs(
     output_dir: Path,
     output_spec: QwenOutputSpec | None,
     enabled: bool,
+    model: str,
     progress: StatusReporter,
 ) -> QwenIdentityPostprocessStep:
     start = perf_counter()
@@ -1300,7 +1307,7 @@ def _postprocess_qwen_identity_outputs(
             )
 
     progress.phase("load anime upscaler")
-    upscaler = RealESRGANAnimeUpscaler()
+    upscaler = RealESRGANAnimeUpscaler(model_path=upscale_model_path(model))
     outputs = []
     for raw_output in raw_outputs:
         output = dict(raw_output)
@@ -1314,7 +1321,7 @@ def _postprocess_qwen_identity_outputs(
         output["image"] = image_asset_json(image_path)
         output["postprocess"] = {
             "mode": "anime_upscale",
-            "model": REALESRGAN_ANIME_X4_MODEL_NAME,
+            "model": upscaled.model_name,
             "model_path": upscaled.model_path.as_posix(),
             "scale": upscaled.scale,
             "device": upscaled.device,
@@ -2102,20 +2109,22 @@ def _size_for_output_format(
     return width_ratio * scale, height_ratio * scale
 
 
-def _output_spec_json(output_spec: QwenOutputSpec, *, postprocess: bool) -> dict[str, Any]:
+def _output_spec_json(
+    output_spec: QwenOutputSpec, *, postprocess: bool, postprocess_model: str = DEFAULT_UPSCALE_MODEL
+) -> dict[str, Any]:
     payload = {
         "mode": "explicit_output_format" if postprocess else "explicit_raw_canvas",
         "output_format": output_spec.output_format,
         "raw_width": output_spec.raw_width,
         "raw_height": output_spec.raw_height,
-        "postprocess": "realesrgan_anime_upscale" if postprocess else "none",
+        "postprocess": f"{postprocess_model}_upscale" if postprocess else "none",
     }
     if postprocess:
         payload |= {
             "resolution": output_spec.resolution,
             "final_width": output_spec.final_width,
             "final_height": output_spec.final_height,
-            "upscale_model": REALESRGAN_ANIME_X4_MODEL_NAME,
+            "upscale_model": upscale_model_path(postprocess_model).stem,
         }
     return payload
 

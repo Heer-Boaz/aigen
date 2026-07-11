@@ -39,6 +39,7 @@ from aigen.character_task_route_models import CharacterTaskRoutePlanSpec
 from aigen.character_task_router import CharacterTaskRouter
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
+from aigen.generation.image_upscale import DEFAULT_UPSCALE_MODEL
 from aigen.generation.qwen_image_edit_identity import (
     QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES,
     QWEN_IDENTITY_CASES,
@@ -176,6 +177,7 @@ def run_qwen_character_edit(
     pose_mode: str = DEFAULT_QWEN_POSE_MODE,
     structure_source_path: Path | None = None,
     structure_control: str | None = None,
+    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     if (structure_source_path is None) != (structure_control is None):
@@ -248,6 +250,7 @@ def run_qwen_character_edit(
         result_kind="qwen-character-edit-result",
         manifest_context=None,
         postprocess=True,
+        postprocess_model=postprocess_model,
         progress=progress,
     )
 
@@ -274,6 +277,7 @@ def run_planned_qwen_character_edit(
     result_kind: str,
     manifest_context: dict[str, Any] | None,
     postprocess: bool,
+    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     available_modes_by_case = {
@@ -344,6 +348,7 @@ def run_planned_qwen_character_edit(
         result_kind=result_kind,
         manifest_context=manifest_context,
         postprocess=postprocess,
+        postprocess_model=postprocess_model,
         progress=progress,
     )
     for control_name in controls:

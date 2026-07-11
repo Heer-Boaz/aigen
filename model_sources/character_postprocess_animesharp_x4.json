@@ -1,0 +1,22 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "optional character image postprocess",
+    "runtime": "Spandrel 4x-AnimeSharp after Qwen Image Edit unload"
+  },
+  "downloads": [
+    {
+      "name": "animesharp-x4-character-postprocess",
+      "repo_id": "Kim2091/AnimeSharp",
+      "revision": "7696d95ced82b0c1f2a41f6ac73336133f0a90e1",
+      "local_path": "upscale_models/Kim2091/AnimeSharp",
+      "include": [
+        "4x-AnimeSharp.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}
