@@ -15,7 +15,7 @@ from aigen.character_verification_models import (
 )
 from aigen.generation.qwen_image_edit_identity import (
     QwenIdentityCase,
-    QwenImageEditIdentityProfile,
+    QwenImageEditProfile,
 )
 from aigen.image_assets import image_asset_json
 from aigen.manifest_io import resolve_existing_path, sha256_bytes, write_json
@@ -29,7 +29,7 @@ def run_character_verification_matrix(
     *,
     matrix_path: Path,
     output_dir: Path,
-    profile: QwenImageEditIdentityProfile,
+    profile: QwenImageEditProfile,
     overwrite: bool,
     progress: StatusReporter,
 ) -> dict[str, Any]:

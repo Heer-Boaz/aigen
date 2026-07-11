@@ -50,10 +50,12 @@ from aigen.generation.qwen_image_edit_identity import (
     DEFAULT_QWEN_IDENTITY_MAX_SIDE,
     DEFAULT_QWEN_IDENTITY_PROFILE,
     DEFAULT_QWEN_IDENTITY_SEED,
+    DEFAULT_QWEN_INPAINT_PROFILE,
     QwenImageEditIdentityError,
     parse_qwen_identity_reference_args,
     qwen_identity_cli_case_names,
     qwen_image_edit_identity_profile_for_name,
+    qwen_image_edit_inpaint_model_names,
     qwen_image_edit_identity_model_names,
     qwen_image_edit_identity_profile_names,
     qwen_output_format_names,
@@ -411,8 +413,8 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_refine.add_argument(
         "--model",
         dest="profile",
-        default=DEFAULT_QWEN_IDENTITY_PROFILE,
-        choices=qwen_image_edit_identity_model_names(),
+        default=DEFAULT_QWEN_INPAINT_PROFILE,
+        choices=qwen_image_edit_inpaint_model_names(),
         help="Qwen Image Edit model",
     )
     qwen_refine.add_argument(

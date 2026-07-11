@@ -44,7 +44,7 @@ from aigen.generation.qwen_image_edit_identity import (
     QWEN_IDENTITY_CASES,
     QwenControlImage,
     QwenIdentityCase,
-    QwenImageEditIdentityProfile,
+    QwenImageEditProfile,
     run_qwen_image_edit_cases,
 )
 from aigen.image_assets import image_asset_json
@@ -155,7 +155,7 @@ def run_qwen_character_edit(
     *,
     pack_path: Path,
     output_dir: Path,
-    profile: QwenImageEditIdentityProfile,
+    profile: QwenImageEditProfile,
     instruction_parser_config: CharacterInstructionParserConfig,
     vlm_config: QwenVlmConfig,
     cases: Sequence[str],
@@ -259,7 +259,7 @@ def run_planned_qwen_character_edit(
     structure_source_path: Path | None,
     structure_control: str | None,
     output_dir: Path,
-    profile: QwenImageEditIdentityProfile,
+    profile: QwenImageEditProfile,
     max_side: int,
     steps: int | None,
     true_cfg_scale: float | None,

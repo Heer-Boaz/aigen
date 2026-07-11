@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import gc
 from math import gcd, lcm, log
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import perf_counter
 from types import MethodType
 from typing import Any
@@ -17,6 +18,16 @@ from aigen.character_reference_models import CHARACTER_REFERENCE_NAME_SET
 from aigen.generation.image_upscale import (
     REALESRGAN_ANIME_X4_MODEL_NAME,
     RealESRGANAnimeUpscaler,
+)
+from aigen.generation.qwen_image_edit_lightx2v import (
+    LIGHTX2V_QWEN_EDIT_2511_PROFILE,
+    QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES,
+    LightX2VQwenCaseRequest,
+    LightX2VQwenOutputRequest,
+    QwenImageEditLightX2VError,
+    QwenImageEditLightX2VProfile,
+    lightx2v_profile_json,
+    run_lightx2v_qwen_image_edit,
 )
 from aigen.generation.prompt_encoding import tensor_to_device
 from aigen.generation.qwen_prompt_encoding import (
@@ -40,7 +51,8 @@ from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
 
-DEFAULT_QWEN_IDENTITY_PROFILE = "nunchaku-qwen-edit-2509-fp4-r32-lightning-4step"
+DEFAULT_QWEN_INPAINT_PROFILE = "nunchaku-qwen-edit-2509-fp4-r32-lightning-4step"
+DEFAULT_QWEN_IDENTITY_PROFILE = LIGHTX2V_QWEN_EDIT_2511_PROFILE
 DEFAULT_QWEN_IDENTITY_MAX_SIDE = 1248
 DEFAULT_QWEN_IDENTITY_SEED = 0
 DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH = 512
@@ -89,6 +101,9 @@ class QwenImageEditIdentityProfile:
     default_guidance_scale: float
     scheduler_config: dict[str, Any] | None
     local_files_only: bool = True
+
+
+QwenImageEditProfile = QwenImageEditIdentityProfile | QwenImageEditLightX2VProfile
 
 
 @dataclass(frozen=True)
@@ -204,9 +219,9 @@ QWEN_IMAGE_EDIT_2509_LIGHTNING_SCHEDULER_CONFIG = {
 }
 
 
-QWEN_IDENTITY_PROFILES: dict[str, QwenImageEditIdentityProfile] = {
-    DEFAULT_QWEN_IDENTITY_PROFILE: QwenImageEditIdentityProfile(
-        name=DEFAULT_QWEN_IDENTITY_PROFILE,
+QWEN_IDENTITY_PROFILES: dict[str, QwenImageEditProfile] = {
+    DEFAULT_QWEN_INPAINT_PROFILE: QwenImageEditIdentityProfile(
+        name=DEFAULT_QWEN_INPAINT_PROFILE,
         base_model=QWEN_EDIT_2509_LOCAL_MODEL,
         base_repo_id="Qwen/Qwen-Image-Edit-2509",
         base_revision=QWEN_EDIT_2509_REVISION,
@@ -268,8 +283,9 @@ QWEN_IDENTITY_PROFILES: dict[str, QwenImageEditIdentityProfile] = {
         scheduler_config=None,
     ),
 }
+QWEN_IDENTITY_PROFILES.update(QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES)
 QWEN_IDENTITY_PROFILE_ALIASES: dict[str, str] = {
-    "nunchaku-qwen-edit-2509-r32-4step": DEFAULT_QWEN_IDENTITY_PROFILE,
+    "nunchaku-qwen-edit-2509-r32-4step": DEFAULT_QWEN_INPAINT_PROFILE,
     "nunchaku-qwen-edit-2509-r32-8step": "nunchaku-qwen-edit-2509-fp4-r32-lightning-8step",
     "nunchaku-qwen-edit-2509-r32": "nunchaku-qwen-edit-2509-fp4-r32",
     "nunchaku-qwen-edit-2509-r128": "nunchaku-qwen-edit-2509-fp4-r128",
@@ -345,7 +361,7 @@ QWEN_IDENTITY_CASE_ALIASES = {
 }
 
 
-def qwen_image_edit_identity_profile_for_name(profile_name: str) -> QwenImageEditIdentityProfile:
+def qwen_image_edit_identity_profile_for_name(profile_name: str) -> QwenImageEditProfile:
     profile_name = QWEN_IDENTITY_PROFILE_ALIASES.get(profile_name, profile_name)
     try:
         return QWEN_IDENTITY_PROFILES[profile_name]
@@ -358,6 +374,18 @@ def qwen_image_edit_identity_profile_for_name(profile_name: str) -> QwenImageEdi
 
 def qwen_image_edit_identity_profile_names() -> tuple[str, ...]:
     return tuple(QWEN_IDENTITY_PROFILES)
+
+
+def qwen_image_edit_inpaint_profile_names() -> tuple[str, ...]:
+    return tuple(
+        name
+        for name, profile in QWEN_IDENTITY_PROFILES.items()
+        if isinstance(profile, QwenImageEditIdentityProfile)
+    )
+
+
+def qwen_image_edit_inpaint_model_names() -> tuple[str, ...]:
+    return tuple(QWEN_IDENTITY_PROFILE_ALIASES) + qwen_image_edit_inpaint_profile_names()
 
 
 def qwen_image_edit_identity_model_names() -> tuple[str, ...]:
@@ -397,7 +425,7 @@ def run_qwen_image_edit_identity(
     *,
     references: Mapping[str, Path],
     output_dir: Path,
-    profile: QwenImageEditIdentityProfile,
+    profile: QwenImageEditProfile,
     cases: Sequence[str],
     max_side: int,
     steps: int | None,
@@ -443,7 +471,7 @@ def run_qwen_image_edit_cases(
     guides: Mapping[str, Path],
     controls: Mapping[str, QwenControlImage],
     output_dir: Path,
-    profile: QwenImageEditIdentityProfile,
+    profile: QwenImageEditProfile,
     edit_cases: Sequence[QwenIdentityCase],
     max_side: int,
     steps: int | None,
@@ -490,6 +518,37 @@ def run_qwen_image_edit_cases(
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     control_paths = _materialize_qwen_control_images(controls, output_dir)
+
+    if isinstance(profile, QwenImageEditLightX2VProfile):
+        if nunchaku_blocks_on_gpu is not None:
+            raise QwenImageEditIdentityError(
+                "--nunchaku-blocks-on-gpu does not apply to the Qwen-Image-Edit-2511 LightX2V backend"
+            )
+        try:
+            return _run_qwen_image_edit_cases_lightx2v(
+                references=references,
+                guides=guides,
+                controls=controls,
+                control_paths=control_paths,
+                output_dir=output_dir,
+                raw_dir=raw_dir,
+                profile=profile,
+                selected_cases=selected_cases,
+                max_side=max_side,
+                steps=resolved_steps,
+                true_cfg_scale=resolved_true_cfg_scale,
+                guidance_scale=resolved_guidance_scale,
+                seed=seed,
+                max_sequence_length=max_sequence_length,
+                candidates_per_case=candidates_per_case,
+                output_spec=output_spec,
+                postprocess=postprocess,
+                result_kind=result_kind,
+                manifest_context=manifest_context,
+                progress=progress,
+            )
+        except QwenImageEditLightX2VError as error:
+            raise QwenImageEditIdentityError(str(error)) from error
 
     preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
     memory_sampler = NvidiaSmiMemorySampler(preflight)
@@ -620,6 +679,209 @@ def run_qwen_image_edit_cases(
             session.close()
         if memory is None:
             memory_sampler.stop()
+
+
+def _run_qwen_image_edit_cases_lightx2v(
+    *,
+    references: Mapping[str, Path],
+    guides: Mapping[str, Path],
+    controls: Mapping[str, QwenControlImage],
+    control_paths: Mapping[str, Path],
+    output_dir: Path,
+    raw_dir: Path,
+    profile: QwenImageEditLightX2VProfile,
+    selected_cases: tuple[QwenIdentityCase, ...],
+    max_side: int,
+    steps: int,
+    true_cfg_scale: float,
+    guidance_scale: float,
+    seed: int,
+    max_sequence_length: int,
+    candidates_per_case: int,
+    output_spec: QwenOutputSpec | None,
+    postprocess: bool,
+    result_kind: str,
+    manifest_context: Mapping[str, Any] | None,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
+    memory_sampler = NvidiaSmiMemorySampler(preflight)
+    memory_sampler.start()
+    memory: dict[str, Any] | None = None
+    try:
+        reference_step = _prepare_qwen_identity_references(
+            references=references,
+            guides=guides,
+            controls=controls,
+            selected_cases=selected_cases,
+            max_side=max_side,
+            output_spec=output_spec,
+            progress=progress,
+        )
+        with TemporaryDirectory(prefix="aigen-qwen-2511-inputs-") as temporary_dir:
+            staged_paths = _stage_lightx2v_input_images(reference_step, Path(temporary_dir))
+            requests = []
+            for case_index, case in enumerate(selected_cases):
+                case_seeds = case.seeds or tuple(
+                    seed + case_index * candidates_per_case + candidate_index
+                    for candidate_index in range(candidates_per_case)
+                )
+                width, height = reference_step.canvas_sizes[case.name]
+                requests.append(
+                    LightX2VQwenCaseRequest(
+                        name=case.name,
+                        prompt=case.prompt,
+                        image_paths=tuple(staged_paths[id(image)] for image in _case_input_images(reference_step, case)),
+                        width=width,
+                        height=height,
+                        outputs=tuple(
+                            LightX2VQwenOutputRequest(
+                                name=_case_output_name(case.name, candidate_index, len(case_seeds)),
+                                seed=case_seed,
+                                path=raw_dir
+                                / f"{_case_output_name(case.name, candidate_index, len(case_seeds))}.png",
+                            )
+                            for candidate_index, case_seed in enumerate(case_seeds)
+                        ),
+                    )
+                )
+            backend_result = run_lightx2v_qwen_image_edit(
+                profile=profile,
+                cases=tuple(requests),
+                steps=steps,
+                true_cfg_scale=true_cfg_scale,
+                guidance_scale=guidance_scale,
+                max_sequence_length=max_sequence_length,
+                progress=progress,
+            )
+
+        cases_by_name = {case.name: case for case in selected_cases}
+        raw_outputs = []
+        for backend_output in backend_result.outputs:
+            case = cases_by_name[backend_output["case"]]
+            case_request = next(request for request in requests if request.name == case.name)
+            raw_image_path = Path(backend_output["path"])
+            raw_output = {
+                "name": backend_output["name"],
+                "case": case.name,
+                "candidate_index": next(
+                    index
+                    for index, output in enumerate(case_request.outputs)
+                    if output.name == backend_output["name"]
+                ),
+                "seed": backend_output["seed"],
+                "raw_width": backend_output["width"],
+                "raw_height": backend_output["height"],
+                "references": list(case.references),
+                "guides": list(case.guides),
+                "controls": list(case.controls),
+                "prompt": case.prompt,
+                "raw_image": image_asset_json(raw_image_path),
+                "timings_ms": {
+                    "denoise_ms": backend_output["denoise_ms"],
+                    "vae_decode_ms": backend_output["vae_decode_ms"],
+                },
+            }
+            if case.edit_context is not None:
+                raw_output["edit_context"] = case.edit_context
+            raw_outputs.append(raw_output)
+
+        postprocess_step = _postprocess_qwen_identity_outputs(
+            raw_outputs=raw_outputs,
+            output_dir=output_dir,
+            output_spec=output_spec,
+            enabled=postprocess,
+            progress=progress,
+        )
+        contact_sheet = output_dir / "contact_sheet.png"
+        candidate_columns = max(
+            len(case.seeds) if case.seeds is not None else candidates_per_case
+            for case in selected_cases
+        )
+        save_contact_sheet(
+            [{"name": output["name"], "path": output["image"]["path"]} for output in postprocess_step.outputs],
+            contact_sheet,
+            thumb_width=320 if not postprocess else 192,
+            max_label_chars=40 if not postprocess else 24,
+            max_columns=candidate_columns if candidate_columns > 1 else 8,
+        )
+        memory = memory_sampler.stop() | backend_result.memory
+        result = {
+            "status": "completed",
+            "kind": result_kind,
+            "profile": lightx2v_profile_json(profile),
+            "generation": {
+                "max_side": max_side,
+                "num_images_per_case": candidates_per_case,
+                "max_references_per_case": max(len(case.references) for case in selected_cases),
+                "max_guides_per_case": max(len(case.guides) for case in selected_cases),
+                "max_controls_per_case": max(len(case.controls) for case in selected_cases),
+                "max_inputs_per_case": max(
+                    len(case.references) + len(case.guides) + len(case.controls)
+                    for case in selected_cases
+                ),
+                "steps": steps,
+                "true_cfg_scale": true_cfg_scale,
+                "guidance_scale": guidance_scale,
+                "negative_prompt": None,
+                "seed": seed,
+                "max_sequence_length": max_sequence_length,
+                "output_canvas": (
+                    _output_spec_json(output_spec, postprocess=postprocess)
+                    if output_spec is not None
+                    else {"mode": "reference_anchor", "postprocess": "none"}
+                ),
+            },
+            "references": {name: image_asset_json(path) for name, path in sorted(references.items())},
+            "guides": {name: image_asset_json(path) for name, path in sorted(guides.items())},
+            "controls": {name: image_asset_json(path) for name, path in sorted(control_paths.items())},
+            "outputs": postprocess_step.outputs,
+            "timings_ms": backend_result.timings_ms
+            | {
+                "postprocess_ms": postprocess_step.elapsed_ms,
+                "total_ms": backend_result.timings_ms["total_ms"] + postprocess_step.elapsed_ms,
+            },
+            "memory": memory,
+            "environment": backend_result.environment
+            | {
+                "postprocess": "realesrgan_anime_upscale"
+                if output_spec is not None and postprocess
+                else "none",
+            },
+            "output": {
+                "directory": output_dir.as_posix(),
+                "raw": raw_dir.as_posix(),
+                "contact_sheet": contact_sheet.as_posix(),
+                "result": (output_dir / "result.json").as_posix(),
+            },
+        }
+        if manifest_context is not None:
+            result["plan"] = dict(manifest_context)
+        write_json(output_dir / "result.json", result)
+        return result
+    finally:
+        if memory is None:
+            memory_sampler.stop()
+
+
+def _stage_lightx2v_input_images(
+    reference_step: QwenIdentityReferenceStep,
+    directory: Path,
+) -> dict[int, Path]:
+    images = (
+        tuple(reference_step.reference_images.values())
+        + tuple(reference_step.guide_images.values())
+        + tuple(reference_step.control_images.values())
+    )
+    staged_paths = {}
+    for index, image in enumerate(images):
+        image_id = id(image)
+        if image_id in staged_paths:
+            continue
+        path = directory / f"input_{index:03d}.png"
+        image.save(path)
+        staged_paths[image_id] = path
+    return staged_paths
 
 
 def run_qwen_image_edit_inpaint_candidates(
