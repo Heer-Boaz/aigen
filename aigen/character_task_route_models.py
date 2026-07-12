@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 CHARACTER_TASK_ROUTE_PLAN_KIND = "character-task-route-plan"
@@ -51,13 +51,7 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ReferenceBudgetSpec(StrictModel):
-    min: int = Field(ge=1)
-    max: int = Field(ge=1)
-
-
 class FinalEditorConstraintsSpec(StrictModel):
-    reference_budget: ReferenceBudgetSpec
     mask_required: bool
     pose_conditioning: bool
     text_rendering: bool
@@ -65,7 +59,7 @@ class FinalEditorConstraintsSpec(StrictModel):
 
 
 class ModelCapabilityRegistrySpec(StrictModel):
-    max_qwen_edit_images: int = Field(default=3, ge=1)
+    pass
 
 
 class CharacterTaskRoutePlanSpec(StrictModel):

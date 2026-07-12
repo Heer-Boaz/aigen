@@ -21,7 +21,7 @@ Downloads the fixed production model set:
 - Florence-2 large-ft native checkpoint for polish region grounding
 - DWPose ONNX annotator models for keyframe pose scoring
 - Depth Anything V2 Large for structural scene controls
-- Real-ESRGAN anime 6B for optional character postprocessing
+- IllustrationJaNai V1 DAT2 and ESRGAN for character postprocessing
 - Qwen2.5-VL-7B keyframe judge
 EOF
 }
@@ -51,7 +51,7 @@ manifest_args=(
   "model_sources/keyframe_grounding_florence2.json"
   "model_sources/keyframe_pose_dwpose_onnx.json"
   "model_sources/character_scene_depth_v2_large.json"
-  "model_sources/character_postprocess_realesrgan_anime_6b.json"
+  "model_sources/character_postprocess_illustrationjanai_v1.json"
   "model_sources/keyframe_judge_qwen2_5_vl_7b.json"
 )
 

@@ -48,7 +48,9 @@ code change is needed, the code is wrong.
 
 ## Fixed facts
 
-- Target GPU: 16GB VRAM (RTX 50-series/Blackwell). Edit-model route: Nunchaku
-  Qwen-Image-Edit-2509 FP4/r32; escalation ladder in `docs/PLAN.md`.
+- Target GPU: 16GB VRAM (RTX 50-series/Blackwell). Edit-model route:
+  Qwen-Image-Edit-2511 FP8 Lightning 8-step via LightX2V, with its native
+  block-offload lifecycle and 1.77MP raw generation canvas. There is no legacy
+  Qwen fallback or comparison baseline in the active character pipeline.
 - FLUX/Kontext remains a separate pipeline next to Qwen edit; do not merge the
   two.

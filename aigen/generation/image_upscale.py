@@ -9,17 +9,12 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from aigen.image_assets import image_asset_json
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
 
-REALESRGAN_ANIME_X4_MODEL_NAME = "RealESRGAN_x4plus_anime_6B"
-REALESRGAN_ANIME_X4_MODEL = (
-    MODELS_ROOT
-    / "upscale_models/amd/realesrgan-x4plus-anime-6b/RealESRGAN_x4plus_anime_6B.pth"
-)
 UPSCALE_MODELS: dict[str, Path] = {
-    "realesrgan-anime-6b": REALESRGAN_ANIME_X4_MODEL,
     "illustrationjanai-dat2": (
         MODELS_ROOT
         / "upscale_models/halllooo/4x_illustrationJaNaiV1/4x_IllustrationJaNai_V1_DAT2_190k.pth"
@@ -32,7 +27,7 @@ UPSCALE_MODELS: dict[str, Path] = {
         MODELS_ROOT / "upscale_models/Kim2091/AnimeSharp/4x-AnimeSharp.safetensors"
     ),
 }
-DEFAULT_UPSCALE_MODEL = "realesrgan-anime-6b"
+DEFAULT_UPSCALE_MODEL = "illustrationjanai-dat2"
 UPSCALE_TILE_SIZE = 512
 UPSCALE_TILE_OVERLAP = 32
 
@@ -46,6 +41,22 @@ def upscale_model_path(name: str) -> Path:
         allowed = ", ".join(sorted(UPSCALE_MODELS))
         raise ImageUpscaleError(f"Unknown upscale model {name}; expected one of: {allowed}")
     return UPSCALE_MODELS[name]
+
+
+def size_for_long_side(
+    width: int,
+    height: int,
+    *,
+    long_side: int,
+    align_to_multiple: int | None = None,
+) -> tuple[int, int]:
+    scale = long_side / max(width, height)
+    target_width = round(width * scale)
+    target_height = round(height * scale)
+    if align_to_multiple is not None:
+        target_width = max(align_to_multiple, target_width // align_to_multiple * align_to_multiple)
+        target_height = max(align_to_multiple, target_height // align_to_multiple * align_to_multiple)
+    return target_width, target_height
 
 
 class ImageUpscaleError(RuntimeError):
@@ -72,11 +83,11 @@ class UpscaledImage:
     target_height: int
 
 
-class RealESRGANAnimeUpscaler:
+class IllustrationUpscaler:
     def __init__(
         self,
         *,
-        model_path: Path = REALESRGAN_ANIME_X4_MODEL,
+        model_path: Path,
         tile_size: int = UPSCALE_TILE_SIZE,
         tile_overlap: int = UPSCALE_TILE_OVERLAP,
     ) -> None:
@@ -141,6 +152,42 @@ class RealESRGANAnimeUpscaler:
             target_width=target_width,
             target_height=target_height,
         )
+
+
+def upscale_image(
+    *,
+    input_path: Path,
+    output_path: Path,
+    long_side: int,
+    model: str,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    resolved_input = input_path.resolve(strict=True)
+    resolved_output = output_path.resolve()
+    upscaler = IllustrationUpscaler(model_path=upscale_model_path(model))
+    with Image.open(resolved_input) as image:
+        result = upscaler.upscale(
+            image,
+            target_size=size_for_long_side(*image.size, long_side=long_side),
+            progress=progress,
+        )
+    resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    result.image.save(resolved_output)
+    return {
+        "status": "completed",
+        "kind": "character-image-postprocess-result",
+        "input": image_asset_json(resolved_input),
+        "output": image_asset_json(resolved_output),
+        "model": result.model_name,
+        "model_path": result.model_path.as_posix(),
+        "device": result.device,
+        "scale": result.scale,
+        "natural_width": result.natural_width,
+        "natural_height": result.natural_height,
+        "target_width": result.target_width,
+        "target_height": result.target_height,
+        "elapsed_ms": result.elapsed_ms,
+    }
 
 
 def _load_spandrel_image_model(model_path: Path) -> tuple[Any, Any]:

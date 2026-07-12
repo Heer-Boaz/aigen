@@ -20,9 +20,9 @@ def read_json(path: Path, *, label: str) -> dict[str, Any]:
         raise ManifestIOError(f"Invalid {label}: {path.as_posix()}: {error}") from error
 
 
-def write_json(path: Path, payload: dict[str, Any]) -> None:
+def write_json(path: Path, payload: dict[str, Any], *, sort_keys: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=sort_keys) + "\n", encoding="utf-8")
 
 
 def write_json_line(stream: Any, payload: dict[str, Any]) -> None:

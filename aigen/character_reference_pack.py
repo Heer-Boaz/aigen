@@ -32,6 +32,17 @@ def parse_character_reference_args(reference_args: Sequence[str], base_dir: Path
     return references
 
 
+def parse_character_reference_files(reference_files: Sequence[Path], base_dir: Path) -> dict[str, Path]:
+    references: dict[str, Path] = {}
+    for reference_file in reference_files:
+        path = resolve_existing_path(reference_file.as_posix(), base_dir)
+        name = path.stem
+        if name in references:
+            raise CharacterReferenceError(f"Duplicate reference filename: {name}")
+        references[name] = path
+    return references
+
+
 def build_character_reference_pack(
     *,
     character_id: str,
@@ -66,8 +77,10 @@ def build_character_reference_pack(
         "status": "completed",
         **pack.model_dump(mode="json"),
     }
-    write_json(pack_path, payload)
+    write_json(pack_path, payload, sort_keys=False)
     return payload
+
+
 def _validate_character_id(character_id: str) -> None:
     if not character_id.strip():
         raise CharacterReferenceError("character_id must not be empty")

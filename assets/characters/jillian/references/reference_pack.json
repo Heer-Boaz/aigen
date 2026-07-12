@@ -19,6 +19,13 @@
       "path": "/home/boaz/aigen/assets/characters/jillian/front-upperbody.png",
       "sha256": "72e3095c8b90344f076373a311e828e7253023dd0440d52a4d5152b2e98ece70",
       "width": 3392
+    },
+    "clothes": {
+      "height": 5056,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/characters/jillian/clothes.png",
+      "sha256": "4341aae634f444254053f180f92d5f9db4a8a984a3a407d9bf91367b00a9025b",
+      "width": 3392
     }
   },
   "status": "completed"

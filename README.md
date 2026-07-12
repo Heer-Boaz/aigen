@@ -48,7 +48,7 @@ The model manifests used by the installer are:
 - `model_sources/keyframe_grounding_florence2.json`
 - `model_sources/keyframe_pose_dwpose_onnx.json`
 - `model_sources/character_scene_depth_v2_large.json`
-- `model_sources/character_postprocess_realesrgan_anime_6b.json`
+- `model_sources/character_postprocess_illustrationjanai_v1.json`
 - `model_sources/keyframe_judge_qwen2_5_vl_7b.json`
 
 Legacy Qwen-Image-Edit-2509 baseline manifests remain separate from the 2511
@@ -107,7 +107,7 @@ run evidence.
 
 PixAI-style character editing starts with a named reference pack. The pack stores
 image metadata and stable pack-local handles; it never serializes the character
-into an identity dossier. Qwen-Image-Edit receives the selected references as
+into an identity dossier. Qwen-Image-Edit receives all references as
 images and resolves identity and appearance inside the edit model.
 
 ```bash
@@ -120,11 +120,23 @@ images and resolves identity and appearance inside the edit model.
   --output-dir assets/characters/<character-id>/references
 ```
 
-This writes `reference_pack.json`. Packs of one to three images bypass the
-external VLM entirely. For larger packs, the narrow Qwen2.5-VL selector returns
-only up to three 1-based image indices, unloads, and then Qwen-Image-Edit receives
-those images plus the user's instruction. No image descriptions or inferred
-reference roles enter the generation prompt.
+When filenames already provide suitable handles, omit the manual `name=path`
+mapping:
+
+```bash
+.venv/bin/python -m aigen.cli characters reference-pack build \
+  --character-id <character-id> \
+  --file path/to/fullbody-multiview.png \
+  --file path/to/front-upperbody.png \
+  --file path/to/clothes.png \
+  --output-dir assets/characters/<character-id>/references
+```
+
+This writes `reference_pack.json`; each `--file` uses its filename stem as the
+stable pack-local handle, and repeated `--file` options establish model-input
+order. Qwen-Image-Edit receives that complete ordered pack plus the user's
+instruction and any structural inputs. No image descriptions, inferred
+reference roles or count-based selector enter the generation path.
 
 ```bash
 .venv/bin/aigen characters qwen-edit-run \
@@ -137,13 +149,17 @@ reference roles enter the generation prompt.
 
 `qwen-edit-run` runs exactly one free-instruction request by default. Its default
 model is `lightx2v-qwen-edit-2511-fp8-lightning-8step`; no case name or reusable
-JSON plan is involved. The 2511 backend targets the proven approximately
-1.77-megapixel raw canvas while preserving the visual anchor's aspect ratio;
-`--output-format` overrides that aspect when needed. Use `--candidates N` only
-when multiple outputs are intentional.
+JSON plan is involved. The 2511 backend translates the selected aspect ratio to
+its proven 1.77-megapixel target raw canvas on Qwen's 16-pixel latent grid. A control, source or guide
+owns the aspect ratio in that order; without one the default is 3:4.
+Character-reference images never choose the canvas. Override the shape with
+`--aspect-ratio W:H`. Raw images remain in `raw/`; final images are upscaled to
+a 2048-pixel long side by default. Override that with
+`--upscale-long-side PIXELS`. Use `--candidates N` only when multiple outputs
+are intentional.
 
 To edit an existing image, pass it as Image 1. The source image owns the output
-aspect and native canvas within the configured cap. Repeat `--image` only when
+aspect unless `--aspect-ratio` overrides it. Repeat `--image` only when
 the instruction deliberately refers to additional pictures:
 
 ```bash

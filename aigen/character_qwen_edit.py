@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -16,15 +15,10 @@ from aigen.character_reference_models import (
     CharacterReferencePackSpec,
     load_completed_character_reference_pack,
 )
-from aigen.character_reference_selector import (
-    ReferenceSelection,
-    select_reference_subset,
-)
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.image_upscale import DEFAULT_UPSCALE_MODEL
 from aigen.generation.qwen_image_edit_identity import (
-    QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES,
     QwenControlImage,
     QwenIdentityCase,
     QwenImageEditProfile,
@@ -33,7 +27,6 @@ from aigen.generation.qwen_image_edit_identity import (
 from aigen.image_assets import image_asset_json
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 from aigen.progress import StatusReporter
-from aigen.vlm_qwen import QwenVlm, QwenVlmConfig
 
 
 class QwenCharacterEditError(RuntimeError):
@@ -87,7 +80,6 @@ def run_qwen_character_edit(
     pack_path: Path | None,
     output_dir: Path,
     profile: QwenImageEditProfile,
-    vlm_config: QwenVlmConfig,
     instruction: str,
     source_image_paths: Sequence[Path],
     max_side: int,
@@ -97,8 +89,8 @@ def run_qwen_character_edit(
     seed: int,
     max_sequence_length: int,
     candidates_per_case: int,
-    output_format: str | None,
-    resolution: str | None,
+    aspect_ratio: tuple[int, int] | None,
+    upscale_long_side: int,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
     pose_source_path: Path | None = None,
@@ -114,9 +106,7 @@ def run_qwen_character_edit(
     if candidates_per_case < 1:
         raise QwenCharacterEditError("--candidates must be at least 1")
     if (pack_path is None) == (not source_image_paths):
-        raise QwenCharacterEditError("qwen-edit-run requires either --pack or one to three --image inputs")
-    if (output_format is None) != (resolution is None):
-        raise QwenCharacterEditError("--output-format and --resolution must be provided together")
+        raise QwenCharacterEditError("qwen-edit-run requires either --pack or --image inputs")
     if (structure_source_path is None) != (structure_control is None):
         raise QwenCharacterEditError("--structure-source and --structure-control must be provided together")
     if pose_source_path is not None and structure_source_path is not None:
@@ -129,7 +119,6 @@ def run_qwen_character_edit(
         raise QwenCharacterEditError(f"Unknown pose mode {pose_mode}; expected one of: {allowed}")
     planned = _build_qwen_character_edit_request(
         pack_path=pack_path,
-        vlm_config=vlm_config,
         instruction=instruction,
         source_image_paths=source_image_paths,
         pose_source_present=pose_source_path is not None,
@@ -160,11 +149,10 @@ def run_qwen_character_edit(
         candidates_per_case=candidates_per_case,
         overwrite=overwrite,
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
-        output_format=output_format,
-        resolution=resolution,
+        aspect_ratio=aspect_ratio,
+        upscale_long_side=upscale_long_side,
         result_kind="qwen-character-edit-result",
         manifest_context=None,
-        postprocess=True,
         postprocess_model=postprocess_model,
         progress=progress,
     )
@@ -187,11 +175,10 @@ def run_planned_qwen_character_edit(
     candidates_per_case: int,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
-    output_format: str | None,
-    resolution: str | None,
+    aspect_ratio: tuple[int, int] | None,
+    upscale_long_side: int,
     result_kind: str,
     manifest_context: dict[str, Any] | None,
-    postprocess: bool,
     postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
@@ -259,11 +246,10 @@ def run_planned_qwen_character_edit(
         candidates_per_case=candidates_per_case,
         overwrite=overwrite,
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
-        output_format=output_format,
-        resolution=resolution,
+        aspect_ratio=aspect_ratio,
+        upscale_long_side=upscale_long_side,
         result_kind=result_kind,
         manifest_context=manifest_context,
-        postprocess=postprocess,
         postprocess_model=postprocess_model,
         progress=progress,
     )
@@ -278,7 +264,6 @@ def run_planned_qwen_character_edit(
 def _build_qwen_character_edit_request(
     *,
     pack_path: Path | None,
-    vlm_config: QwenVlmConfig,
     instruction: str,
     source_image_paths: Sequence[Path],
     pose_source_present: bool,
@@ -289,14 +274,7 @@ def _build_qwen_character_edit_request(
         pose_source_present=pose_source_present,
         structure_source_present=structure_source_present,
     )
-    reserved_inputs = int(pose_source_present) + int(structure_source_present)
-    input_budget = QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES - reserved_inputs
     if source_image_paths:
-        if len(source_image_paths) > input_budget:
-            raise QwenCharacterEditError(
-                f"This edit supplies {len(source_image_paths) + reserved_inputs} input images; "
-                f"Qwen accepts at most {QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES}"
-            )
         source_names = tuple(f"image_{index}" for index in range(1, len(source_image_paths) + 1))
         source_images = {
             name: resolve_existing_path(path.as_posix(), Path.cwd())
@@ -304,29 +282,16 @@ def _build_qwen_character_edit_request(
         }
         reference_paths: dict[str, Path] = {}
         selected_refs: tuple[str, ...] = ()
-        selected_ref_indices: tuple[int, ...] = ()
-        selector = "explicit_images"
     else:
         context = load_qwen_character_reference_context(
             pack_path=pack_path,
             progress=progress,
             phase="load qwen character edit reference pack",
         )
-        selection = _select_character_references(
-            context=context,
-            vlm_config=vlm_config,
-            instruction=instruction,
-            route_kind=route_kind,
-            output_mode=output_mode,
-            budget=input_budget,
-            progress=progress,
-        )
         source_names = ()
         source_images = {}
         reference_paths = context.reference_paths
-        selected_refs = selection.selected_refs
-        selected_ref_indices = selection.selected_ref_indices
-        selector = selection.selector
+        selected_refs = tuple(context.pack.references)
     edit_case = QwenIdentityCase(
         name=QWEN_EDIT_REQUEST_NAME,
         source_images=source_names,
@@ -335,8 +300,6 @@ def _build_qwen_character_edit_request(
         edit_context={
             "task": "character_edit",
             "input_source": "explicit_images" if source_names else "reference_pack",
-            "reference_selector": selector,
-            "selected_ref_indices": list(selected_ref_indices),
             "refs_used": list(selected_refs),
             "prompt_source": "user_instruction",
             "route_kind": route_kind,
@@ -356,49 +319,6 @@ def _direct_request_route(*, pose_source_present: bool, structure_source_present
     if structure_source_present:
         return "scene_insertion", "single_image_scene"
     return "unknown_reference_edit", "single_image_reference_edit"
-
-
-def _select_character_references(
-    *,
-    context: QwenCharacterReferenceContext,
-    vlm_config: QwenVlmConfig,
-    instruction: str,
-    route_kind: str,
-    output_mode: str,
-    budget: int,
-    progress: StatusReporter,
-) -> ReferenceSelection:
-    needs_vlm = len(context.pack.references) > budget
-    progress.phase(
-        "select qwen character edit references with VLM"
-        if needs_vlm
-        else "use all qwen character references within input budget"
-    )
-    try:
-        if needs_vlm:
-            with closing(QwenVlm(vlm_config)) as runner:
-                return select_reference_subset(
-                    runner=runner,
-                    pack=context.pack,
-                    reference_paths=context.reference_paths,
-                    instruction=instruction,
-                    route_kind=route_kind,
-                    output_mode=output_mode,
-                    budget=budget,
-                    path_label=f"{context.pack_path.as_posix()}#{QWEN_EDIT_REQUEST_NAME}",
-                )
-        return select_reference_subset(
-            runner=None,
-            pack=context.pack,
-            reference_paths=context.reference_paths,
-            instruction=instruction,
-            route_kind=route_kind,
-            output_mode=output_mode,
-            budget=budget,
-            path_label=f"{context.pack_path.as_posix()}#{QWEN_EDIT_REQUEST_NAME}",
-        )
-    except CharacterReferenceError as error:
-        raise QwenCharacterEditError(str(error)) from error
 
 
 def load_qwen_character_reference_context(
@@ -479,16 +399,9 @@ def _apply_route_conditioning(
         )
         if case.edit_context is None:
             raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
-        prompt = case.prompt
-        if "pose_reference" in modes or "pose_keypoint" in modes:
-            prompt = (
-                f"{prompt.rstrip()} Use the last input image only for pose and framing; "
-                "preserve identity from the preceding reference images."
-            )
         conditioned_cases.append(
             replace(
                 case,
-                prompt=prompt,
                 guides=case_guides,
                 controls=case_controls,
                 edit_context=case.edit_context

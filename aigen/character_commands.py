@@ -8,6 +8,7 @@ from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import (
     build_character_reference_pack,
     parse_character_reference_args,
+    parse_character_reference_files,
 )
 from aigen.character_region_plan import (
     CharacterRegionPlanError,
@@ -21,9 +22,12 @@ from aigen.character_qwen_edit import (
     QwenCharacterEditError,
     run_qwen_character_edit,
 )
-from aigen.character_verification import run_character_verification_matrix
-from aigen.generation.image_upscale import DEFAULT_UPSCALE_MODEL, upscale_model_names
-from aigen.character_verification_models import CharacterVerificationError
+from aigen.generation.image_upscale import (
+    DEFAULT_UPSCALE_MODEL,
+    ImageUpscaleError,
+    upscale_image,
+    upscale_model_names,
+)
 from aigen.character_qwen_refine import (
     QwenCharacterRefineError,
     plan_qwen_character_refine,
@@ -48,56 +52,20 @@ from aigen.generation.qwen_image_edit_identity import (
     DEFAULT_QWEN_IDENTITY_PROFILE,
     DEFAULT_QWEN_IDENTITY_SEED,
     DEFAULT_QWEN_INPAINT_PROFILE,
+    DEFAULT_QWEN_UPSCALE_LONG_SIDE,
     QwenImageEditIdentityError,
+    parse_qwen_aspect_ratio,
     qwen_image_edit_identity_profile_for_name,
     qwen_image_edit_inpaint_model_names,
     qwen_image_edit_identity_model_names,
-    qwen_output_format_names,
-    qwen_output_resolution_names,
 )
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.keyframe_grounding import GroundingConfig, KeyframeGroundingError
 from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmentationError
 from aigen.manifest_io import ManifestIOError
 from aigen.progress import StatusReporter
-from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT, keyframe_profile_for_name
-from aigen.vlm_qwen import (
-    DEFAULT_JUDGE_ID,
-    DEFAULT_JUDGE_QUANTIZATION,
-    DEFAULT_JUDGE_REPO_ID,
-    DEFAULT_JUDGE_REVISION,
-    DEFAULT_MAX_PIXELS,
-    DEFAULT_MIN_PIXELS,
-    QwenVlmConfig,
-    QwenVlmError,
-)
-
-
-DEFAULT_REFERENCE_SELECTOR_ID = DEFAULT_JUDGE_ID
-DEFAULT_REFERENCE_SELECTOR_MODEL = MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct"
-DEFAULT_REFERENCE_SELECTOR_DTYPE = "bfloat16"
-DEFAULT_REFERENCE_SELECTOR_ATTENTION_IMPL = "sdpa"
-DEFAULT_REFERENCE_SELECTOR_QUANTIZATION = DEFAULT_JUDGE_QUANTIZATION
-DEFAULT_REFERENCE_SELECTOR_MIN_PIXELS = DEFAULT_MIN_PIXELS
-DEFAULT_REFERENCE_SELECTOR_MAX_PIXELS = DEFAULT_MAX_PIXELS
-DEFAULT_REFERENCE_SELECTOR_MAX_NEW_TOKENS = 64
-DEFAULT_REFERENCE_SELECTOR_TEMPERATURE = 0.0
-
-
-def default_reference_selector_vlm_config() -> QwenVlmConfig:
-    return QwenVlmConfig(
-        judge_id=DEFAULT_REFERENCE_SELECTOR_ID,
-        model=DEFAULT_REFERENCE_SELECTOR_MODEL,
-        repo_id=DEFAULT_JUDGE_REPO_ID,
-        revision=DEFAULT_JUDGE_REVISION,
-        dtype=DEFAULT_REFERENCE_SELECTOR_DTYPE,
-        attention_impl=DEFAULT_REFERENCE_SELECTOR_ATTENTION_IMPL,
-        quantization=DEFAULT_REFERENCE_SELECTOR_QUANTIZATION,
-        min_pixels=DEFAULT_REFERENCE_SELECTOR_MIN_PIXELS,
-        max_pixels=DEFAULT_REFERENCE_SELECTOR_MAX_PIXELS,
-        max_new_tokens=DEFAULT_REFERENCE_SELECTOR_MAX_NEW_TOKENS,
-        temperature=DEFAULT_REFERENCE_SELECTOR_TEMPERATURE,
-    )
+from aigen.runtime_profiles import PROJECT_ROOT, keyframe_profile_for_name
+from aigen.vlm_qwen import QwenVlmError
 
 
 def add_character_commands(subparsers: Any) -> None:
@@ -142,11 +110,17 @@ def add_character_commands(subparsers: Any) -> None:
         help="Build a named character reference pack",
     )
     reference_pack_build.add_argument("--character-id", required=True, help="Character id")
-    reference_pack_build.add_argument(
+    reference_pack_inputs = reference_pack_build.add_mutually_exclusive_group(required=True)
+    reference_pack_inputs.add_argument(
         "--reference",
         action="append",
-        required=True,
         help="Named reference image as name=path; names are stable pack-local handles",
+    )
+    reference_pack_inputs.add_argument(
+        "--file",
+        action="append",
+        type=Path,
+        help="Reference image path; repeat for each image and use each filename stem as its pack handle",
     )
     reference_pack_build.add_argument("--output-dir", type=Path, required=True, help="Reference pack directory")
     reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
@@ -161,7 +135,7 @@ def add_character_commands(subparsers: Any) -> None:
         "--image",
         action="append",
         type=Path,
-        help="Model input image in Picture order; repeat up to three times",
+        help="Model input image in Picture order; repeat for each image",
     )
     qwen_edit.add_argument(
         "--instruction",
@@ -204,14 +178,15 @@ def add_character_commands(subparsers: Any) -> None:
         help="Upper cap for the generated/reference long side",
     )
     qwen_edit.add_argument(
-        "--output-format",
-        choices=qwen_output_format_names(),
-        help="Override output aspect ratio; requires --resolution",
+        "--aspect-ratio",
+        type=parse_qwen_aspect_ratio,
+        help="Raw canvas aspect as W:H; source or structural input owns the aspect when omitted",
     )
     qwen_edit.add_argument(
-        "--resolution",
-        choices=qwen_output_resolution_names(),
-        help="Postprocess output resolution; requires --output-format",
+        "--upscale-long-side",
+        type=int,
+        default=DEFAULT_QWEN_UPSCALE_LONG_SIDE,
+        help=f"Upscaled long side in pixels; defaults to {DEFAULT_QWEN_UPSCALE_LONG_SIDE}",
     )
     qwen_edit.add_argument(
         "--postprocess-model",
@@ -255,21 +230,25 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_edit.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    qwen_matrix = character_subparsers.add_parser(
-        "qwen-matrix-run",
-        help="Run the visual Qwen backbone verification matrix",
+    postprocess = character_subparsers.add_parser(
+        "postprocess",
+        help="Upscale one existing character image",
     )
-    qwen_matrix.set_defaults(compact=False)
-    qwen_matrix.add_argument("--matrix", type=Path, required=True, help="Character verification matrix")
-    qwen_matrix.add_argument("--output-dir", type=Path, required=True, help="Directory for generated images")
-    qwen_matrix.add_argument(
+    postprocess.add_argument("--image", type=Path, required=True, help="Input image")
+    postprocess.add_argument("--output", type=Path, required=True, help="Upscaled output image")
+    postprocess.add_argument(
+        "--long-side",
+        type=int,
+        default=DEFAULT_QWEN_UPSCALE_LONG_SIDE,
+        help=f"Output long side in pixels; defaults to {DEFAULT_QWEN_UPSCALE_LONG_SIDE}",
+    )
+    postprocess.add_argument(
         "--model",
-        dest="profile",
-        default=DEFAULT_QWEN_IDENTITY_PROFILE,
-        choices=qwen_image_edit_identity_model_names(),
-        help="Qwen Image Edit model",
+        choices=upscale_model_names(),
+        default=DEFAULT_UPSCALE_MODEL,
+        help=f"Upscale model; defaults to {DEFAULT_UPSCALE_MODEL}",
     )
-    qwen_matrix.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    postprocess.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     qwen_refine_plan = character_subparsers.add_parser(
         "qwen-edit-refine-plan",
@@ -426,7 +405,11 @@ def run_character_command(
                     stdout,
                     build_character_reference_pack(
                         character_id=args.character_id,
-                        references=parse_character_reference_args(args.reference, Path.cwd()),
+                        references=(
+                            parse_character_reference_files(args.file, Path.cwd())
+                            if args.file
+                            else parse_character_reference_args(args.reference, Path.cwd())
+                        ),
                         output_dir=args.output_dir,
                         overwrite=args.overwrite,
                     ),
@@ -440,7 +423,6 @@ def run_character_command(
                     pack_path=args.pack,
                     output_dir=args.output_dir,
                     profile=qwen_image_edit_identity_profile_for_name(args.profile),
-                    vlm_config=default_reference_selector_vlm_config(),
                     instruction=args.instruction,
                     source_image_paths=args.image or (),
                     max_side=args.max_side,
@@ -450,8 +432,8 @@ def run_character_command(
                     seed=args.seed,
                     max_sequence_length=args.max_sequence_length,
                     candidates_per_case=args.candidates,
-                    output_format=args.output_format,
-                    resolution=args.resolution,
+                    aspect_ratio=args.aspect_ratio,
+                    upscale_long_side=args.upscale_long_side,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
                     pose_source_path=args.pose_source,
@@ -464,17 +446,17 @@ def run_character_command(
                 pretty=not args.compact,
             )
             return 0
-        if args.characters_command == "qwen-matrix-run":
+        if args.characters_command == "postprocess":
             dump_json(
                 stdout,
-                run_character_verification_matrix(
-                    matrix_path=args.matrix,
-                    output_dir=args.output_dir,
-                    profile=qwen_image_edit_identity_profile_for_name(args.profile),
-                    overwrite=args.overwrite,
+                upscale_image(
+                    input_path=args.image,
+                    output_path=args.output,
+                    long_side=args.long_side,
+                    model=args.model,
                     progress=progress,
                 ),
-                pretty=True,
+                pretty=not args.compact,
             )
             return 0
         if args.characters_command == "qwen-edit-refine-plan":
@@ -488,7 +470,6 @@ def run_character_command(
                     region_name=args.region,
                     instruction=args.instruction,
                     candidates=args.candidates,
-                    vlm_config=default_reference_selector_vlm_config(),
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -517,7 +498,6 @@ def run_character_command(
                     candidates=args.candidates,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
-                    vlm_config=default_reference_selector_vlm_config(),
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -554,9 +534,9 @@ def run_character_command(
         KeyframeGroundingError,
         KeyframeSegmentationError,
         KeyframeMemoryError,
+        ImageUpscaleError,
         ManifestIOError,
         QwenVlmError,
-        CharacterVerificationError,
     ) as error:
         dump_json(stderr, command_error_payload(error), pretty=not args.compact)
         return 1

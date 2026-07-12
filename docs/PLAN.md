@@ -76,7 +76,7 @@ never converges.
 `Qwen-Image-Edit` **already contains `Qwen2.5-VL` as its condition encoder.** The
 input image is fed through *both* Qwen2.5-VL (semantic understanding) *and* the
 VAE (appearance), and those become the conditioning. Multi-image consistency
-across the 1–3 inputs is resolved **in-model** by joint attention.
+across the supplied image inputs is resolved **in-model** by joint attention.
 
 So the current pipeline runs **two** Qwen2.5-VLs in series: an external one that
 looks at the refs and writes a JSON dossier, whose text becomes the prompt for
@@ -98,12 +98,12 @@ user instruction ──▶│ 1. parse instruction   2. route   (opt) scene-only
                     └──────────────────────────────────────────────────────────────────┘  │
                                                                                             ▼
                     ┌──────────────────── IMAGE / LATENT LANE (all the work) ─────────┐   prompt (thin)
-reference images ──▶│ 3. select ≤3 ref indices (only if >3 supplied)                  │──┐  │
-                    │ 8. build optional structural condition (pose/mask/depth) — IMG  │  │  │
+reference images ──▶│ 3. feed the complete ordered reference pack                    │──┐  │
+                    │ 8. build optional structural conditions (pose/mask/depth) — IMG │  │  │
                     └──────────────────────────────────────────────────────────────────┘  │  │
                                                                                             ▼  ▼
                                           ┌──────────────────────────────────────────────────────┐
-                                          │  Qwen-Image-Edit-2509  (the MMDiT: contains Qwen2.5-VL)│
+                                          │  Qwen-Image-Edit-2511  (the MMDiT: contains Qwen2.5-VL)│
                                           │  does steps 4–7 INTERNALLY:                            │
                                           │  subject-id · component extraction · cross-ref align   │
                                           │  · relevance weighting · identity-consistent redraw    │
@@ -121,9 +121,8 @@ reference images ──▶│ 3. select ≤3 ref indices (only if >3 supplied)  
   ("close-up, looking left, white background") — which is *output intent*, not a
   character dossier. Note your own `PLAN.md` example instruction is already exactly
   this shape.
-- **Reference selection outputs indices, not descriptions.** Its worst-case
-  failure is "picked a slightly worse image" (bounded), never "hallucinated the
-  character" (catastrophic).
+- **All supplied references remain native visual inputs.** External code does
+  not discard them to satisfy a guessed image-count budget.
 
 ---
 
@@ -134,25 +133,22 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 
 | Role | Model (HF) | Notes |
 |------|------------|-------|
-| **Edit backbone (core)** | `Qwen/Qwen-Image-Edit-2509` | Multi-image (1–3 optimal), person/text consistency, **native** depth/edge/keypoint control. This is the whole engine. |
-| **Backbone, quantized for 16GB (baseline)** | `nunchaku-tech/nunchaku-qwen-image-edit-2509` (SVDQuant **FP4**, r32) + a Lightning 4/8-step variant | FP4 for Blackwell. Pipeline: `QwenImageEditPlusPipeline` + `NunchakuQwenImageTransformer2DModel`. Multi-image via `image=[img1,img2,img3]`. Verify exact lightning filename on the org (weights churn). Escalation: 4-step → 8-step → full r32 → r128. Proven; stays the baseline until a candidate beats it on the §8 verification matrix. |
-| **Backbone, next candidate (primary)** | `Qwen/Qwen-Image-Edit-2511` via **LightX2V** (official scaled FP8 + 4/8-step Lightning) | Same family and reference semantics as 2509; reports better consistency and multi-image editing. This is a **separate backend adapter** (LightX2V engine + its own offload), *not* a Nunchaku weight swap — official Nunchaku supports 2509, not 2511. Community FP4/SVDQ 2511 builds are experimental-only (third-party provenance, ~40GB-RAM-class guidance). Test order: 8-step FP8 (quality) → 4-step FP8 (speed) → BF16 + distilled LoRA as quality reference if FP8 artifacts show. Judged on the §8 matrix, never on public benchmark ELOs — none of those measure anime character fidelity. |
-| **Backbone, later candidate (evidence-gated)** | FLUX.2 **klein** (NVFP4-class quant) | Multi-reference editor, consumer-GPU positioning. New pipeline class + conditioning API = a real adapter build; anime-character fidelity unproven. Only after the matrix shows gaps the Qwen line does not close. |
-| **Ref-selector VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (or `-3B-Instruct`) | **Only** job: when >3 refs supplied, return the ≤3 best indices for the route. Optionally a one-word route hint. **Never** a character description. Anime-domain worries mostly evaporate here — "which image is the full-body front view" is robust even on anime. |
-| **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit; same runner as the selector) | **Only** job: stage 10 — compare the candidate image against the selected reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. It also receives the user instruction, route, and pose/scene context (output intent — allowed text-lane input) so intent-consistent changes (a flaring skirt mid-jump, open fingertips) are not flagged as identity errors. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. An integrated pipeline stage, **not** a separate CLI product layer. |
-| Pose preprocessor | DWPose (via `IDEA-Research/DWPose`, or `controlnet_aux`) | Produces the keypoint control image for `pose_transfer`. Feeds 2509's native keypoint control. |
-| Depth preprocessor | `depth-anything/Depth-Anything-V2-Large` | Depth control image for structured scene routes. Feeds 2509's native depth control. |
-| Edge preprocessor | Canny (OpenCV) or `controlnet_aux` | Edge control image. Feeds 2509's native edge control. |
+| **Edit backbone (core)** | `Qwen/Qwen-Image-Edit-2511` via **LightX2V** | Official scaled FP8 Lightning 8-step is the active 16GB route. LightX2V owns block offload, Qwen2.5-VL conditioning, VAE encoding/decoding and the ordered multi-image input bundle. 4-step FP8 is speed-only evidence; BF16 + distilled LoRA is a quality-reference experiment if FP8 artifacts become structural. |
+| **Backbone, later candidate (evidence-gated)** | FLUX.2 **klein** (NVFP4-class quant) | Multi-reference editor, consumer-GPU positioning. New pipeline class + conditioning API = a real adapter build; anime-character fidelity unproven. Only after direct 2511 output experiments show a persistent gap the Qwen line does not close. |
+| **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit) | **Only** job: stage 10 — compare the candidate image against all supplied reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. It also receives the user instruction, route, and pose/scene context (output intent — allowed text-lane input) so intent-consistent changes (a flaring skirt mid-jump, open fingertips) are not flagged as identity errors. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. An integrated pipeline stage, **not** a separate CLI product layer. |
+| Pose preprocessor | DWPose (via `IDEA-Research/DWPose`, or `controlnet_aux`) | Produces a keypoint control image for `pose_transfer`; it is appended to the native 2511 visual input bundle. |
+| Depth preprocessor | `depth-anything/Depth-Anything-V2-Large` | Produces a depth control image for structured scene routes; it is appended to the native 2511 visual input bundle. |
+| Edge preprocessor | Canny (OpenCV) or `controlnet_aux` | Produces an edge control image for structured scene routes; it is appended to the native 2511 visual input bundle. |
 | Mask / segmentation | `facebook/sam2` (SAM2) | **Preservation/compositing boundary only** for `local_repair_or_inpaint` / regional outfit swap — the exact-pixel guarantee, never the carrier of character semantics (see §4 defect response ladder). |
-| Region grounding (text→box) | `microsoft/Florence-2-large` | Ground a region pointer ("her left glove") to a box in the candidate **and** in the selected references, to build close-up conditioning crops and to seed SAM2. Image-domain output (regions), not a character description. |
-| Upscale (postprocess) | Real-ESRGAN anime (`RealESRGAN_x4plus_anime_6B`) | Safe, stable anime upscaler. Stage 11 only, after the audit loop passes. |
+| Region grounding (text→box) | `microsoft/Florence-2-large` | Ground a region pointer ("her left glove") to a box in the candidate **and** in the supplied references, to build close-up conditioning crops and to seed SAM2. Image-domain output (regions), not a character description. |
+| Upscale (postprocess) | IllustrationJaNai V1 DAT2 | Anime/illustration upscaler. Stage 11 only, after the audit loop passes. |
 | Anime polish (optional) | A current SOTA anime **SDXL** checkpoint (Illustrious-XL / NoobAI-XL family) as **low-denoise img2img refine** | Optional stage-11 finish for anime crispness. It is a *refiner*, never the identity carrier. Pick the current best checkpoint; this space moves fast. |
 
 ### Explicit anti-recommendations (these are the traps)
 
 - **No GFPGAN / CodeFormer.** They restore *photoreal human* faces and will
   destroy anime faces. The pixai.md "face restoration" line is hallucination.
-- **No IP-Adapter as a PixAI replacement.** 2509's multi-image path *is* the
+- **No IP-Adapter as a PixAI replacement.** 2511's multi-image path *is* the
   faithful identity mechanism. IP-Adapter is a generic anime-diffusion reflex.
 - **No external character dossier, no deep nested JSON from the VLM, no
   line-protocol/free-text variants.** All were attempts to fix a bottleneck that
@@ -162,7 +158,7 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 
 ### Anime domain (the one legitimate ChatGPT concern, correctly placed)
 
-Qwen-Image is trained with heavy illustration data, so 2509 is a reasonable anime
+Qwen-Image is trained with heavy illustration data, so 2511 is a strong anime
 editor, but not elite. If anime fidelity falls short, the lever is a **style LoRA
 on the backbone** or the **stage-11 anime SDXL refine pass** — *not* a pipeline rewrite
 and *not* an external VLM. Keep it as a model-swap slot behind the same boundary.
@@ -183,13 +179,13 @@ sources the user supplied), **not** off `visual_analysis` text.
 | `full_body_identity_generation` | none | refs + instruction only |
 | `view_change` | none | refs + instruction only |
 | `scene_insertion` | optional depth/edge | Depth-Anything-V2 / Canny |
-| `pose_transfer` | pose keypoints | DWPose → 2509 keypoint control |
+| `pose_transfer` | pose keypoints | DWPose → 2511 visual control input |
 | `local_repair_or_inpaint` | region mask (user-directed); close-up variant is an evidence-gated reserve (see defect ladder below) | Florence-2 (box) → SAM2 (**boundary only**) |
 | `object_removal` (future, route-gated) | none (maskless) | full-image "remove X" edit + diff-composite: accept only the changed zone, restore everything else pixel-exact from the source. Until this route exists, removals run as `local_repair_or_inpaint` and residual artifacts are the audit loop's job. |
 | `outfit_swap` | optional region mask | SAM2 if regional; else refs + instruction |
 | `style_transfer` | style ref as image (+ opt. style LoRA) | — |
 | `layout_or_sheet` | feed the sheet whole | — |
-| `text_or_label_heavy` | none (2509 renders text well) | instruction carries the literal text |
+| `text_or_label_heavy` | none (2511 renders text well) | instruction carries the literal text |
 
 Identity/portrait/view/normal-scene routes need **no** extra conditioning — the
 backbone handles them. That is not "too simple"; it is the model doing its job.
@@ -205,13 +201,13 @@ surgery is the exception, never the architecture. When the audit (stage 10)
 or the user flags a defect, respond in this order:
 
 1. **Select.** Pick the best of the N candidates already generated.
-2. **Re-run the single pass, escalated.** Other seeds, more steps,
-   r32 → r128, larger canvas, or the §3 backbone ladder — model-native levers
-   only. Slower is explicitly acceptable.
+2. **Re-run the single pass, escalated.** Other seeds, 8-step FP8, a larger
+   raw canvas where evidence supports it, or the §3 BF16 quality-reference
+   route — model-native levers only. Slower is explicitly acceptable.
 3. **Targeted close-up repair (evidence-gated reserve).** Only for a defect
    class that demonstrably survives a fully escalated single pass. Flow:
    Florence-2 grounds the region pointer in the candidate **and** in the
-   originally selected references (same refs, no re-selection) → image-only
+   originally supplied references (same refs throughout) → image-only
    close-up crops (the one legitimate motivation: references are far
    higher-res than the ~1MP conditioning canvas, so a ref close-up carries
    detail the full-frame pass physically destroys) → Qwen inpaints the
@@ -219,7 +215,7 @@ or the user flags a defect, respond in this order:
    prompt ("make this region match the references") → SAM2 provides **only**
    the preservation/compositing boundary → paste back; the hard pixel-diff
    assert outside the boundary stands. If the pointer grounds in no
-   reference, the repair runs with the full selected references — an explicit
+   reference, the repair runs with the full supplied references — an explicit
    route condition, not a fallback. **Do not build or invoke this rung
    pre-emptively.**
 
@@ -277,11 +273,15 @@ wins over refs by design). The fix is model-owned retargeting, in this order:
 | 1 | Parse instruction | raw text + envelope | `instruction_plan` | text |
 | 2 | Route | `instruction_plan` | `route_plan` (route_kind + editor constraints) | text |
 | 3 | Reference intake | all supplied ref images | ordered `reference1..N` handles | image |
-| 3b | Select (only if N>3) | ref images + route | **≤3 indices** | indices |
-| 8 | Conditioning build (route-gated) | selected refs + user structural sources | control image(s): pose/mask/depth | image |
-| 9 | Generate | ≤3 ref images (+ control imgs) + **thin prompt** | edited image | latent→image |
-| 10 | **Audit loop (bounded, on raw)** | raw candidates + selected refs + user instruction/route context (+ repair mask if any) | pass (best candidate selected), **or** defect report → §4 defect response ladder | image → verdict + region pointers |
+| 8 | Conditioning build (route-gated) | supplied refs + user structural sources | control image(s): pose/mask/depth | image |
+| 9 | Generate | all supplied ref/source/control images + **thin prompt** | edited image | latent→image |
+| 10 | **Audit loop (bounded, on raw)** | raw candidates + supplied refs + user instruction/route context (+ repair mask if any) | pass (best candidate selected), **or** defect report → §4 defect response ladder | image → verdict + region pointers |
 | 11 | Postprocess (optional, after audit passes) | audited raw image | upscaled/anime-refined image | image |
+
+External code imposes no identity-reference count, total-image count or
+one-control-per-case limit. The complete ordered visual bundle is passed to the
+backend. Actual backend or resource exhaustion fails visibly instead of being
+predicted by an arbitrary guard.
 
 The **prompt** at stage 9 is the user's instruction, lightly normalized (and, only
 for scene/style, optionally expanded on the *scene* — never the character). It is
@@ -352,37 +352,29 @@ defaults (640/1008) are silent quality killers, not optimizations.
 
 ## 6. 16GB VRAM execution plan
 
-Qwen-Image-Edit-2509 is ~20B; Qwen2.5-VL-7B is ~16GB-class on its own. **They do
-not coexist on 16GB.** Run stages sequentially:
+Qwen-Image-Edit-2511 runs through LightX2V's FP8 block-offload route. Run stages
+sequentially:
 
-1. (If N>3) load selector VLM → return indices → **unload**.
-2. Build any control images with lightweight preprocessors (Depth-Anything /
+1. Build any control images with lightweight preprocessors (Depth-Anything /
    DWPose / SAM2 / Florence-2 — each load→run→unload).
-3. Load Nunchaku FP4 backbone (+ Lightning) with CPU offload enabled → generate →
+2. Load the LightX2V 2511 conditioner and FP8 Lightning backbone, feed the full
+   ordered visual bundle, generate all requested candidates in one worker, then
    unload.
-4. Audit loop (stage 10): pixel-diff track is model-free; then load audit VLM
+3. Audit loop (stage 10): pixel-diff track is model-free; then load audit VLM
    (8-bit) → verdict + region pointers → **unload**. On fail, rerun the
    preprocessors + backbone on the region **close-ups** (§4) — a crop canvas,
    cheaper than a full-frame pass (bounded iterations).
-5. (Optional) load upscaler/refiner → finish.
+4. (Optional) load upscaler/refiner → finish.
 
-**Device ownership rule (implemented):** under sequential Accelerate offload
-(`--nunchaku-blocks-on-gpu`), never derive a device from
-`next(module.parameters()).device` — offloaded parameters can sit on `cpu`/meta
-while the real execution device is CUDA. The owner is
-`pipeline._execution_device`; for decode, capture it **before**
-`pipeline.transformer.to("cpu")` and pass it through.
-
-**2511/LightX2V route (FP8, ~20.5GB transformer):** weights stream from
+Weights stream from
 pinned system RAM. Every timing run records seconds/step, peak VRAM, WSL RAM,
 and swap usage — the moment swap grows, the measurement is invalid as a
-normal offload figure. Nunchaku
-flags (`--nunchaku-blocks-on-gpu`) do not project onto this backend;
-LightX2V owns its own offload mechanism.
+normal offload figure. LightX2V owns its own offload mechanism. VAE decode stays
+on the GPU after denoising weights are released. Reuse one worker for multiple
+cases and seeds so model loading is paid once.
 
-For the common case (≤3 refs, identity/portrait/view/scene) stage 1 and 2 are
-skipped entirely: **load backbone, feed refs + instruction, generate.** That is
-the first thing to make work.
+For the common identity/portrait/view/scene case: **load backbone, feed all refs
+and the instruction, generate.** No selector VLM runs before the editor.
 
 ---
 
@@ -393,12 +385,12 @@ Keep the routing/conditioning scaffolding; excise the text-serialization organs.
 **Keep (reuse as-is or lightly):**
 - `character_instruction_*` — step 1.
 - `character_task_router.py` / `character_task_route_models.py` — step 2. Its
-  `ModelCapabilityRegistrySpec` / `FinalEditorConstraintsSpec` / reference budget
-  are good.
+  `ModelCapabilityRegistrySpec` / `FinalEditorConstraintsSpec` remain routing
+  contracts; reference-count budgeting does not.
 - `character_conditioning_planner.py` / `_models.py` — step 8. Re-key its input
   from `visual_analysis` to `route_plan` + supplied structural sources.
 - `character_reference_pack.py` **pack-building only** (`build_character_reference_pack`).
-- `vlm_qwen.py` — keep the runner; **narrow** its use to index-selection.
+- `vlm_qwen.py` — keep the runner for the stage-10 audit only.
 - `diffusers_kontext_adapter.py`, `keyframe_*`, `lora_*` — separate tracks, leave.
 
 **Gut (these are the disease):**
@@ -406,71 +398,53 @@ Keep the routing/conditioning scaffolding; excise the text-serialization organs.
 - In `character_reference_pack.py`: the **identity dossier** parser
   (`_identity_parser_prompt`, `parse_character_reference_pack`) and the
   `visual_analysis` / `reference_semantics` / VLM-authored `edit_instruction`
-  fields in `parse_character_edit_plan`. Replace `parse_character_edit_plan` with a
-  thin **selector** that returns `selected_ref_indices` only.
+  fields in `parse_character_edit_plan`. No replacement selector is needed.
 - In `character_qwen_edit.py`: stop sourcing `prompt` from
-  `qwen_vlm_edit_planner`. `prompt` = user instruction (normalized). `references`
-  = selected indices.
+  `qwen_vlm_edit_planner`. `prompt` = user instruction (normalized). Feed every
+  ordered reference from the pack.
 
 **Add (small):**
 - Preprocessor adapters that each emit a control *image*: `dwpose`, `depth_v2`,
   `sam2_mask`, `florence_region`, `canny`. Wire them into the conditioning
   planner's `planned_tools`.
-- Nunchaku `QwenImageEditPlusPipeline` generation adapter that accepts
-  `image=[...selected refs...]`, optional control image(s), and the thin prompt.
+- LightX2V 2511 generation adapter that accepts the complete ordered visual
+  bundle and the thin prompt.
 
 ---
 
-## 8. Build order (so Codex stops thrashing)
+## 8. Active work order (so Codex stops thrashing)
 
-1. **Backbone smoke, no VLM.** ≤3 refs + literal instruction →
-   `QwenImageEditPlusPipeline` (Nunchaku FP4, 4-step) → image. Prove the jillian
-   close-up case renders with **zero** external character analysis. This is the
-   milestone the whole current apparatus was failing to reach.
-2. Wire the router (step 2) so `route_kind` selects the conditioning path.
-3. Add the **index selector** VLM path, active only when N>3.
-4. Add route-gated structural conditioning: `pose_transfer` (DWPose) first, then
-   `local_repair` (Florence-2 → SAM2), then depth/edge for scenes. Closing this
-   rung (M4b) required the sequential-offload device fix (§6, implemented) and
-   the native-resolution defaults (§5 resolution policy, implemented) — not
-   wider masks.
-5. Add stage-11 postprocess (upscale, optional anime refine), gated behind the
-   audit once stage 10 exists.
-6. **Verification matrix (proof rung — next):** routes × a handful of poses,
-   emotions, and camera angles on the **current reference pack**, fixed
-   seeds, judged visually only. Include the §4 pose-proportion ladder
-   (native pose transfer vs. keypoint control) as matrix cases. This matrix
-   is the permanent backbone-eval harness — build once, reuse for every
-   candidate; keep it small enough to rerun per backbone. It exists to make
-   rung 7 judgeable.
-7. **Backbone rung (prioritized):** Qwen-Image-Edit-2511 via LightX2V as a
-   separate backend adapter (8-step FP8 → 4-step FP8; BF16 + distilled LoRA
-   as quality reference), measured per §6, judged on the matrix against the
-   2509 baseline. FLUX.2 klein only after the matrix shows gaps the Qwen
-   line does not close.
-8. **Audit (M5):** stage 10 as described in §5 — pixel-diff track, audit VLM
-   track as detector + best-of-N selector, bounded response per the §4
-   defect ladder (select/regenerate/escalate; no surgery by default).
-9. **Second character pack + matrix rerun:** the acid test of the golden
-   rule — zero code, pure assets. Deliberately deferred until after the
-   backbone switch.
-10. **Evidence-gated reserves** (build only on proven need): close-up repair
-    (§4 ladder step 3), object-removal route (maskless edit +
-    diff-composite), bone-length pose retargeting, tiled detail refine
-    (§5, validate visually first).
-11. Only then, if anime fidelity is short: backbone style LoRA.
+1. **2511 backbone — established.** LightX2V FP8 Lightning 8-step at the 1.77MP
+   raw sweet spot is the only active Qwen edit route. Identity and detail passed
+   the accepted comparison runs.
+2. **Complete native reference bundle — current.** Feed every ordered pack
+   reference plus every route-required source/guide/control image. No selector
+   VLM and no guessed count limits.
+3. **Structural-conditioning evidence — current.** Judge native pose, DWPose,
+   depth and edge by real two-seed outputs. A control path is accepted only when
+   it improves requested geometry without unacceptable identity drift.
+4. **Audit (stage 10).** Pixel-diff track plus an intent-aware audit VLM as
+   detector and best-of-N selector; bounded response per the §4 defect ladder.
+5. **Stage-11 postprocess.** Upscale and optional anime refine only after the raw
+   candidate has passed visual/audit selection.
+6. **Second character pack.** The golden-rule acid test: zero code changes,
+   pure assets and direct visually judged outputs.
+7. **Evidence-gated reserves only:** close-up repair, object-removal
+   diff-composite, bone-length pose retargeting and tiled detail refine.
+8. Only then, if anime fidelity is short: a 2511-compatible style adaptation or
+   the separate stage-11 anime refiner. FLUX/Kontext remains a separate pipeline.
 
 Do not advance a rung until the previous one renders.
 
 ## 9. First smoke that must pass
 
 ```text
-refs:        assets/characters/jillian/references/*   (≤3, fed directly)
+refs:        assets/characters/jillian/references/*   (all fed directly, in order)
 instruction: "Character as shown in referenced images. Close-up face,
               looking to the left with neutral expression. Neutral
               lighting, white background."
 route:       portrait_identity_generation
-generation:  QwenImageEditPlusPipeline(image=[refs], prompt=instruction)
+generation:  LightX2V Qwen-Image-Edit-2511(image=[refs], prompt=instruction)
 assert:      an image is produced; NO identity_profile.json, NO
              reference observations, NO visual_analysis, NO VLM-authored
              edit_instruction anywhere in the path.
@@ -480,8 +454,8 @@ assert:      an image is produced; NO identity_profile.json, NO
 
 1. **Never serialize the character to text.** No dossier, no `visual_analysis`,
    no per-ref observations, no VLM-authored `edit_instruction`.
-2. VLMs return **indices** (selector; at most a route hint), **verdicts and
-   short region pointers** (audit). Nothing else. Region pointers feed
+2. The audit VLM returns **verdicts and short region pointers**. Nothing else.
+   Region pointers feed
    Florence-2 grounding and the thin repair instruction only — never appearance
    descriptions that condition generation. The audit is **intent-aware**: it
    receives the user instruction, route, and pose/scene context (output

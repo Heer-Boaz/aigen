@@ -84,6 +84,13 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
         resize_mode="adaptive",
     )
     runner = pipe.runner
+    with runner.config.temporarily_unlocked():
+        runner.config["max_custom_size"] = max(
+            max(case["width"], case["height"]) for case in cases
+        )
+        runner.config["min_custom_size"] = min(
+            min(case["width"], case["height"]) for case in cases
+        )
 
     _reset_cuda_peak(torch)
     conditioner_load_start = time.perf_counter()

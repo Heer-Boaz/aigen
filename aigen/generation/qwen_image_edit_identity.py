@@ -5,7 +5,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import gc
-from math import gcd, lcm, log, sqrt
+from math import gcd, log, sqrt
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -16,7 +16,8 @@ from PIL import Image
 
 from aigen.generation.image_upscale import (
     DEFAULT_UPSCALE_MODEL,
-    RealESRGANAnimeUpscaler,
+    IllustrationUpscaler,
+    size_for_long_side,
     upscale_model_path,
 )
 from aigen.generation.qwen_image_edit_lightx2v import (
@@ -57,24 +58,9 @@ DEFAULT_QWEN_IDENTITY_MAX_SIDE = 1792
 DEFAULT_QWEN_IDENTITY_SEED = 0
 DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH = 512
 QWEN_IDENTITY_PREFLIGHT_LIMIT_MB = 4096
-QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES = 3
 QWEN_IMAGE_EDIT_2511_NATIVE_PIXELS = 1152 * 1536
-QWEN_OUTPUT_FORMATS: dict[str, tuple[int, int]] = {
-    "1:1": (1, 1),
-    "2:3": (2, 3),
-    "3:2": (3, 2),
-    "3:4": (3, 4),
-    "4:3": (4, 3),
-    "8:11": (8, 11),
-    "9:16": (9, 16),
-    "16:9": (16, 9),
-}
-QWEN_OUTPUT_FORMAT_ORDER = ("1:1", "2:3", "3:2", "3:4", "4:3", "8:11", "9:16", "16:9")
-QWEN_OUTPUT_RESOLUTIONS = {
-    "1k": 1024,
-    "2k": 2048,
-}
-QWEN_OUTPUT_RESOLUTION_ORDER = ("1k", "2k")
+DEFAULT_QWEN_ASPECT_RATIO = (3, 4)
+DEFAULT_QWEN_UPSCALE_LONG_SIDE = 2048
 
 
 class QwenImageEditIdentityError(RuntimeError):
@@ -114,7 +100,6 @@ class QwenIdentityCase:
     source_images: tuple[str, ...] = ()
     guides: tuple[str, ...] = ()
     controls: tuple[str, ...] = ()
-    portrait_canvas: bool = False
     edit_context: dict[str, Any] | None = None
     seeds: tuple[int, ...] | None = None
 
@@ -151,16 +136,6 @@ class QwenIdentityDenoiseStep:
 class QwenIdentityPostprocessStep:
     outputs: list[dict[str, Any]]
     elapsed_ms: float
-
-
-@dataclass(frozen=True)
-class QwenOutputSpec:
-    output_format: str
-    resolution: str | None
-    raw_width: int
-    raw_height: int
-    final_width: int
-    final_height: int
 
 
 @dataclass(frozen=True)
@@ -331,12 +306,16 @@ def _native_canvas_pixels(profile: QwenImageEditProfile) -> int | None:
     return None
 
 
-def qwen_output_format_names() -> tuple[str, ...]:
-    return QWEN_OUTPUT_FORMAT_ORDER
-
-
-def qwen_output_resolution_names() -> tuple[str, ...]:
-    return QWEN_OUTPUT_RESOLUTION_ORDER
+def parse_qwen_aspect_ratio(value: str) -> tuple[int, int]:
+    width_text, separator, height_text = value.partition(":")
+    if not separator:
+        raise ValueError("aspect ratio must use W:H")
+    width_ratio = int(width_text)
+    height_ratio = int(height_text)
+    if width_ratio < 1 or height_ratio < 1:
+        raise ValueError("aspect ratio values must be positive integers")
+    divisor = gcd(width_ratio, height_ratio)
+    return width_ratio // divisor, height_ratio // divisor
 
 
 def run_qwen_image_edit_cases(
@@ -357,11 +336,10 @@ def run_qwen_image_edit_cases(
     candidates_per_case: int,
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
-    output_format: str | None,
-    resolution: str | None,
+    aspect_ratio: tuple[int, int] | None,
+    upscale_long_side: int,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
-    postprocess: bool,
     postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
@@ -378,13 +356,8 @@ def run_qwen_image_edit_cases(
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
     )
     native_canvas_pixels = _native_canvas_pixels(profile)
-    output_spec = _qwen_output_spec(
-        output_format=output_format,
-        resolution=resolution,
-        max_side=max_side,
-        native_canvas_pixels=native_canvas_pixels,
-        postprocess=postprocess,
-    )
+    if upscale_long_side < 1:
+        raise QwenImageEditIdentityError("upscale_long_side must be at least 1")
     selected_cases = tuple(edit_cases)
     _validate_edit_cases(selected_cases)
     _validate_image_inputs(source_images, references, guides, controls, selected_cases)
@@ -421,8 +394,8 @@ def run_qwen_image_edit_cases(
                 seed=seed,
                 max_sequence_length=max_sequence_length,
                 candidates_per_case=candidates_per_case,
-                output_spec=output_spec,
-                postprocess=postprocess,
+                aspect_ratio=aspect_ratio,
+                upscale_long_side=upscale_long_side,
                 postprocess_model=postprocess_model,
                 result_kind=result_kind,
                 manifest_context=manifest_context,
@@ -445,7 +418,7 @@ def run_qwen_image_edit_cases(
             selected_cases=selected_cases,
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
-            output_spec=output_spec,
+            aspect_ratio=aspect_ratio,
             progress=progress,
         )
         prompt_step = _encode_qwen_identity_prompts(
@@ -485,8 +458,7 @@ def run_qwen_image_edit_cases(
         postprocess_step = _postprocess_qwen_identity_outputs(
             raw_outputs=denoise_step.outputs,
             output_dir=output_dir,
-            output_spec=output_spec,
-            enabled=postprocess,
+            upscale_long_side=upscale_long_side,
             model=postprocess_model,
             progress=progress,
         )
@@ -498,8 +470,8 @@ def run_qwen_image_edit_cases(
         save_contact_sheet(
             [{"name": output["name"], "path": output["image"]["path"]} for output in postprocess_step.outputs],
             contact_sheet,
-            thumb_width=320 if not postprocess else 192,
-            max_label_chars=40 if not postprocess else 24,
+            thumb_width=192,
+            max_label_chars=24,
             max_columns=candidate_columns if candidate_columns > 1 else 8,
         )
         memory = memory_sampler.stop()
@@ -525,10 +497,11 @@ def run_qwen_image_edit_cases(
                 "seed": seed,
                 "max_sequence_length": max_sequence_length,
                 "native_canvas_pixels": native_canvas_pixels,
-                "output_canvas": (
-                    _output_spec_json(output_spec, postprocess=postprocess, postprocess_model=postprocess_model)
-                    if output_spec is not None
-                    else _implicit_output_canvas_json(selected_cases, native_canvas_pixels=native_canvas_pixels)
+                "output_canvas": _output_canvas_json(
+                    aspect_ratio=aspect_ratio,
+                    native_canvas_pixels=native_canvas_pixels,
+                    upscale_long_side=upscale_long_side,
+                    postprocess_model=postprocess_model,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -546,9 +519,7 @@ def run_qwen_image_edit_cases(
             "memory": cuda_memory_stats(torch, "cuda") | memory,
             "environment": environment
             | {
-                "postprocess": f"{postprocess_model}_upscale"
-                if output_spec is not None and postprocess
-                else "none",
+                "postprocess": f"{postprocess_model}_upscale",
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -587,8 +558,8 @@ def _run_qwen_image_edit_cases_lightx2v(
     seed: int,
     max_sequence_length: int,
     candidates_per_case: int,
-    output_spec: QwenOutputSpec | None,
-    postprocess: bool,
+    aspect_ratio: tuple[int, int] | None,
+    upscale_long_side: int,
     postprocess_model: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
@@ -607,7 +578,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             selected_cases=selected_cases,
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
-            output_spec=output_spec,
+            aspect_ratio=aspect_ratio,
             progress=progress,
         )
         with TemporaryDirectory(prefix="aigen-qwen-2511-inputs-") as temporary_dir:
@@ -682,8 +653,7 @@ def _run_qwen_image_edit_cases_lightx2v(
         postprocess_step = _postprocess_qwen_identity_outputs(
             raw_outputs=raw_outputs,
             output_dir=output_dir,
-            output_spec=output_spec,
-            enabled=postprocess,
+            upscale_long_side=upscale_long_side,
             model=postprocess_model,
             progress=progress,
         )
@@ -695,8 +665,8 @@ def _run_qwen_image_edit_cases_lightx2v(
         save_contact_sheet(
             [{"name": output["name"], "path": output["image"]["path"]} for output in postprocess_step.outputs],
             contact_sheet,
-            thumb_width=320 if not postprocess else 192,
-            max_label_chars=40 if not postprocess else 24,
+            thumb_width=192,
+            max_label_chars=24,
             max_columns=candidate_columns if candidate_columns > 1 else 8,
         )
         memory = memory_sampler.stop() | backend_result.memory
@@ -722,10 +692,11 @@ def _run_qwen_image_edit_cases_lightx2v(
                 "seed": seed,
                 "max_sequence_length": max_sequence_length,
                 "native_canvas_pixels": native_canvas_pixels,
-                "output_canvas": (
-                    _output_spec_json(output_spec, postprocess=postprocess, postprocess_model=postprocess_model)
-                    if output_spec is not None
-                    else _implicit_output_canvas_json(selected_cases, native_canvas_pixels=native_canvas_pixels)
+                "output_canvas": _output_canvas_json(
+                    aspect_ratio=aspect_ratio,
+                    native_canvas_pixels=native_canvas_pixels,
+                    upscale_long_side=upscale_long_side,
+                    postprocess_model=postprocess_model,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -741,9 +712,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             "memory": memory,
             "environment": backend_result.environment
             | {
-                "postprocess": f"{postprocess_model}_upscale"
-                if output_spec is not None and postprocess
-                else "none",
+                "postprocess": f"{postprocess_model}_upscale",
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -805,11 +774,6 @@ def run_qwen_image_edit_inpaint_candidates(
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
-    if len(reference_images) > QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES:
-        raise QwenImageEditIdentityError(
-            f"Qwen inpaint uses {len(reference_images)} identity reference images; "
-            f"maximum is {QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES}"
-        )
     resolved_steps = profile.default_steps if steps is None else steps
     resolved_true_cfg_scale = profile.default_true_cfg_scale if true_cfg_scale is None else true_cfg_scale
     resolved_guidance_scale = profile.default_guidance_scale if guidance_scale is None else guidance_scale
@@ -974,7 +938,7 @@ def _prepare_qwen_identity_references(
     selected_cases: Sequence[QwenIdentityCase],
     max_side: int,
     native_canvas_pixels: int | None,
-    output_spec: QwenOutputSpec | None,
+    aspect_ratio: tuple[int, int] | None,
     progress: StatusReporter,
 ) -> QwenIdentityReferenceStep:
     progress.phase("prepare qwen identity references")
@@ -996,22 +960,15 @@ def _prepare_qwen_identity_references(
     canvas_sizes: dict[str, tuple[int, int]] = {}
     for case in selected_cases:
         control = controls[case.controls[0]] if case.controls else None
-        anchor_image = (
-            loaded_source_images[case.source_images[0]]
-            if case.source_images
-            else (
-                guide_images[case.guides[-1]]
-                if case.guides
-                else reference_images[case.references[0]]
-            )
-        )
+        source_image = loaded_source_images[case.source_images[0]] if case.source_images else None
+        guide_image = guide_images[case.guides[-1]] if case.guides else None
         target_size = _case_canvas(
-            case,
-            anchor_image=anchor_image,
+            source_image=source_image,
+            guide_image=guide_image,
             control=control,
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
-            output_spec=output_spec,
+            aspect_ratio=aspect_ratio,
         )
         canvas_sizes[case.name] = target_size
         for control_name in case.controls:
@@ -1183,51 +1140,27 @@ def _postprocess_qwen_identity_outputs(
     *,
     raw_outputs: Sequence[dict[str, Any]],
     output_dir: Path,
-    output_spec: QwenOutputSpec | None,
-    enabled: bool,
+    upscale_long_side: int,
     model: str,
     progress: StatusReporter,
 ) -> QwenIdentityPostprocessStep:
     start = perf_counter()
-    if output_spec is None or not enabled:
-        progress.begin(len(raw_outputs), "register qwen raw images")
-        outputs = []
-        for raw_output in raw_outputs:
-            output = dict(raw_output)
-            output["width"] = output["raw_width"]
-            output["height"] = output["raw_height"]
-            output["image"] = output["raw_image"]
-            output["postprocess"] = {"mode": "none"}
-            outputs.append(output)
-            progress.step(f"registered qwen raw image {output['name']}")
-        return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=elapsed_ms(start, perf_counter()))
-
-    target_size = (output_spec.final_width, output_spec.final_height)
-    for raw_output in raw_outputs:
-        raw_size = (raw_output["raw_width"], raw_output["raw_height"])
-        if raw_size != (output_spec.raw_width, output_spec.raw_height):
-            raise QwenImageEditIdentityError(
-                f"Raw output {raw_output['name']} has size {raw_size[0]}x{raw_size[1]}, "
-                f"expected {output_spec.raw_width}x{output_spec.raw_height}"
-            )
-        if raw_size[0] * target_size[1] != raw_size[1] * target_size[0]:
-            raise QwenImageEditIdentityError(
-                f"Postprocess target {target_size[0]}x{target_size[1]} changes the aspect ratio of "
-                f"raw output {raw_output['name']} ({raw_size[0]}x{raw_size[1]})"
-            )
-
     progress.phase("load anime upscaler")
-    upscaler = RealESRGANAnimeUpscaler(model_path=upscale_model_path(model))
+    upscaler = IllustrationUpscaler(model_path=upscale_model_path(model))
     outputs = []
     for raw_output in raw_outputs:
         output = dict(raw_output)
         raw_path = Path(output["raw_image"]["path"])
+        target_size = size_for_long_side(
+            output["raw_width"],
+            output["raw_height"],
+            long_side=upscale_long_side,
+        )
         with Image.open(raw_path) as raw_image:
             upscaled = upscaler.upscale(raw_image, target_size=target_size, progress=progress)
         image_path = output_dir / f"{output['name']}.png"
         upscaled.image.save(image_path)
-        output["width"] = output_spec.final_width
-        output["height"] = output_spec.final_height
+        output["width"], output["height"] = target_size
         output["image"] = image_asset_json(image_path)
         output["postprocess"] = {
             "mode": "anime_upscale",
@@ -1235,8 +1168,7 @@ def _postprocess_qwen_identity_outputs(
             "model_path": upscaled.model_path.as_posix(),
             "scale": upscaled.scale,
             "device": upscaled.device,
-            "output_format": output_spec.output_format,
-            "resolution": output_spec.resolution,
+            "long_side": upscale_long_side,
             "natural_width": upscaled.natural_width,
             "natural_height": upscaled.natural_height,
             "target_width": upscaled.target_width,
@@ -1635,8 +1567,6 @@ def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
     for case in cases:
         if not case.source_images and not case.references:
             raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has no input images")
-        if len(case.controls) > 1:
-            raise QwenImageEditIdentityError(f"Qwen edit case {case.name} uses more than one control image")
         if case.seeds is not None:
             if not case.seeds:
                 raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has no seeds")
@@ -1644,12 +1574,6 @@ def _validate_edit_cases(cases: Sequence[QwenIdentityCase]) -> None:
                 raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has duplicate seeds")
             if any(seed < 0 for seed in case.seeds):
                 raise QwenImageEditIdentityError(f"Qwen edit case {case.name} has a negative seed")
-        visual_input_count = len(case.source_images) + len(case.references) + len(case.guides) + len(case.controls)
-        if visual_input_count > QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES:
-            raise QwenImageEditIdentityError(
-                f"Qwen edit case {case.name} uses {visual_input_count} input images; "
-                f"maximum is {QWEN_IMAGE_EDIT_MAX_REFERENCE_IMAGES}"
-            )
 
 
 def _validate_generation_settings(
@@ -1890,39 +1814,32 @@ def _fit_image_to_max_side(
 
 
 def _case_canvas(
-    case: QwenIdentityCase,
     *,
-    anchor_image: Image.Image,
+    source_image: Image.Image | None,
+    guide_image: Image.Image | None,
     control: QwenControlImage | None,
     max_side: int,
     native_canvas_pixels: int | None,
-    output_spec: QwenOutputSpec | None = None,
+    aspect_ratio: tuple[int, int] | None,
 ) -> tuple[int, int]:
-    if output_spec is not None:
-        return output_spec.raw_width, output_spec.raw_height
-    if case.source_images:
-        return anchor_image.size
+    if aspect_ratio is not None:
+        width_ratio, height_ratio = aspect_ratio
+    elif control is not None:
+        width_ratio, height_ratio = control.image.size
+    elif source_image is not None:
+        width_ratio, height_ratio = source_image.size
+    elif guide_image is not None:
+        width_ratio, height_ratio = guide_image.size
+    else:
+        width_ratio, height_ratio = DEFAULT_QWEN_ASPECT_RATIO
     if native_canvas_pixels is not None:
-        canvas_anchor = control.image if control is not None else anchor_image
         return _size_for_target_area(
-            canvas_anchor.width,
-            canvas_anchor.height,
+            width_ratio,
+            height_ratio,
             target_pixels=native_canvas_pixels,
             max_side=max_side,
         )
-    if control is not None:
-        return _canvas_from_anchor_aspect(control.image, max_side=max_side)
-    if case.portrait_canvas:
-        return _canvas_from_anchor_aspect(anchor_image, max_side=max_side)
-    return anchor_image.size
-
-
-def _canvas_from_anchor_aspect(anchor_image: Image.Image, *, max_side: int) -> tuple[int, int]:
-    canvas_long_side = _align_to_multiple(min(max(anchor_image.size), max_side), 16)
-    width, height = anchor_image.size
-    if width >= height:
-        return canvas_long_side, _align_to_multiple(round(canvas_long_side * height / width), 16)
-    return _align_to_multiple(round(canvas_long_side * width / height), 16), canvas_long_side
+    return size_for_long_side(width_ratio, height_ratio, long_side=max_side, align_to_multiple=16)
 
 
 @contextmanager
@@ -1955,86 +1872,6 @@ def _align_up_to_multiple(value: int, multiple: int) -> int:
     return max(multiple, (value + multiple - 1) // multiple * multiple)
 
 
-def _qwen_output_spec(
-    *,
-    output_format: str | None,
-    resolution: str | None,
-    max_side: int,
-    native_canvas_pixels: int | None,
-    postprocess: bool,
-) -> QwenOutputSpec | None:
-    if not postprocess:
-        if resolution is not None:
-            raise QwenImageEditIdentityError("Raw canvas does not accept a postprocess resolution")
-        if output_format is None:
-            return None
-        if output_format not in QWEN_OUTPUT_FORMATS:
-            allowed = ", ".join(QWEN_OUTPUT_FORMAT_ORDER)
-            raise QwenImageEditIdentityError(f"Unknown output_format {output_format}; expected one of: {allowed}")
-        raw_width, raw_height = _raw_size_for_output_format(
-            output_format,
-            max_side=max_side,
-            native_canvas_pixels=native_canvas_pixels,
-        )
-        return QwenOutputSpec(
-            output_format=output_format,
-            resolution=None,
-            raw_width=raw_width,
-            raw_height=raw_height,
-            final_width=raw_width,
-            final_height=raw_height,
-        )
-    if output_format is None and resolution is None:
-        return None
-    if output_format is None or resolution is None:
-        raise QwenImageEditIdentityError("output_format and resolution must be provided together")
-    if output_format not in QWEN_OUTPUT_FORMATS:
-        allowed = ", ".join(QWEN_OUTPUT_FORMAT_ORDER)
-        raise QwenImageEditIdentityError(f"Unknown output_format {output_format}; expected one of: {allowed}")
-    if resolution not in QWEN_OUTPUT_RESOLUTIONS:
-        allowed = ", ".join(QWEN_OUTPUT_RESOLUTION_ORDER)
-        raise QwenImageEditIdentityError(f"Unknown resolution {resolution}; expected one of: {allowed}")
-    raw_width, raw_height = _raw_size_for_output_format(
-        output_format,
-        max_side=max_side,
-        native_canvas_pixels=native_canvas_pixels,
-    )
-    final_width, final_height = _size_for_output_format(
-        output_format,
-        long_side=QWEN_OUTPUT_RESOLUTIONS[resolution],
-        align_to_multiple=None,
-    )
-    return QwenOutputSpec(
-        output_format=output_format,
-        resolution=resolution,
-        raw_width=raw_width,
-        raw_height=raw_height,
-        final_width=final_width,
-        final_height=final_height,
-    )
-
-
-def _raw_size_for_output_format(
-    output_format: str,
-    *,
-    max_side: int,
-    native_canvas_pixels: int | None,
-) -> tuple[int, int]:
-    if native_canvas_pixels is None:
-        return _size_for_output_format(
-            output_format,
-            long_side=max_side,
-            align_to_multiple=16,
-        )
-    width_ratio, height_ratio = QWEN_OUTPUT_FORMATS[output_format]
-    return _size_for_target_area(
-        width_ratio,
-        height_ratio,
-        target_pixels=native_canvas_pixels,
-        max_side=max_side,
-    )
-
-
 def _size_for_target_area(
     width_ratio: int,
     height_ratio: int,
@@ -2043,73 +1880,34 @@ def _size_for_target_area(
     max_side: int,
 ) -> tuple[int, int]:
     ratio = width_ratio / height_ratio
-    width = round(sqrt(target_pixels * ratio) / 32) * 32
-    height = round(sqrt(target_pixels / ratio) / 32) * 32
+    width = round(sqrt(target_pixels * ratio) / 16) * 16
+    height = round(sqrt(target_pixels / ratio) / 16) * 16
     if max(width, height) <= max_side:
         return width, height
     scale = max_side / max(width, height)
     return (
-        _align_to_multiple(round(width * scale), 32),
-        _align_to_multiple(round(height * scale), 32),
+        _align_to_multiple(round(width * scale), 16),
+        _align_to_multiple(round(height * scale), 16),
     )
 
 
-def _size_for_output_format(
-    output_format: str,
+def _output_canvas_json(
     *,
-    long_side: int,
-    align_to_multiple: int | None,
-) -> tuple[int, int]:
-    width_ratio, height_ratio = QWEN_OUTPUT_FORMATS[output_format]
-    scale = long_side // max(width_ratio, height_ratio)
-    if align_to_multiple is not None:
-        scale_multiple = lcm(
-            align_to_multiple // gcd(width_ratio, align_to_multiple),
-            align_to_multiple // gcd(height_ratio, align_to_multiple),
-        )
-        scale = scale // scale_multiple * scale_multiple
-    if scale < 1:
-        raise QwenImageEditIdentityError(
-            f"Output format {output_format} does not fit within a {long_side}px long side"
-        )
-    return width_ratio * scale, height_ratio * scale
-
-
-def _implicit_output_canvas_json(
-    cases: Sequence[QwenIdentityCase],
-    *,
+    aspect_ratio: tuple[int, int] | None,
     native_canvas_pixels: int | None,
+    upscale_long_side: int,
+    postprocess_model: str,
 ) -> dict[str, Any]:
-    if any(case.source_images for case in cases):
-        return {"mode": "source_native", "postprocess": "none"}
-    if native_canvas_pixels is not None:
-        return {
-            "mode": "model_native_area",
-            "target_pixels": native_canvas_pixels,
-            "alignment": 32,
-            "postprocess": "none",
-        }
-    return {"mode": "reference_anchor", "postprocess": "none"}
-
-
-def _output_spec_json(
-    output_spec: QwenOutputSpec, *, postprocess: bool, postprocess_model: str = DEFAULT_UPSCALE_MODEL
-) -> dict[str, Any]:
-    payload = {
-        "mode": "explicit_output_format" if postprocess else "explicit_raw_canvas",
-        "output_format": output_spec.output_format,
-        "raw_width": output_spec.raw_width,
-        "raw_height": output_spec.raw_height,
-        "postprocess": f"{postprocess_model}_upscale" if postprocess else "none",
+    return {
+        "mode": "model_native_area" if native_canvas_pixels is not None else "long_side",
+        "aspect_owner": "explicit" if aspect_ratio is not None else "control_source_guide_or_default",
+        "aspect_ratio": list(aspect_ratio) if aspect_ratio is not None else None,
+        "target_pixels": native_canvas_pixels,
+        "alignment": 16,
+        "postprocess": f"{postprocess_model}_upscale",
+        "upscale_long_side": upscale_long_side,
+        "upscale_model": upscale_model_path(postprocess_model).stem,
     }
-    if postprocess:
-        payload |= {
-            "resolution": output_spec.resolution,
-            "final_width": output_spec.final_width,
-            "final_height": output_spec.final_height,
-            "upscale_model": upscale_model_path(postprocess_model).stem,
-        }
-    return payload
 
 
 def _qwen_inpaint_canvas_size(pipeline: Any, image: Image.Image) -> tuple[int, int]:

@@ -6,7 +6,6 @@ from aigen.character_task_route_models import (
     CharacterTaskRoutePlanSpec,
     FinalEditorConstraintsSpec,
     ModelCapabilityRegistrySpec,
-    ReferenceBudgetSpec,
 )
 
 
@@ -125,7 +124,7 @@ def _portrait_route(
         route_kind="portrait_identity_generation",
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_portrait",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
     )
 
 
@@ -139,7 +138,7 @@ def _full_body_route(
         route_kind="full_body_identity_generation",
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_full_body",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
     )
 
 
@@ -153,7 +152,7 @@ def _view_change_route(
         route_kind="view_change",
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_view",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=False, layout="simple"),
     )
 
 
@@ -168,7 +167,6 @@ def _scene_insertion_route(
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_scene",
         constraints=_constraints(
-            registry,
             mask_required=False,
             pose_conditioning=False,
             text_rendering=_text_risk(plan),
@@ -194,12 +192,10 @@ def _pose_transfer_route(
         ),
         output_mode="single_image_pose",
         constraints=_constraints(
-            registry,
             mask_required=False,
             pose_conditioning=True,
             text_rendering=_text_risk(plan),
             layout="simple",
-            reserved_image_inputs=int(native_pose_reference_present),
         ),
     )
 
@@ -214,7 +210,7 @@ def _local_repair_route(
         route_kind="local_repair_or_inpaint",
         editor_route="qwen_image_edit_inpaint_or_masked_edit",
         output_mode="masked_refine_candidates",
-        constraints=_constraints(registry, mask_required=True, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
+        constraints=_constraints(mask_required=True, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
     )
 
 
@@ -228,7 +224,7 @@ def _outfit_swap_route(
         route_kind="outfit_swap",
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_reference_edit",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
     )
 
 
@@ -242,7 +238,7 @@ def _style_transfer_route(
         route_kind="style_transfer",
         editor_route="qwen_image_edit_multi_reference",
         output_mode="single_image_reference_edit",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
     )
 
 
@@ -256,7 +252,7 @@ def _layout_or_sheet_route(
         route_kind="layout_or_sheet",
         editor_route="layout_heavy_reference_generation",
         output_mode="layout_or_sheet",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="layout_heavy"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="layout_heavy"),
     )
 
 
@@ -270,7 +266,7 @@ def _text_primary_route(
         route_kind="text_or_label_heavy",
         editor_route="qwen_image_edit_text_heavy",
         output_mode="text_or_label_image",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=True, layout="moderate"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=True, layout="moderate"),
     )
 
 
@@ -284,7 +280,7 @@ def _unknown_reference_edit_route(
         route_kind="unknown_reference_edit",
         editor_route="qwen_image_edit_unknown_reference",
         output_mode="single_image_reference_edit",
-        constraints=_constraints(registry, mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
+        constraints=_constraints(mask_required=False, pose_conditioning=False, text_rendering=_text_risk(plan), layout="simple"),
     )
 
 
@@ -309,19 +305,13 @@ def _route_plan(
 
 
 def _constraints(
-    registry: ModelCapabilityRegistrySpec,
     *,
     mask_required: bool,
     pose_conditioning: bool,
     text_rendering: bool,
     layout: str,
-    reserved_image_inputs: int = 0,
 ) -> FinalEditorConstraintsSpec:
     return FinalEditorConstraintsSpec(
-        reference_budget=ReferenceBudgetSpec(
-            min=1,
-            max=registry.max_qwen_edit_images - reserved_image_inputs,
-        ),
         mask_required=mask_required,
         pose_conditioning=pose_conditioning,
         text_rendering=text_rendering,
