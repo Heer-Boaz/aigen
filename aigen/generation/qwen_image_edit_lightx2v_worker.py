@@ -49,6 +49,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
 
     profile = request["profile"]
     cases = request["cases"]
+    output_count = sum(len(case["outputs"]) for case in cases)
     total_start = time.perf_counter()
     host_before = _host_snapshot()
     phase_peaks: dict[str, float] = {}
@@ -147,7 +148,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     del runner.vae, vae_source_groups
     _release_cuda(torch)
 
-    ops_utils.create_pin_tensor = _regular_cpu_tensor_factory(torch)
+    ops_utils.create_pin_tensor = _file_backed_cpu_tensor_factory()
     _reset_cuda_peak(torch)
     transformer_load_start = time.perf_counter()
     runner.model = runner.load_transformer()
@@ -155,7 +156,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     torch.cuda.synchronize()
     timings["transformer_load_ms"] = _elapsed_ms(transformer_load_start)
     resident_upload_start = time.perf_counter()
-    resident_buffers = _enable_resident_blocks(torch, runner, cases)
+    resident_buffers = _enable_resident_blocks(torch, runner, cases) if output_count > 1 else []
     timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
 
     latent_outputs: list[dict[str, Any]] = []
@@ -283,7 +284,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             "matrix_multiply": "fp8-triton",
             "attention": "flash_attn2",
             "rope": "torch",
-            "host_buffers": "regular_cpu",
+            "host_buffers": "file_backed_cpu",
             "resident_blocks": resident_block_count,
             "phase_order": "conditioner->vae_encode->transformer->vae_decode",
         },
@@ -414,16 +415,14 @@ def _input_info(pipe: Any, case: dict[str, Any], seed: int, init_empty_input_inf
     return input_info
 
 
-def _regular_cpu_tensor_factory(torch: Any) -> Any:
-    def create_regular_cpu_tensor(tensor: Any, transpose: bool = False, dtype: Any = None) -> Any:
-        target = torch.empty(tensor.shape, dtype=dtype or tensor.dtype)
-        target.copy_(tensor)
+def _file_backed_cpu_tensor_factory() -> Any:
+    def preserve_file_backed_tensor(tensor: Any, transpose: bool = False, dtype: Any = None) -> Any:
+        target = tensor if dtype is None or tensor.dtype == dtype else tensor.to(dtype)
         if transpose:
             target = target.t()
-        del tensor
         return target
 
-    return create_regular_cpu_tensor
+    return preserve_file_backed_tensor
 
 
 def _host_snapshot() -> dict[str, int]:
