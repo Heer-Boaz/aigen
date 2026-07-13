@@ -141,8 +141,13 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 | Edge preprocessor | Canny (OpenCV) or `controlnet_aux` | Produces an edge control image for structured scene routes; it is appended to the native 2511 visual input bundle. |
 | Mask / segmentation | `facebook/sam2` (SAM2) | **Preservation/compositing boundary only** for `local_repair_or_inpaint` / regional outfit swap — the exact-pixel guarantee, never the carrier of character semantics (see §4 defect response ladder). |
 | Region grounding (text→box) | `microsoft/Florence-2-large` | Ground a region pointer ("her left glove") to a box in the candidate **and** in the supplied references, to build close-up conditioning crops and to seed SAM2. Image-domain output (regions), not a character description. |
-| Upscale (postprocess) | IllustrationJaNai V1 DAT2 | Anime/illustration upscaler. Stage 11 only, after the audit loop passes. |
+| **Upscale (Stage-11 standard)** | `CSWRY/VOSR-1.4B-ms` | The automatic postprocess after the raw audit passes. Independent BF16 CUDA backend over the official model code and weights, with tiled Qwen-VAE and VOSR DiT inference for a 16GB RTX 5070 Ti. One model load processes the complete candidate batch. Defaults: exact 2K long side in the character flow; standalone 2x, 25 steps, CFG 1.5, weak AELQ condition 0.20, wavelet alignment, 512px tiles, seed 42. No Spandrel, img2img, legacy model fallback, or integration into Qwen denoising. Alpha is resized deterministically and recomposited after RGB inference. |
+| Legacy explicit upscale | IllustrationJaNai V1 DAT2 | Available only through the explicit legacy `characters postprocess` command. Never selected by the character flow and never an automatic VOSR fallback. |
 | Anime polish (optional) | A current SOTA anime **SDXL** checkpoint (Illustrious-XL / NoobAI-XL family) as **low-denoise img2img refine** | Optional stage-11 finish for anime crispness. It is a *refiner*, never the identity carrier. Pick the current best checkpoint; this space moves fast. |
+
+VOSR install: `scripts/download_vosr.sh && scripts/install_vosr.sh`
+
+VOSR CLI: `.venv/bin/aigen characters vosr-upscale --input INPUT --output OUTPUT` (add `--long-side 2048` or `--long-side 4096` for an exact 2K/4K long side).
 
 ### Explicit anti-recommendations (these are the traps)
 

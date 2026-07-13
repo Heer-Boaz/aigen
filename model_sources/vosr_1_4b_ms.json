@@ -1,0 +1,28 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "Stage-11 generative super-resolution",
+    "runtime": "Aigen VOSR batch runtime using official CSWRY VOSR-1.4B model code"
+  },
+  "downloads": [
+    {
+      "name": "vosr-1.4b-ms-official-assets",
+      "repo_id": "CSWRY/VOSR",
+      "revision": "bf5da48b5eaa4affe063e4b53b3e5d70d532615b",
+      "local_path": "vosr/CSWRY/VOSR/preset/ckpts",
+      "include": [
+        "VOSR_1.4B_ms/args.json",
+        "VOSR_1.4B_ms/checkpoints/ema_model.safetensors",
+        "Qwen-Image-vae-2d/config.json",
+        "Qwen-Image-vae-2d/diffusion_pytorch_model.safetensors",
+        "torch_cache/checkpoints/dinov2_vitl14_pretrain.pth",
+        "torch_cache/facebookresearch_dinov2_main/**",
+        "torch_cache/trusted_list"
+      ],
+      "exclude": [
+        ".gitattributes"
+      ]
+    }
+  ]
+}

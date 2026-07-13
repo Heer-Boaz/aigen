@@ -52,6 +52,7 @@ manifest_args=(
   "model_sources/keyframe_pose_dwpose_onnx.json"
   "model_sources/character_scene_depth_v2_large.json"
   "model_sources/character_postprocess_illustrationjanai_v1.json"
+  "model_sources/vosr_1_4b_ms.json"
   "model_sources/keyframe_judge_qwen2_5_vl_7b.json"
 )
 

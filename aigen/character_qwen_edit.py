@@ -17,7 +17,6 @@ from aigen.character_reference_models import (
 )
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
-from aigen.generation.image_upscale import DEFAULT_UPSCALE_MODEL
 from aigen.generation.qwen_image_edit_identity import (
     QwenControlImage,
     QwenIdentityCase,
@@ -97,7 +96,6 @@ def run_qwen_character_edit(
     pose_mode: str = DEFAULT_QWEN_POSE_MODE,
     structure_source_path: Path | None = None,
     structure_control: str | None = None,
-    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     instruction = instruction.strip()
@@ -153,7 +151,6 @@ def run_qwen_character_edit(
         upscale_long_side=upscale_long_side,
         result_kind="qwen-character-edit-result",
         manifest_context=None,
-        postprocess_model=postprocess_model,
         progress=progress,
     )
 
@@ -179,7 +176,6 @@ def run_planned_qwen_character_edit(
     upscale_long_side: int,
     result_kind: str,
     manifest_context: dict[str, Any] | None,
-    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     available_modes_by_case = {
@@ -250,7 +246,6 @@ def run_planned_qwen_character_edit(
         upscale_long_side=upscale_long_side,
         result_kind=result_kind,
         manifest_context=manifest_context,
-        postprocess_model=postprocess_model,
         progress=progress,
     )
     for control_name in controls:

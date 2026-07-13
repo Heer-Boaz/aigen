@@ -37,6 +37,7 @@ run "$script_dir/setup_venv.sh"
 run "$script_dir/install_nunchaku.sh"
 run "$script_dir/download_lora_trainer.sh"
 run "$script_dir/download_models.sh"
+run "$script_dir/install_vosr.sh"
 run "$script_dir/check_install.sh"
 
 log "install complete"

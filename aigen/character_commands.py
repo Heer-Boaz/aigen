@@ -28,6 +28,17 @@ from aigen.generation.image_upscale import (
     upscale_image,
     upscale_model_names,
 )
+from aigen.generation.vosr_backend import (
+    VOSR_DEFAULT_ALIGN_METHOD,
+    VOSR_DEFAULT_CFG_SCALE,
+    VOSR_DEFAULT_INFER_STEPS,
+    VOSR_DEFAULT_SCALE,
+    VOSR_DEFAULT_SEED,
+    VOSR_DEFAULT_TILE_SIZE,
+    VOSR_DEFAULT_WEAK_COND_STRENGTH_AELQ,
+    VosrBackendError,
+    upscale_files_with_vosr,
+)
 from aigen.character_qwen_refine import (
     QwenCharacterRefineError,
     plan_qwen_character_refine,
@@ -189,12 +200,6 @@ def add_character_commands(subparsers: Any) -> None:
         help=f"Upscaled long side in pixels; defaults to {DEFAULT_QWEN_UPSCALE_LONG_SIDE}",
     )
     qwen_edit.add_argument(
-        "--postprocess-model",
-        choices=upscale_model_names(),
-        default=DEFAULT_UPSCALE_MODEL,
-        help="Upscale model for the raw-to-final postprocess step",
-    )
-    qwen_edit.add_argument(
         "--steps",
         type=int,
         help="Qwen Image Edit denoising steps; defaults to the selected profile",
@@ -249,6 +254,31 @@ def add_character_commands(subparsers: Any) -> None:
         help=f"Upscale model; defaults to {DEFAULT_UPSCALE_MODEL}",
     )
     postprocess.add_argument("--compact", action="store_true", help="Write compact JSON")
+
+    vosr_upscale = character_subparsers.add_parser(
+        "vosr-upscale",
+        help="VOSR-1.4B-ms upscale",
+    )
+    vosr_upscale.set_defaults(compact=False)
+    vosr_upscale.add_argument("--input", type=Path, required=True)
+    vosr_upscale.add_argument("--output", type=Path, required=True)
+    vosr_size = vosr_upscale.add_mutually_exclusive_group()
+    vosr_size.add_argument("--scale", type=int, default=VOSR_DEFAULT_SCALE)
+    vosr_size.add_argument("--long-side", type=int)
+    vosr_upscale.add_argument("--infer-steps", type=int, default=VOSR_DEFAULT_INFER_STEPS)
+    vosr_upscale.add_argument("--cfg-scale", type=float, default=VOSR_DEFAULT_CFG_SCALE)
+    vosr_upscale.add_argument(
+        "--weak-cond-strength-aelq",
+        type=float,
+        default=VOSR_DEFAULT_WEAK_COND_STRENGTH_AELQ,
+    )
+    vosr_upscale.add_argument(
+        "--align-method",
+        choices=("wavelet", "adain", "nofix"),
+        default=VOSR_DEFAULT_ALIGN_METHOD,
+    )
+    vosr_upscale.add_argument("--tile-size", type=int, default=VOSR_DEFAULT_TILE_SIZE)
+    vosr_upscale.add_argument("--seed", type=int, default=VOSR_DEFAULT_SEED)
 
     qwen_refine_plan = character_subparsers.add_parser(
         "qwen-edit-refine-plan",
@@ -440,7 +470,6 @@ def run_character_command(
                     pose_mode=args.pose_mode,
                     structure_source_path=args.structure_source,
                     structure_control=args.structure_control,
-                    postprocess_model=args.postprocess_model,
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -456,6 +485,25 @@ def run_character_command(
                     model=args.model,
                     progress=progress,
                 ),
+                pretty=not args.compact,
+            )
+            return 0
+        if args.characters_command == "vosr-upscale":
+            batch = upscale_files_with_vosr(
+                files=((args.input, args.output),),
+                scale=args.scale,
+                long_side=args.long_side,
+                infer_steps=args.infer_steps,
+                cfg_scale=args.cfg_scale,
+                weak_cond_strength_aelq=args.weak_cond_strength_aelq,
+                align_method=args.align_method,
+                tile_size=args.tile_size,
+                seed=args.seed,
+                progress=progress,
+            )
+            dump_json(
+                stdout,
+                batch.outputs[0] | {"elapsed_ms": batch.elapsed_ms},
                 pretty=not args.compact,
             )
             return 0
@@ -531,6 +579,7 @@ def run_character_command(
         QwenCharacterRefineError,
         CharacterViewError,
         QwenImageEditIdentityError,
+        VosrBackendError,
         KeyframeGroundingError,
         KeyframeSegmentationError,
         KeyframeMemoryError,

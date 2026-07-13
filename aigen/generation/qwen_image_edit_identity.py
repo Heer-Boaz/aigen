@@ -14,12 +14,7 @@ from typing import Any
 
 from PIL import Image
 
-from aigen.generation.image_upscale import (
-    DEFAULT_UPSCALE_MODEL,
-    IllustrationUpscaler,
-    size_for_long_side,
-    upscale_model_path,
-)
+from aigen.generation.image_upscale import size_for_long_side
 from aigen.generation.qwen_image_edit_lightx2v import (
     LIGHTX2V_QWEN_EDIT_2511_PROFILE,
     QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES,
@@ -44,6 +39,11 @@ from aigen.generation.runtime_diagnostics import (
     synchronized_time,
 )
 from aigen.generation.runtime_types import resolve_torch_dtype
+from aigen.generation.vosr_backend import (
+    VOSR_MODEL_NAME,
+    VOSR_POSTPROCESS_NAME,
+    upscale_files_with_vosr,
+)
 from aigen.image_assets import image_asset_json
 from aigen.keyframe_image_ops import exact_outside_mask_diff, save_contact_sheet
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight_limit
@@ -340,7 +340,6 @@ def run_qwen_image_edit_cases(
     upscale_long_side: int,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
-    postprocess_model: str = DEFAULT_UPSCALE_MODEL,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     resolved_steps = profile.default_steps if steps is None else steps
@@ -396,7 +395,6 @@ def run_qwen_image_edit_cases(
                 candidates_per_case=candidates_per_case,
                 aspect_ratio=aspect_ratio,
                 upscale_long_side=upscale_long_side,
-                postprocess_model=postprocess_model,
                 result_kind=result_kind,
                 manifest_context=manifest_context,
                 progress=progress,
@@ -459,7 +457,6 @@ def run_qwen_image_edit_cases(
             raw_outputs=denoise_step.outputs,
             output_dir=output_dir,
             upscale_long_side=upscale_long_side,
-            model=postprocess_model,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -501,7 +498,6 @@ def run_qwen_image_edit_cases(
                     aspect_ratio=aspect_ratio,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
-                    postprocess_model=postprocess_model,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -519,7 +515,7 @@ def run_qwen_image_edit_cases(
             "memory": cuda_memory_stats(torch, "cuda") | memory,
             "environment": environment
             | {
-                "postprocess": f"{postprocess_model}_upscale",
+                "postprocess": VOSR_POSTPROCESS_NAME,
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -560,7 +556,6 @@ def _run_qwen_image_edit_cases_lightx2v(
     candidates_per_case: int,
     aspect_ratio: tuple[int, int] | None,
     upscale_long_side: int,
-    postprocess_model: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
@@ -654,7 +649,6 @@ def _run_qwen_image_edit_cases_lightx2v(
             raw_outputs=raw_outputs,
             output_dir=output_dir,
             upscale_long_side=upscale_long_side,
-            model=postprocess_model,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -696,7 +690,6 @@ def _run_qwen_image_edit_cases_lightx2v(
                     aspect_ratio=aspect_ratio,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
-                    postprocess_model=postprocess_model,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -712,7 +705,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             "memory": memory,
             "environment": backend_result.environment
             | {
-                "postprocess": f"{postprocess_model}_upscale",
+                "postprocess": VOSR_POSTPROCESS_NAME,
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -1141,43 +1134,45 @@ def _postprocess_qwen_identity_outputs(
     raw_outputs: Sequence[dict[str, Any]],
     output_dir: Path,
     upscale_long_side: int,
-    model: str,
     progress: StatusReporter,
 ) -> QwenIdentityPostprocessStep:
-    start = perf_counter()
-    progress.phase("load anime upscaler")
-    upscaler = IllustrationUpscaler(model_path=upscale_model_path(model))
+    batch = upscale_files_with_vosr(
+        files=tuple(
+            (
+                Path(raw_output["raw_image"]["path"]),
+                output_dir / f"{raw_output['name']}.png",
+            )
+            for raw_output in raw_outputs
+        ),
+        long_side=upscale_long_side,
+        progress=progress,
+    )
     outputs = []
-    for raw_output in raw_outputs:
+    for raw_output, upscaled in zip(raw_outputs, batch.outputs, strict=True):
         output = dict(raw_output)
-        raw_path = Path(output["raw_image"]["path"])
-        target_size = size_for_long_side(
-            output["raw_width"],
-            output["raw_height"],
-            long_side=upscale_long_side,
-        )
-        with Image.open(raw_path) as raw_image:
-            upscaled = upscaler.upscale(raw_image, target_size=target_size, progress=progress)
-        image_path = output_dir / f"{output['name']}.png"
-        upscaled.image.save(image_path)
-        output["width"], output["height"] = target_size
-        output["image"] = image_asset_json(image_path)
+        output["width"] = upscaled["target_width"]
+        output["height"] = upscaled["target_height"]
+        output["image"] = upscaled["output"]
         output["postprocess"] = {
-            "mode": "anime_upscale",
-            "model": upscaled.model_name,
-            "model_path": upscaled.model_path.as_posix(),
-            "scale": upscaled.scale,
-            "device": upscaled.device,
+            "mode": "vosr_upscale",
+            "backend": upscaled["backend"],
+            "model": upscaled["model"],
+            "model_revision": upscaled["model_revision"],
+            "scale": upscaled["scale"],
+            "device": upscaled["device"],
             "long_side": upscale_long_side,
-            "natural_width": upscaled.natural_width,
-            "natural_height": upscaled.natural_height,
-            "target_width": upscaled.target_width,
-            "target_height": upscaled.target_height,
-            "elapsed_ms": upscaled.elapsed_ms,
+            "target_width": upscaled["target_width"],
+            "target_height": upscaled["target_height"],
+            "infer_steps": upscaled["infer_steps"],
+            "cfg_scale": upscaled["cfg_scale"],
+            "weak_cond_strength_aelq": upscaled["weak_cond_strength_aelq"],
+            "align_method": upscaled["align_method"],
+            "tile_size": upscaled["tile_size"],
+            "seed": upscaled["seed"],
         }
         outputs.append(output)
         progress.phase(f"saved upscaled qwen image {output['name']}")
-    return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=elapsed_ms(start, perf_counter()))
+    return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=batch.elapsed_ms)
 
 
 def _run_qwen_inpaint_denoise_step(
@@ -1896,7 +1891,6 @@ def _output_canvas_json(
     aspect_ratio: tuple[int, int] | None,
     native_canvas_pixels: int | None,
     upscale_long_side: int,
-    postprocess_model: str,
 ) -> dict[str, Any]:
     return {
         "mode": "model_native_area" if native_canvas_pixels is not None else "long_side",
@@ -1904,9 +1898,9 @@ def _output_canvas_json(
         "aspect_ratio": list(aspect_ratio) if aspect_ratio is not None else None,
         "target_pixels": native_canvas_pixels,
         "alignment": 16,
-        "postprocess": f"{postprocess_model}_upscale",
+        "postprocess": VOSR_POSTPROCESS_NAME,
         "upscale_long_side": upscale_long_side,
-        "upscale_model": upscale_model_path(postprocess_model).stem,
+        "upscale_model": VOSR_MODEL_NAME,
     }
 
 
