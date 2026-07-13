@@ -10,11 +10,8 @@ from PIL import Image
 from aigen.canny_control import CannyControl, CannyControlError, render_canny_control
 from aigen.character_conditioning_models import CharacterConditioningPlanError, CharacterConditioningPlanSpec
 from aigen.character_conditioning_planner import CharacterConditioningPlanner
-from aigen.character_reference_models import (
-    CharacterReferenceError,
-    CharacterReferencePackSpec,
-    load_completed_character_reference_pack,
-)
+from aigen.character_reference_models import CharacterReferenceError
+from aigen.character_reference_pack import load_character_reference_pack
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
 from aigen.dwpose_control import DWPoseControl, DWPoseControlError, render_dwpose_control
 from aigen.generation.qwen_image_edit_identity import (
@@ -24,7 +21,7 @@ from aigen.generation.qwen_image_edit_identity import (
     run_qwen_image_edit_cases,
 )
 from aigen.image_assets import image_asset_json
-from aigen.manifest_io import read_json, resolve_existing_path, write_json
+from aigen.manifest_io import resolve_existing_path, write_json
 from aigen.progress import StatusReporter
 
 
@@ -65,13 +62,6 @@ class PlannedQwenCharacterEdit:
     edit_cases: tuple[QwenIdentityCase, ...]
     reference_paths: dict[str, Path]
     source_images: dict[str, Path] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class QwenCharacterReferenceContext:
-    pack_path: Path
-    pack: CharacterReferencePackSpec
-    reference_paths: dict[str, Path]
 
 
 def run_qwen_character_edit(
@@ -278,15 +268,15 @@ def _build_qwen_character_edit_request(
         reference_paths: dict[str, Path] = {}
         selected_refs: tuple[str, ...] = ()
     else:
-        context = load_qwen_character_reference_context(
-            pack_path=pack_path,
-            progress=progress,
-            phase="load qwen character edit reference pack",
-        )
+        progress.phase("load qwen character edit reference pack")
+        try:
+            context = load_character_reference_pack(pack_path)
+        except CharacterReferenceError as error:
+            raise QwenCharacterEditError(str(error)) from error
         source_names = ()
         source_images = {}
-        reference_paths = context.reference_paths
-        selected_refs = tuple(context.pack.references)
+        reference_paths = context.references
+        selected_refs = tuple(context.spec.references)
     edit_case = QwenIdentityCase(
         name=QWEN_EDIT_REQUEST_NAME,
         source_images=source_names,
@@ -314,32 +304,6 @@ def _direct_request_route(*, pose_source_present: bool, structure_source_present
     if structure_source_present:
         return "scene_insertion", "single_image_scene"
     return "unknown_reference_edit", "single_image_reference_edit"
-
-
-def load_qwen_character_reference_context(
-    *,
-    pack_path: Path,
-    progress: StatusReporter,
-    phase: str,
-) -> QwenCharacterReferenceContext:
-    progress.phase(phase)
-    resolved_pack_path = pack_path.resolve()
-    pack = _load_reference_pack(resolved_pack_path)
-    return QwenCharacterReferenceContext(
-        pack_path=resolved_pack_path,
-        pack=pack,
-        reference_paths=_reference_paths(pack, resolved_pack_path),
-    )
-
-
-def _load_reference_pack(pack_path: Path) -> CharacterReferencePackSpec:
-    try:
-        return load_completed_character_reference_pack(
-            read_json(pack_path, label="character reference pack"),
-            path_label=pack_path.as_posix(),
-        )
-    except CharacterReferenceError as error:
-        raise QwenCharacterEditError(str(error)) from error
 
 
 def _plan_route_conditioning(
@@ -510,10 +474,3 @@ def _case_route_kind(case: QwenIdentityCase) -> str:
     if case.edit_context is None:
         raise QwenCharacterEditError(f"Character edit case {case.name} has no route context")
     return str(case.edit_context["route_kind"])
-
-
-def _reference_paths(pack: CharacterReferencePackSpec, pack_path: Path) -> dict[str, Path]:
-    return {
-        name: resolve_existing_path(asset.path, pack_path.parent)
-        for name, asset in pack.references.items()
-    }

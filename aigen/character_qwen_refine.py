@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from aigen.character_qwen_edit import load_qwen_character_reference_context
+from aigen.character_reference_models import CharacterReferenceError
+from aigen.character_reference_pack import load_character_reference_pack
 from aigen.generation.qwen_image_edit_identity import (
     QwenImageEditIdentityProfile,
     run_qwen_image_edit_inpaint_candidates,
@@ -143,16 +144,16 @@ def _build_qwen_character_refine_plan(
         region_plan_path=region_plan_path,
         region_name=region_name,
     )
-    context = load_qwen_character_reference_context(
-        pack_path=pack_path,
-        progress=progress,
-        phase="load qwen character refine reference pack",
-    )
+    progress.phase("load qwen character refine reference pack")
+    try:
+        context = load_character_reference_pack(pack_path)
+    except CharacterReferenceError as error:
+        raise QwenCharacterRefineError(str(error)) from error
     source_image = resolve_existing_path(source_image_path.as_posix(), Path.cwd())
-    references = dict(context.reference_paths)
+    references = dict(context.references)
     manifest = _refine_manifest(
-        pack_path=context.pack_path,
-        character_id=context.pack.character_id,
+        pack_path=context.path,
+        character_id=context.spec.character_id,
         source_image=source_image,
         mask_image=mask_image,
         mask_source=mask_source,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +12,37 @@ from aigen.character_reference_models import (
     CharacterReferencePackOutputSpec,
     CharacterReferencePackSpec,
     ImageAssetSpec,
+    load_completed_character_reference_pack,
 )
 from aigen.image_assets import image_asset_json
-from aigen.manifest_io import resolve_existing_path, write_json
+from aigen.manifest_io import read_json, resolve_existing_path, write_json
 
 
 REFERENCE_PACK_FILENAME = "reference_pack.json"
+
+
+@dataclass(frozen=True)
+class LoadedCharacterReferencePack:
+    path: Path
+    spec: CharacterReferencePackSpec
+    references: dict[str, Path]
+
+
+def load_character_reference_pack(pack_path: Path) -> LoadedCharacterReferencePack:
+    resolved_path = pack_path.resolve()
+    spec = load_completed_character_reference_pack(
+        read_json(resolved_path, label="character reference pack"),
+        path_label=resolved_path.as_posix(),
+    )
+    references = {
+        name: resolve_existing_path(asset.path, resolved_path.parent)
+        for name, asset in spec.references.items()
+    }
+    return LoadedCharacterReferencePack(
+        path=resolved_path,
+        spec=spec,
+        references=references,
+    )
 
 
 def parse_character_reference_args(reference_args: Sequence[str], base_dir: Path) -> dict[str, Path]:

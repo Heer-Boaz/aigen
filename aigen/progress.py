@@ -293,6 +293,12 @@ def _command_label(args: argparse.Namespace) -> str:
             return f"lora {args.lora_command}"
         case "models":
             return f"models {args.models_command}"
+        case "image-caption":
+            return "image-caption"
+        case "pixel-art":
+            return "pixel-art"
+        case "pixel-art-wu":
+            return "pixel-art-wu"
     raise RuntimeError("unsupported command")
 
 
