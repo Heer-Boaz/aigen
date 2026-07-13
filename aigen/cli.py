@@ -13,6 +13,7 @@ from aigen.image_caption_commands import add_image_caption_command, run_image_ca
 from aigen.keyframe_commands import add_keyframe_commands, run_keyframe_command
 from aigen.lora_commands import add_lora_commands, run_lora_command
 from aigen.model_commands import add_model_commands, run_model_command
+from aigen.pixel_art_commands import add_pixel_art_command, run_pixel_art_command
 from aigen.progress import StatusReporter, open_cli_progress
 
 
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_keyframe_commands(subparsers)
     add_lora_commands(subparsers)
     add_model_commands(subparsers)
+    add_pixel_art_command(subparsers)
     return parser
 
 
@@ -58,6 +60,8 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_lora_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "models":
         return run_model_command(args, sys.stdout, sys.stderr, progress=progress)
+    if args.command == "pixel-art":
+        return run_pixel_art_command(args, sys.stdout, sys.stderr, progress=progress)
 
     raise RuntimeError("unsupported command")
 

@@ -1,0 +1,87 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "runtime": "Aigen SD-piXL FP16 runtime with Canny and depth ControlNet"
+  },
+  "downloads": [
+    {
+      "name": "sd-pixl-sdxl-fp16",
+      "repo_id": "stabilityai/stable-diffusion-xl-base-1.0",
+      "revision": "462165984030d82259a11f4367a4eed129e94a7b",
+      "local_path": "sd_pixl/stabilityai/stable-diffusion-xl-base-1.0",
+      "include": [
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.fp16.safetensors",
+        "text_encoder_2/config.json",
+        "text_encoder_2/model.fp16.safetensors",
+        "tokenizer/**",
+        "tokenizer_2/**",
+        "unet/config.json",
+        "unet/diffusion_pytorch_model.fp16.safetensors"
+      ]
+    },
+    {
+      "name": "sd-pixl-taesdxl",
+      "repo_id": "madebyollin/taesdxl",
+      "revision": "b20258aaef75ef61e659c1e0f14f251cf0ad153e",
+      "local_path": "sd_pixl/madebyollin/taesdxl",
+      "include": [
+        "config.json",
+        "diffusion_pytorch_model.safetensors"
+      ]
+    },
+    {
+      "name": "sd-pixl-controlnet-canny-mid-fp16",
+      "repo_id": "diffusers/controlnet-canny-sdxl-1.0-mid",
+      "revision": "4d3e948836782759082d16985b139cfcae06109d",
+      "local_path": "sd_pixl/diffusers/controlnet-canny-sdxl-1.0-mid",
+      "include": [
+        "config.json",
+        "diffusion_pytorch_model.fp16.safetensors"
+      ]
+    },
+    {
+      "name": "sd-pixl-controlnet-depth-mid-fp16",
+      "repo_id": "diffusers/controlnet-depth-sdxl-1.0-mid",
+      "revision": "ba71fc551635921528fc9e2856fd464046d3448e",
+      "local_path": "sd_pixl/diffusers/controlnet-depth-sdxl-1.0-mid",
+      "include": [
+        "config.json",
+        "diffusion_pytorch_model.fp16.safetensors"
+      ]
+    },
+    {
+      "name": "sd-pixl-dpt-hybrid-midas",
+      "repo_id": "Intel/dpt-hybrid-midas",
+      "revision": "11eaf7a1cf4bd70740697dbc216f98980c0aeb03",
+      "local_path": "sd_pixl/Intel/dpt-hybrid-midas",
+      "include": [
+        "config.json",
+        "preprocessor_config.json",
+        "pytorch_model.bin"
+      ]
+    },
+    {
+      "name": "sd-pixl-caption-qwen2.5-vl-7b-instruct",
+      "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+      "local_path": "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+      "include": [
+        "*.json",
+        "*.safetensors",
+        "*.txt",
+        "*.model",
+        "tokenizer*",
+        "merges.txt",
+        "vocab.json"
+      ],
+      "exclude": [
+        "*.md",
+        ".gitattributes"
+      ]
+    }
+  ]
+}

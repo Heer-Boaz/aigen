@@ -36,6 +36,7 @@ generation = [
   "protobuf",
   "qwen-vl-utils==0.0.8",
   "safetensors>=0.4",
+  "scikit-learn>=1.5",
   "segment-anything==1.0",
   "sentencepiece",
   "spandrel>=0.4",
