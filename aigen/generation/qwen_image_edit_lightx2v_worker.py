@@ -8,7 +8,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 
 # cudaHostAlloc on this WSL2 host starts refusing past ~14 GiB even with 15 GiB of RAM
@@ -16,7 +16,7 @@ from typing import Any
 # the denoise activations still need host memory, and page-locked pages cannot be reclaimed.
 PINNED_HOST_BUDGET_BYTES = 10 * 1024**3
 
-os.environ.setdefault("PROFILING_DEBUG_LEVEL", "1")
+os.environ.setdefault("PROFILING_DEBUG_LEVEL", "0")
 os.environ.setdefault("DTYPE", "BF16")
 os.environ.setdefault("SENSITIVE_LAYER_DTYPE", "None")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -28,25 +28,32 @@ def main() -> int:
         raise SystemExit("usage: qwen_image_edit_lightx2v_worker REQUEST RESPONSE")
     request_path = Path(sys.argv[1])
     response_path = Path(sys.argv[2])
-    try:
-        request = json.loads(request_path.read_text(encoding="utf-8"))
-        response = _run(request)
-    except Exception as error:
-        traceback.print_exc()
-        response = {
-            "status": "error",
-            "error": error.__class__.__name__,
-            "message": str(error),
-        }
+    with _open_progress_stream() as progress_stream:
+        try:
+            request = json.loads(request_path.read_text(encoding="utf-8"))
+            response = _run(request, progress_stream)
+        except Exception as error:
+            traceback.print_exc()
+            response = {
+                "status": "error",
+                "error": error.__class__.__name__,
+                "message": str(error),
+            }
+            response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
+            return 1
         response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
-        return 1
-    response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
     return 0
 
 
-def _run(request: dict[str, Any]) -> dict[str, Any]:
+def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
+    _send_progress(progress_stream, "phase", text="loading Qwen runtime")
+    from loguru import logger
     import torch
     from PIL import Image
+
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
+
     from lightx2v import LightX2VPipeline
     from lightx2v.common.ops import utils as ops_utils
     from lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
@@ -59,6 +66,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     phase_peaks: dict[str, float] = {}
     timings: dict[str, float] = {}
 
+    _send_progress(progress_stream, "phase", text="loading Qwen pipeline")
     pipe = LightX2VPipeline(
         model_path=profile["base_model"],
         model_cls="qwen-image-edit-2511",
@@ -98,6 +106,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
 
     _reset_cuda_peak(torch)
     conditioner_load_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="loading image conditioner")
     with runner.config.temporarily_unlocked():
         runner.config["cpu_offload"] = False
         runner.config["qwen25vl_cpu_offload"] = False
@@ -105,6 +114,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     torch.cuda.synchronize()
     timings["conditioner_load_ms"] = _elapsed_ms(conditioner_load_start)
     encode_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="encoding reference images")
     conditioned: dict[str, dict[str, Any]] = {}
     vae_source_groups: dict[tuple[str, ...], dict[str, Any]] = {}
     for case in cases:
@@ -148,6 +158,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
 
     _reset_cuda_peak(torch)
     vae_encode_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="encoding reference latents")
     runner.vae = runner.load_vae()
     encoded_groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for group_key, source_group in vae_source_groups.items():
@@ -165,22 +176,34 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     ops_utils.create_pin_tensor = _file_backed_cpu_tensor_factory()
     _reset_cuda_peak(torch)
     transformer_load_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="loading denoiser")
     runner.model = runner.load_transformer()
     runner.model.set_scheduler(runner.scheduler)
     torch.cuda.synchronize()
     timings["transformer_load_ms"] = _elapsed_ms(transformer_load_start)
     resident_upload_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="placing denoiser blocks on GPU")
     resident_buffers = _enable_resident_blocks(torch, runner, cases)
     timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
     host_pin_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="pinning streamed weights")
     host_buffers = _pin_streamed_host_weights(torch, runner, len(resident_buffers))
     timings["host_pin_ms"] = _elapsed_ms(host_pin_start)
 
     latent_outputs: list[dict[str, Any]] = []
     denoise_total_start = time.perf_counter()
+    output_count = sum(len(case["outputs"]) for case in cases)
+    _send_progress(
+        progress_stream,
+        "begin",
+        total=output_count * profile["steps"],
+        text=f"denoising 0/{profile['steps']}",
+    )
+    output_index = 0
     for case in cases:
         condition = conditioned[case["name"]]
         for output in case["outputs"]:
+            output_index += 1
             input_info = _input_info(pipe, case, output["seed"], init_empty_input_info, update_input_info_from_dict)
             input_info.txt_seq_lens = condition["txt_seq_lens"]
             runner.input_info = input_info
@@ -206,6 +229,17 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             seed_all(output["seed"])
             runner.model.scheduler.generator = torch.Generator(device="cuda").manual_seed(output["seed"])
             runner.model.scheduler.prepare(input_info)
+            output_step = 0
+
+            def report_denoise_step(_percent: float, _total: float) -> None:
+                nonlocal output_step
+                output_step += 1
+                text = f"denoising {output_step}/{profile['steps']}"
+                if output_count > 1:
+                    text += f" (image {output_index}/{output_count})"
+                _send_progress(progress_stream, "step", text=text)
+
+            runner.progress_callback = report_denoise_step
             denoise_start = time.perf_counter()
             latents, generator = runner.run()
             torch.cuda.synchronize()
@@ -230,6 +264,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             _release_cuda(torch)
     timings["denoise_ms"] = _elapsed_ms(denoise_total_start)
     phase_peaks["denoise"] = _cuda_peak_mib(torch)
+    _send_progress(progress_stream, "phase", text="releasing denoiser")
     resident_block_count = len(resident_buffers)
     _release_resident_blocks(torch, runner, resident_buffers)
     runner.end_run()
@@ -237,6 +272,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
 
     _reset_cuda_peak(torch)
     decode_start = time.perf_counter()
+    _send_progress(progress_stream, "phase", text="decoding images")
     runner.vae = runner.load_vae()
     outputs = []
     for latent_output in latent_outputs:
@@ -313,6 +349,17 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             "phase_order": "conditioner->vae_encode->transformer->vae_decode",
         },
     }
+
+
+def _open_progress_stream() -> TextIO:
+    sys.stdout.flush()
+    progress_fd = os.dup(sys.stdout.fileno())
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    return os.fdopen(progress_fd, "w", encoding="utf-8", buffering=1)
+
+
+def _send_progress(stream: TextIO, kind: str, **values: Any) -> None:
+    stream.write(json.dumps({"kind": kind, **values}, separators=(",", ":")) + "\n")
 
 
 def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]) -> list[Any]:

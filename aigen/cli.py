@@ -45,7 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run_command(args: argparse.Namespace) -> int:
-    progress = open_cli_progress(args)
+    progress = open_cli_progress()
     with progress:
         exit_code = _run_command_with_progress(args, progress)
         progress.finish("completed" if exit_code == 0 else "failed")

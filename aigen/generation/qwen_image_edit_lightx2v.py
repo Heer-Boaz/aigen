@@ -164,6 +164,7 @@ def run_lightx2v_qwen_image_edit(
         temporary_path = Path(temporary_dir)
         request_path = temporary_path / "request.json"
         response_path = temporary_path / "response.json"
+        worker_log_path = temporary_path / "worker.log"
         request_path.write_text(
             json.dumps(
                 {
@@ -208,24 +209,42 @@ def run_lightx2v_qwen_image_edit(
             if not python_path
             else os.pathsep.join((PROJECT_ROOT.as_posix(), python_path))
         )
-        progress.phase("run Qwen-Image-Edit-2511 with LightX2V")
-        completed = subprocess.run(
-            [
-                python.as_posix(),
-                "-m",
-                "aigen.generation.qwen_image_edit_lightx2v_worker",
-                request_path.as_posix(),
-                response_path.as_posix(),
-            ],
-            cwd=source,
-            env=environment,
-            check=False,
-        )
+        progress.phase("starting Qwen worker")
+        with worker_log_path.open("w", encoding="utf-8") as worker_log:
+            with subprocess.Popen(
+                [
+                    python.as_posix(),
+                    "-m",
+                    "aigen.generation.qwen_image_edit_lightx2v_worker",
+                    request_path.as_posix(),
+                    response_path.as_posix(),
+                ],
+                cwd=source,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=worker_log,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+            ) as worker:
+                try:
+                    for line in worker.stdout:
+                        _apply_worker_progress(line, progress)
+                    returncode = worker.wait()
+                except BaseException:
+                    if worker.poll() is None:
+                        worker.terminate()
+                    raise
         response = _read_worker_response(response_path)
-        if completed.returncode != 0 or response.get("status") != "completed":
-            message = response.get("message", f"worker exited with status {completed.returncode}")
+        if returncode != 0 or response.get("status") != "completed":
+            message = response.get("message")
+            if not message:
+                worker_output = worker_log_path.read_text(
+                    encoding="utf-8", errors="replace"
+                ).strip()
+                message = worker_output[-8192:] or f"worker exited with status {returncode}"
             raise QwenImageEditLightX2VError(f"Qwen-Image-Edit-2511 LightX2V failed: {message}")
-        progress.phase("Qwen-Image-Edit-2511 LightX2V generation completed")
+        progress.phase("generation completed")
         return LightX2VQwenResult(
             outputs=tuple(response["outputs"]),
             timings_ms=dict(response["timings_ms"]),
@@ -283,3 +302,19 @@ def _read_worker_response(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise QwenImageEditLightX2VError(f"Invalid LightX2V worker response {path}: {error}") from error
+
+
+def _apply_worker_progress(line: str, progress: StatusReporter) -> None:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise QwenImageEditLightX2VError("Invalid LightX2V worker progress event") from error
+    match event["kind"]:
+        case "phase":
+            progress.phase(event["text"])
+        case "begin":
+            progress.begin(event["total"], event["text"])
+        case "step":
+            progress.step(event["text"])
+        case kind:
+            raise QwenImageEditLightX2VError(f"Unknown LightX2V worker progress event: {kind}")

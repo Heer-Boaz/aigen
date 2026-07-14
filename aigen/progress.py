@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import os
 import shutil
 import sys
@@ -18,13 +17,11 @@ ACTIVITY_WIDTH = 18
 
 @dataclass(frozen=True)
 class RuntimeStatusSnapshot:
-    label: str
     phase: str
-    events: int
     completed: int
     total: int
     elapsed_seconds: float
-    frame: int
+    remaining_seconds: float | None
     final: bool
     telemetry: SystemTelemetry
 
@@ -56,21 +53,19 @@ class RuntimeStatus:
     def __init__(
         self,
         *,
-        label: str,
         interval_seconds: float = DEFAULT_PROGRESS_INTERVAL_SECONDS,
         renderer: StatusRenderer,
         telemetry: SystemTelemetrySampler,
     ) -> None:
-        self._label = label
         self._renderer = renderer
         self._interval_seconds = interval_seconds
         self._telemetry = telemetry
         self._phase = "starting"
-        self._events = 0
         self._completed = 0
         self._total = 0
+        self._previous_step_at: float | None = None
+        self._seconds_per_step: float | None = None
         self._started_at = time.monotonic()
-        self._frame = 0
         self._done = Event()
         self._lock = Lock()
         self._thread = Thread(target=self._render_loop, daemon=True)
@@ -79,14 +74,12 @@ class RuntimeStatus:
     def terminal(
         cls,
         *,
-        label: str,
         interval_seconds: float,
         stream: TextIO,
         telemetry: SystemTelemetrySampler,
         close_stream: bool = False,
     ) -> RuntimeStatus:
         return cls(
-            label=label,
             interval_seconds=interval_seconds,
             renderer=TerminalLineRenderer(stream=stream, close_stream=close_stream),
             telemetry=telemetry,
@@ -96,14 +89,12 @@ class RuntimeStatus:
     def lines(
         cls,
         *,
-        label: str,
         interval_seconds: float,
         stream: TextIO,
         telemetry: SystemTelemetrySampler,
         close_stream: bool = False,
     ) -> RuntimeStatus:
         return cls(
-            label=label,
             interval_seconds=interval_seconds,
             renderer=ProgressLineRenderer(stream=stream, close_stream=close_stream),
             telemetry=telemetry,
@@ -137,10 +128,20 @@ class RuntimeStatus:
             self._total = total
             self._completed = 0
             self._phase = phase
+            self._previous_step_at = None
+            self._seconds_per_step = None
 
     def step(self, text: str) -> None:
+        now = time.monotonic()
         with self._lock:
-            self._events += 1
+            if self._previous_step_at is not None:
+                step_seconds = now - self._previous_step_at
+                self._seconds_per_step = (
+                    step_seconds
+                    if self._seconds_per_step is None
+                    else self._seconds_per_step * 0.75 + step_seconds * 0.25
+                )
+            self._previous_step_at = now
             self._completed += 1
             self._phase = text
 
@@ -166,21 +167,22 @@ class RuntimeStatus:
     def _snapshot(self, *, final: bool) -> RuntimeStatusSnapshot:
         with self._lock:
             phase = self._phase
-            events = self._events
             completed = self._completed
             total = self._total
+            remaining_seconds = (
+                (total - completed) * self._seconds_per_step
+                if self._seconds_per_step is not None and completed < total
+                else None
+            )
         snapshot = RuntimeStatusSnapshot(
-            label=self._label,
             phase=phase,
-            events=events,
             completed=completed,
             total=total,
             elapsed_seconds=time.monotonic() - self._started_at,
-            frame=self._frame,
+            remaining_seconds=remaining_seconds,
             final=final,
             telemetry=self._telemetry.sample(),
         )
-        self._frame += 1
         return snapshot
 
 
@@ -250,17 +252,15 @@ class SilentRuntimeStatus:
 SILENT_STATUS = SilentRuntimeStatus()
 
 
-def open_cli_progress(args: argparse.Namespace) -> StatusReporter:
+def open_cli_progress() -> StatusReporter:
     _claim_progress_ownership()
-    label = _command_label(args)
     if _progress_disabled():
         return SilentRuntimeStatus()
     if os.environ.get("AIGEN_PROGRESS") == "stderr":
-        return _stderr_progress(label)
+        return _stderr_progress()
     stream = _open_terminal_stream()
     if stream is not None:
         return RuntimeStatus.terminal(
-            label=label,
             interval_seconds=_progress_interval_seconds(),
             stream=stream,
             telemetry=SystemTelemetrySampler(),
@@ -268,38 +268,16 @@ def open_cli_progress(args: argparse.Namespace) -> StatusReporter:
         )
     if os.environ.get("AIGEN_PROGRESS") == "tty":
         return SilentRuntimeStatus()
-    return _stderr_progress(label)
+    return _stderr_progress()
 
 
-def _stderr_progress(label: str) -> RuntimeStatus:
+def _stderr_progress() -> RuntimeStatus:
     return RuntimeStatus.lines(
-        label=label,
         interval_seconds=_progress_interval_seconds(),
         stream=sys.stderr,
         telemetry=SystemTelemetrySampler(),
         close_stream=False,
     )
-
-
-def _command_label(args: argparse.Namespace) -> str:
-    match args.command:
-        case "briefs":
-            return f"briefs {args.briefs_command}"
-        case "characters":
-            return f"characters {args.characters_command}"
-        case "keyframes":
-            return f"keyframes {args.keyframes_command}"
-        case "lora":
-            return f"lora {args.lora_command}"
-        case "models":
-            return f"models {args.models_command}"
-        case "image-caption":
-            return "image-caption"
-        case "pixel-art":
-            return "pixel-art"
-        case "pixel-art-wu":
-            return "pixel-art-wu"
-    raise RuntimeError("unsupported command")
 
 
 def _claim_progress_ownership() -> None:
@@ -325,45 +303,36 @@ def _progress_interval_seconds() -> float:
 
 
 def _format_line(snapshot: RuntimeStatusSnapshot) -> str:
-    return " | ".join(
+    parts = []
+    if snapshot.total:
+        parts.append(
+            f"{_activity(snapshot, width=ACTIVITY_WIDTH)} "
+            f"{min(100, snapshot.completed * 100 // snapshot.total):3d}%"
+        )
+    parts.append(snapshot.phase)
+    if snapshot.total and not snapshot.final and snapshot.completed < snapshot.total:
+        parts.append(
+            "eta --:--"
+            if snapshot.remaining_seconds is None
+            else f"eta {_duration_text(snapshot.remaining_seconds)}"
+        )
+    parts.extend(
         [
-            f"{_activity(snapshot, width=ACTIVITY_WIDTH)} {snapshot.label}",
-            _progress_text(snapshot),
-            _elapsed_text(snapshot.elapsed_seconds),
+            f"elapsed {_duration_text(snapshot.elapsed_seconds)}",
             _cpu_text(snapshot.telemetry),
             _gpu_text(snapshot.telemetry),
-            snapshot.phase,
         ]
     )
+    return " | ".join(parts)
 
 
 def _activity(snapshot: RuntimeStatusSnapshot, *, width: int) -> str:
-    if snapshot.total:
-        ratio = min(1.0, snapshot.completed / snapshot.total)
-        filled = int(width * ratio)
-        chars = ["="] * filled + [" "] * (width - filled)
-        if not snapshot.final and snapshot.completed < snapshot.total:
-            chars[min(width - 1, filled)] = ">"
-        return "[" + "".join(chars) + "]"
-    if snapshot.final:
-        return "[" + "=" * width + "]"
-    position = snapshot.frame % (width * 2 - 2)
-    if position >= width:
-        position = width * 2 - 2 - position
-    chars = [" "] * width
-    chars[position] = "="
+    ratio = min(1.0, snapshot.completed / snapshot.total)
+    filled = int(width * ratio)
+    chars = ["="] * filled + [" "] * (width - filled)
+    if not snapshot.final and snapshot.completed < snapshot.total:
+        chars[min(width - 1, filled)] = ">"
     return "[" + "".join(chars) + "]"
-
-
-def _progress_text(snapshot: RuntimeStatusSnapshot) -> str:
-    if snapshot.total:
-        if snapshot.completed == 0:
-            return f"{snapshot.completed}/{snapshot.total} eta --:--"
-        if snapshot.completed < snapshot.total:
-            remaining_seconds = snapshot.elapsed_seconds / snapshot.completed * (snapshot.total - snapshot.completed)
-            return f"{snapshot.completed}/{snapshot.total} eta {_duration_text(remaining_seconds)}"
-        return f"{snapshot.completed}/{snapshot.total}"
-    return f"events {snapshot.events}"
 
 
 def _cpu_text(telemetry: SystemTelemetry) -> str:
@@ -373,11 +342,11 @@ def _cpu_text(telemetry: SystemTelemetry) -> str:
 def _gpu_text(telemetry: SystemTelemetry) -> str:
     if telemetry.gpu is None:
         return "gpu n/a | vram n/a"
-    return f"gpu {telemetry.gpu.gpu_percent:3d}% | vram {telemetry.gpu.vram_used_mb}/{telemetry.gpu.vram_total_mb} MB"
-
-
-def _elapsed_text(seconds: float) -> str:
-    return _duration_text(seconds)
+    vram_percent = round(telemetry.gpu.vram_used_mb * 100 / telemetry.gpu.vram_total_mb)
+    return (
+        f"gpu {telemetry.gpu.gpu_percent:3d}% | "
+        f"vram {telemetry.gpu.vram_used_mb}/{telemetry.gpu.vram_total_mb} MB ({vram_percent}%)"
+    )
 
 
 def _duration_text(seconds: float) -> str:
