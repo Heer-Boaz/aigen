@@ -197,7 +197,13 @@ def add_character_commands(subparsers: Any) -> None:
         "--upscale-long-side",
         type=int,
         default=DEFAULT_QWEN_UPSCALE_LONG_SIDE,
-        help=f"Upscaled long side in pixels; defaults to {DEFAULT_QWEN_UPSCALE_LONG_SIDE}",
+        help=f"Upscaled long side in pixels when --postprocess vosr; defaults to {DEFAULT_QWEN_UPSCALE_LONG_SIDE}",
+    )
+    qwen_edit.add_argument(
+        "--postprocess",
+        choices=("none", "vosr"),
+        default="none",
+        help="Postprocess applied to the raw render; defaults to none (upscale separately with 'characters postprocess')",
     )
     qwen_edit.add_argument(
         "--steps",
@@ -464,6 +470,7 @@ def run_character_command(
                     candidates_per_case=args.candidates,
                     aspect_ratio=args.aspect_ratio,
                     upscale_long_side=args.upscale_long_side,
+                    postprocess=args.postprocess,
                     overwrite=args.overwrite,
                     nunchaku_blocks_on_gpu=args.nunchaku_blocks_on_gpu,
                     pose_source_path=args.pose_source,

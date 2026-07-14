@@ -338,6 +338,7 @@ def run_qwen_image_edit_cases(
     nunchaku_blocks_on_gpu: int | None,
     aspect_ratio: tuple[int, int] | None,
     upscale_long_side: int,
+    postprocess: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
@@ -395,6 +396,7 @@ def run_qwen_image_edit_cases(
                 candidates_per_case=candidates_per_case,
                 aspect_ratio=aspect_ratio,
                 upscale_long_side=upscale_long_side,
+                postprocess=postprocess,
                 result_kind=result_kind,
                 manifest_context=manifest_context,
                 progress=progress,
@@ -457,6 +459,7 @@ def run_qwen_image_edit_cases(
             raw_outputs=denoise_step.outputs,
             output_dir=output_dir,
             upscale_long_side=upscale_long_side,
+            postprocess=postprocess,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -556,6 +559,7 @@ def _run_qwen_image_edit_cases_lightx2v(
     candidates_per_case: int,
     aspect_ratio: tuple[int, int] | None,
     upscale_long_side: int,
+    postprocess: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
@@ -649,6 +653,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             raw_outputs=raw_outputs,
             output_dir=output_dir,
             upscale_long_side=upscale_long_side,
+            postprocess=postprocess,
             progress=progress,
         )
         contact_sheet = output_dir / "contact_sheet.png"
@@ -1134,8 +1139,15 @@ def _postprocess_qwen_identity_outputs(
     raw_outputs: Sequence[dict[str, Any]],
     output_dir: Path,
     upscale_long_side: int,
+    postprocess: str,
     progress: StatusReporter,
 ) -> QwenIdentityPostprocessStep:
+    if postprocess == "none":
+        return _passthrough_qwen_identity_outputs(
+            raw_outputs=raw_outputs,
+            output_dir=output_dir,
+            progress=progress,
+        )
     batch = upscale_files_with_vosr(
         files=tuple(
             (
@@ -1173,6 +1185,34 @@ def _postprocess_qwen_identity_outputs(
         outputs.append(output)
         progress.phase(f"saved upscaled qwen image {output['name']}")
     return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=batch.elapsed_ms)
+
+
+def _passthrough_qwen_identity_outputs(
+    *,
+    raw_outputs: Sequence[dict[str, Any]],
+    output_dir: Path,
+    progress: StatusReporter,
+) -> QwenIdentityPostprocessStep:
+    """Publish the raw denoise output as the candidate, skipping the upscaler.
+
+    Pixel art is finished the moment it leaves the model: the VOSR upscaler resamples the
+    hard block edges and leaves halos around them, so its output is strictly worse than
+    what it was given. It also costs about as much as a third of the denoise.
+    """
+    start = perf_counter()
+    outputs = []
+    for raw_output in raw_outputs:
+        raw_path = Path(raw_output["raw_image"]["path"])
+        output_path = output_dir / f"{raw_output['name']}.png"
+        shutil.copyfile(raw_path, output_path)
+        output = dict(raw_output)
+        output["width"] = raw_output["raw_width"]
+        output["height"] = raw_output["raw_height"]
+        output["image"] = image_asset_json(output_path)
+        output["postprocess"] = {"mode": "none"}
+        outputs.append(output)
+        progress.phase(f"kept raw qwen image {output['name']}")
+    return QwenIdentityPostprocessStep(outputs=outputs, elapsed_ms=(perf_counter() - start) * 1000)
 
 
 def _run_qwen_inpaint_denoise_step(

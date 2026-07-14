@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any
 
 
+# cudaHostAlloc on this WSL2 host starts refusing past ~14 GiB even with 15 GiB of RAM
+# still free -- a driver ceiling, not a shortage. Stay well under it: the CUDA context and
+# the denoise activations still need host memory, and page-locked pages cannot be reclaimed.
+PINNED_HOST_BUDGET_BYTES = 10 * 1024**3
+
 os.environ.setdefault("PROFILING_DEBUG_LEVEL", "1")
 os.environ.setdefault("DTYPE", "BF16")
 os.environ.setdefault("SENSITIVE_LAYER_DTYPE", "None")
@@ -167,6 +172,9 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     resident_upload_start = time.perf_counter()
     resident_buffers = _enable_resident_blocks(torch, runner, cases)
     timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
+    host_pin_start = time.perf_counter()
+    host_buffers = _pin_streamed_host_weights(torch, runner, len(resident_buffers))
+    timings["host_pin_ms"] = _elapsed_ms(host_pin_start)
 
     latent_outputs: list[dict[str, Any]] = []
     denoise_total_start = time.perf_counter()
@@ -297,7 +305,10 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             "matrix_multiply": "fp8-triton",
             "attention": "flash_attn2",
             "rope": "torch",
-            "host_buffers": "file_backed_cpu",
+            "host_buffers": host_buffers["mode"],
+            "pinned_blocks": host_buffers["pinned_blocks"],
+            "pinned_gib": round(host_buffers["pinned_gib"], 2),
+            "streamed_blocks": host_buffers["streamed_blocks"],
             "resident_blocks": resident_block_count,
             "phase_order": "conditioner->vae_encode->transformer->vae_decode",
         },
@@ -404,6 +415,106 @@ def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]
 
     infer.infer_func = types.MethodType(infer_with_resident_blocks, infer)
     return resident_buffers
+
+
+def _pin_streamed_host_weights(torch: Any, runner: Any, streamed_start: int) -> dict[str, Any]:
+    """Page-lock the host weights of the blocks that still stream every step.
+
+    The engine's cuda buffers already copy with non_blocking=True, but a pageable
+    source silently degrades that to a staged, synchronous transfer: measured 3.2 GB/s
+    against 50 GB/s from page-locked memory on this host. Streaming 36 blocks of ~340 MiB
+    is what makes the step time, so this is the difference between a transfer-bound and a
+    compute-bound denoise.
+
+    Only the streamed blocks are pinned. Pinning at load time (LightX2V's own default)
+    would lock all 60 blocks, i.e. the entire 20 GiB checkpoint, in unswappable memory --
+    which does not fit next to the activations on a 30 GiB host. The resident blocks
+    already live on the GPU and never transfer, so their host copies stay file-backed.
+    """
+    mode = os.environ.get("AIGEN_LIGHTX2V_HOST_BUFFERS", "pinned")
+    blocks = runner.model.transformer_weights.blocks
+    result: dict[str, Any] = {
+        "mode": mode,
+        "pinned_blocks": 0,
+        "pinned_gib": 0.0,
+        "streamed_blocks": max(0, len(blocks) - streamed_start),
+    }
+    if mode != "pinned" or streamed_start >= len(blocks):
+        result["mode"] = "file_backed" if mode != "pinned" else "pinned"
+        return result
+
+    # Two ceilings apply. cudaHostAlloc on this WSL2 host refuses past ~14 GiB regardless
+    # of free RAM (measured), and page-locked pages cannot be reclaimed under pressure, so
+    # the interpreter, the CUDA context and the page cache backing the read need room left.
+    # Whatever does not fit stays file-backed and simply streams at the old speed.
+    available_bytes = _host_snapshot()["mem_available_kib"] * 1024
+    budget = min(PINNED_HOST_BUDGET_BYTES, available_bytes - 8 * 1024**3)
+    pinned_bytes = 0
+    for block_idx in range(streamed_start, len(blocks)):
+        block_bytes = _pin_block_host_weights(torch, blocks[block_idx], budget - pinned_bytes)
+        if block_bytes is None:
+            break
+        pinned_bytes += block_bytes
+        result["pinned_blocks"] += 1
+    gc.collect()
+    result["pinned_gib"] = pinned_bytes / 1024**3
+    if result["pinned_blocks"] < result["streamed_blocks"]:
+        result["mode"] = "pinned_partial"
+    return result
+
+
+def _pin_block_host_weights(torch: Any, block: Any, remaining_bytes: int) -> int | None:
+    """Replace one block's file-backed host tensors with page-locked copies.
+
+    Returns the number of bytes pinned, or None when the block does not fit the budget.
+    A block is pinned all-or-nothing: a half-pinned block would still stall the step on
+    its pageable remainder. The copies are contiguous, which also removes the transposed
+    views the file-backed path hands to copy_() -- those cannot take the DMA fast path.
+    """
+    targets = []
+    block_bytes = 0
+    for holder in _iter_weight_objects(block):
+        for attribute, value in vars(holder).items():
+            if not attribute.startswith("pin_") or not isinstance(value, torch.Tensor):
+                continue
+            if value.device.type != "cpu" or value.is_pinned():
+                continue
+            targets.append((holder, attribute, value))
+            block_bytes += value.numel() * value.element_size()
+    if block_bytes > remaining_bytes:
+        return None
+    # All-or-nothing: a half-pinned block still stalls the step on its pageable remainder,
+    # so allocate everything first and only publish once the whole block is page-locked.
+    pinned_tensors = []
+    try:
+        for _, _, value in targets:
+            pinned = torch.empty(value.shape, dtype=value.dtype, pin_memory=True)
+            pinned.copy_(value)
+            pinned_tensors.append(pinned)
+    except RuntimeError:
+        return None
+    for (holder, attribute, _), pinned in zip(targets, pinned_tensors):
+        setattr(holder, attribute, pinned)
+    return block_bytes
+
+
+def _iter_weight_objects(module: Any) -> Any:
+    """Walk every object in a block's weight tree, leaves included.
+
+    The engine's own named_parameters() cannot be used here: it recurses into _modules as
+    if every entry were a WeightModule, but the weight leaves are registered there too and
+    carry no such method.
+    """
+    stack = [module]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        yield node
+        for children in (getattr(node, "_parameters", {}), getattr(node, "_modules", {})):
+            stack.extend(child for child in children.values() if child is not None)
 
 
 def _release_resident_blocks(torch: Any, runner: Any, resident_buffers: list[Any]) -> None:
