@@ -23,6 +23,7 @@ def caption_image(
     image_path: Path,
     *,
     reference_images: Sequence[Path] = (),
+    instruction: str | None = None,
 ) -> str:
     from qwen_vl_utils import process_vision_info
     from transformers import (
@@ -47,6 +48,11 @@ def caption_image(
     )
     model.eval()
     try:
+        caption_instruction = instruction
+        if caption_instruction is None:
+            caption_instruction = (
+                _REFERENCE_CAPTION_INSTRUCTION if reference_images else _CAPTION_INSTRUCTION
+            )
         if reference_images:
             content = [{"type": "text", "text": "Appearance reference pack:"}]
             content.extend(
@@ -63,7 +69,7 @@ def caption_image(
                         "type": "image",
                         "image": image_path.resolve().as_posix(),
                     },
-                    {"type": "text", "text": _REFERENCE_CAPTION_INSTRUCTION},
+                    {"type": "text", "text": caption_instruction},
                 ]
             )
         else:
@@ -72,7 +78,7 @@ def caption_image(
                     "type": "image",
                     "image": image_path.resolve().as_posix(),
                 },
-                {"type": "text", "text": _CAPTION_INSTRUCTION},
+                {"type": "text", "text": caption_instruction},
             ]
         messages = [
             {

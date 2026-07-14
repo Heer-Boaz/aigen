@@ -12,6 +12,7 @@ def add_image_caption_command(subparsers: Any) -> None:
     command = subparsers.add_parser("image-caption")
     command.add_argument("--input", type=Path, required=True)
     command.add_argument("--reference-pack", type=Path)
+    command.add_argument("--instruction")
 
 
 def run_image_caption_command(
@@ -29,5 +30,7 @@ def run_image_caption_command(
             load_character_reference_pack(args.reference_pack).references.values()
         )
     progress.phase("caption image")
-    stdout.write(f"{caption_image(args.input, reference_images=reference_images)}\n")
+    stdout.write(
+        f"{caption_image(args.input, reference_images=reference_images, instruction=args.instruction)}\n"
+    )
     return 0
