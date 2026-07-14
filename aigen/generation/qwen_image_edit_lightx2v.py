@@ -13,6 +13,7 @@ from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
 
 LIGHTX2V_QWEN_EDIT_2511_PROFILE = "lightx2v-qwen-edit-2511-fp8-lightning-8step"
+LIGHTX2V_QWEN_EDIT_2511_BASE_PROFILE = "lightx2v-qwen-edit-2511-fp8-base-40step"
 LIGHTX2V_REVISION = "b96309e82899145aebd8ecf95c387894aba66b1e"
 QWEN_EDIT_2511_REVISION = "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
 QWEN_EDIT_2511_LIGHTNING_REVISION = "d74eba145674fd7e31b949324e148e21e7118abd"
@@ -40,6 +41,7 @@ class QwenImageEditLightX2VProfile:
     default_steps: int
     default_true_cfg_scale: float
     default_guidance_scale: float
+    scheduler: str
     local_files_only: bool = True
 
 
@@ -76,6 +78,11 @@ QWEN_IMAGE_EDIT_2511_LIGHTNING_MODEL = (
     / "lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning"
     / "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
 )
+QWEN_IMAGE_EDIT_2511_BASE_MODEL = (
+    MODELS_ROOT
+    / "lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning"
+    / "qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors"
+)
 QWEN25_VL_4BIT_MODEL = MODELS_ROOT / "lightx2v/Encoders/Qwen25-VL-4bit-GPTQ"
 
 QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
@@ -95,7 +102,26 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
         default_steps=8,
         default_true_cfg_scale=1.0,
         default_guidance_scale=1.0,
-    )
+        scheduler="lightning",
+    ),
+    LIGHTX2V_QWEN_EDIT_2511_BASE_PROFILE: QwenImageEditLightX2VProfile(
+        name=LIGHTX2V_QWEN_EDIT_2511_BASE_PROFILE,
+        base_model=QWEN_IMAGE_EDIT_2511_LOCAL_MODEL,
+        base_repo_id="Qwen/Qwen-Image-Edit-2511",
+        base_revision=QWEN_EDIT_2511_REVISION,
+        transformer_model=QWEN_IMAGE_EDIT_2511_BASE_MODEL,
+        transformer_repo_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
+        transformer_revision=QWEN_EDIT_2511_LIGHTNING_REVISION,
+        transformer_variant="fp8_e4m3fn_scaled",
+        conditioner_model=QWEN25_VL_4BIT_MODEL,
+        conditioner_repo_id="lightx2v/Encoders",
+        conditioner_revision=QWEN25_VL_4BIT_REVISION,
+        dtype="bfloat16",
+        default_steps=40,
+        default_true_cfg_scale=4.0,
+        default_guidance_scale=1.0,
+        scheduler="flow-match-euler",
+    ),
 }
 
 
@@ -109,9 +135,13 @@ def run_lightx2v_qwen_image_edit(
     max_sequence_length: int,
     progress: StatusReporter,
 ) -> LightX2VQwenResult:
-    if true_cfg_scale != 1.0 or guidance_scale != 1.0:
+    if guidance_scale != 1.0:
         raise QwenImageEditLightX2VError(
-            "Qwen-Image-Edit-2511 Lightning FP8 runs without CFG; true_cfg_scale and guidance_scale must both be 1"
+            "Qwen-Image-Edit-2511 LightX2V does not use guidance embeddings; guidance_scale must be 1"
+        )
+    if profile.scheduler == "lightning" and true_cfg_scale != 1.0:
+        raise QwenImageEditLightX2VError(
+            "Qwen-Image-Edit-2511 Lightning FP8 runs without CFG; true_cfg_scale must be 1"
         )
 
     runtime_root = _lightx2v_runtime_root()
@@ -209,7 +239,7 @@ def lightx2v_profile_json(profile: QwenImageEditLightX2VProfile) -> dict[str, An
         "name": profile.name,
         "dtype": profile.dtype,
         "load_strategy": "lightx2v-qwen-image-edit-2511-fp8-block-offload",
-        "scheduler": "lightning",
+        "scheduler": profile.scheduler,
         "prompt_conditioning": "qwen25-vl-int4-native-multimodal",
         "default_steps": profile.default_steps,
         "default_true_cfg_scale": profile.default_true_cfg_scale,

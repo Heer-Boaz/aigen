@@ -49,7 +49,6 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
 
     profile = request["profile"]
     cases = request["cases"]
-    output_count = sum(len(case["outputs"]) for case in cases)
     total_start = time.perf_counter()
     host_before = _host_snapshot()
     phase_peaks: dict[str, float] = {}
@@ -79,7 +78,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     pipe.create_generator(
         attn_mode="flash_attn2",
         infer_steps=profile["steps"],
-        guidance_scale=profile["guidance_scale"],
+        guidance_scale=profile["true_cfg_scale"],
         rope_type="torch",
         resize_mode="adaptive",
     )
@@ -120,12 +119,15 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
                     "images": [tensor.detach().to("cpu") for tensor in image_info["vae_image_list"]],
                     "info": image_info["vae_image_info_list"],
                 }
-            conditioned[case["name"]] = {
+            condition = {
                 "prompt_embeds": text_output["prompt_embeds"].detach().to("cpu"),
                 "vae_group": group_key,
                 "vae_image_info_list": image_info["vae_image_info_list"],
                 "txt_seq_lens": list(input_info.txt_seq_lens),
             }
+            if profile["true_cfg_scale"] != 1.0:
+                condition["negative_prompt_embeds"] = text_output["negative_prompt_embeds"].detach().to("cpu")
+            conditioned[case["name"]] = condition
             del text_output
         finally:
             for image in images:
@@ -163,7 +165,7 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
     torch.cuda.synchronize()
     timings["transformer_load_ms"] = _elapsed_ms(transformer_load_start)
     resident_upload_start = time.perf_counter()
-    resident_buffers = _enable_resident_blocks(torch, runner, cases) if output_count > 1 else []
+    resident_buffers = _enable_resident_blocks(torch, runner, cases)
     timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
 
     latent_outputs: list[dict[str, Any]] = []
@@ -174,23 +176,27 @@ def _run(request: dict[str, Any]) -> dict[str, Any]:
             input_info = _input_info(pipe, case, output["seed"], init_empty_input_info, update_input_info_from_dict)
             input_info.txt_seq_lens = condition["txt_seq_lens"]
             runner.input_info = input_info
-            runner.inputs = {
-                "text_encoder_output": {
-                    "prompt_embeds": condition["prompt_embeds"].to("cuda"),
-                    "image_info": {
-                        "vae_image_info_list": condition["vae_image_info_list"],
-                    },
+            text_encoder_output = {
+                "prompt_embeds": condition["prompt_embeds"].to("cuda"),
+                "image_info": {
+                    "vae_image_info_list": condition["vae_image_info_list"],
                 },
+            }
+            if profile["true_cfg_scale"] != 1.0:
+                text_encoder_output["negative_prompt_embeds"] = condition["negative_prompt_embeds"].to("cuda")
+            runner.inputs = {
+                "text_encoder_output": text_encoder_output,
                 "image_encoder_output": [
                     {"image_latents": item["image_latents"].to("cuda")}
                     for item in encoded_groups[condition["vae_group"]]
                 ],
             }
+            del text_encoder_output
             input_info.image_encoder_output = runner.inputs["image_encoder_output"]
             runner.set_target_shape()
             runner.set_img_shapes()
             seed_all(output["seed"])
-            runner.model.scheduler.generator = None
+            runner.model.scheduler.generator = torch.Generator(device="cuda").manual_seed(output["seed"])
             runner.model.scheduler.prepare(input_info)
             denoise_start = time.perf_counter()
             latents, generator = runner.run()
