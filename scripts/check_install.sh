@@ -5,6 +5,10 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 [[ -x "$venv_python" ]] || die "venv is missing; run scripts/setup_venv.sh first"
 
+lightx2v_root="${AIGEN_LIGHTX2V_ROOT:-$HOME/.cache/aigen-lightx2v}"
+lightx2v_python="$lightx2v_root/venv/bin/python"
+models_root="${AIGEN_MODELS_ROOT:-$repo_root/aigen/models}"
+
 "$venv_python" - <<'PY'
 import importlib.util
 
@@ -36,6 +40,29 @@ if importlib.util.find_spec("nunchaku") is None:
     raise SystemExit("missing Python package: nunchaku")
 PY
 fi
+
+[[ -x "$lightx2v_python" ]] || die "LightX2V venv is missing; run scripts/install_lightx2v.sh first"
+require_file "$lightx2v_root/LightX2V/lightx2v/__init__.py"
+require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511/text_encoder/config.json"
+require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511/vae/diffusion_pytorch_model.safetensors"
+require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors"
+require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
+
+"$lightx2v_python" - <<'PY'
+import importlib.metadata
+
+expected = {
+    "torch": "2.8.0",
+    "transformers": "4.57.3",
+    "diffusers": "0.39.0",
+    "flash_attn": "2.8.3",
+    "lightx2v": "0.1.0",
+}
+for distribution, version in expected.items():
+    installed = importlib.metadata.version(distribution)
+    if installed.split("+")[0] != version:
+        raise SystemExit(f"{distribution} {version} is required, got {installed}")
+PY
 
 "$venv_python" - <<'PY'
 import onnxruntime as ort

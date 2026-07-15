@@ -17,7 +17,6 @@ LIGHTX2V_QWEN_EDIT_2511_BASE_PROFILE = "lightx2v-qwen-edit-2511-fp8-base-40step"
 LIGHTX2V_REVISION = "b96309e82899145aebd8ecf95c387894aba66b1e"
 QWEN_EDIT_2511_REVISION = "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
 QWEN_EDIT_2511_LIGHTNING_REVISION = "d74eba145674fd7e31b949324e148e21e7118abd"
-QWEN25_VL_4BIT_REVISION = "b02d199f65e5729ee45b7fcaca24f43ab4ae16fa"
 
 
 class QwenImageEditLightX2VError(RuntimeError):
@@ -83,7 +82,9 @@ QWEN_IMAGE_EDIT_2511_BASE_MODEL = (
     / "lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning"
     / "qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors"
 )
-QWEN25_VL_4BIT_MODEL = MODELS_ROOT / "lightx2v/Encoders/Qwen25-VL-4bit-GPTQ"
+QWEN25_VL_BF16_MODEL = (
+    MODELS_ROOT / "lightx2v/Qwen/Qwen-Image-Edit-2511/text_encoder"
+)
 
 QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
     LIGHTX2V_QWEN_EDIT_2511_PROFILE: QwenImageEditLightX2VProfile(
@@ -95,9 +96,9 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
         transformer_repo_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
         transformer_revision=QWEN_EDIT_2511_LIGHTNING_REVISION,
         transformer_variant="fp8_e4m3fn_scaled_lightning_8steps_v1.0",
-        conditioner_model=QWEN25_VL_4BIT_MODEL,
-        conditioner_repo_id="lightx2v/Encoders",
-        conditioner_revision=QWEN25_VL_4BIT_REVISION,
+        conditioner_model=QWEN25_VL_BF16_MODEL,
+        conditioner_repo_id="Qwen/Qwen-Image-Edit-2511",
+        conditioner_revision=QWEN_EDIT_2511_REVISION,
         dtype="bfloat16",
         default_steps=8,
         default_true_cfg_scale=1.0,
@@ -113,9 +114,9 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
         transformer_repo_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
         transformer_revision=QWEN_EDIT_2511_LIGHTNING_REVISION,
         transformer_variant="fp8_e4m3fn_scaled",
-        conditioner_model=QWEN25_VL_4BIT_MODEL,
-        conditioner_repo_id="lightx2v/Encoders",
-        conditioner_revision=QWEN25_VL_4BIT_REVISION,
+        conditioner_model=QWEN25_VL_BF16_MODEL,
+        conditioner_repo_id="Qwen/Qwen-Image-Edit-2511",
+        conditioner_revision=QWEN_EDIT_2511_REVISION,
         dtype="bfloat16",
         default_steps=40,
         default_true_cfg_scale=4.0,
@@ -259,7 +260,7 @@ def lightx2v_profile_json(profile: QwenImageEditLightX2VProfile) -> dict[str, An
         "dtype": profile.dtype,
         "load_strategy": "lightx2v-qwen-image-edit-2511-fp8-block-offload",
         "scheduler": profile.scheduler,
-        "prompt_conditioning": "qwen25-vl-int4-native-multimodal",
+        "prompt_conditioning": "qwen25-vl-fp8-w8a8-language-bf16-vision-native-multimodal",
         "default_steps": profile.default_steps,
         "default_true_cfg_scale": profile.default_true_cfg_scale,
         "default_guidance_scale": profile.default_guidance_scale,

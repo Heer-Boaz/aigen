@@ -59,6 +59,8 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     from lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
     from lightx2v.utils.utils import seed_all
 
+    from aigen.generation.qwen_image_edit_conditioner import QwenImageEditFp8Conditioner
+
     profile = request["profile"]
     cases = request["cases"]
     total_start = time.perf_counter()
@@ -83,9 +85,6 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
         dit_quantized=True,
         dit_quantized_ckpt=profile["transformer_model"],
         quant_scheme="fp8-triton",
-        text_encoder_quantized=True,
-        text_encoder_quantized_ckpt=profile["conditioner_model"],
-        text_encoder_quant_scheme="int4",
     )
     pipe.tokenizer_max_length = profile["max_sequence_length"]
     pipe.create_generator(
@@ -110,7 +109,12 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     with runner.config.temporarily_unlocked():
         runner.config["cpu_offload"] = False
         runner.config["qwen25vl_cpu_offload"] = False
-    runner.text_encoders = runner.load_text_encoder()
+    runner.text_encoders = [
+        QwenImageEditFp8Conditioner(
+            runner.config,
+            Path(profile["conditioner_model"]),
+        )
+    ]
     torch.cuda.synchronize()
     timings["conditioner_load_ms"] = _elapsed_ms(conditioner_load_start)
     encode_start = time.perf_counter()
@@ -339,6 +343,7 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             "cuda": torch.version.cuda,
             "gpu": torch.cuda.get_device_name(0),
             "matrix_multiply": "fp8-triton",
+            "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
             "attention": "flash_attn2",
             "rope": "torch",
             "host_buffers": host_buffers["mode"],

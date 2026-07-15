@@ -1,0 +1,43 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "Qwen-Image-Edit-2511 FP8 character editing",
+    "runtime": "LightX2V FP8 block offload with a fine-grained FP8 Qwen2.5-VL conditioner"
+  },
+  "downloads": [
+    {
+      "name": "qwen-image-edit-2511-conditioner-and-vae",
+      "repo_id": "Qwen/Qwen-Image-Edit-2511",
+      "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9",
+      "local_path": "lightx2v/Qwen/Qwen-Image-Edit-2511",
+      "include": [
+        "model_index.json",
+        "processor/**",
+        "scheduler/**",
+        "text_encoder/**",
+        "tokenizer/**",
+        "transformer/config.json",
+        "vae/**"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md"
+      ]
+    },
+    {
+      "name": "qwen-image-edit-2511-lightx2v-fp8-transformers",
+      "repo_id": "lightx2v/Qwen-Image-Edit-2511-Lightning",
+      "revision": "d74eba145674fd7e31b949324e148e21e7118abd",
+      "local_path": "lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning",
+      "include": [
+        "qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors",
+        "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md"
+      ]
+    }
+  ]
+}

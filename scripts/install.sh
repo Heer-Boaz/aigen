@@ -8,13 +8,12 @@ usage() {
 Usage: scripts/install.sh
 
 One-shot installer for aigen. It keeps the steps modular by calling the scripts
-next to this file. It always installs the Nunchaku backend, downloads the
-keyframe generation models, downloads the local LoRA trainer, downloads the
-Qwen3 instruction parser, downloads the Qwen2.5-VL judge/planner, and runs the
-final install check.
+next to this file. It installs the Nunchaku and LightX2V backends, downloads the
+fixed production models and local LoRA trainer, and runs the final install check.
 
 Environment:
   PYTHON=/path/to/python3.12         Python used to create .venv
+  AIGEN_LIGHTX2V_PYTHON=/path/to/python3.12
   AIGEN_MODELS_ROOT=/path/to/models  Defaults to ./aigen/models
   NUNCHAKU_WHEEL_URL=https://...     Override the pinned Nunchaku wheel
 EOF
@@ -35,6 +34,7 @@ done
 run "$script_dir/check_system.sh"
 run "$script_dir/setup_venv.sh"
 run "$script_dir/install_nunchaku.sh"
+run "$script_dir/install_lightx2v.sh"
 run "$script_dir/download_lora_trainer.sh"
 run "$script_dir/download_models.sh"
 run "$script_dir/install_vosr.sh"
