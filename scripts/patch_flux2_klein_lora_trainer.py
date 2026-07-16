@@ -230,7 +230,7 @@ def patch_trainer(path: Path) -> None:
         if persistent_cache_path.is_file():
             cached = torch.load(
                 persistent_cache_path,
-                map_location=accelerator.device,
+                map_location="cpu",
                 weights_only=True,
             )
             if cached["signature"] != persistent_cache_signature:
@@ -275,9 +275,13 @@ def patch_trainer(path: Path) -> None:
                     else:
                         instance_latents = latents
                     for i, idx in enumerate(sample_indices):
-                        instance_latents_cache[idx] = instance_latents[i : i + 1]
+                        instance_latents_cache[idx] = (
+                            instance_latents[i : i + 1].detach().cpu()
+                        )
                         if args.with_prior_preservation:
-                            class_latents_cache[idx] = class_latents[i : i + 1]
+                            class_latents_cache[idx] = (
+                                class_latents[i : i + 1].detach().cpu()
+                            )
             assert all(latents is not None for latents in instance_latents_cache), (
                 "Latent cache has unfilled entries."
             )
@@ -298,8 +302,10 @@ def patch_trainer(path: Path) -> None:
                         batch["instance_prompts"], text_encoding_pipeline
                     )
                     for i, idx in enumerate(sample_indices):
-                        prompt_embeds_cache[idx] = prompt_embeds[i : i + 1]
-                        text_ids_cache[idx] = text_ids[i : i + 1]
+                        prompt_embeds_cache[idx] = (
+                            prompt_embeds[i : i + 1].detach().cpu()
+                        )
+                        text_ids_cache[idx] = text_ids[i : i + 1].detach().cpu()
             assert all(embeds is not None for embeds in prompt_embeds_cache), (
                 "Prompt embedding cache has unfilled entries."
             )
@@ -324,12 +330,75 @@ def patch_trainer(path: Path) -> None:
 '''
     source = source[:cache_block_start] + new_cache_block + source[cache_block_end:]
 
-    encoder_release = '''    text_encoding_pipeline = text_encoding_pipeline.to("cpu")
+    training_loop = '''    for epoch in range(first_epoch, args.num_train_epochs):
+'''
+    training_loop_with_cache_loader = '''    def load_cached_batch(cache, sample_indices):
+        if len(sample_indices) == 1:
+            return cache[sample_indices[0]].to(accelerator.device)
+        return torch.cat([cache[idx] for idx in sample_indices], dim=0).to(
+            accelerator.device
+        )
+
+    for epoch in range(first_epoch, args.num_train_epochs):
+'''
+    source = replace_once(
+        source,
+        training_loop,
+        training_loop_with_cache_loader,
+        "CPU cache batch loader",
+    )
+
+    prompt_cache_load = '''                    prompt_embeds = torch.cat([prompt_embeds_cache[idx] for idx in sample_indices], dim=0)
+                    text_ids = torch.cat([text_ids_cache[idx] for idx in sample_indices], dim=0)
+'''
+    prompt_cache_load_from_cpu = '''                    prompt_embeds = load_cached_batch(
+                        prompt_embeds_cache, sample_indices
+                    )
+                    text_ids = load_cached_batch(text_ids_cache, sample_indices)
+'''
+    source = replace_once(
+        source,
+        prompt_cache_load,
+        prompt_cache_load_from_cpu,
+        "CPU prompt cache batch",
+    )
+
+    latent_cache_load = '''                    model_input = torch.cat([instance_latents_cache[idx] for idx in sample_indices], dim=0)
+                    if args.with_prior_preservation:
+                        model_input = torch.cat(
+                            [model_input, torch.cat([class_latents_cache[idx] for idx in sample_indices], dim=0)],
+                            dim=0,
+                        )
+'''
+    latent_cache_load_from_cpu = '''                    model_input = load_cached_batch(
+                        instance_latents_cache, sample_indices
+                    )
+                    if args.with_prior_preservation:
+                        model_input = torch.cat(
+                            [
+                                model_input,
+                                load_cached_batch(class_latents_cache, sample_indices),
+                            ],
+                            dim=0,
+                        )
+'''
+    source = replace_once(
+        source,
+        latent_cache_load,
+        latent_cache_load_from_cpu,
+        "CPU latent cache batch",
+    )
+
+    encoder_release = '''    # move back to cpu before deleting to ensure memory is freed see: https://github.com/huggingface/diffusers/issues/11376#issue-3008144624
+    text_encoding_pipeline = text_encoding_pipeline.to("cpu")
     del text_encoder, tokenizer
     free_memory()
 
 '''
-    encoder_release_then_transformer_move = encoder_release + '''    if not is_fsdp and args.offload:
+    encoder_release_then_transformer_move = '''    del text_encoding_pipeline, text_encoder, tokenizer
+    free_memory()
+
+    if not is_fsdp and args.offload:
         transformer.to(**transformer_to_kwargs)
 
     if args.do_fp8_training:

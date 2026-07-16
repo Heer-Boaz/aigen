@@ -17,6 +17,7 @@ Downloads the fixed production model set:
 - Qwen3-8B local instruction parser
 - SAM ViT-B checkpoint for keyframe foreground segmentation
 - SAM2.1 tiny checkpoint for character region masks
+- SkyTNT anime foreground segmentation
 - GroundingDINO base model for polish region grounding
 - Florence-2 large-ft native checkpoint for polish region grounding
 - DWPose ONNX annotator models for keyframe pose scoring
@@ -49,6 +50,7 @@ manifest_args=(
   "model_sources/qwen3_8b_instruction_parser.json"
   "model_sources/keyframe_segmentation_sam_vit_b.json"
   "model_sources/character_region_sam2_tiny.json"
+  "model_sources/anime_foreground_segmentation.json"
   "model_sources/keyframe_grounding_dino.json"
   "model_sources/keyframe_grounding_florence2.json"
   "model_sources/keyframe_pose_dwpose_onnx.json"

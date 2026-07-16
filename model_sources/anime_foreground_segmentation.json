@@ -1,0 +1,17 @@
+{
+  "target_hardware": {
+    "phase": "anime foreground segmentation",
+    "runtime": "Official SkyTNT ISNet ONNX model on CUDA"
+  },
+  "downloads": [
+    {
+      "name": "anime-foreground-segmentation-isnet",
+      "repo_id": "skytnt/anime-seg",
+      "revision": "976cbb9ba61600e0993d1ee2a8a247ae05d183ee",
+      "local_path": "segmentation/skytnt/anime-seg",
+      "include": [
+        "isnetis.onnx"
+      ]
+    }
+  ]
+}

@@ -14,6 +14,9 @@ DEFAULT_SAM_CHECKPOINT = (
     DEFAULT_MODELS_ROOT / "segmentation/ybelkada/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
 )
 DEFAULT_SAM2_MODEL = DEFAULT_MODELS_ROOT / "segmentation/facebook/sam2.1-hiera-tiny"
+DEFAULT_ANIME_SEGMENTATION_MODEL = (
+    DEFAULT_MODELS_ROOT / "segmentation/skytnt/anime-seg/isnetis.onnx"
+)
 
 
 class KeyframeSegmentationError(RuntimeError):
@@ -33,6 +36,12 @@ class Sam2SegmentationConfig:
     model: Path = DEFAULT_SAM2_MODEL
     device: str = "cuda"
     multimask_output: bool = True
+
+
+@dataclass(frozen=True)
+class AnimeSegmentationConfig:
+    model: Path = DEFAULT_ANIME_SEGMENTATION_MODEL
+    input_size: int = 1024
 
 
 class SamForegroundSegmenter:
@@ -81,6 +90,80 @@ class SamForegroundSegmenter:
             import torch
 
             torch.cuda.empty_cache()
+
+
+class AnimeForegroundSegmenter:
+    def __init__(self, config: AnimeSegmentationConfig):
+        try:
+            import cv2
+            import onnxruntime as ort
+        except ImportError as error:
+            raise KeyframeSegmentationError(
+                "Anime foreground segmentation requires OpenCV and ONNX Runtime GPU."
+            ) from error
+
+        if not config.model.is_file():
+            raise KeyframeSegmentationError(
+                f"Missing anime segmentation model: {config.model.as_posix()}"
+            )
+
+        ort.preload_dlls()
+        options = ort.SessionOptions()
+        options.log_severity_level = 3
+        session = ort.InferenceSession(
+            config.model.as_posix(),
+            sess_options=options,
+            providers=["CUDAExecutionProvider"],
+        )
+        if session.get_providers()[0] != "CUDAExecutionProvider":
+            raise KeyframeSegmentationError(
+                "Anime foreground segmentation could not start with CUDAExecutionProvider."
+            )
+
+        self._cv2 = cv2
+        self._session = session
+        self._input_size = config.input_size
+        self._input_name = session.get_inputs()[0].name
+        self._output_name = session.get_outputs()[0].name
+
+    def segment(self, image_path: Path) -> np.ndarray:
+        return self.segment_image(_load_rgb(image_path))
+
+    def segment_image(self, image: np.ndarray) -> np.ndarray:
+        height, width = image.shape[:2]
+        size = self._input_size
+        if height > width:
+            resized_height = size
+            resized_width = int(size * width / height)
+        else:
+            resized_height = int(size * height / width)
+            resized_width = size
+
+        pad_height = size - resized_height
+        pad_width = size - resized_width
+        input_image = np.zeros((size, size, 3), dtype=np.float32)
+        input_image[
+            pad_height // 2 : pad_height // 2 + resized_height,
+            pad_width // 2 : pad_width // 2 + resized_width,
+        ] = self._cv2.resize(
+            image.astype(np.float32) / 255.0,
+            (resized_width, resized_height),
+        )
+        input_tensor = np.ascontiguousarray(
+            input_image.transpose(2, 0, 1)[np.newaxis]
+        )
+        mask = self._session.run(
+            [self._output_name],
+            {self._input_name: input_tensor},
+        )[0][0, 0]
+        mask = mask[
+            pad_height // 2 : pad_height // 2 + resized_height,
+            pad_width // 2 : pad_width // 2 + resized_width,
+        ]
+        return self._cv2.resize(mask, (width, height))
+
+    def close(self) -> None:
+        del self._session
 
 
 class Sam2RegionSegmenter:
