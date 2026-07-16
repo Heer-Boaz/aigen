@@ -1,0 +1,62 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "runtime": "Official BFL FLUX.2 Klein 9B scaled-FP8 transformer with sequential component ownership"
+  },
+  "downloads": [
+    {
+      "name": "flux2-klein-9b-fp8-transformer",
+      "repo_id": "black-forest-labs/FLUX.2-klein-9b-fp8",
+      "revision": "902d9d510b51533e07729f19211414a3648b77d2",
+      "local_path": "flux2/black-forest-labs/FLUX.2-klein-9b-fp8",
+      "include": [
+        "LICENSE.md",
+        "flux-2-klein-9b-fp8.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.jpg"
+      ]
+    },
+    {
+      "name": "flux2-klein-9b-runtime-components",
+      "repo_id": "black-forest-labs/FLUX.2-klein-9B",
+      "revision": "92196c8e11f7b6cf2b7493e037d8c5345c559216",
+      "local_path": "flux2/black-forest-labs/FLUX.2-klein-9B",
+      "include": [
+        "LICENSE.md",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "transformer/config.json",
+        "vae/config.json",
+        "vae/diffusion_pytorch_model.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.jpg"
+      ]
+    },
+    {
+      "name": "flux2-klein-qwen3-8b-fp8-conditioner",
+      "repo_id": "Qwen/Qwen3-8B-FP8",
+      "revision": "220b46e3b2180893580a4454f21f22d3ebb187d3",
+      "local_path": "flux2/Qwen/Qwen3-8B-FP8",
+      "include": [
+        "LICENSE",
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model-*.safetensors",
+        "model.safetensors.index.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "README.md"
+      ]
+    }
+  ]
+}

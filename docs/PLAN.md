@@ -103,10 +103,10 @@ reference images ──▶│ 3. feed the complete ordered reference pack       
                     └──────────────────────────────────────────────────────────────────┘  │  │
                                                                                             ▼  ▼
                                           ┌──────────────────────────────────────────────────────┐
-                                          │  Qwen-Image-Edit-2511  (the MMDiT: contains Qwen2.5-VL)│
-                                          │  does steps 4–7 INTERNALLY:                            │
-                                          │  subject-id · component extraction · cross-ref align   │
-                                          │  · relevance weighting · identity-consistent redraw    │
+                                          │  native multimodal edit backbone                       │
+                                          │  default: FLUX.2 Klein · explicit: Qwen-Image-Edit-2511 │
+                                          │  subject-id · component extraction · cross-ref align    │
+                                          │  · relevance weighting · identity-consistent redraw     │
                                           └──────────────────────────────────────────────────────┘
                                                                      │
                                                 10. audit loop (raw, bounded) → 11. optional postprocess (upscale)
@@ -115,8 +115,9 @@ reference images ──▶│ 3. feed the complete ordered reference pack       
 - **Steps 4–7 of `PLAN.md` are not deleted — they move into the model.** That is
   where PixAI does them too. You are not doing *less* semantic control; you are
   doing it *model-native* instead of through an 8B model's JSON. This is the
-  opposite of a "simpler pipeline": the heavy lifting is a 20B MMDiT plus real
-  structural conditioning, not a text blob.
+  opposite of a "simpler pipeline": the heavy lifting is a multi-billion-
+  parameter multimodal transformer plus real structural conditioning, not a
+  text blob.
 - **The text lane never describes the character.** It carries the user's request
   ("close-up, looking left, white background") — which is *output intent*, not a
   character dossier. Note your own `PLAN.md` example instruction is already exactly
@@ -133,8 +134,8 @@ Target: single RTX 50-series / Blackwell GPU, ≤16GB VRAM. Stages run
 
 | Role | Model (HF) | Notes |
 |------|------------|-------|
-| **Edit backbone (core)** | `Qwen/Qwen-Image-Edit-2511` via **LightX2V** | Official scaled FP8 Lightning 8-step is the active 16GB route. LightX2V owns block offload, Qwen2.5-VL conditioning, VAE encoding/decoding and the ordered multi-image input bundle. 4-step FP8 is speed-only evidence; BF16 + distilled LoRA is a quality-reference experiment if FP8 artifacts become structural. |
-| **Backbone, later candidate (evidence-gated)** | FLUX.2 **klein** (NVFP4-class quant) | Multi-reference editor, consumer-GPU positioning. New pipeline class + conditioning API = a real adapter build; anime-character fidelity unproven. Only after direct 2511 output experiments show a persistent gap the Qwen line does not close. |
+| **Default direct-edit backbone** | `black-forest-labs/FLUX.2-klein-9B` with the official scaled-FP8 transformer | Official 4-step multi-reference editor. The local 16GB backend runs Qwen3 conditioning, reference VAE encoding, denoising and VAE decoding sequentially. Accepted evidence covers a single-reference pixel-art conversion, an extreme high-angle full-body view from three references, and a single-reference profile transfer for a second character; identity, outfit construction and palette remained strong while generation was materially faster than the Qwen base route. |
+| **Explicit conservative edit route** | `Qwen/Qwen-Image-Edit-2511` via **LightX2V** | Official scaled FP8 Lightning 8-step remains available when Qwen's stronger bias toward preserving the source is preferable. LightX2V owns block offload, Qwen2.5-VL conditioning, VAE encoding/decoding and the ordered multi-image input bundle at the established 1.77MP raw canvas. It is not a fallback selected behind FLUX; callers choose the explicitly named Qwen route. |
 | **Audit VLM (narrow)** | `Qwen/Qwen2.5-VL-7B-Instruct` (8-bit) | **Only** job: stage 10 — compare the candidate image against all supplied reference images and return a pass/fail verdict plus short region pointers ("skirt", "right hand") for regions that visually deviate. It also receives the user instruction, route, and pose/scene context (output intent — allowed text-lane input) so intent-consistent changes (a flaring skirt mid-jump, open fingertips) are not flagged as identity errors. Region pointers feed Florence-2 grounding only. **Never** a character description, never appearance text toward generation. An integrated pipeline stage, **not** a separate CLI product layer. |
 | Pose preprocessor | DWPose (via `IDEA-Research/DWPose`, or `controlnet_aux`) | Produces a keypoint control image for `pose_transfer`; it is appended to the native 2511 visual input bundle. |
 | Depth preprocessor | `depth-anything/Depth-Anything-V2-Large` | Produces a depth control image for structured scene routes; it is appended to the native 2511 visual input bundle. |
@@ -357,8 +358,14 @@ defaults (640/1008) are silent quality killers, not optimizations.
 
 ## 6. 16GB VRAM execution plan
 
-Qwen-Image-Edit-2511 runs through LightX2V's FP8 block-offload route. Run stages
-sequentially:
+The default FLUX.2 Klein route uses strict stage ownership: load the FP8 Qwen3
+conditioner on CUDA, encode the prompt and unload it; encode all references with
+the VAE and unload it; run the official scaled-FP8 transformer for four steps;
+unload the transformer; move the VAE back to CUDA and decode. The accepted
+three-reference run stayed below the 16GB target without CPU denoising.
+
+The explicit Qwen-Image-Edit-2511 route runs through LightX2V's FP8 block-offload
+route. Its stages also run sequentially:
 
 1. Build any control images with lightweight preprocessors (Depth-Anything /
    DWPose / SAM2 / Florence-2 — each load→run→unload).
@@ -378,8 +385,9 @@ normal offload figure. LightX2V owns its own offload mechanism. VAE decode stays
 on the GPU after denoising weights are released. Reuse one worker for multiple
 cases and seeds so model loading is paid once.
 
-For the common identity/portrait/view/scene case: **load backbone, feed all refs
-and the instruction, generate.** No selector VLM runs before the editor.
+For the common identity/portrait/view/scene case: **load the selected explicit
+backbone, feed all refs and the instruction, generate.** No selector VLM runs
+before the editor.
 
 ---
 
@@ -419,25 +427,30 @@ Keep the routing/conditioning scaffolding; excise the text-serialization organs.
 
 ## 8. Active work order (so Codex stops thrashing)
 
-1. **2511 backbone — established.** LightX2V FP8 Lightning 8-step at the 1.77MP
-   raw sweet spot is the only active Qwen edit route. Identity and detail passed
-   the accepted comparison runs.
-2. **Complete native reference bundle — current.** Feed every ordered pack
+1. **FLUX.2 Klein default — established.** Official scaled-FP8 9B at four steps
+   is the default direct-edit and rapid-prototyping route. Single-reference
+   pixel conversion and three-reference extreme view change both passed direct
+   visual review on the 16GB target.
+2. **2511 explicit route — established.** LightX2V FP8 Lightning 8-step at the
+   1.77MP raw sweet spot remains the separate conservative editor. Identity and
+   detail passed the accepted comparison runs.
+3. **Complete native reference bundle — current.** Feed every ordered pack
    reference plus every route-required source/guide/control image. No selector
    VLM and no guessed count limits.
-3. **Structural-conditioning evidence — current.** Judge native pose, DWPose,
+4. **Structural-conditioning evidence — current.** Judge native pose, DWPose,
    depth and edge by real two-seed outputs. A control path is accepted only when
    it improves requested geometry without unacceptable identity drift.
-4. **Audit (stage 10).** Pixel-diff track plus an intent-aware audit VLM as
+5. **Audit (stage 10).** Pixel-diff track plus an intent-aware audit VLM as
    detector and best-of-N selector; bounded response per the §4 defect ladder.
-5. **Stage-11 postprocess.** Upscale and optional anime refine only after the raw
+6. **Stage-11 postprocess.** Upscale and optional anime refine only after the raw
    candidate has passed visual/audit selection.
-6. **Second character pack.** The golden-rule acid test: zero code changes,
+7. **Second character pack.** The golden-rule acid test: zero code changes,
    pure assets and direct visually judged outputs.
-7. **Evidence-gated reserves only:** close-up repair, object-removal
+8. **Evidence-gated reserves only:** close-up repair, object-removal
    diff-composite, bone-length pose retargeting and tiled detail refine.
-8. Only then, if anime fidelity is short: a 2511-compatible style adaptation or
-   the separate stage-11 anime refiner. FLUX/Kontext remains a separate pipeline.
+9. Only then, if anime fidelity is short: a backbone-specific style adaptation
+   or the separate stage-11 anime refiner. FLUX.2 Klein and Qwen remain separate
+   pipelines with explicit commands.
 
 Do not advance a rung until the previous one renders.
 
@@ -449,7 +462,7 @@ instruction: "Character as shown in referenced images. Close-up face,
               looking to the left with neutral expression. Neutral
               lighting, white background."
 route:       portrait_identity_generation
-generation:  LightX2V Qwen-Image-Edit-2511(image=[refs], prompt=instruction)
+generation:  FLUX.2 Klein 9B scaled-FP8(image=[refs], prompt=instruction)
 assert:      an image is produced; NO identity_profile.json, NO
              reference observations, NO visual_analysis, NO VLM-authored
              edit_instruction anywhere in the path.

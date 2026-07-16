@@ -22,9 +22,12 @@ required = [
     "datasets",
     "ftfy",
     "jinja2",
+    "kernels",
     "tensorboard",
     "transformers",
     "controlnet_aux",
+    "comfy_kitchen",
+    "flux2",
     "segment_anything",
 ]
 missing = [name for name in required if importlib.util.find_spec(name) is None]
@@ -47,6 +50,9 @@ require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511/text_encoder/confi
 require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511/vae/diffusion_pytorch_model.safetensors"
 require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors"
 require_file "$models_root/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors"
+require_file "$models_root/flux2/black-forest-labs/FLUX.2-klein-9b-fp8/flux-2-klein-9b-fp8.safetensors"
+require_file "$models_root/flux2/black-forest-labs/FLUX.2-klein-9B/vae/diffusion_pytorch_model.safetensors"
+require_file "$models_root/flux2/Qwen/Qwen3-8B-FP8/model.safetensors.index.json"
 
 "$lightx2v_python" - <<'PY'
 import importlib.metadata
@@ -88,5 +94,12 @@ run "$venv_python" -m aigen.cli keyframes polish-plan-schema --compact
 grep -Fq 'check_min_version("0.38.0")' "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
 grep -Fq "move_training_module" "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
 grep -Fq "Skipping save-time transformer dtype cast for quantized local LoRA training." "$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
+[[ -f "$repo_root/tools/diffusers/train_dreambooth_lora_flux2_klein.py" ]] || {
+  echo "missing FLUX.2 Klein LoRA trainer; run scripts/download_lora_trainer.sh" >&2
+  exit 1
+}
+grep -Fq 'check_min_version("0.40.0.dev0")' "$repo_root/tools/diffusers/train_dreambooth_lora_flux2_klein.py"
+grep -Fq -- "--precomputed_cache_path" "$repo_root/tools/diffusers/train_dreambooth_lora_flux2_klein.py"
+grep -Fq "Loaded precomputed training cache" "$repo_root/tools/diffusers/train_dreambooth_lora_flux2_klein.py"
 
 log "install check passed"

@@ -37,20 +37,25 @@ code change is needed, the code is wrong.
 
 ## Workflow for every change under `aigen/`
 
-1. Touch no code yet. First present: (a) the task in your own words, (b) the
-   exact list of files you will create/modify (and anything you propose to
-   delete or revert), (c) 2–3 lines per file describing its contents, (d) every
+1. Touch no code yet. First present: (a) the task in your own words, (b) every
    assumption you had to make.
+2. When in doubt, ask a subagent to review your plan and assumptions before touching code.
+   If the subagent disagrees, update your plan.
 2. After presenting that disclosure, proceed immediately. Do not wait for an
    explicit "GO".
 3. Implement fully. If a real contradiction with the plan blocks
    implementation, stop and ask; do not pick a direction yourself.
+4. Have prompts reviewed by a subagent before running a model. If the subagent disagrees, update your prompt.
 
 ## Fixed facts
 
-- Target GPU: 16GB VRAM (RTX 50-series/Blackwell). Edit-model route:
-  Qwen-Image-Edit-2511 FP8 Lightning 8-step via LightX2V, with its native
+- Target GPU: 16GB VRAM (RTX 50-series/Blackwell). The default direct-edit and
+  rapid-prototyping route is FLUX.2 Klein 9B with the official scaled-FP8
+  transformer and 4-step schedule. Its conditioner, VAE and transformer run
+  sequentially so their weights never need to coexist in VRAM.
+- Qwen-Image-Edit-2511 FP8 Lightning 8-step via LightX2V remains an explicit,
+  separate route for conservative identity-preserving edits, with its native
   block-offload lifecycle and 1.77MP raw generation canvas. There is no legacy
   Qwen fallback or comparison baseline in the active character pipeline.
-- FLUX/Kontext remains a separate pipeline next to Qwen edit; do not merge the
-  two.
+- FLUX.2 Klein and Qwen edit remain separate pipelines; do not merge them or
+  silently switch an explicitly named command from one model to the other.

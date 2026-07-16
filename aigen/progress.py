@@ -272,7 +272,8 @@ def open_cli_progress() -> StatusReporter:
 
 
 def _stderr_progress() -> RuntimeStatus:
-    return RuntimeStatus.lines(
+    progress_factory = RuntimeStatus.terminal if sys.stderr.isatty() else RuntimeStatus.lines
+    return progress_factory(
         interval_seconds=_progress_interval_seconds(),
         stream=sys.stderr,
         telemetry=SystemTelemetrySampler(),

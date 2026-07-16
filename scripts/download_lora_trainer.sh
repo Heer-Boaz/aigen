@@ -3,16 +3,19 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-trainer_url="https://raw.githubusercontent.com/huggingface/diffusers/v0.38.0/examples/dreambooth/train_dreambooth_lora_flux.py"
-trainer_path="$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
-expected_check='check_min_version("0.38.0")'
+flux_trainer_url="https://raw.githubusercontent.com/huggingface/diffusers/v0.38.0/examples/dreambooth/train_dreambooth_lora_flux.py"
+flux_trainer_path="$repo_root/tools/diffusers/train_dreambooth_lora_flux.py"
+flux_expected_check='check_min_version("0.38.0")'
+flux2_trainer_url="https://raw.githubusercontent.com/huggingface/diffusers/main/examples/dreambooth/train_dreambooth_lora_flux2_klein.py"
+flux2_trainer_path="$repo_root/tools/diffusers/train_dreambooth_lora_flux2_klein.py"
+flux2_expected_check='check_min_version("0.40.0.dev0")'
 
 usage() {
   cat <<'EOF'
 Usage: scripts/download_lora_trainer.sh
 
-Downloads the pinned official Diffusers 0.38 FLUX DreamBooth-LoRA trainer used
-by the local 16GB LoRA training profile.
+Downloads the official Diffusers FLUX and FLUX.2 Klein DreamBooth-LoRA trainers
+used by the local 16GB LoRA training profiles.
 EOF
 }
 
@@ -28,10 +31,10 @@ while (($#)); do
   esac
 done
 
-mkdir -p "$(dirname -- "$trainer_path")"
-run curl -L --fail "$trainer_url" -o "$trainer_path"
-grep -Fq "$expected_check" "$trainer_path" || die "downloaded trainer is not the pinned Diffusers 0.38 trainer"
-"$venv_python" - "$trainer_path" <<'PY'
+mkdir -p "$(dirname -- "$flux_trainer_path")"
+run curl -L --fail "$flux_trainer_url" -o "$flux_trainer_path"
+grep -Fq "$flux_expected_check" "$flux_trainer_path" || die "downloaded trainer is not the pinned Diffusers 0.38 trainer"
+"$venv_python" - "$flux_trainer_path" <<'PY'
 import sys
 from pathlib import Path
 
@@ -61,7 +64,7 @@ if replacement not in source:
     source = source.replace(needle, replacement, 1)
 path.write_text(source, encoding="utf-8")
 PY
-"$venv_python" - "$trainer_path" <<'PY'
+"$venv_python" - "$flux_trainer_path" <<'PY'
 import sys
 from pathlib import Path
 
@@ -87,7 +90,15 @@ if replacement not in source:
     source = source.replace(needle, replacement, 1)
 path.write_text(source, encoding="utf-8")
 PY
-grep -Fq "move_training_module" "$trainer_path"
-grep -Fq "Skipping save-time transformer dtype cast for quantized local LoRA training." "$trainer_path"
-chmod +x "$trainer_path"
-log "LoRA trainer downloaded: $trainer_path"
+grep -Fq "move_training_module" "$flux_trainer_path"
+grep -Fq "Skipping save-time transformer dtype cast for quantized local LoRA training." "$flux_trainer_path"
+chmod +x "$flux_trainer_path"
+log "LoRA trainer downloaded: $flux_trainer_path"
+
+run curl -L --fail "$flux2_trainer_url" -o "$flux2_trainer_path"
+grep -Fq "$flux2_expected_check" "$flux2_trainer_path" || die "downloaded trainer is not the current Diffusers FLUX.2 Klein trainer"
+run "$venv_python" "$script_dir/patch_flux2_klein_lora_trainer.py" "$flux2_trainer_path"
+grep -Fq -- "--precomputed_cache_path" "$flux2_trainer_path"
+grep -Fq "Loaded precomputed training cache" "$flux2_trainer_path"
+chmod +x "$flux2_trainer_path"
+log "FLUX.2 Klein LoRA trainer downloaded: $flux2_trainer_path"

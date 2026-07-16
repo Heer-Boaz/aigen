@@ -23,6 +23,7 @@ Downloads the fixed production model set:
 - Depth Anything V2 Large for structural scene controls
 - IllustrationJaNai V1 DAT2 and ESRGAN for character postprocessing
 - Qwen-Image-Edit-2511 conditioner, VAE, and LightX2V FP8 transformers
+- FLUX.2 Klein 9B official scaled-FP8 transformer, VAE, and Qwen3 conditioner
 - Qwen2.5-VL-7B keyframe judge
 EOF
 }
@@ -55,6 +56,7 @@ manifest_args=(
   "model_sources/character_postprocess_illustrationjanai_v1.json"
   "model_sources/vosr_1_4b_ms.json"
   "model_sources/qwen_image_edit_2511_lightx2v_fp8.json"
+  "model_sources/flux2_klein_9b_fp8.json"
   "model_sources/keyframe_judge_qwen2_5_vl_7b.json"
 )
 

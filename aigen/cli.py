@@ -9,6 +9,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from aigen.brief_commands import add_brief_commands, run_brief_command
 from aigen.character_commands import add_character_commands, run_character_command
+from aigen.flux2_commands import add_flux2_klein_command, run_flux2_klein_command
 from aigen.image_caption_commands import add_image_caption_command, run_image_caption_command
 from aigen.keyframe_commands import add_keyframe_commands, run_keyframe_command
 from aigen.lora_commands import add_lora_commands, run_lora_command
@@ -29,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_brief_commands(subparsers)
     add_character_commands(subparsers)
+    add_flux2_klein_command(subparsers)
     add_image_caption_command(subparsers)
     add_keyframe_commands(subparsers)
     add_lora_commands(subparsers)
@@ -57,6 +59,8 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_brief_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "characters":
         return run_character_command(args, sys.stdout, sys.stderr, progress=progress)
+    if args.command == "flux2-klein":
+        return run_flux2_klein_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "image-caption":
         return run_image_caption_command(args, sys.stdout, progress=progress)
     if args.command == "keyframes":
