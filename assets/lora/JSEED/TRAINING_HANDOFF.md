@@ -1,197 +1,89 @@
-# Handoff aan Claude: JSEED-dataset v9 is afgekeurd
+# Handoff: JSEED dataset v10 — klaar voor training
 
-Datum: 2026-07-16
+Datum: 2026-07-16. Vervangt de v9-afkeuring (evidence blijft staan, zie onder).
 
-## Kort oordeel
+## Wat er is veranderd
 
-De afgekeurde dataset is als bewijsmateriaal gearchiveerd in:
+De destructieve segmentatieroute is geschrapt en vervangen door
+`scripts/build_jseed_dataset_v10.py`:
 
-`assets/lora/JSEED/train/rejected-jseed-dataset-v9/`
+- **Bronownership (vraag 1): opgelost.** Alle 52 goedgekeurde masters staan in
+  één canonieke map `assets/lora/JSEED/masters/` (19 gepromoveerd uit train/,
+  33 uit uncleaned/). De bouwer leest uitsluitend die map, via een expliciete
+  tabel van 52 rijen met per master de volledige caption als literal.
+- **Achtergrondvariatie (vraag 2): geschrapt.** De achtergrond staat in élke
+  caption benoemd ("Plain white background") en blijft daardoor promptbaar
+  (captioning-wet). Of dat volstaat is ná de training goedkoop te testen met
+  één prompt op een andere achtergrond; alleen bij falen is variatie nodig.
+- **Niet-destructief by construction (vragen 3-5):** de bouwer padt elke
+  master uitsluitend met de eigen randkleur (mediaan van de randpixels) tot de
+  dichtstbijzijnde officiële FLUX.2-bucketverhouding en schaalt dan Lanczos
+  naar exact die bucket. Geen alpha, geen masker: onderwerppixels kúnnen niet
+  beschadigen. Randen waar de figuur is afgesneden (portret-onderkant) krijgen
+  geen padding (anker), dus geen zwevende banden. Mocht achtergrondvariatie
+  ooit nodig zijn: flood-fill vanaf de canvasrand (alleen met de buitenrand
+  verbonden bijna-witte pixels vervangen) behoudt wit binnen gesloten
+  inktcontouren exact — maar dat is nu niet nodig.
+- **Geen kunstmatige inflatie.** v9 blies 52 masters op tot 416 beelden
+  (8 duplicaten per master in andere buckets/kleuren) — nul nieuwe informatie;
+  herhaling komt al uit de epochs. v10 = 52 unieke beelden, 1:1 met de masters.
 
-Deze set is niet bruikbaar voor training. De eerdere goedkeuring was fout. De
-compositiestap heeft bij veel beelden echte delen van het haar verwijderd en
-tegelijk witte bronachtergrond of witte randen rond het haar behouden. Volgens
-de volledige visuele controle is dit geen incident bij een paar bestanden:
-vrijwel de hele samengestelde set moet als afgekeurd worden behandeld.
+## Dataset
 
-De FLUX.2-LoRA-training is gestopt. Er draait geen trainer meer en de GPU is
-vrij. De run bereikte ongeveer stap 520; checkpoint 500 is volledig opgeslagen,
-maar is semantisch ongeldig omdat het op de kapotte dataset is getraind.
+- `assets/lora/JSEED/dataset-v10/` — 52 beelden + metadata.jsonl
+- Review: `assets/lora/JSEED/review/dataset-v10-contact-sheet.png` en
+  `dataset-v10-manifest.json` (per beeld: bron, maat, padkleur, bucket).
+- Steekproef op 100% gecontroleerd (o.a. `portrait-lookleft-lineart.png`):
+  haar en lineart-vulling intact.
+- Captions: kale `JSEED` + stijlfrase + inhoud/expressie + achtergrond.
+  Drie stijlen; expressies (determined/upset/warm smile) benoemd.
 
-Niet hervatten en niet hergebruiken:
+## Startcommando
 
-- `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/`
-- `runs/jseed_dataset_v5_preview_v9/flux2_klein_base_9b_jseed_17bucket_cache.pt`
-- `runs/flux2_jseed_subject_lora_9b_nf4_v5/checkpoint-250/`
-- `runs/flux2_jseed_subject_lora_9b_nf4_v5/checkpoint-500/`
-
-Er is niets verwijderd.
-
-## Wat daadwerkelijk als bron is gebruikt
-
-De datasetbouwer is:
-
-`scripts/prepare_jillian_subject_lora_dataset_v4.py`
-
-Hij leest twee bronmappen:
-
-- `assets/lora/JSEED/train/`: momenteel 40 bestanden, waarvan de expliciete
-  selectie in het script 19 masters gebruikt;
-- `assets/lora/JSEED/uncleaned/`: 33 bestanden, alle 33 als master gebruikt.
-
-De nieuwe PixAI-beelden zijn dus technisch wel meegenomen. De training gebruikte
-niet alleen oude data. De bronownership was desondanks verkeerd: goedgekeurde
-masters bleven in `uncleaned/` staan en de bouwer las rechtstreeks uit zowel de
-canonieke als tijdelijke bronmap. Daardoor was niet in één oogopslag vast te
-stellen wat de echte goedgekeurde trainingsbron was.
-
-Het manifest bevestigt:
-
-- 52 unieke masters;
-- 19 uit `assets/lora/JSEED/train/`;
-- 33 uit `assets/lora/JSEED/uncleaned/`;
-- 8 varianten per master;
-- 416 gegenereerde trainingsbeelden.
-
-Zie
-`assets/lora/JSEED/train/rejected-jseed-dataset-v9/manifest.json`.
-
-## Waar de beeldschade ontstaat
-
-De originele bronbeelden die bij de onderstaande voorbeelden horen hebben
-intact haar. De schade wordt dus door de datasetvoorbewerking geïntroduceerd.
-
-De actieve route in `scripts/prepare_jillian_subject_lora_dataset_v4.py` is:
-
-1. `AnimeForegroundSegmenter.segment_image(...)`;
-2. een harde binaire grens van `>= 0.90`;
-3. alpha uitsluitend als volledig transparant of volledig opaak;
-4. bijsnijden tot de alpha-bounding box;
-5. schalen met Lanczos en compositen op een effen achtergrond.
-
-Die route kan in deze dataset niet betrouwbaar onderscheiden tussen:
-
-- witte achtergrond en witte delen die bij het onderwerp horen;
-- dunne bruine/zwarte haarstrengen en achtergrond;
-- lichte pixels langs de haarcontour en achtergebleven bronachtergrond;
-- witte line-artvulling en de witte achtergrond;
-- echte heldere reflecties op het leren jack of de laarzen en te verwijderen
-  wit.
-
-Het gevolg is een combinatie van uitgeknipt haar, gaten in de silhouet, witte
-plekken tussen haarstrengen en zichtbare witte randen op donkere achtergronden.
-
-De review-contactbladen waren geen geldige kwaliteitscontrole. Op hun
-overzichtsschaal waren de pixel- en contourfouten te klein om betrouwbaar te
-zien. De dataset had op oorspronkelijke resolutie, bestand voor bestand,
-gecontroleerd moeten worden voordat de cache of training werd gestart.
-
-## Concrete kapotte voorbeelden
-
-| Gegenereerd trainingsbeeld | Originele bron | Zichtbaar probleem |
-| --- | --- | --- |
-| `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/determined_waistup_wide__b08_1024x1024__cool-light-gray.png` | `assets/lora/JSEED/uncleaned/determined_waistup_wide.png` | Haarcontour en losse strengen zijn weggeknipt. |
-| `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/determined_waistup_wide__b12_800x1328__white.png` | `assets/lora/JSEED/uncleaned/determined_waistup_wide.png` | Dezelfde structurele haarschade, minder opvallend door de witte achtergrond. |
-| `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/determined_fullbody_wide__b01_1504x688__dark-slate.png` | `assets/lora/JSEED/uncleaned/determined_fullbody_wide.png` | Witte plekken en een lichte rand rond het haar. |
-| `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/determined_nearly_fullbody__b14_720x1456__dark-slate.png` | `assets/lora/JSEED/uncleaned/determined_nearly_fullbody.png` | Duidelijke witte halo en restpixels rond het haar. |
-| `assets/lora/JSEED/train/rejected-jseed-dataset-v9/train/portrait-lookleft-lineart__b02_1456x720__dark-slate.png` | `assets/lora/JSEED/train/portrait-lookleft-lineart.png` | Buitenste haarvorm is rafelig en deels verdwenen; wit blijft lokaal achter. |
-
-De line-artbron is een bijzonder duidelijk bewijs van het fundamentele
-probleem: wit binnen gesloten zwarte haarcontouren is onderwerpinhoud, terwijl
-het omringende canvas eveneens wit is. Een generieke binaire
-voorgrondsegmentatie kan dat niet zonder inhoudsverlies oplossen.
-
-## Ongeldige afgeleide artefacten
-
-De cache:
-
-`runs/jseed_dataset_v5_preview_v9/flux2_klein_base_9b_jseed_17bucket_cache.pt`
-
-- grootte: 5.676.951.499 bytes;
-- inhoudssignatuur:
-  `3c2a08f996e3f1f022bbcbdf004237d84def03950b69468f3de5e90bc4668fdf`;
-- technisch correct voor exact dataset v9, maar daardoor juist onbruikbaar voor
-  een gerepareerde dataset.
-
-De gestopte trainingsrun:
-
-`runs/flux2_jseed_subject_lora_9b_nf4_v5/`
-
-Checkpoint 250 en 500 bevatten ieder LoRA-weights plus optimizer-, scheduler-
-en RNG-state. Het log meldt een succesvolle checkpoint-save op stap 500. De
-training liep daarna door tot ongeveer stap 520 en werd toen gestopt. Geen van
-deze checkpoints mag als kwaliteitskandidaat of hervattingspunt worden gebruikt.
-
-## Wat technisch wel werkte
-
-De trainermechaniek zelf is niet de oorzaak van deze mislukking:
-
-- FLUX.2 Klein 9B training-base;
-- bevroren transformer in NF4-opslag met BF16-rekenwerk;
-- Qwen3-8B-FP8 als bevroren conditioner;
-- conditionerlagen `9 18 27`;
-- rank en alpha 16;
-- persistente latents en promptembeddings op CPU, alleen de actuele batch naar
-  CUDA;
-- circa 4,3 tot 4,8 seconden per trainingsstap;
-- circa 13,8 GiB VRAM tijdens training;
-- geen geconstateerde nieuwe swapgroei.
-
-Voor de trainermechaniek zijn de relevante bestanden:
-
-- `tools/diffusers/train_dreambooth_lora_flux2_klein.py`
-- `scripts/patch_flux2_klein_lora_trainer.py`
-- `runs/flux2_jseed_subject_lora_9b_nf4_v5/train.log`
-
-Een nieuwe, gewijzigde dataset vereist altijd een nieuw datasetpad, een nieuwe
-cache en een nieuwe trainingsoutput. De v5-run mag niet worden hervat.
-
-## Leesvolgorde voor onderzoek
-
-1. Dit document.
-2. `scripts/prepare_jillian_subject_lora_dataset_v4.py`.
-3. `aigen/keyframe_segmentation.py`.
-4. `assets/lora/JSEED/train/rejected-jseed-dataset-v9/manifest.json`.
-5. De originele bestanden in `assets/lora/JSEED/train/` en
-   `assets/lora/JSEED/uncleaned/`.
-6. De vijf concrete bron/output-paren hierboven, op 100% zoom.
-7. Pas daarna de contactbladen in
-   `assets/lora/JSEED/train/rejected-jseed-dataset-v9/`.
-8. Alleen voor trainerperformance:
-   `runs/flux2_jseed_subject_lora_9b_nf4_v5/train.log` en
-   `scripts/patch_flux2_klein_lora_trainer.py`.
-
-## Vragen voor Claude
-
-1. Moeten alle goedgekeurde masters eerst naar één canonieke map
-   `assets/lora/JSEED/train/` worden gepromoveerd en moet de bouwer uitsluitend
-   die map lezen?
-2. Is achtergrondvariatie voor deze subject-LoRA de risico's van
-   voorgrondextractie waard, of is trainen op de schone originele witte
-   achtergronden verstandiger?
-3. Als achtergrondvariatie wel nodig is: welke route kan de originele
-   onderwerp-RGB exact behouden, inclusief haarstrengen, witte line-artvulling
-   en leren highlights, en uitsluitend bewezen achtergrondpixels vervangen?
-4. Hoe moet de kwaliteitscontrole worden ingericht zodat geen enkel
-   trainingsbeeld wordt gebruikt voordat de samengestelde output op volledige
-   resolutie naast de bron is bekeken?
-5. Is er een betrouwbare niet-destructieve manier om witte, met de buitenrand
-   verbonden achtergrond te vervangen zonder wit binnen gesloten
-   inktcontouren te verwijderen?
-
-Er is nog geen keuze gemaakt voor een vervangende segmentatie- of
-compositieroute. Eerst moet worden vastgesteld welke route de broninhoud
-daadwerkelijk pixelgetrouw behoudt.
-
-## Relevante implementatiebestanden
-
-```text
-aigen/keyframe_segmentation.py
-assets/lora/JSEED/TRAINING_HANDOFF.md
-assets/lora/JSEED/uncleaned/
-model_sources/anime_foreground_segmentation.json
-scripts/download_models.sh
-scripts/patch_flux2_klein_lora_trainer.py
-scripts/prepare_jillian_subject_lora_dataset_v4.py
-tools/clean_backgrounds.py
+```bash
+.venv/bin/accelerate launch tools/diffusers/train_dreambooth_lora_flux2_klein.py \
+  --pretrained_model_name_or_path aigen/models/flux2/black-forest-labs/FLUX.2-klein-base-9B-training \
+  --pretrained_text_encoder_name_or_path aigen/models/flux2/Qwen/Qwen3-8B-FP8 \
+  --dataset_name assets/lora/JSEED/dataset-v10 --caption_column prompt \
+  --instance_prompt "JSEED" \
+  --output_dir runs/flux2_jseed_subject_lora_9b_nf4_v6 \
+  --bnb_quantization_config_path runs/jillian_subject_lora_dataset_clean_v1/nf4-bf16.json \
+  --cache_latents \
+  --precomputed_cache_path assets/lora/JSEED/dataset-v10-cache.pt \
+  --aspect_ratio_buckets "832,1248;1184,880;1248,832" \
+  --text_encoder_out_layers 9 18 27 \
+  --center_crop --rank 16 --lora_alpha 16 --train_batch_size 1 --gradient_accumulation_steps 1 \
+  --gradient_checkpointing --mixed_precision bf16 \
+  --learning_rate 1e-4 --lr_scheduler constant --lr_warmup_steps 100 \
+  --optimizer adamW --use_8bit_adam --max_sequence_length 512 \
+  --max_train_steps 3000 --checkpointing_steps 250 --checkpoints_total_limit 12 \
+  --offload --seed 42 --skip_final_inference --report_to tensorboard
 ```
+
+Nieuw datasetpad, nieuwe cache, nieuwe output — v5-run niet hervatten.
+Beelden zijn al exact op bucketmaat; de trainer hoeft niets meer te croppen.
+
+## Evaluatieprotocol (runtime-defaults, ~3 s/render)
+
+- Checkpoint-sweep per 250; optimum lag bij v2 vóór het einde (2500 > 3000).
+- Per kandidaat, weight 1.0, seeds 42/43: canon-frase × drie aspecten;
+  stijl-switch (cel-shaded / lineart / pixel-art-frase); expressie-switch
+  ("with a warm smile" vs "determined"); prompt zonder stijlfrase (default?);
+  én één prompt met een niet-witte achtergrond (test van vraag 2).
+- Proporties vergelijken met `assets/lora/JSEED/masters/front-full.png`.
+
+## Niet hergebruiken (v9-erfenis, niets verwijderd)
+
+- `assets/lora/JSEED/train/` — legacy (oude v4-crops, stale metadata,
+  `rejected-jseed-dataset-v9/`-archief); mag na akkoord van Boaz weg.
+- `assets/lora/JSEED/uncleaned/` — leeg na promotie; mag weg.
+- `runs/jseed_dataset_v5_preview_v9/...cache.pt`, `runs/flux2_jseed_subject_lora_9b_nf4_v5/`
+  (checkpoints 250/500: getraind op kapotte data).
+- `scripts/prepare_jillian_subject_lora_dataset_v4.py` — vervangen door
+  `scripts/build_jseed_dataset_v10.py`.
+
+## Waarschuwingen
+
+- NF4-route bewezen: ~4,3-4,8 s/step, ~13,8 GiB VRAM → 3000 stappen ≈ 4 uur.
+- Geen FP8/TorchAO-training; "GPU 100%" is geen bewijs van voortgang.
+- Niets committen; Boaz commit zelf.

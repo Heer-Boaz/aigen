@@ -1,0 +1,938 @@
+[
+  {
+    "file_name": "front-full.png",
+    "source": "assets/lora/JSEED/masters/front-full.png",
+    "source_size": [
+      2800,
+      4200
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Full-body front view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "front-full-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/front-full-cellshaded.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Full-body front view with a faint smile. Plain white background."
+  },
+  {
+    "file_name": "front-full-lineart.png",
+    "source": "assets/lora/JSEED/masters/front-full-lineart.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Full-body front view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "side-full.png",
+    "source": "assets/lora/JSEED/masters/side-full.png",
+    "source_size": [
+      2800,
+      4200
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Full-body left-facing side view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "side-full-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/side-full-cellshaded.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Full-body left-facing side view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "side-full-lineart.png",
+    "source": "assets/lora/JSEED/masters/side-full-lineart.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Full-body left-facing side view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "back-full.png",
+    "source": "assets/lora/JSEED/masters/back-full.png",
+    "source_size": [
+      2800,
+      4200
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Full-body rear view. Plain white background."
+  },
+  {
+    "file_name": "back-full-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/back-full-cellshaded.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Full-body rear view. Plain white background."
+  },
+  {
+    "file_name": "back-full-lineart.png",
+    "source": "assets/lora/JSEED/masters/back-full-lineart.png",
+    "source_size": [
+      1684,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Full-body rear view. Plain white background."
+  },
+  {
+    "file_name": "front-upperbody.png",
+    "source": "assets/lora/JSEED/masters/front-upperbody.png",
+    "source_size": [
+      3360,
+      5040
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Front upper-body portrait with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "front-portrait-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/front-portrait-cellshaded.png",
+    "source_size": [
+      1696,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Front upper-body portrait with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "font-portrait-lineart.png",
+    "source": "assets/lora/JSEED/masters/font-portrait-lineart.png",
+    "source_size": [
+      1696,
+      2528
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Front upper-body portrait with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "side-upperbody.png",
+    "source": "assets/lora/JSEED/masters/side-upperbody.png",
+    "source_size": [
+      1088,
+      1632
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Left-facing side-profile upper-body portrait with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "three-quarter-upperbody.png",
+    "source": "assets/lora/JSEED/masters/three-quarter-upperbody.png",
+    "source_size": [
+      1493,
+      2240
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Left-facing three-quarter upper-body view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "three-quarter-upperbody-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/three-quarter-upperbody-cellshaded.png",
+    "source_size": [
+      3368,
+      5056
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Left-facing three-quarter upper-body view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "three-quarter-upperbody-lineart.png",
+    "source": "assets/lora/JSEED/masters/three-quarter-upperbody-lineart.png",
+    "source_size": [
+      3368,
+      5056
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1248,
+      832
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Left-facing three-quarter upper-body view with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "portrait-lookleft.png",
+    "source": "assets/lora/JSEED/masters/portrait-lookleft.png",
+    "source_size": [
+      1680,
+      2240
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Upper-body portrait looking to the left with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "portrait-lookleft-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/portrait-lookleft-cellshaded.png",
+    "source_size": [
+      3584,
+      4800
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Upper-body portrait looking to the left with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "portrait-lookleft-lineart.png",
+    "source": "assets/lora/JSEED/masters/portrait-lookleft-lineart.png",
+    "source_size": [
+      3584,
+      4780
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Upper-body portrait looking to the left with a neutral expression. Plain white background."
+  },
+  {
+    "file_name": "determined_fullbody_wide.png",
+    "source": "assets/lora/JSEED/masters/determined_fullbody_wide.png",
+    "source_size": [
+      1632,
+      1088
+    ],
+    "pad_color": [
+      255,
+      254,
+      254
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_fullbody_wide-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/determined_fullbody_wide-cellshaded.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_fullbody_wide-lineart.png",
+    "source": "assets/lora/JSEED/masters/determined_fullbody_wide-lineart.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_nearly_fullbody.png",
+    "source": "assets/lora/JSEED/masters/determined_nearly_fullbody.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      255,
+      255,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Nearly full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_nearly_fullbody-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/determined_nearly_fullbody-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Nearly full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_nearly_fullbody-lineart.png",
+    "source": "assets/lora/JSEED/masters/determined_nearly_fullbody-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Nearly full-body standing view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_portrait.png",
+    "source": "assets/lora/JSEED/masters/determined_portrait.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      255,
+      255,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Portrait with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_portrait-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/determined_portrait-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Portrait with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_portrait-lineart.png",
+    "source": "assets/lora/JSEED/masters/determined_portrait-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Portrait with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_waistup_wide.png",
+    "source": "assets/lora/JSEED/masters/determined_waistup_wide.png",
+    "source_size": [
+      1632,
+      1088
+    ],
+    "pad_color": [
+      255,
+      254,
+      254
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Waist-up view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_waistup_wide-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/determined_waistup_wide-cellshaded.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Waist-up view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "determined_waistup_wide-lineart.png",
+    "source": "assets/lora/JSEED/masters/determined_waistup_wide-lineart.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Waist-up view with a determined expression. Plain white background."
+  },
+  {
+    "file_name": "upset_fullbody_wide.png",
+    "source": "assets/lora/JSEED/masters/upset_fullbody_wide.png",
+    "source_size": [
+      1632,
+      1088
+    ],
+    "pad_color": [
+      253,
+      253,
+      253
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Seated full-body view, tense and sweating. Plain white background."
+  },
+  {
+    "file_name": "upset_fullbody_wide-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/upset_fullbody_wide-cellshaded.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Seated full-body view, tense and sweating. Plain white background."
+  },
+  {
+    "file_name": "upset_fullbody_wide-lineart.png",
+    "source": "assets/lora/JSEED/masters/upset_fullbody_wide-lineart.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Seated full-body view, tense and sweating. Plain white background."
+  },
+  {
+    "file_name": "upset_nearly_fullbody.png",
+    "source": "assets/lora/JSEED/masters/upset_nearly_fullbody.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      254,
+      254,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Nearly full-body view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_nearly_fullbody-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/upset_nearly_fullbody-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Nearly full-body view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_nearly_fullbody-lineart.png",
+    "source": "assets/lora/JSEED/masters/upset_nearly_fullbody-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Nearly full-body view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_portrait.png",
+    "source": "assets/lora/JSEED/masters/upset_portrait.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      255,
+      255,
+      253
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Portrait, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_portrait-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/upset_portrait-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      254,
+      255,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Portrait, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_portrait-lineart.png",
+    "source": "assets/lora/JSEED/masters/upset_portrait-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Portrait, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_waistup_wide.png",
+    "source": "assets/lora/JSEED/masters/upset_waistup_wide.png",
+    "source_size": [
+      1632,
+      1088
+    ],
+    "pad_color": [
+      254,
+      254,
+      253
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Waist-up view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_waistup_wide-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/upset_waistup_wide-cellshaded.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Waist-up view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "upset_waistup_wide-lineart.png",
+    "source": "assets/lora/JSEED/masters/upset_waistup_wide-lineart.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      254,
+      254,
+      254
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Waist-up view, visibly upset with tears. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_nearly_fullbody.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_nearly_fullbody.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      254,
+      254,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Nearly full-body standing view with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_nearly_fullbody-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_nearly_fullbody-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Nearly full-body standing view with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_nearly_fullbody-lineart.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_nearly_fullbody-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Nearly full-body standing view with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_portrait.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_portrait.png",
+    "source_size": [
+      1152,
+      1536
+    ],
+    "pad_color": [
+      254,
+      255,
+      254
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Portrait with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_portrait-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_portrait-cellshaded.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Portrait with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_portrait-lineart.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_portrait-lineart.png",
+    "source_size": [
+      1792,
+      2390
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      1184,
+      880
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Portrait with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_waistup_wide.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_waistup_wide.png",
+    "source_size": [
+      1632,
+      1088
+    ],
+    "pad_color": [
+      255,
+      254,
+      254
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black ink line art with light watercolor-like coloring. Waist-up view with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_waistup_wide-cellshaded.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_waistup_wide-cellshaded.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Anime cel shading with clean ink outlines. Waist-up view with a warm smile. Plain white background."
+  },
+  {
+    "file_name": "warm_smile_waistup_wide-lineart.png",
+    "source": "assets/lora/JSEED/masters/warm_smile_waistup_wide-lineart.png",
+    "source_size": [
+      2528,
+      1686
+    ],
+    "pad_color": [
+      255,
+      255,
+      255
+    ],
+    "bucket": [
+      832,
+      1248
+    ],
+    "prompt": "JSEED. Black-and-white ink line art. Waist-up view with a warm smile. Plain white background."
+  }
+]
