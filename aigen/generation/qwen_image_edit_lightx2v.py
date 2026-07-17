@@ -4,10 +4,12 @@ import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aigen.generation.image_generation_requests import ImageGenerationCaseRequest
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
@@ -42,23 +44,6 @@ class QwenImageEditLightX2VProfile:
     default_guidance_scale: float
     scheduler: str
     local_files_only: bool = True
-
-
-@dataclass(frozen=True)
-class LightX2VQwenOutputRequest:
-    name: str
-    seed: int
-    path: Path
-
-
-@dataclass(frozen=True)
-class LightX2VQwenCaseRequest:
-    name: str
-    prompt: str
-    image_paths: tuple[Path, ...]
-    width: int
-    height: int
-    outputs: tuple[LightX2VQwenOutputRequest, ...]
 
 
 @dataclass(frozen=True)
@@ -129,7 +114,7 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
 def run_lightx2v_qwen_image_edit(
     *,
     profile: QwenImageEditLightX2VProfile,
-    cases: tuple[LightX2VQwenCaseRequest, ...],
+    cases: Sequence[ImageGenerationCaseRequest],
     steps: int,
     true_cfg_scale: float,
     guidance_scale: float,

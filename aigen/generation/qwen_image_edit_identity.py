@@ -14,12 +14,14 @@ from typing import Any
 
 from PIL import Image
 
+from aigen.generation.image_generation_requests import (
+    ImageGenerationCaseRequest,
+    ImageGenerationOutputRequest,
+)
 from aigen.generation.image_upscale import size_for_long_side
 from aigen.generation.qwen_image_edit_lightx2v import (
     LIGHTX2V_QWEN_EDIT_2511_PROFILE,
     QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES,
-    LightX2VQwenCaseRequest,
-    LightX2VQwenOutputRequest,
     QwenImageEditLightX2VError,
     QwenImageEditLightX2VProfile,
     lightx2v_profile_json,
@@ -590,14 +592,14 @@ def _run_qwen_image_edit_cases_lightx2v(
                 )
                 width, height = reference_step.canvas_sizes[case.name]
                 requests.append(
-                    LightX2VQwenCaseRequest(
+                    ImageGenerationCaseRequest(
                         name=case.name,
                         prompt=case.prompt,
                         image_paths=tuple(staged_paths[id(image)] for image in _case_input_images(reference_step, case)),
                         width=width,
                         height=height,
                         outputs=tuple(
-                            LightX2VQwenOutputRequest(
+                            ImageGenerationOutputRequest(
                                 name=_case_output_name(case.name, candidate_index, len(case_seeds)),
                                 seed=case_seed,
                                 path=raw_dir

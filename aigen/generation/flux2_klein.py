@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import gc
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 from PIL import Image
 
+from aigen.flux_geometry import FLUX_TOKEN_SIZE
 from aigen.generation.flux2_scaled_fp8 import load_flux2_klein_scaled_fp8
+from aigen.generation.image_generation_requests import (
+    ImageGenerationCaseRequest,
+    ImageGenerationOutputRequest,
+)
+from aigen.generation.prompt_encoding import ordered_unique
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
@@ -29,6 +36,60 @@ class Flux2KleinError(RuntimeError):
 
 class Flux2KleinDependencyError(Flux2KleinError):
     pass
+
+
+@dataclass(frozen=True)
+class Flux2KleinPromptEmbedding:
+    prompt: str
+    prompt_embeds: Any
+
+
+@dataclass(frozen=True)
+class Flux2KleinBatchOutput:
+    case: str
+    name: str
+    output: str
+    width: int
+    height: int
+    seed: int
+    reference_count: int
+    denoise_ms: float
+    decode_ms: float
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "case": self.case,
+            "name": self.name,
+            "output": self.output,
+            "width": self.width,
+            "height": self.height,
+            "seed": self.seed,
+            "reference_count": self.reference_count,
+            "denoise_ms": self.denoise_ms,
+            "decode_ms": self.decode_ms,
+        }
+
+
+@dataclass(frozen=True)
+class Flux2KleinBatchResult:
+    outputs: tuple[Flux2KleinBatchOutput, ...]
+    generation_ms: float
+    model_load_ms: float
+    peak_vram_mb: int
+    lora: str | None
+    lora_weight: float
+
+    def to_json(self) -> dict[str, Any]:
+        payload = {
+            "outputs": [output.to_json() for output in self.outputs],
+            "generation_ms": self.generation_ms,
+            "model_load_ms": self.model_load_ms,
+            "peak_vram_mb": self.peak_vram_mb,
+        }
+        if self.lora is not None:
+            payload["lora"] = self.lora
+            payload["lora_weight"] = self.lora_weight
+        return payload
 
 
 @dataclass(frozen=True)
@@ -59,62 +120,105 @@ class Flux2KleinResult:
         return payload
 
 
-def generate_flux2_klein(
+@dataclass(frozen=True)
+class _PreparedFlux2KleinCase:
+    request: ImageGenerationCaseRequest
+    width: int
+    height: int
+    prompt_embeds: Any
+    text_ids: Any
+    image_latents: Any | None
+    image_latent_ids: Any | None
+
+
+@dataclass(frozen=True)
+class _DenoisedFlux2KleinOutput:
+    case: _PreparedFlux2KleinCase
+    request: ImageGenerationOutputRequest
+    latents: Any
+    latent_ids: Any
+    denoise_ms: float
+
+
+def encode_flux2_klein_prompts(
     *,
-    prompt: str,
-    output: Path,
-    references: Sequence[Path],
-    seed: int,
-    lora: Path | None,
-    lora_weight: float,
+    prompts: Sequence[str],
     progress: StatusReporter,
-) -> Flux2KleinResult:
+) -> tuple[dict[str, Flux2KleinPromptEmbedding], float]:
     (
         torch,
-        AutoencoderKLFlux2,
-        FlowMatchEulerDiscreteScheduler,
+        _,
+        _,
         Flux2KleinPipeline,
-        compute_empirical_mu,
-        retrieve_timesteps,
+        _,
+        _,
         AutoModelForCausalLM,
         AutoTokenizer,
     ) = _load_dependencies()
     if not torch.cuda.is_available():
         raise Flux2KleinError("FLUX.2 Klein 9B requires CUDA")
 
-    reference_images = _load_reference_images(references)
     started = time.perf_counter()
-    torch.cuda.reset_peak_memory_stats()
-
-    progress.phase("encode prompt")
+    progress.phase("encode prompts")
     tokenizer = AutoTokenizer.from_pretrained(
         FLUX2_KLEIN_TEXT_ENCODER,
         local_files_only=True,
     )
-    text_encoder = AutoModelForCausalLM.from_pretrained(
-        FLUX2_KLEIN_TEXT_ENCODER,
-        dtype="auto",
-        device_map="cuda",
-        local_files_only=True,
-        low_cpu_mem_usage=True,
-    )
+    text_encoder = None
     try:
+        text_encoder = AutoModelForCausalLM.from_pretrained(
+            FLUX2_KLEIN_TEXT_ENCODER,
+            dtype="auto",
+            device_map="cuda",
+            local_files_only=True,
+            low_cpu_mem_usage=True,
+        )
+        embeddings = {}
         with torch.no_grad():
-            prompt_embeds = Flux2KleinPipeline._get_qwen3_prompt_embeds(
-                text_encoder,
-                tokenizer,
-                prompt,
-                dtype=torch.bfloat16,
-                device=torch.device("cuda"),
-            ).cpu()
+            for prompt in ordered_unique(prompts):
+                embeddings[prompt] = Flux2KleinPromptEmbedding(
+                    prompt=prompt,
+                    prompt_embeds=Flux2KleinPipeline._get_qwen3_prompt_embeds(
+                        text_encoder,
+                        tokenizer,
+                        prompt,
+                        dtype=torch.bfloat16,
+                        device=torch.device("cuda"),
+                    ).cpu(),
+                )
+        return embeddings, (time.perf_counter() - started) * 1000
+    except torch.cuda.OutOfMemoryError as exc:
+        raise Flux2KleinError("FLUX.2 Klein 9B exceeded 16 GB VRAM") from exc
     finally:
-        del text_encoder
+        if text_encoder is not None:
+            del text_encoder
         del tokenizer
         _release_cuda(torch)
 
-    pipeline = None
-    try:
+
+class Flux2KleinSession:
+    def __init__(
+        self,
+        *,
+        lora: Path | None,
+        lora_weight: float,
+        progress: StatusReporter,
+    ) -> None:
+        (
+            torch,
+            AutoencoderKLFlux2,
+            FlowMatchEulerDiscreteScheduler,
+            Flux2KleinPipeline,
+            compute_empirical_mu,
+            retrieve_timesteps,
+            _,
+            _,
+        ) = _load_dependencies()
+        if not torch.cuda.is_available():
+            raise Flux2KleinError("FLUX.2 Klein 9B requires CUDA")
+
         progress.phase("load FLUX.2 Klein 9B")
+        started = time.perf_counter()
         transformer = load_flux2_klein_scaled_fp8(
             FLUX2_KLEIN_TRANSFORMER,
             lora=lora,
@@ -130,7 +234,7 @@ def generate_flux2_klein(
             FLUX2_KLEIN_MODEL_ROOT / "scheduler",
             local_files_only=True,
         )
-        pipeline = Flux2KleinPipeline(
+        self.pipeline = Flux2KleinPipeline(
             scheduler=scheduler,
             vae=vae,
             text_encoder=None,
@@ -138,137 +242,418 @@ def generate_flux2_klein(
             transformer=transformer,
             is_distilled=True,
         )
-        pipeline.set_progress_bar_config(disable=True)
+        self.pipeline.set_progress_bar_config(disable=True)
+        self.torch = torch
+        self.compute_empirical_mu = compute_empirical_mu
+        self.retrieve_timesteps = retrieve_timesteps
+        self.lora = lora.resolve() if lora is not None else None
+        self.lora_weight = lora_weight
+        self.model_load_ms = (time.perf_counter() - started) * 1000
 
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-        prompt_embeds, text_ids = pipeline.encode_prompt(
+    def generate(
+        self,
+        *,
+        cases: Sequence[ImageGenerationCaseRequest],
+        prompt_embeddings: Mapping[str, Flux2KleinPromptEmbedding],
+        progress: StatusReporter,
+    ) -> Flux2KleinBatchResult:
+        _validate_flux2_klein_cases(cases)
+        started = time.perf_counter()
+        try:
+            with self.torch.no_grad():
+                prepared_cases = _prepare_flux2_klein_cases(
+                    self.pipeline,
+                    cases=cases,
+                    prompt_embeddings=prompt_embeddings,
+                    torch=self.torch,
+                    progress=progress,
+                )
+                denoised_outputs = _denoise_flux2_klein_cases(
+                    self.pipeline,
+                    prepared_cases=prepared_cases,
+                    torch=self.torch,
+                    compute_empirical_mu=self.compute_empirical_mu,
+                    retrieve_timesteps=self.retrieve_timesteps,
+                    progress=progress,
+                )
+                outputs = _decode_flux2_klein_outputs(
+                    self.pipeline,
+                    denoised_outputs=denoised_outputs,
+                    torch=self.torch,
+                    progress=progress,
+                )
+            return Flux2KleinBatchResult(
+                outputs=outputs,
+                generation_ms=(time.perf_counter() - started) * 1000,
+                model_load_ms=self.model_load_ms,
+                peak_vram_mb=round(self.torch.cuda.max_memory_allocated() / 1024**2),
+                lora=self.lora.as_posix() if self.lora is not None else None,
+                lora_weight=self.lora_weight,
+            )
+        except self.torch.cuda.OutOfMemoryError as exc:
+            raise Flux2KleinError("FLUX.2 Klein 9B exceeded 16 GB VRAM") from exc
+
+    def close(self) -> None:
+        del self.pipeline
+        _release_cuda(self.torch)
+
+
+def generate_flux2_klein(
+    *,
+    prompt: str,
+    output: Path,
+    references: Sequence[Path],
+    width: int | None,
+    height: int | None,
+    seed: int,
+    lora: Path | None,
+    lora_weight: float,
+    progress: StatusReporter,
+) -> Flux2KleinResult:
+    started = time.perf_counter()
+    torch = _load_dependencies()[0]
+    if not torch.cuda.is_available():
+        raise Flux2KleinError("FLUX.2 Klein 9B requires CUDA")
+    torch.cuda.reset_peak_memory_stats()
+
+    case = ImageGenerationCaseRequest(
+        name=output.stem,
+        prompt=prompt,
+        image_paths=tuple(references),
+        width=width,
+        height=height,
+        outputs=(
+            ImageGenerationOutputRequest(
+                name=output.stem,
+                seed=seed,
+                path=output,
+            ),
+        ),
+    )
+    _validate_flux2_klein_cases((case,))
+    prompt_embeddings, _ = encode_flux2_klein_prompts(
+        prompts=(prompt,),
+        progress=progress,
+    )
+    session = Flux2KleinSession(
+        lora=lora,
+        lora_weight=lora_weight,
+        progress=progress,
+    )
+    try:
+        batch = session.generate(
+            cases=(case,),
+            prompt_embeddings=prompt_embeddings,
+            progress=progress,
+        )
+        generated = batch.outputs[0]
+        return Flux2KleinResult(
+            output=generated.output,
+            width=generated.width,
+            height=generated.height,
+            seed=generated.seed,
+            reference_count=generated.reference_count,
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+            peak_vram_mb=batch.peak_vram_mb,
+            lora=batch.lora,
+            lora_weight=batch.lora_weight,
+        )
+    finally:
+        session.close()
+
+
+def _validate_flux2_klein_cases(cases: Sequence[ImageGenerationCaseRequest]) -> None:
+    if not cases:
+        raise Flux2KleinError("FLUX.2 Klein requires at least one generation case")
+    for case in cases:
+        if not case.outputs:
+            raise Flux2KleinError(f"FLUX.2 Klein case {case.name} has no outputs")
+        if (case.width is None) != (case.height is None):
+            raise Flux2KleinError("width and height must be provided together")
+        if case.width is not None and (
+            case.width < FLUX_TOKEN_SIZE
+            or case.height < FLUX_TOKEN_SIZE
+            or case.width % FLUX_TOKEN_SIZE
+            or case.height % FLUX_TOKEN_SIZE
+        ):
+            raise Flux2KleinError(
+                f"width and height must be positive multiples of {FLUX_TOKEN_SIZE}"
+            )
+
+
+def _prepare_flux2_klein_cases(
+    pipeline: Any,
+    *,
+    cases: Sequence[ImageGenerationCaseRequest],
+    prompt_embeddings: Mapping[str, Flux2KleinPromptEmbedding],
+    torch: Any,
+    progress: StatusReporter,
+) -> tuple[_PreparedFlux2KleinCase, ...]:
+    encoded_prompts = {}
+    for prompt in ordered_unique(case.prompt for case in cases):
+        embedding = prompt_embeddings[prompt]
+        encoded_prompts[prompt] = pipeline.encode_prompt(
             prompt=None,
-            prompt_embeds=prompt_embeds,
+            prompt_embeds=embedding.prompt_embeds,
             device=torch.device("cpu"),
         )
-        condition_images, width, height = _prepare_condition_images(pipeline, reference_images)
 
-        progress.phase("encode references")
-        vae.requires_grad_(False)
-        vae.to("cuda")
-        image_latents = None
-        image_latent_ids = None
-        if condition_images:
-            with torch.no_grad():
-                image_latents, image_latent_ids = pipeline.prepare_image_latents(
-                    images=condition_images,
-                    batch_size=1,
-                    generator=generator,
-                    device=torch.device("cuda"),
-                    dtype=vae.dtype,
+    progress.phase("encode references")
+    vae = pipeline.vae
+    vae.requires_grad_(False)
+    has_references = any(case.image_paths for case in cases)
+    reference_cache = {}
+    prepared_cases = []
+    try:
+        if has_references:
+            vae.to("cuda")
+        for case in cases:
+            reference_key = tuple(path.resolve() for path in case.image_paths)
+            reference_encoding = reference_cache.get(reference_key)
+            if reference_encoding is None:
+                reference_images = _load_reference_images(reference_key)
+                try:
+                    (
+                        condition_images,
+                        inferred_width,
+                        inferred_height,
+                    ) = _prepare_condition_images(
+                        pipeline,
+                        reference_images,
+                    )
+                finally:
+                    for image in reference_images:
+                        image.close()
+                image_latents = None
+                image_latent_ids = None
+                if condition_images:
+                    generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
+                    with torch.no_grad():
+                        image_latents, image_latent_ids = pipeline.prepare_image_latents(
+                            images=condition_images,
+                            batch_size=1,
+                            generator=generator,
+                            device=torch.device("cuda"),
+                            dtype=vae.dtype,
+                        )
+                    image_latents = image_latents.cpu()
+                    image_latent_ids = image_latent_ids.cpu()
+                reference_encoding = (
+                    image_latents,
+                    image_latent_ids,
+                    inferred_width,
+                    inferred_height,
                 )
-        if image_latents is not None:
-            image_latents = image_latents.cpu()
-            image_latent_ids = image_latent_ids.cpu()
-        vae.to("cpu")
+                reference_cache[reference_key] = reference_encoding
+            image_latents, image_latent_ids, inferred_width, inferred_height = reference_encoding
+            prompt_embeds, text_ids = encoded_prompts[case.prompt]
+            prepared_cases.append(
+                _PreparedFlux2KleinCase(
+                    request=case,
+                    width=case.width or inferred_width,
+                    height=case.height or inferred_height,
+                    prompt_embeds=prompt_embeds,
+                    text_ids=text_ids,
+                    image_latents=image_latents,
+                    image_latent_ids=image_latent_ids,
+                )
+            )
+    finally:
+        if has_references:
+            vae.to("cpu")
         _release_cuda(torch)
+    return tuple(prepared_cases)
 
+
+def _denoise_flux2_klein_cases(
+    pipeline: Any,
+    *,
+    prepared_cases: Sequence[_PreparedFlux2KleinCase],
+    torch: Any,
+    compute_empirical_mu: Any,
+    retrieve_timesteps: Any,
+    progress: StatusReporter,
+) -> tuple[_DenoisedFlux2KleinOutput, ...]:
+    transformer = pipeline.transformer
+    total_steps = sum(len(case.request.outputs) for case in prepared_cases) * FLUX2_KLEIN_STEPS
+    progress.begin(total_steps, f"denoising 0/{total_steps}")
+    denoised_outputs = []
+    try:
         progress.phase("load transformer to CUDA")
         transformer.to("cuda")
-        prompt_embeds = prompt_embeds.to("cuda")
-        text_ids = text_ids.to("cuda")
-        if image_latents is not None:
-            image_latents = image_latents.to("cuda")
-            image_latent_ids = image_latent_ids.to("cuda")
+        for case in prepared_cases:
+            denoised_outputs.extend(
+                _denoise_flux2_klein_case(
+                    pipeline,
+                    case=case,
+                    torch=torch,
+                    compute_empirical_mu=compute_empirical_mu,
+                    retrieve_timesteps=retrieve_timesteps,
+                    progress=progress,
+                )
+            )
+    finally:
+        progress.phase("offload transformer")
+        transformer.to("cpu")
+        _release_cuda(torch)
+    return tuple(denoised_outputs)
 
+
+def _denoise_flux2_klein_case(
+    pipeline: Any,
+    *,
+    case: _PreparedFlux2KleinCase,
+    torch: Any,
+    compute_empirical_mu: Any,
+    retrieve_timesteps: Any,
+    progress: StatusReporter,
+) -> list[_DenoisedFlux2KleinOutput]:
+    prompt_embeds = case.prompt_embeds.to("cuda")
+    text_ids = case.text_ids.to("cuda")
+    image_latents = (
+        case.image_latents.to("cuda") if case.image_latents is not None else None
+    )
+    image_latent_ids = (
+        case.image_latent_ids.to("cuda") if case.image_latent_ids is not None else None
+    )
+    outputs = []
+    for output in case.request.outputs:
+        started = time.perf_counter()
+        generator = torch.Generator(device="cuda").manual_seed(output.seed)
         latents, latent_ids = pipeline.prepare_latents(
             batch_size=1,
-            num_latents_channels=transformer.config.in_channels // 4,
-            height=height,
-            width=width,
+            num_latents_channels=pipeline.transformer.config.in_channels // 4,
+            height=case.height,
+            width=case.width,
             dtype=prompt_embeds.dtype,
             device=torch.device("cuda"),
             generator=generator,
         )
         mu = compute_empirical_mu(latents.shape[1], FLUX2_KLEIN_STEPS)
         timesteps, _ = retrieve_timesteps(
-            scheduler,
+            pipeline.scheduler,
             FLUX2_KLEIN_STEPS,
             torch.device("cuda"),
             sigmas=np.linspace(1.0, 1 / FLUX2_KLEIN_STEPS, FLUX2_KLEIN_STEPS),
             mu=mu,
         )
-        scheduler.set_begin_index(0)
+        pipeline.scheduler.set_begin_index(0)
 
-        progress.begin(FLUX2_KLEIN_STEPS, "denoising 0/4")
-        for step_index, timestep in enumerate(timesteps):
-            timestep_batch = timestep.expand(latents.shape[0]).to(latents.dtype)
-            latent_model_input = latents
-            latent_model_ids = latent_ids
-            if image_latents is not None:
-                latent_model_input = torch.cat((latents, image_latents), dim=1)
-                latent_model_ids = torch.cat((latent_ids, image_latent_ids), dim=1)
-            noise_prediction = transformer(
-                hidden_states=latent_model_input,
-                timestep=timestep_batch / 1000,
-                guidance=None,
-                encoder_hidden_states=prompt_embeds,
-                txt_ids=text_ids,
-                img_ids=latent_model_ids,
-                return_dict=False,
-            )[0][:, : latents.size(1)]
-            latents = scheduler.step(
-                noise_prediction,
-                timestep,
-                latents,
-                return_dict=False,
-            )[0]
-            progress.step(f"denoising {step_index + 1}/{FLUX2_KLEIN_STEPS}")
-
-        progress.phase("offload transformer")
-        transformer.to("cpu")
+        with torch.no_grad():
+            for step_index, timestep in enumerate(timesteps):
+                timestep_batch = timestep.expand(latents.shape[0]).to(latents.dtype)
+                latent_model_input = latents
+                latent_model_ids = latent_ids
+                if image_latents is not None:
+                    latent_model_input = torch.cat((latents, image_latents), dim=1)
+                    latent_model_ids = torch.cat((latent_ids, image_latent_ids), dim=1)
+                noise_prediction = pipeline.transformer(
+                    hidden_states=latent_model_input,
+                    timestep=timestep_batch / 1000,
+                    guidance=None,
+                    encoder_hidden_states=prompt_embeds,
+                    txt_ids=text_ids,
+                    img_ids=latent_model_ids,
+                    return_dict=False,
+                )[0][:, : latents.size(1)]
+                latents = pipeline.scheduler.step(
+                    noise_prediction,
+                    timestep,
+                    latents,
+                    return_dict=False,
+                )[0]
+                progress.step(
+                    f"{output.name}: denoising {step_index + 1}/{FLUX2_KLEIN_STEPS}"
+                )
+        output_latents = latents.cpu()
+        output_latent_ids = latent_ids.cpu()
+        del latents
+        del latent_ids
         del noise_prediction
         del latent_model_input
-        del prompt_embeds
-        del text_ids
-        del image_latents
-        del image_latent_ids
-        _release_cuda(torch)
+        del latent_model_ids
+        del timestep_batch
+        outputs.append(
+            _DenoisedFlux2KleinOutput(
+                case=case,
+                request=output,
+                latents=output_latents,
+                latent_ids=output_latent_ids,
+                denoise_ms=(time.perf_counter() - started) * 1000,
+            )
+        )
+    return outputs
 
-        progress.phase("decode image")
+
+def _decode_flux2_klein_outputs(
+    pipeline: Any,
+    *,
+    denoised_outputs: Sequence[_DenoisedFlux2KleinOutput],
+    torch: Any,
+    progress: StatusReporter,
+) -> tuple[Flux2KleinBatchOutput, ...]:
+    progress.phase("decode images")
+    vae = pipeline.vae
+    outputs = []
+    try:
         vae.to("cuda")
-        latent_height = 2 * (height // (pipeline.vae_scale_factor * 2))
-        latent_width = 2 * (width // (pipeline.vae_scale_factor * 2))
-        latents = pipeline._unpack_latents_with_ids(
-            latents,
-            latent_ids,
-            latent_height // 2,
-            latent_width // 2,
-        )
-        latent_mean = vae.bn.running_mean.view(1, -1, 1, 1).to(latents.device, latents.dtype)
-        latent_std = torch.sqrt(
-            vae.bn.running_var.view(1, -1, 1, 1) + vae.config.batch_norm_eps
-        ).to(latents.device, latents.dtype)
-        latents = pipeline._unpatchify_latents(latents * latent_std + latent_mean)
-        with torch.no_grad():
-            decoded = vae.decode(latents, return_dict=False)[0]
-        image = pipeline.image_processor.postprocess(decoded, output_type="pil")[0]
-        output = output.resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        image.save(output)
-        peak_vram_mb = round(torch.cuda.max_memory_allocated() / 1024**2)
-        return Flux2KleinResult(
-            output=output.as_posix(),
-            width=image.width,
-            height=image.height,
-            seed=seed,
-            reference_count=len(reference_images),
-            elapsed_ms=(time.perf_counter() - started) * 1000,
-            peak_vram_mb=peak_vram_mb,
-            lora=lora.resolve().as_posix() if lora is not None else None,
-            lora_weight=lora_weight,
-        )
-    except torch.cuda.OutOfMemoryError as exc:
-        raise Flux2KleinError("FLUX.2 Klein 9B exceeded 16 GB VRAM") from exc
+        for denoised in denoised_outputs:
+            outputs.append(
+                _decode_flux2_klein_output(
+                    pipeline,
+                    denoised=denoised,
+                    torch=torch,
+                )
+            )
     finally:
-        if pipeline is not None:
-            del pipeline
+        vae.to("cpu")
         _release_cuda(torch)
+    return tuple(outputs)
+
+
+def _decode_flux2_klein_output(
+    pipeline: Any,
+    *,
+    denoised: _DenoisedFlux2KleinOutput,
+    torch: Any,
+) -> Flux2KleinBatchOutput:
+    started = time.perf_counter()
+    vae = pipeline.vae
+    latents = denoised.latents.to("cuda")
+    latent_ids = denoised.latent_ids.to("cuda")
+    latent_height = 2 * (denoised.case.height // (pipeline.vae_scale_factor * 2))
+    latent_width = 2 * (denoised.case.width // (pipeline.vae_scale_factor * 2))
+    latents = pipeline._unpack_latents_with_ids(
+        latents,
+        latent_ids,
+        latent_height // 2,
+        latent_width // 2,
+    )
+    latent_mean = vae.bn.running_mean.view(1, -1, 1, 1).to(
+        latents.device,
+        latents.dtype,
+    )
+    latent_std = torch.sqrt(
+        vae.bn.running_var.view(1, -1, 1, 1) + vae.config.batch_norm_eps
+    ).to(latents.device, latents.dtype)
+    latents = pipeline._unpatchify_latents(latents * latent_std + latent_mean)
+    with torch.no_grad():
+        decoded = vae.decode(latents, return_dict=False)[0]
+    image = pipeline.image_processor.postprocess(decoded, output_type="pil")[0]
+    output_path = denoised.request.path.resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path)
+    return Flux2KleinBatchOutput(
+        case=denoised.case.request.name,
+        name=denoised.request.name,
+        output=output_path.as_posix(),
+        width=image.width,
+        height=image.height,
+        seed=denoised.request.seed,
+        reference_count=len(denoised.case.request.image_paths),
+        denoise_ms=denoised.denoise_ms,
+        decode_ms=(time.perf_counter() - started) * 1000,
+    )
 
 
 def _load_reference_images(paths: Sequence[Path]) -> list[Image.Image]:

@@ -13,6 +13,8 @@ def add_flux2_klein_command(subparsers: Any) -> None:
     command.add_argument("--prompt", required=True)
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--reference", type=Path, action="append", default=[])
+    command.add_argument("--width", type=int)
+    command.add_argument("--height", type=int)
     command.add_argument("--seed", type=int, default=42)
     command.add_argument("--lora", type=Path)
     command.add_argument("--lora-weight", type=float, default=1.0)
@@ -32,6 +34,8 @@ def run_flux2_klein_command(
             prompt=args.prompt,
             output=args.output,
             references=args.reference,
+            width=args.width,
+            height=args.height,
             seed=args.seed,
             lora=args.lora,
             lora_weight=args.lora_weight,
