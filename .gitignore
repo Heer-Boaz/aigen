@@ -4,6 +4,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.venv-pixal3d/
+.venv-pixal3d-cu128-failed/
 dist/
 build/
 *.egg-info/
@@ -19,6 +21,8 @@ catalogs/
 plans/
 runs/
 tools/diffusers/
+model_sources/Pixal3D/
+model_sources/TRELLIS.2/
 !assets/lora/
 !assets/lora/a51_lora/
 !assets/lora/a51_lora/**
