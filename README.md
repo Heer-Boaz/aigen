@@ -70,18 +70,58 @@ To inspect a model download manifest manually:
 
 Remove `--dry-run` after accepting required model licenses.
 
+## Experimental HunyuanVideo-1.5 I2V
+
+HunyuanVideo-1.5 is an optional direct image-to-video route and is not part of
+the default character-keyframe installation. It uses Tencent's official source
+at a pinned revision and the official `480p_i2v_step_distilled` transformer.
+The transformer alone is 33.3 GB, so the runtime keeps model components on the
+CPU and uses transformer group offloading instead of loading the complete model
+into VRAM.
+
+Install the isolated runtime and download only the required model components:
+
+```bash
+scripts/install_hunyuanvideo15.sh
+scripts/download_hunyuanvideo15.sh
+```
+
+The installer applies the tracked patch under `patches/hunyuanvideo15/`. It
+releases CUDA allocator cache after an offloaded component has moved back to
+the CPU. This was required to pass the text-encoder-to-VAE transition on the
+16 GB RTX 5070 Ti, but the BF16 transformer still fails at the first denoise
+step. The route is not end-to-end validated; see
+`docs/HANDOFF-HUNYUANVIDEO15.md` for the exact evidence and review questions.
+
+The command below targets the intended short 480p I2V profile:
+
+```bash
+.venv/bin/aigen hunyuanvideo15-i2v \
+  --image path/to/input.png \
+  --prompt "<motion and camera instruction>" \
+  --output runs/hunyuanvideo15/output.mp4
+```
+
+The defaults are 49 frames, seed 42 and 8 step-distilled inference steps. The
+only other supported step count is 12. CFG 1 and flow shift 7 come from
+Tencent's official checkpoint profile. Super-resolution, prompt rewriting,
+feature caching, sparse attention and compilation remain disabled; CPU model
+offloading and transformer group offloading remain enabled. The process writes
+Tencent's generation config and a log beside the MP4.
+
 ## Command Surface
 
-The public CLI has four owners:
+The character-keyframe workflow has four public owners:
 
 - `models`: download pinned model manifests into `aigen/models`.
 - `characters`: validate, run and accept canonical character view-bank entries.
 - `briefs`: plan and materialize keyframe jobs from identity images and example sprites.
 - `keyframes`: run, score, judge, refine and polish materialized jobs.
 
-Raw one-shot generation commands are not a supported public workflow. Model
-pipelines are implementation modules behind character-view, keyframe and polish
-jobs.
+Raw one-shot generation commands are not a supported character-keyframe
+workflow. Model pipelines are implementation modules behind character-view,
+keyframe and polish jobs. The optional HunyuanVideo command above is a separate
+I2V utility.
 
 ## Character Views
 

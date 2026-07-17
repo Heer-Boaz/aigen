@@ -1,0 +1,6 @@
+diff --git a/hyvideo/commons/__init__.py b/hyvideo/commons/__init__.py
+index a59b44b..aba7815 100644
+--- a/hyvideo/commons/__init__.py
++++ b/hyvideo/commons/__init__.py
+@@ -241,0 +242 @@ def auto_offload_model(models, device, enabled=True):
++        torch.cuda.empty_cache()

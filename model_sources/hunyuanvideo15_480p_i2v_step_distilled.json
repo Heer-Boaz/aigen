@@ -1,0 +1,69 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "runtime": "Official Tencent HunyuanVideo-1.5 480p I2V step-distilled with CPU and transformer group offloading"
+  },
+  "downloads": [
+    {
+      "name": "hunyuanvideo-1.5-480p-i2v-step-distilled",
+      "repo_id": "tencent/HunyuanVideo-1.5",
+      "revision": "9b49404b3f5df2a8f0b31df27a0c7ab872e7b038",
+      "local_path": "hunyuanvideo15/tencent/HunyuanVideo-1.5",
+      "include": [
+        "LICENSE",
+        "NOTICE",
+        "config.json",
+        "scheduler/**",
+        "transformer/480p_i2v_step_distilled/**",
+        "vae/**"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "transformer/1080p_*/**",
+        "transformer/480p_i2v/**",
+        "transformer/480p_i2v_distilled/**",
+        "transformer/480p_t2v*/**",
+        "transformer/720p_*/**",
+        "upsampler/**"
+      ]
+    },
+    {
+      "name": "hunyuanvideo-1.5-byt5-small",
+      "repo_id": "google/byt5-small",
+      "revision": "68377bdc18a2ffec8a0533fef03b1c513a4dd49d",
+      "local_path": "hunyuanvideo15/tencent/HunyuanVideo-1.5/text_encoder/byt5-small",
+      "include": [
+        "config.json",
+        "generation_config.json",
+        "pytorch_model.bin",
+        "special_tokens_map.json",
+        "tokenizer_config.json"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "README.md",
+        "flax_model.msgpack",
+        "tf_model.h5"
+      ]
+    },
+    {
+      "name": "hunyuanvideo-1.5-siglip-vision-encoder",
+      "repo_id": "black-forest-labs/FLUX.1-Redux-dev",
+      "revision": "c95859fbf7703ca4d6824b4da4407d7cd0434f81",
+      "local_path": "hunyuanvideo15/tencent/HunyuanVideo-1.5/vision_encoder/siglip",
+      "include": [
+        "LICENSE.md",
+        "feature_extractor/**",
+        "image_encoder/**"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "README.md",
+        "flux1-redux-dev.safetensors",
+        "image_embedder/**",
+        "redux.png"
+      ]
+    }
+  ]
+}
