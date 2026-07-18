@@ -14,8 +14,13 @@ from aigen.runtime_profiles import PROJECT_ROOT
 
 
 LTX23_WANGP_REVISION = "5582327dc25e45fec6cda0f27144d4dcf7ed104b"
-LTX23_MODEL_TYPE = "ltx2_22B_nvfp4"
+LTX23_MODEL_TYPES = {
+    "nvfp4": "ltx2_22B_nvfp4",
+    "int8": "ltx2_22B",
+}
+LTX23_DEFAULT_MODEL = "nvfp4"
 LTX23_DEFAULT_FPS = 24
+LTX23_DEFAULT_CONDITIONING_STRENGTH = 1.0
 LTX23_MINIMUM_FRAMES = 17
 LTX23_FRAME_STEP = 8
 LTX23_SOLVERS = frozenset({"distilled_8_steps", "euler", "res2s"})
@@ -45,6 +50,9 @@ class Ltx23KeyframesResult:
     fps: int
     steps: int
     solver: str
+    conditioning_strength: float
+    model: str
+    model_type: str
     seed: int
     elapsed_seconds: float
     phase_metrics: tuple[dict[str, Any], ...]
@@ -60,13 +68,15 @@ class Ltx23KeyframesResult:
             "log": self.log.as_posix(),
             "runtime": "WanGP",
             "runtime_revision": LTX23_WANGP_REVISION,
-            "model_type": LTX23_MODEL_TYPE,
+            "model": self.model,
+            "model_type": self.model_type,
             "keyframes": [keyframe.to_json() for keyframe in self.keyframes],
             "resolution": self.resolution,
             "frames": self.frames,
             "fps": self.fps,
             "steps": self.steps,
             "solver": self.solver,
+            "conditioning_strength": self.conditioning_strength,
             "seed": self.seed,
             "prompt_enhancer": False,
             "audio": False,
@@ -89,6 +99,8 @@ def generate_ltx23_keyframes(
     fps: int,
     steps: int,
     solver: str,
+    conditioning_strength: float,
+    model: str,
     seed: int,
     progress: StatusReporter,
 ) -> Ltx23KeyframesResult:
@@ -101,6 +113,8 @@ def generate_ltx23_keyframes(
         fps=fps,
         steps=steps,
         solver=solver,
+        conditioning_strength=conditioning_strength,
+        model=model,
         seeds=(seed,),
         progress=progress,
     )[0]
@@ -116,6 +130,8 @@ def generate_ltx23_keyframes_seed_sweep(
     fps: int,
     steps: int,
     solver: str,
+    conditioning_strength: float,
+    model: str,
     seeds: Sequence[int],
     progress: StatusReporter,
 ) -> tuple[Ltx23KeyframesResult, ...]:
@@ -133,7 +149,10 @@ def generate_ltx23_keyframes_seed_sweep(
         fps=fps,
         steps=steps,
         solver=solver,
+        conditioning_strength=conditioning_strength,
+        model=model,
     )
+    model_type = LTX23_MODEL_TYPES[model]
     output = output.expanduser().resolve()
     outputs = tuple(
         output
@@ -172,6 +191,8 @@ def generate_ltx23_keyframes_seed_sweep(
             "fps": fps,
             "steps": steps,
             "solver": solver,
+            "conditioning_strength": conditioning_strength,
+            "model_type": model_type,
             "seed": seed,
         }
         for seed, job_output in zip(normalized_seeds, outputs, strict=True)
@@ -228,6 +249,9 @@ def generate_ltx23_keyframes_seed_sweep(
                 fps=fps,
                 steps=steps,
                 solver=solver,
+                conditioning_strength=conditioning_strength,
+                model=model,
+                model_type=model_type,
                 seed=seed,
                 elapsed_seconds=elapsed_seconds,
                 phase_metrics=tuple(response["phase_metrics"]),
@@ -248,6 +272,8 @@ def _validate_request(
     fps: int,
     steps: int,
     solver: str,
+    conditioning_strength: float,
+    model: str,
 ) -> tuple[Ltx23Keyframe, ...]:
     if not prompt.strip():
         raise Ltx23KeyframesError("video motion prompt must not be empty")
@@ -263,8 +289,12 @@ def _validate_request(
         raise Ltx23KeyframesError("inference steps must be positive")
     if solver not in LTX23_SOLVERS:
         raise Ltx23KeyframesError(f"unsupported LTX-2.3 solver: {solver}")
+    if model not in LTX23_MODEL_TYPES:
+        raise Ltx23KeyframesError(f"unsupported LTX-2.3 model: {model}")
     if solver == "distilled_8_steps" and steps != 8:
         raise Ltx23KeyframesError("distilled_8_steps requires exactly 8 inference steps")
+    if not 0.0 <= conditioning_strength <= 1.0:
+        raise Ltx23KeyframesError("conditioning strength must be between 0 and 1")
     try:
         width_text, height_text = resolution.lower().split("x", maxsplit=1)
         width, height = int(width_text), int(height_text)

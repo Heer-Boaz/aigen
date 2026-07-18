@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
-from aigen.generation.ltx23_keyframes import LTX23_DEFAULT_FPS
+from aigen.generation.ltx23_keyframes import (
+    LTX23_DEFAULT_CONDITIONING_STRENGTH,
+    LTX23_DEFAULT_FPS,
+    LTX23_DEFAULT_MODEL,
+    LTX23_MODEL_TYPES,
+)
 from aigen.progress import StatusReporter
 
 
@@ -34,6 +39,18 @@ def add_ltx23_command(subparsers: Any) -> None:
         "--solver",
         choices=("distilled_8_steps", "euler", "res2s"),
         default="res2s",
+    )
+    command.add_argument(
+        "--conditioning-strength",
+        type=float,
+        default=LTX23_DEFAULT_CONDITIONING_STRENGTH,
+        help="Keyframe conditioning strength from 0 to 1 (default: 1)",
+    )
+    command.add_argument(
+        "--model",
+        choices=tuple(LTX23_MODEL_TYPES),
+        default=LTX23_DEFAULT_MODEL,
+        help="LTX-2.3 Dev transformer precision; defaults to nvfp4",
     )
     command.add_argument(
         "--seed",
@@ -81,6 +98,8 @@ def run_ltx23_command(
                 fps=args.fps,
                 steps=args.steps,
                 solver=args.solver,
+                conditioning_strength=args.conditioning_strength,
+                model=args.model,
                 seed=seeds[0],
                 progress=progress,
             )
@@ -95,6 +114,8 @@ def run_ltx23_command(
                 fps=args.fps,
                 steps=args.steps,
                 solver=args.solver,
+                conditioning_strength=args.conditioning_strength,
+                model=args.model,
                 seeds=seeds,
                 progress=progress,
             )

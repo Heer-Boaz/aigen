@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 
-MODEL_TYPE = "ltx2_22B_nvfp4"
 RUNTIME_PROFILE = "4"
 # mmgp can consume roughly twice its configured budget;
 # 4000 MiB leaves headroom on 16 GiB GPUs.
@@ -96,9 +95,10 @@ def _run_requests(requests: list[dict[str, Any]], progress_stream: TextIO) -> in
         ],
         console_output=False,
     )
-    schema = session.get_model_schema(MODEL_TYPE)
+    model_type = requests[0]["model_type"]
+    schema = session.get_model_schema(model_type)
     if schema is None:
-        raise RuntimeError(f"WanGP has no {MODEL_TYPE} model definition")
+        raise RuntimeError(f"WanGP has no {model_type} model definition")
     try:
         for index, request in enumerate(requests, start=1):
             if index > 1:
@@ -115,6 +115,7 @@ def _run_requests(requests: list[dict[str, Any]], progress_stream: TextIO) -> in
                     progress_stream,
                     session=session,
                     default_settings=schema["default_settings"],
+                    model_type=model_type,
                     torch=torch,
                     phase_metrics=phase_metrics,
                     started=started,
@@ -143,6 +144,7 @@ def _run(
     *,
     session: Any,
     default_settings: dict[str, Any],
+    model_type: str,
     torch: Any,
     phase_metrics: _PhaseMetrics,
     started: float,
@@ -150,7 +152,7 @@ def _run(
     output = Path(request["output"]).resolve()
     torch.cuda.reset_peak_memory_stats()
     phase_metrics.start("generation_setup")
-    settings = _build_wangp_settings(request, default_settings)
+    settings = _build_wangp_settings(request, default_settings, model_type)
     callbacks = _ProgressCallbacks(progress_stream, phase_metrics)
 
     _send_progress(progress_stream, "phase", text="loading LTX-2.3 and generating video")
@@ -185,7 +187,7 @@ def _run(
         "phase_metrics": phase_metrics.records,
         "environment": {
             "engine": "WanGP",
-            "model_type": MODEL_TYPE,
+            "model_type": model_type,
             "runtime_profile": int(RUNTIME_PROFILE),
             "preload_mib": PRELOAD_MIB,
             "attention": ATTENTION_MODE,
@@ -205,6 +207,7 @@ def _run(
 def _build_wangp_settings(
     request: dict[str, Any],
     default_settings: dict[str, Any],
+    model_type: str,
 ) -> dict[str, Any]:
     frames = request["frames"]
     keyframes = sorted(request["keyframes"], key=lambda keyframe: keyframe["frame"])
@@ -219,7 +222,7 @@ def _build_wangp_settings(
     )
     settings = dict(default_settings)
     settings.update(
-        model_type=MODEL_TYPE,
+        model_type=model_type,
         prompt=request["prompt"],
         resolution=request["resolution"],
         image_mode=0,
@@ -229,7 +232,7 @@ def _build_wangp_settings(
         image_end=end["image"] if end is not None else None,
         image_refs=[keyframe["image"] for keyframe in injected] or None,
         frames_positions=" ".join(str(keyframe["frame"] + 1) for keyframe in injected),
-        input_video_strength=1.0,
+        input_video_strength=request["conditioning_strength"],
         remove_background_images_ref=0,
         prompt_enhancer="",
         audio_prompt_type="A",
