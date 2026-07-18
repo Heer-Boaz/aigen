@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -48,6 +47,7 @@ class Ltx23KeyframesResult:
     solver: str
     seed: int
     elapsed_seconds: float
+    phase_metrics: tuple[dict[str, Any], ...]
     environment: dict[str, Any]
 
     def to_json(self) -> dict[str, Any]:
@@ -74,6 +74,7 @@ class Ltx23KeyframesResult:
             "spatial_upsampling": False,
             "temporal_upsampling": False,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
+            "phase_metrics": list(self.phase_metrics),
             "environment": self.environment,
         }
 
@@ -91,6 +92,38 @@ def generate_ltx23_keyframes(
     seed: int,
     progress: StatusReporter,
 ) -> Ltx23KeyframesResult:
+    return generate_ltx23_keyframes_seed_sweep(
+        prompt=prompt,
+        keyframes=keyframes,
+        output=output,
+        resolution=resolution,
+        frames=frames,
+        fps=fps,
+        steps=steps,
+        solver=solver,
+        seeds=(seed,),
+        progress=progress,
+    )[0]
+
+
+def generate_ltx23_keyframes_seed_sweep(
+    *,
+    prompt: str,
+    keyframes: Sequence[Ltx23Keyframe],
+    output: Path,
+    resolution: str,
+    frames: int,
+    fps: int,
+    steps: int,
+    solver: str,
+    seeds: Sequence[int],
+    progress: StatusReporter,
+) -> tuple[Ltx23KeyframesResult, ...]:
+    normalized_seeds = tuple(seeds)
+    if not normalized_seeds:
+        raise Ltx23KeyframesError("LTX-2.3 seed sweep requires at least one seed")
+    if len(set(normalized_seeds)) != len(normalized_seeds):
+        raise Ltx23KeyframesError("LTX-2.3 seed sweep contains duplicate seeds")
     normalized_keyframes = _validate_request(
         prompt=prompt,
         keyframes=keyframes,
@@ -102,9 +135,23 @@ def generate_ltx23_keyframes(
         solver=solver,
     )
     output = output.expanduser().resolve()
-    config = output.with_name(f"{output.stem}_config.json")
-    log = output.with_suffix(f"{output.suffix}.log")
-    existing = next((path for path in (output, config, log) if path.exists()), None)
+    outputs = tuple(
+        output
+        if len(normalized_seeds) == 1
+        else output.with_name(f"{output.stem}-seed{seed}{output.suffix}")
+        for seed in normalized_seeds
+    )
+    configs = tuple(
+        job_output.with_name(f"{job_output.stem}_config.json")
+        for job_output in outputs
+    )
+    log = (
+        output.with_suffix(f"{output.suffix}.log")
+        if len(normalized_seeds) == 1
+        else output.with_name(f"{output.stem}-seed-sweep.log")
+    )
+    artifacts = (log, *(path for pair in zip(outputs, configs) for path in pair))
+    existing = next((path for path in artifacts if path.exists()), None)
     if existing is not None:
         raise Ltx23KeyframesError(f"output already exists: {existing}")
 
@@ -114,108 +161,81 @@ def generate_ltx23_keyframes(
     _validate_runtime(runtime_python, source_root)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    request = {
-        "kind": "aigen-ltx23-keyframes-job",
-        "prompt": prompt.strip(),
-        "keyframes": [keyframe.to_json() for keyframe in normalized_keyframes],
-        "output": output.as_posix(),
-        "resolution": resolution,
-        "frames": frames,
-        "fps": fps,
-        "steps": steps,
-        "solver": solver,
-        "seed": seed,
-    }
+    requests = tuple(
+        {
+            "kind": "aigen-ltx23-keyframes-job",
+            "prompt": prompt.strip(),
+            "keyframes": [keyframe.to_json() for keyframe in normalized_keyframes],
+            "output": job_output.as_posix(),
+            "resolution": resolution,
+            "frames": frames,
+            "fps": fps,
+            "steps": steps,
+            "solver": solver,
+            "seed": seed,
+        }
+        for seed, job_output in zip(normalized_seeds, outputs, strict=True)
+    )
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="aigen-ltx23-job-") as temporary_dir:
-        temporary_path = Path(temporary_dir)
-        request_path = temporary_path / "request.json"
-        response_path = temporary_path / "response.json"
-        request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
-
-        environment = os.environ.copy()
-        python_path = environment.get("PYTHONPATH")
-        environment["PYTHONPATH"] = os.pathsep.join(
-            path
-            for path in (
-                PROJECT_ROOT.as_posix(),
-                source_root.as_posix(),
-                python_path,
-            )
-            if path
-        )
-        environment.update(
-            AIGEN_LTX23_ROOT=runtime_root.as_posix(),
-            PYTHONUNBUFFERED="1",
-            TOKENIZERS_PARALLELISM="false",
-        )
-
-        progress.phase("starting LTX-2.3 worker")
-        with log.open("w", encoding="utf-8") as worker_log:
-            with subprocess.Popen(
-                [
-                    runtime_python.as_posix(),
-                    "-m",
-                    "aigen.generation.ltx23_wangp_worker",
-                    request_path.as_posix(),
-                    response_path.as_posix(),
-                ],
-                cwd=source_root,
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=worker_log,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-            ) as worker:
-                try:
-                    if worker.stdout is None:
-                        raise Ltx23KeyframesError("LTX-2.3 worker has no progress stream")
-                    for line in worker.stdout:
-                        _apply_worker_progress(line, progress)
-                    returncode = worker.wait()
-                except BaseException:
-                    if worker.poll() is None:
-                        worker.terminate()
-                    raise
-
-        response = _read_worker_response(response_path)
-        if returncode != 0 or response.get("status") != "completed":
-            message = response.get("message") or _log_tail(log)
-            raise Ltx23KeyframesError(f"LTX-2.3 WanGP failed: {message}")
-
-    if not output.is_file() or output.stat().st_size == 0:
-        raise Ltx23KeyframesError(f"LTX-2.3 did not create a video: {output}")
-
-    elapsed_seconds = time.monotonic() - started
-    config_payload = {
-        "kind": "aigen-ltx23-keyframes-config",
-        "runtime": "WanGP",
-        "runtime_revision": LTX23_WANGP_REVISION,
-        "request": request,
-        "effective_settings": response["effective_settings"],
-        "environment": response["environment"],
-        "elapsed_seconds": round(elapsed_seconds, 3),
-    }
-    config.write_text(
-        json.dumps(config_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    progress.phase("LTX-2.3 generation completed")
-    return Ltx23KeyframesResult(
-        output=output,
-        config=config,
+    responses = _run_worker_requests(
+        requests=requests,
+        runtime_root=runtime_root,
+        runtime_python=runtime_python,
+        source_root=source_root,
         log=log,
-        keyframes=normalized_keyframes,
-        resolution=resolution,
-        frames=frames,
-        fps=fps,
-        steps=steps,
-        solver=solver,
-        seed=seed,
-        elapsed_seconds=elapsed_seconds,
-        environment=dict(response["environment"]),
+        progress=progress,
     )
+    total_elapsed_seconds = time.monotonic() - started
+
+    results = []
+    for request, response, job_output, config, seed in zip(
+        requests,
+        responses,
+        outputs,
+        configs,
+        normalized_seeds,
+        strict=True,
+    ):
+        if not job_output.is_file() or job_output.stat().st_size == 0:
+            raise Ltx23KeyframesError(f"LTX-2.3 did not create a video: {job_output}")
+        elapsed_seconds = (
+            total_elapsed_seconds
+            if len(requests) == 1
+            else float(response["environment"]["elapsed_seconds"])
+        )
+        config_payload = {
+            "kind": "aigen-ltx23-keyframes-config",
+            "runtime": "WanGP",
+            "runtime_revision": LTX23_WANGP_REVISION,
+            "request": request,
+            "effective_settings": response["effective_settings"],
+            "phase_metrics": response["phase_metrics"],
+            "environment": response["environment"],
+            "elapsed_seconds": round(elapsed_seconds, 3),
+        }
+        config.write_text(
+            json.dumps(config_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        results.append(
+            Ltx23KeyframesResult(
+                output=job_output,
+                config=config,
+                log=log,
+                keyframes=normalized_keyframes,
+                resolution=resolution,
+                frames=frames,
+                fps=fps,
+                steps=steps,
+                solver=solver,
+                seed=seed,
+                elapsed_seconds=elapsed_seconds,
+                phase_metrics=tuple(response["phase_metrics"]),
+                environment=dict(response["environment"]),
+            )
+        )
+    progress.phase("LTX-2.3 generation completed")
+    return tuple(results)
 
 
 def _validate_request(
@@ -322,20 +342,98 @@ def _validate_runtime(runtime_python: Path, source_root: Path) -> None:
         )
 
 
-def _read_worker_response(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise Ltx23KeyframesError(f"invalid LTX-2.3 worker response {path}: {error}") from error
+def _run_worker_requests(
+    *,
+    requests: Sequence[dict[str, Any]],
+    runtime_root: Path,
+    runtime_python: Path,
+    source_root: Path,
+    log: Path,
+    progress: StatusReporter,
+) -> tuple[dict[str, Any], ...]:
+    environment = os.environ.copy()
+    python_path = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        path
+        for path in (
+            PROJECT_ROOT.as_posix(),
+            source_root.as_posix(),
+            python_path,
+        )
+        if path
+    )
+    environment.update(
+        AIGEN_LTX23_ROOT=runtime_root.as_posix(),
+        PYTHONUNBUFFERED="1",
+        TOKENIZERS_PARALLELISM="false",
+    )
+
+    responses = []
+    progress.phase("starting LTX-2.3 worker")
+    with log.open("w", encoding="utf-8") as worker_log:
+        with subprocess.Popen(
+            [
+                runtime_python.as_posix(),
+                "-m",
+                "aigen.generation.ltx23_wangp_worker",
+            ],
+            cwd=source_root,
+            env=environment,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=worker_log,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+        ) as worker:
+            try:
+                if worker.stdin is None or worker.stdout is None:
+                    raise Ltx23KeyframesError("LTX-2.3 worker pipes are unavailable")
+                for request in requests:
+                    worker.stdin.write(
+                        json.dumps(request, ensure_ascii=False, separators=(",", ":"))
+                        + "\n"
+                    )
+                worker.stdin.close()
+                for line in worker.stdout:
+                    response = _apply_worker_event(line, progress)
+                    if response is not None:
+                        responses.append(response)
+                returncode = worker.wait()
+            except BaseException:
+                if worker.poll() is None:
+                    worker.terminate()
+                raise
+
+    failed_response = next(
+        (response for response in responses if response.get("status") != "completed"),
+        None,
+    )
+    if returncode != 0 or failed_response is not None:
+        message = (
+            failed_response.get("message")
+            if failed_response is not None
+            else _log_tail(log)
+        )
+        raise Ltx23KeyframesError(f"LTX-2.3 WanGP failed: {message}")
+    if len(responses) != len(requests):
+        raise Ltx23KeyframesError(
+            f"LTX-2.3 worker returned {len(responses)} results for {len(requests)} requests"
+        )
+    for request, response in zip(requests, responses, strict=True):
+        if response["output"] != request["output"]:
+            raise Ltx23KeyframesError("LTX-2.3 worker returned results out of order")
+    return tuple(responses)
 
 
-def _apply_worker_progress(line: str, progress: StatusReporter) -> None:
+def _apply_worker_event(
+    line: str,
+    progress: StatusReporter,
+) -> dict[str, Any] | None:
     try:
         event = json.loads(line)
     except json.JSONDecodeError as error:
-        raise Ltx23KeyframesError("invalid LTX-2.3 worker progress event") from error
+        raise Ltx23KeyframesError("invalid LTX-2.3 worker event") from error
     match event["kind"]:
         case "phase":
             progress.phase(event["text"])
@@ -343,8 +441,11 @@ def _apply_worker_progress(line: str, progress: StatusReporter) -> None:
             progress.begin(event["total"], event["text"])
         case "step":
             progress.step(event["text"])
+        case "result":
+            return event["response"]
         case kind:
-            raise Ltx23KeyframesError(f"unknown LTX-2.3 worker progress event: {kind}")
+            raise Ltx23KeyframesError(f"unknown LTX-2.3 worker event: {kind}")
+    return None
 
 
 def _log_tail(path: Path) -> str:

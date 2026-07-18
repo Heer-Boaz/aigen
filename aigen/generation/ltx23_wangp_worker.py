@@ -13,6 +13,9 @@ from typing import Any, TextIO
 
 MODEL_TYPE = "ltx2_22B_nvfp4"
 RUNTIME_PROFILE = "4"
+# mmgp can consume roughly twice its configured budget;
+# 4000 MiB leaves headroom on 16 GiB GPUs.
+PRELOAD_MIB = 4000
 ATTENTION_MODE = "sdpa"
 
 TWO_STAGE_SOLVER_SETTINGS = {
@@ -52,52 +55,109 @@ TWO_STAGE_SOLVER_SETTINGS = {
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: ltx23_wangp_worker REQUEST RESPONSE")
-    request_path = Path(sys.argv[1])
-    response_path = Path(sys.argv[2])
+    if len(sys.argv) != 1:
+        raise SystemExit("usage: ltx23_wangp_worker")
+    requests = [
+        json.loads(line)
+        for line in sys.stdin
+        if line.strip()
+    ]
+    if not requests:
+        raise SystemExit("ltx23_wangp_worker requires at least one JSON request on stdin")
     with _open_progress_stream() as progress_stream:
         try:
-            request = json.loads(request_path.read_text(encoding="utf-8"))
-            response = _run(request, progress_stream)
-        except Exception as error:
+            return _run_requests(requests, progress_stream)
+        except Exception:
             traceback.print_exc()
-            response = {
-                "status": "error",
-                "error": error.__class__.__name__,
-                "message": str(error),
-            }
-            response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
             return 1
-        response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
-    return 0
 
 
-def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
+def _run_requests(requests: list[dict[str, Any]], progress_stream: TextIO) -> int:
+    phase_metrics = _PhaseMetrics()
+    phase_metrics.start("initialization")
+    started = time.monotonic()
     _send_progress(progress_stream, "phase", text="initializing WanGP")
     import torch
     from shared.api import init
 
     runtime_root = Path(os.environ["AIGEN_LTX23_ROOT"]).resolve()
     source_root = runtime_root / "Wan2GP"
-    output = Path(request["output"]).resolve()
-    torch.cuda.reset_peak_memory_stats()
-    started = time.monotonic()
     session = init(
         root=source_root,
         config_path=runtime_root / "config/wgp_config.json",
-        output_dir=output.parent,
-        cli_args=["--attention", ATTENTION_MODE, "--profile", RUNTIME_PROFILE],
+        output_dir=Path(requests[0]["output"]).resolve().parent,
+        cli_args=[
+            "--attention",
+            ATTENTION_MODE,
+            "--profile",
+            RUNTIME_PROFILE,
+            "--preload",
+            str(PRELOAD_MIB),
+        ],
         console_output=False,
     )
     schema = session.get_model_schema(MODEL_TYPE)
     if schema is None:
         raise RuntimeError(f"WanGP has no {MODEL_TYPE} model definition")
-    settings = _build_wangp_settings(request, schema["default_settings"])
-    callbacks = _ProgressCallbacks(progress_stream)
+    try:
+        for index, request in enumerate(requests, start=1):
+            if index > 1:
+                phase_metrics = _PhaseMetrics()
+                started = time.monotonic()
+            _send_progress(
+                progress_stream,
+                "phase",
+                text=f"LTX-2.3 job {index}/{len(requests)}",
+            )
+            try:
+                response = _run(
+                    request,
+                    progress_stream,
+                    session=session,
+                    default_settings=schema["default_settings"],
+                    torch=torch,
+                    phase_metrics=phase_metrics,
+                    started=started,
+                )
+            except Exception as error:
+                traceback.print_exc()
+                _send_progress(
+                    progress_stream,
+                    "result",
+                    response={
+                        "status": "error",
+                        "error": error.__class__.__name__,
+                        "message": str(error),
+                    },
+                )
+                return 1
+            _send_progress(progress_stream, "result", response=response)
+    finally:
+        session.close()
+    return 0
+
+
+def _run(
+    request: dict[str, Any],
+    progress_stream: TextIO,
+    *,
+    session: Any,
+    default_settings: dict[str, Any],
+    torch: Any,
+    phase_metrics: _PhaseMetrics,
+    started: float,
+) -> dict[str, Any]:
+    output = Path(request["output"]).resolve()
+    torch.cuda.reset_peak_memory_stats()
+    phase_metrics.start("generation_setup")
+    settings = _build_wangp_settings(request, default_settings)
+    callbacks = _ProgressCallbacks(progress_stream, phase_metrics)
 
     _send_progress(progress_stream, "phase", text="loading LTX-2.3 and generating video")
-    result = session.run_task(settings, callbacks=callbacks)
+    try:
+        result = session.run_task(settings, callbacks=callbacks)
+    finally:
+        callbacks.finish()
     if not result.success:
         messages = "; ".join(error.message for error in result.errors)
         raise RuntimeError(messages or "WanGP generation failed without a structured error")
@@ -113,17 +173,21 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
         raise RuntimeError(f"WanGP video is missing or empty: {generated}")
     if output.exists():
         raise RuntimeError(f"requested output appeared while generation was running: {output}")
+    phase_metrics.start("saving_video")
     _move_video_without_audio(generated, output)
+    phase_metrics.finish()
     _send_progress(progress_stream, "phase", text="saved LTX-2.3 video")
     return {
         "status": "completed",
         "output": output.as_posix(),
         "audio": False,
         "effective_settings": settings,
+        "phase_metrics": phase_metrics.records,
         "environment": {
             "engine": "WanGP",
             "model_type": MODEL_TYPE,
             "runtime_profile": int(RUNTIME_PROFILE),
+            "preload_mib": PRELOAD_MIB,
             "attention": ATTENTION_MODE,
             "torch": torch.__version__,
             "cuda": torch.version.cuda,
@@ -220,8 +284,9 @@ def _move_video_without_audio(source: Path, destination: Path) -> None:
 
 
 class _ProgressCallbacks:
-    def __init__(self, stream: TextIO) -> None:
+    def __init__(self, stream: TextIO, phase_metrics: _PhaseMetrics) -> None:
         self._stream = stream
+        self._phase_metrics = phase_metrics
         self._phase = ""
         self._total_steps = 0
         self._current_step = 0
@@ -230,6 +295,9 @@ class _ProgressCallbacks:
         text = text.strip()
         if text and text != self._phase:
             self._phase = text
+            self._total_steps = 0
+            self._current_step = 0
+            self._phase_metrics.start(text)
             _send_progress(self._stream, "phase", text=text)
 
     def on_progress(self, update: Any) -> None:
@@ -237,9 +305,16 @@ class _ProgressCallbacks:
         total = int(update.total_steps or 0)
         current = int(update.current_step or 0)
         if total > 0:
-            if total != self._total_steps or current < self._current_step:
+            new_sequence = total != self._total_steps or current < self._current_step
+            if new_sequence:
+                restart_phase = phase == self._phase and self._total_steps > 0
                 self._total_steps = total
                 self._current_step = 0
+                self._phase = phase
+                self._phase_metrics.start(
+                    phase or "inference",
+                    restart=restart_phase,
+                )
                 _send_progress(
                     self._stream,
                     "begin",
@@ -255,7 +330,104 @@ class _ProgressCallbacks:
                 )
         elif phase and phase != self._phase:
             self._phase = phase
+            self._phase_metrics.start(phase)
             _send_progress(self._stream, "phase", text=phase)
+
+    def finish(self) -> None:
+        self._phase_metrics.finish()
+
+
+class _PhaseMetrics:
+    def __init__(self) -> None:
+        self._phase = ""
+        self._started: dict[str, float | int] | None = None
+        self._records: list[dict[str, float | int | str]] = []
+
+    @property
+    def records(self) -> list[dict[str, float | int | str]]:
+        return list(self._records)
+
+    def start(self, phase: str, *, restart: bool = False) -> None:
+        phase = phase.strip()
+        if not phase or (phase == self._phase and not restart):
+            return
+        self.finish()
+        self._phase = phase
+        self._started = _metric_snapshot()
+
+    def finish(self) -> None:
+        if self._started is None:
+            return
+        finished = _metric_snapshot()
+        elapsed_seconds = finished["wall_seconds"] - self._started["wall_seconds"]
+        cpu_seconds = finished["cpu_seconds"] - self._started["cpu_seconds"]
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        record: dict[str, float | int | str] = {
+            "index": len(self._records) + 1,
+            "phase": self._phase,
+            "elapsed_seconds": round(elapsed_seconds, 3),
+            "process_cpu_seconds": round(cpu_seconds, 3),
+            "process_cpu_percent": round(cpu_seconds / elapsed_seconds * 100, 1),
+            "disk_read_gib": round(
+                (finished["read_bytes"] - self._started["read_bytes"]) / 1024**3,
+                3,
+            ),
+            "disk_write_gib": round(
+                (finished["write_bytes"] - self._started["write_bytes"]) / 1024**3,
+                3,
+            ),
+            "system_swap_in_mib": round(
+                (finished["pswpin"] - self._started["pswpin"]) * page_size / 1024**2,
+                1,
+            ),
+            "system_swap_out_mib": round(
+                (finished["pswpout"] - self._started["pswpout"]) * page_size / 1024**2,
+                1,
+            ),
+            "mem_available_start_mib": round(self._started["mem_available_kib"] / 1024),
+            "mem_available_end_mib": round(finished["mem_available_kib"] / 1024),
+            "swap_free_start_mib": round(self._started["swap_free_kib"] / 1024),
+            "swap_free_end_mib": round(finished["swap_free_kib"] / 1024),
+        }
+        self._records.append(record)
+        # WanGP temporarily replaces sys.stderr while run_task is active;
+        # file descriptor 2 remains the worker log owned by the parent process.
+        os.write(
+            2,
+            (
+                "[aigen-ltx23-phase] "
+                + json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+                + "\n"
+            ).encode("utf-8"),
+        )
+        self._phase = ""
+        self._started = None
+
+
+def _metric_snapshot() -> dict[str, float | int]:
+    meminfo = _key_value_file(Path("/proc/meminfo"))
+    vmstat = _key_value_file(Path("/proc/vmstat"))
+    process_io = _key_value_file(Path("/proc/self/io"))
+    return {
+        "wall_seconds": time.monotonic(),
+        "cpu_seconds": time.process_time(),
+        "mem_available_kib": meminfo["MemAvailable"],
+        "swap_free_kib": meminfo["SwapFree"],
+        "pswpin": vmstat["pswpin"],
+        "pswpout": vmstat["pswpout"],
+        "read_bytes": process_io["read_bytes"],
+        "write_bytes": process_io["write_bytes"],
+    }
+
+
+def _key_value_file(path: Path) -> dict[str, int]:
+    values: dict[str, int] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, separator, raw_value = line.partition(":")
+        if not separator:
+            key, _, raw_value = line.partition(" ")
+        values[key] = int(raw_value.strip().split()[0])
+    return values
 
 
 def _open_progress_stream() -> TextIO:

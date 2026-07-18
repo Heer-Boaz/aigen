@@ -1,0 +1,34 @@
+diff --git a/models/ltx2/ltx2.py b/models/ltx2/ltx2.py
+index 99fd102..b4561ed 100644
+--- a/models/ltx2/ltx2.py
++++ b/models/ltx2/ltx2.py
+@@ -933,7 +933,7 @@ class LTX2:
+             trans = self.model
+         return trans, None
+ 
+-    def get_loras_transformer(self, get_model_recursive_prop, model_type, video_prompt_type, base_model_type=None, model_def = None, lora_dir = None, sample_solver = None, **kwargs):
++    def get_loras_transformer(self, get_model_recursive_prop, model_type, video_prompt_type, image_prompt_type, base_model_type=None, model_def = None, lora_dir = None, sample_solver = None, **kwargs):
+         control_map = {
+             "O": "pose_align",
+             "P": "pose",
+@@ -988,7 +988,7 @@ class LTX2:
+             elif guidance_phases == 1 and use_distilled_8_steps:
+                 mult = 0.5
+             elif use_hq_sampler:
+-                mult = "0.25;0.5"
++                mult = "0;0.5" if "S" in image_prompt_type and "E" in image_prompt_type else "0.25;0.5"
+             elif use_id_lora:
+                 mult = "0;0.8"
+             elif use_distilled_8_steps:
+@@ -1297,6 +1297,11 @@ class LTX2:
+ 
+         if image_start is None:
+             _append_prefix_entries(images, images_stage2)
++        elif image_end is not None:
++            # Keyframe interpolation conditions every supplied frame through guiding latents.
++            entry = (image_start, 0, input_video_strength, "lanczos")
++            guiding_images.append(entry)
++            guiding_images_stage2.append(entry)
+         else:
+             entry = (image_start, _to_latent_index(0, latent_stride), input_video_strength, "lanczos")
+             images.append(entry)

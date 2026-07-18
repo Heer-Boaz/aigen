@@ -10,6 +10,14 @@ runtime_venv="$runtime_root/venv"
 runtime_python="$runtime_venv/bin/python"
 python_version="3.11.14"
 lightx2v_kernel_url="https://github.com/deepbeepmeep/kernels/releases/download/Light2xv/lightx2v_kernel-0.0.2+torch2.10.0-cp311-abi3-linux_x86_64.whl"
+runtime_patches=(
+  "$repo_root/patches/ltx23/0001-skip-unused-negative-text-conditioning.patch"
+  "$repo_root/patches/ltx23/0002-use-guiding-latents-for-start-end-interpolation.patch"
+)
+
+for runtime_patch in "${runtime_patches[@]}"; do
+  require_file "$runtime_patch"
+done
 
 if [[ -n "${AIGEN_LTX23_PYTHON:-}" ]]; then
   python_bootstrap="$AIGEN_LTX23_PYTHON"
@@ -30,11 +38,24 @@ if [[ ! -d "$source_root/.git" ]]; then
   run git clone --filter=blob:none --no-checkout \
     https://github.com/deepbeepmeep/Wan2GP.git "$source_root"
 elif ! git -C "$source_root" diff --quiet || ! git -C "$source_root" diff --cached --quiet; then
-  die "WanGP checkout has tracked local changes: $source_root"
+  git -C "$source_root" diff --cached --quiet || die \
+    "WanGP checkout has staged local changes: $source_root"
+  for runtime_patch in "${runtime_patches[@]}"; do
+    git -C "$source_root" apply --check --reverse "$runtime_patch" || die \
+      "WanGP checkout has unexpected local changes: $source_root"
+  done
+  for ((patch_index=${#runtime_patches[@]} - 1; patch_index >= 0; patch_index--)); do
+    run git -C "$source_root" apply --reverse "${runtime_patches[$patch_index]}"
+  done
+  git -C "$source_root" diff --quiet || die \
+    "WanGP checkout has unexpected local changes: $source_root"
 fi
 
 run git -C "$source_root" fetch --depth=1 origin "$wangp_revision"
 run git -C "$source_root" checkout --detach FETCH_HEAD
+for runtime_patch in "${runtime_patches[@]}"; do
+  run git -C "$source_root" apply "$runtime_patch"
+done
 
 if [[ ! -x "$runtime_python" ]]; then
   run "$python_bootstrap" -m venv "$runtime_venv"

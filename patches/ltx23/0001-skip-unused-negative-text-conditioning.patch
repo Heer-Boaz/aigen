@@ -1,0 +1,42 @@
+diff --git a/models/ltx2/ltx_pipelines/ti2vid_two_stages.py b/models/ltx2/ltx_pipelines/ti2vid_two_stages.py
+index 8ee82c0..26f1047 100644
+--- a/models/ltx2/ltx_pipelines/ti2vid_two_stages.py
++++ b/models/ltx2/ltx_pipelines/ti2vid_two_stages.py
+@@ -238,6 +238,7 @@ class TI2VidTwoStagesPipeline:
+             guider_cls = CFGStarRescalingGuider
+         video_cfg_guider = guider_cls(cfg_guidance_scale)
+         audio_cfg_guider = guider_cls(audio_cfg_guidance_scale)
++        use_negative_context = video_cfg_guider.enabled() or audio_cfg_guider.enabled()
+         dtype = torch.bfloat16
+ 
+         text_encoder = self._get_stage_model(1, "text_encoder")
+@@ -264,20 +265,26 @@ class TI2VidTwoStagesPipeline:
+         )
+         relay_conditioning = encode_prompt_relay(prompt, encode_fn_with_masks, self.text_encoder_cache, self.device, num_frames, frame_rate, text_encoder.tokenizer, visible_frame_offset=prompt_relay_frame_offset)
+         if relay_conditioning is None:
++            prompts = [prompt, negative_prompt] if use_negative_context else [prompt]
+             contexts = self.text_encoder_cache.encode(
+                 encode_fn,
+-                [prompt, negative_prompt],
++                prompts,
+                 device=self.device,
+                 parallel=True,
+             )
+-            context_p, context_n = contexts
++            context_p = contexts[0]
++            context_n = contexts[1] if use_negative_context else context_p
+             v_context_p, a_context_p = context_p
+             v_context_p_mask_builder = None
+             a_context_p_mask_builder = None
+         else:
+             v_context_p = relay_conditioning.video_context
+             a_context_p = relay_conditioning.audio_context
+-            context_n = self.text_encoder_cache.encode(encode_fn, [negative_prompt], device=self.device, parallel=True)[0]
++            context_n = (
++                self.text_encoder_cache.encode(encode_fn, [negative_prompt], device=self.device, parallel=True)[0]
++                if use_negative_context
++                else (v_context_p, a_context_p)
++            )
+             v_context_p_mask_builder = relay_conditioning.video_mask_builder
+             a_context_p_mask_builder = relay_conditioning.audio_mask_builder
+ 
