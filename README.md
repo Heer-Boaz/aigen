@@ -146,8 +146,8 @@ run evidence.
 ## Reference Packs
 
 PixAI-style character editing starts with a named reference pack. The pack stores
-image metadata and stable pack-local handles; it never serializes the character
-into an identity dossier. Qwen-Image-Edit receives all references as
+an ordered mapping of stable pack-local handles to image paths; it never serializes
+the character into an identity dossier. Qwen-Image-Edit receives all references as
 images and resolves identity and appearance inside the edit model.
 
 ```bash

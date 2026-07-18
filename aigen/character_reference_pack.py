@@ -7,14 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from aigen.character_reference_models import (
-    CHARACTER_REFERENCE_PACK_KIND,
     CharacterReferenceError,
-    CharacterReferencePackOutputSpec,
     CharacterReferencePackSpec,
-    ImageAssetSpec,
-    load_completed_character_reference_pack,
+    load_character_reference_pack_payload,
 )
-from aigen.image_assets import image_asset_json
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
 
 
@@ -30,13 +26,13 @@ class LoadedCharacterReferencePack:
 
 def load_character_reference_pack(pack_path: Path) -> LoadedCharacterReferencePack:
     resolved_path = pack_path.resolve()
-    spec = load_completed_character_reference_pack(
+    spec = load_character_reference_pack_payload(
         read_json(resolved_path, label="character reference pack"),
         path_label=resolved_path.as_posix(),
     )
     references = {
-        name: resolve_existing_path(asset.path, resolved_path.parent)
-        for name, asset in spec.references.items()
+        name: resolve_existing_path(path, resolved_path.parent)
+        for name, path in spec.references.items()
     }
     return LoadedCharacterReferencePack(
         path=resolved_path,
@@ -86,23 +82,11 @@ def build_character_reference_pack(
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    reference_assets = {
-        name: ImageAssetSpec(**image_asset_json(path)).model_dump(mode="json")
-        for name, path in references.items()
-    }
     pack = CharacterReferencePackSpec(
-        kind=CHARACTER_REFERENCE_PACK_KIND,
         character_id=character_id,
-        references={name: ImageAssetSpec(**asset) for name, asset in reference_assets.items()},
-        output=CharacterReferencePackOutputSpec(
-            directory=output_dir.as_posix(),
-            reference_pack=pack_path.as_posix(),
-        ),
+        references={name: path.as_posix() for name, path in references.items()},
     )
-    payload = {
-        "status": "completed",
-        **pack.model_dump(mode="json"),
-    }
+    payload = pack.model_dump(mode="json")
     write_json(pack_path, payload, sort_keys=False)
     return payload
 

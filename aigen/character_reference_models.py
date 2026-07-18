@@ -5,7 +5,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 
-CHARACTER_REFERENCE_PACK_KIND = "character-reference-pack"
 CHARACTER_IDENTITY_PROFILE_KIND = "character-identity-profile"
 CHARACTER_BODY_PROPORTION_SOURCE = "model_extracted_from_reference_pack"
 CHARACTER_REFERENCE_ROLE_NAMES = ("front", "portrait", "side", "back", "body_shape")
@@ -22,24 +21,9 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ImageAssetSpec(StrictModel):
-    path: str
-    sha256: str
-    mode: str
-    width: int
-    height: int
-
-
-class CharacterReferencePackOutputSpec(StrictModel):
-    directory: str
-    reference_pack: str
-
-
 class CharacterReferencePackSpec(StrictModel):
-    kind: Literal["character-reference-pack"]
     character_id: str
-    references: dict[str, ImageAssetSpec]
-    output: CharacterReferencePackOutputSpec
+    references: dict[str, str]
 
 
 class BodyProportionSpec(StrictModel):
@@ -82,12 +66,6 @@ class CharacterIdentityProfileSpec(StrictModel):
     output: CharacterIdentityProfileOutputSpec
 
 
-def character_reference_pack_schema() -> dict[str, Any]:
-    schema = CharacterReferencePackSpec.model_json_schema()
-    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    return schema
-
-
 def character_identity_profile_schema() -> dict[str, Any]:
     schema = CharacterIdentityProfileSpec.model_json_schema()
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
@@ -101,10 +79,6 @@ def load_character_reference_pack_payload(data: dict[str, Any], *, path_label: s
         raise CharacterReferenceError(f"Invalid character reference pack {path_label}: {error}") from error
     _validate_reference_ids(pack.references, path_label=path_label)
     return pack
-
-
-def load_completed_character_reference_pack(data: dict[str, Any], *, path_label: str) -> CharacterReferencePackSpec:
-    return load_character_reference_pack_payload(_without_completed_status(data), path_label=path_label)
 
 
 def load_character_identity_profile_payload(data: dict[str, Any], *, path_label: str) -> CharacterIdentityProfileSpec:
