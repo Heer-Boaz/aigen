@@ -164,11 +164,13 @@ def generate_hunyuanvideo15_i2v(
         "true",
     ]
     environment = os.environ.copy()
+    environment.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+    environment.pop("PYTORCH_ALLOC_CONF", None)
     environment.update(
         HF_HUB_OFFLINE="1",
         TRANSFORMERS_OFFLINE="1",
         PYTHONUNBUFFERED="1",
-        PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,max_split_size_mb:128",
+        TORCH_SHOW_CPP_STACKTRACES="1",
     )
 
     progress.phase("run official HunyuanVideo-1.5 480p I2V")

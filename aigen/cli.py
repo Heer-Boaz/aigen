@@ -17,6 +17,7 @@ from aigen.hunyuanvideo15_commands import (
 from aigen.image_caption_commands import add_image_caption_command, run_image_caption_command
 from aigen.keyframe_commands import add_keyframe_commands, run_keyframe_command
 from aigen.lora_commands import add_lora_commands, run_lora_command
+from aigen.ltx23_commands import add_ltx23_command, run_ltx23_command
 from aigen.model_commands import add_model_commands, run_model_command
 from aigen.pixel_art_commands import add_pixel_art_command, run_pixel_art_command
 from aigen.progress import StatusReporter, open_cli_progress
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_image_caption_command(subparsers)
     add_keyframe_commands(subparsers)
     add_lora_commands(subparsers)
+    add_ltx23_command(subparsers)
     add_model_commands(subparsers)
     add_pixel_art_command(subparsers)
     add_wu_pixelization_command(subparsers)
@@ -79,6 +81,8 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_keyframe_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "lora":
         return run_lora_command(args, sys.stdout, sys.stderr, progress=progress)
+    if args.command == "ltx23-keyframes":
+        return run_ltx23_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "models":
         return run_model_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "pixel-art":
