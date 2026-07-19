@@ -1,0 +1,23 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "native image editing for sprite-art reconstruction",
+    "runtime": "ComfyUI native HiDream-O1 Full with scaled FP8 weights and DynamicVRAM"
+  },
+  "downloads": [
+    {
+      "name": "hidream-o1-full-scaled-fp8",
+      "repo_id": "Comfy-Org/HiDream-O1-Image",
+      "revision": "54d16b20496bbd1bdfa6f79ec1ad2d6f0bfd2dcc",
+      "local_path": "comfy",
+      "include": [
+        "checkpoints/hidream_o1_image_fp8_scaled.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md"
+      ]
+    }
+  ]
+}

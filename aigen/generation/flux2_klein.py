@@ -129,6 +129,7 @@ class _PreparedFlux2KleinCase:
     text_ids: Any
     image_latents: Any | None
     image_latent_ids: Any | None
+    init_source_latent: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +203,7 @@ class Flux2KleinSession:
         *,
         lora: Path | None,
         lora_weight: float,
+        strength: float | None = None,
         progress: StatusReporter,
     ) -> None:
         (
@@ -248,6 +250,7 @@ class Flux2KleinSession:
         self.retrieve_timesteps = retrieve_timesteps
         self.lora = lora.resolve() if lora is not None else None
         self.lora_weight = lora_weight
+        self.strength = strength
         self.model_load_ms = (time.perf_counter() - started) * 1000
 
     def generate(
@@ -266,6 +269,7 @@ class Flux2KleinSession:
                     cases=cases,
                     prompt_embeddings=prompt_embeddings,
                     torch=self.torch,
+                    strength=self.strength,
                     progress=progress,
                 )
                 denoised_outputs = _denoise_flux2_klein_cases(
@@ -274,6 +278,7 @@ class Flux2KleinSession:
                     torch=self.torch,
                     compute_empirical_mu=self.compute_empirical_mu,
                     retrieve_timesteps=self.retrieve_timesteps,
+                    strength=self.strength,
                     progress=progress,
                 )
                 outputs = _decode_flux2_klein_outputs(
@@ -308,26 +313,82 @@ def generate_flux2_klein(
     seed: int,
     lora: Path | None,
     lora_weight: float,
+    strength: float | None = None,
     progress: StatusReporter,
 ) -> Flux2KleinResult:
     started = time.perf_counter()
+    batch = generate_flux2_klein_seed_sweep(
+        prompt=prompt,
+        output=output,
+        references=references,
+        width=width,
+        height=height,
+        seeds=(seed,),
+        lora=lora,
+        lora_weight=lora_weight,
+        strength=strength,
+        progress=progress,
+    )
+    generated = batch.outputs[0]
+    return Flux2KleinResult(
+        output=generated.output,
+        width=generated.width,
+        height=generated.height,
+        seed=generated.seed,
+        reference_count=generated.reference_count,
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+        peak_vram_mb=batch.peak_vram_mb,
+        lora=batch.lora,
+        lora_weight=batch.lora_weight,
+    )
+
+
+def generate_flux2_klein_seed_sweep(
+    *,
+    prompt: str,
+    output: Path,
+    references: Sequence[Path],
+    width: int | None,
+    height: int | None,
+    seeds: Sequence[int],
+    lora: Path | None,
+    lora_weight: float,
+    strength: float | None = None,
+    progress: StatusReporter,
+) -> Flux2KleinBatchResult:
+    if strength is not None and not (0.0 < strength <= 1.0):
+        raise Flux2KleinError("--strength must be in (0, 1]")
+    normalized_seeds = tuple(seeds)
+    if not normalized_seeds:
+        raise Flux2KleinError("FLUX.2 Klein seed sweep requires at least one seed")
+    if len(set(normalized_seeds)) != len(normalized_seeds):
+        raise Flux2KleinError("FLUX.2 Klein seed sweep contains duplicate seeds")
+
     torch = _load_dependencies()[0]
     if not torch.cuda.is_available():
         raise Flux2KleinError("FLUX.2 Klein 9B requires CUDA")
     torch.cuda.reset_peak_memory_stats()
 
+    output = output.expanduser().resolve()
+    outputs = tuple(
+        output
+        if len(normalized_seeds) == 1
+        else output.with_name(f"{output.stem}-seed{seed}{output.suffix}")
+        for seed in normalized_seeds
+    )
     case = ImageGenerationCaseRequest(
         name=output.stem,
         prompt=prompt,
         image_paths=tuple(references),
         width=width,
         height=height,
-        outputs=(
+        outputs=tuple(
             ImageGenerationOutputRequest(
-                name=output.stem,
+                name=f"seed-{seed}",
                 seed=seed,
-                path=output,
-            ),
+                path=seed_output,
+            )
+            for seed, seed_output in zip(normalized_seeds, outputs, strict=True)
         ),
     )
     _validate_flux2_klein_cases((case,))
@@ -338,25 +399,14 @@ def generate_flux2_klein(
     session = Flux2KleinSession(
         lora=lora,
         lora_weight=lora_weight,
+        strength=strength,
         progress=progress,
     )
     try:
-        batch = session.generate(
+        return session.generate(
             cases=(case,),
             prompt_embeddings=prompt_embeddings,
             progress=progress,
-        )
-        generated = batch.outputs[0]
-        return Flux2KleinResult(
-            output=generated.output,
-            width=generated.width,
-            height=generated.height,
-            seed=generated.seed,
-            reference_count=generated.reference_count,
-            elapsed_ms=(time.perf_counter() - started) * 1000,
-            peak_vram_mb=batch.peak_vram_mb,
-            lora=batch.lora,
-            lora_weight=batch.lora_weight,
         )
     finally:
         session.close()
@@ -387,6 +437,7 @@ def _prepare_flux2_klein_cases(
     cases: Sequence[ImageGenerationCaseRequest],
     prompt_embeddings: Mapping[str, Flux2KleinPromptEmbedding],
     torch: Any,
+    strength: float | None = None,
     progress: StatusReporter,
 ) -> tuple[_PreparedFlux2KleinCase, ...]:
     encoded_prompts = {}
@@ -426,7 +477,17 @@ def _prepare_flux2_klein_cases(
                         image.close()
                 image_latents = None
                 image_latent_ids = None
-                if condition_images:
+                init_source_latent = None
+                if strength is not None and condition_images:
+                    # img2img: the first reference is the init image; encode it (unpacked)
+                    # and drop kontext context so its pose is preserved by the init, not a hint.
+                    generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
+                    with torch.no_grad():
+                        init_source_latent = pipeline._encode_vae_image(
+                            condition_images[0].to(device="cuda", dtype=vae.dtype),
+                            generator,
+                        ).cpu()
+                elif condition_images:
                     generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
                     with torch.no_grad():
                         image_latents, image_latent_ids = pipeline.prepare_image_latents(
@@ -441,11 +502,18 @@ def _prepare_flux2_klein_cases(
                 reference_encoding = (
                     image_latents,
                     image_latent_ids,
+                    init_source_latent,
                     inferred_width,
                     inferred_height,
                 )
                 reference_cache[reference_key] = reference_encoding
-            image_latents, image_latent_ids, inferred_width, inferred_height = reference_encoding
+            (
+                image_latents,
+                image_latent_ids,
+                init_source_latent,
+                inferred_width,
+                inferred_height,
+            ) = reference_encoding
             prompt_embeds, text_ids = encoded_prompts[case.prompt]
             prepared_cases.append(
                 _PreparedFlux2KleinCase(
@@ -456,6 +524,7 @@ def _prepare_flux2_klein_cases(
                     text_ids=text_ids,
                     image_latents=image_latents,
                     image_latent_ids=image_latent_ids,
+                    init_source_latent=init_source_latent,
                 )
             )
     finally:
@@ -472,6 +541,7 @@ def _denoise_flux2_klein_cases(
     torch: Any,
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
+    strength: float | None = None,
     progress: StatusReporter,
 ) -> tuple[_DenoisedFlux2KleinOutput, ...]:
     transformer = pipeline.transformer
@@ -489,6 +559,7 @@ def _denoise_flux2_klein_cases(
                     torch=torch,
                     compute_empirical_mu=compute_empirical_mu,
                     retrieve_timesteps=retrieve_timesteps,
+                    strength=strength,
                     progress=progress,
                 )
             )
@@ -506,6 +577,7 @@ def _denoise_flux2_klein_case(
     torch: Any,
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
+    strength: float | None = None,
     progress: StatusReporter,
 ) -> list[_DenoisedFlux2KleinOutput]:
     prompt_embeds = case.prompt_embeds.to("cuda")
@@ -537,10 +609,31 @@ def _denoise_flux2_klein_case(
             sigmas=np.linspace(1.0, 1 / FLUX2_KLEIN_STEPS, FLUX2_KLEIN_STEPS),
             mu=mu,
         )
-        pipeline.scheduler.set_begin_index(0)
+        begin_index = 0
+        if case.init_source_latent is not None and strength is not None:
+            # img2img: seed the latent from the noised source so its pose is preserved,
+            # then start denoising partway through the schedule (higher strength = more change).
+            begin_index = min(
+                FLUX2_KLEIN_STEPS - 1,
+                max(0, round((1.0 - strength) * FLUX2_KLEIN_STEPS)),
+            )
+            source = case.init_source_latent.to(device="cuda", dtype=latents.dtype)
+            init_noise = torch.randn(
+                source.shape,
+                generator=generator,
+                device=torch.device("cuda"),
+                dtype=source.dtype,
+            )
+            noised = pipeline.scheduler.scale_noise(
+                source, timesteps[begin_index : begin_index + 1], init_noise
+            )
+            latents = pipeline._pack_latents(noised)
+        pipeline.scheduler.set_begin_index(begin_index)
 
         with torch.no_grad():
             for step_index, timestep in enumerate(timesteps):
+                if step_index < begin_index:
+                    continue
                 timestep_batch = timestep.expand(latents.shape[0]).to(latents.dtype)
                 latent_model_input = latents
                 latent_model_ids = latent_ids

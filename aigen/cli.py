@@ -15,6 +15,7 @@ from aigen.hunyuanvideo15_commands import (
     run_hunyuanvideo15_command,
 )
 from aigen.image_caption_commands import add_image_caption_command, run_image_caption_command
+from aigen.image_edit_commands import add_image_edit_command, run_image_edit_command
 from aigen.keyframe_commands import add_keyframe_commands, run_keyframe_command
 from aigen.lora_commands import add_lora_commands, run_lora_command
 from aigen.ltx23_commands import add_ltx23_command, run_ltx23_command
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_flux2_klein_command(subparsers)
     add_hunyuanvideo15_command(subparsers)
     add_image_caption_command(subparsers)
+    add_image_edit_command(subparsers)
     add_keyframe_commands(subparsers)
     add_lora_commands(subparsers)
     add_ltx23_command(subparsers)
@@ -77,6 +79,8 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         )
     if args.command == "image-caption":
         return run_image_caption_command(args, sys.stdout, progress=progress)
+    if args.command == "image-edit":
+        return run_image_edit_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "keyframes":
         return run_keyframe_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "lora":

@@ -1,0 +1,29 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "phase": "native image editing benchmark",
+    "runtime": "official Boogu-Image Turbo FP8 with model CPU offload"
+  },
+  "downloads": [
+    {
+      "name": "boogu-image-0.1-edit-turbo-fp8-hotfix-1k",
+      "repo_id": "Boogu/Boogu-Image-0.1-Edit-Turbo-fp8",
+      "revision": "5f608c1680cb91ca88af88010c91e50f12c41d28",
+      "local_path": "boogu/Boogu-Image-0.1-Edit-Turbo-fp8",
+      "include": [
+        "model_index.json",
+        "mllm/*",
+        "processor/*",
+        "scheduler/*",
+        "transformer/*",
+        "vae/*"
+      ],
+      "exclude": [
+        "**/.gitattributes",
+        "**/.ms_upload_cache",
+        "**/*.md"
+      ]
+    }
+  ]
+}

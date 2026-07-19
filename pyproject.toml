@@ -31,7 +31,7 @@ generation = [
   "fairscale>=0.4.13",
   "ftfy",
   "Jinja2",
-  "kernels==0.12.3",
+  "kernels==0.15.2",
   "opencv-python-headless>=4.10",
   "onnxruntime-gpu==1.26.0",
   "peft>=0.17",
