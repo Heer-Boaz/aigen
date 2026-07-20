@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from aigen.generation.image_generation_requests import ImageGenerationCaseRequest
+from aigen.image_edit_defaults import (
+    QWEN_2511_BASE_DEFAULT_GUIDANCE,
+    QWEN_2511_BASE_DEFAULT_STEPS,
+    QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
+    QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+)
 from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
@@ -86,8 +92,8 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
         conditioner_repo_id="Qwen/Qwen-Image-Edit-2511",
         conditioner_revision=QWEN_EDIT_2511_REVISION,
         dtype="bfloat16",
-        default_steps=8,
-        default_true_cfg_scale=1.0,
+        default_steps=QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+        default_true_cfg_scale=QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
         default_guidance_scale=1.0,
         scheduler="lightning",
     ),
@@ -104,8 +110,8 @@ QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES = {
         conditioner_repo_id="Qwen/Qwen-Image-Edit-2511",
         conditioner_revision=QWEN_EDIT_2511_REVISION,
         dtype="bfloat16",
-        default_steps=40,
-        default_true_cfg_scale=4.0,
+        default_steps=QWEN_2511_BASE_DEFAULT_STEPS,
+        default_true_cfg_scale=QWEN_2511_BASE_DEFAULT_GUIDANCE,
         default_guidance_scale=1.0,
         scheduler="flow-match-euler",
     ),

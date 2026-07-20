@@ -11,8 +11,24 @@ from PIL import Image
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import load_character_reference_pack
 from aigen.command_io import command_error_payload, dump_json
+from aigen.image_edit_defaults import (
+    BOOGU_DEFAULT_GUIDANCE,
+    BOOGU_DEFAULT_STEPS,
+    FLUX2_KLEIN_STEPS,
+    HIDREAM_DEFAULT_GUIDANCE,
+    HIDREAM_DEFAULT_STEPS,
+    QWEN_2511_BASE_DEFAULT_GUIDANCE,
+    QWEN_2511_BASE_DEFAULT_STEPS,
+    QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
+    QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+)
 from aigen.image_dimensions import normalized_aspect_ratio, parse_aspect_ratio
-from aigen.lora_weights import LoraLoadSpec
+from aigen.lora_weights import (
+    FLUX2_KLEIN_ARCHITECTURE,
+    QWEN_IMAGE_ARCHITECTURE,
+    LoraLoadSpec,
+    inspect_lora_weights,
+)
 from aigen.progress import StatusReporter
 
 
@@ -28,6 +44,33 @@ IMAGE_EDIT_BACKENDS = (
     HIDREAM_O1_BACKEND,
     BOOGU_IMAGE_EDIT_BACKEND,
 )
+IMAGE_EDIT_ASPECT_RATIOS = (
+    (1, 1),
+    (2, 3),
+    (3, 2),
+    (3, 4),
+    (4, 3),
+    (9, 16),
+    (16, 9),
+)
+IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES = {
+    FLUX2_KLEIN_BACKEND: FLUX2_KLEIN_ARCHITECTURE,
+    QWEN_2511_LIGHTNING_BACKEND: QWEN_IMAGE_ARCHITECTURE,
+    QWEN_2511_BASE_BACKEND: QWEN_IMAGE_ARCHITECTURE,
+}
+IMAGE_EDIT_BACKEND_DEFAULTS: dict[str, tuple[int, float | None]] = {
+    FLUX2_KLEIN_BACKEND: (FLUX2_KLEIN_STEPS, None),
+    QWEN_2511_LIGHTNING_BACKEND: (
+        QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+        QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
+    ),
+    QWEN_2511_BASE_BACKEND: (
+        QWEN_2511_BASE_DEFAULT_STEPS,
+        QWEN_2511_BASE_DEFAULT_GUIDANCE,
+    ),
+    HIDREAM_O1_BACKEND: (HIDREAM_DEFAULT_STEPS, HIDREAM_DEFAULT_GUIDANCE),
+    BOOGU_IMAGE_EDIT_BACKEND: (BOOGU_DEFAULT_STEPS, BOOGU_DEFAULT_GUIDANCE),
+}
 
 
 class ImageEditCommandError(RuntimeError):
@@ -189,7 +232,6 @@ def _run_flux2_klein(
     progress: StatusReporter,
 ) -> dict[str, Any]:
     from aigen.generation.flux2_klein import (
-        FLUX2_KLEIN_STEPS,
         Flux2KleinError,
         generate_flux2_klein_seed_sweep,
     )
@@ -314,8 +356,6 @@ def _run_hidream_o1(
     progress: StatusReporter,
 ) -> dict[str, Any]:
     from aigen.generation.hidream_o1_comfy import (
-        HIDREAM_DEFAULT_GUIDANCE,
-        HIDREAM_DEFAULT_STEPS,
         HiDreamO1Error,
         generate_hidream_o1_seed_sweep,
     )
@@ -355,8 +395,6 @@ def _run_boogu_image_edit(
     progress: StatusReporter,
 ) -> dict[str, Any]:
     from aigen.generation.boogu_image_edit import (
-        BOOGU_DEFAULT_GUIDANCE,
-        BOOGU_DEFAULT_STEPS,
         BooguImageEditError,
         generate_boogu_image_edit_seed_sweep,
     )
@@ -447,17 +485,7 @@ def _resolve_loras(
     if any(not math.isfinite(weight) for weight in resolved_weights):
         raise ImageEditCommandError("--lora-weight must be finite")
 
-    from aigen.lora_weights import (
-        FLUX2_KLEIN_ARCHITECTURE,
-        QWEN_IMAGE_ARCHITECTURE,
-        inspect_lora_weights,
-    )
-
-    expected_architecture = {
-        FLUX2_KLEIN_BACKEND: FLUX2_KLEIN_ARCHITECTURE,
-        QWEN_2511_LIGHTNING_BACKEND: QWEN_IMAGE_ARCHITECTURE,
-        QWEN_2511_BASE_BACKEND: QWEN_IMAGE_ARCHITECTURE,
-    }.get(backend)
+    expected_architecture = IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES.get(backend)
     if expected_architecture is None:
         raise ImageEditCommandError(f"{backend} does not support --lora")
     resolved = []

@@ -13,6 +13,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
+from aigen.image_edit_defaults import HIDREAM_DEFAULT_GUIDANCE, HIDREAM_DEFAULT_STEPS
 from aigen.image_dimensions import closest_aspect_match
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
@@ -22,8 +23,6 @@ COMFY_REVISION = "26515acd23fa291a8f5ab53c5997258598de0701"
 HIDREAM_CHECKPOINT_REVISION = "54d16b20496bbd1bdfa6f79ec1ad2d6f0bfd2dcc"
 HIDREAM_CHECKPOINT = "hidream_o1_image_fp8_scaled.safetensors"
 HIDREAM_DEFAULT_RESOLUTION = "2048x2048"
-HIDREAM_DEFAULT_STEPS = 40
-HIDREAM_DEFAULT_GUIDANCE = 5.0
 HIDREAM_DEFAULT_SAMPLER = "dpmpp_2m_sde_gpu"
 HIDREAM_DEFAULT_SCHEDULER = "normal"
 HIDREAM_NOISE_SCALE = 8.0

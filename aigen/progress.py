@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -13,6 +14,7 @@ from aigen.system_telemetry import SystemTelemetry, SystemTelemetrySampler
 
 DEFAULT_PROGRESS_INTERVAL_SECONDS = 2.0
 ACTIVITY_WIDTH = 18
+JSON_PROGRESS_PREFIX = "AIGEN_PROGRESS "
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,33 @@ class ProgressLineRenderer:
             self._stream.close()
 
 
+class JsonLineRenderer:
+    def __init__(self, *, stream: TextIO, close_stream: bool = False) -> None:
+        self._stream = stream
+        self._close_stream = close_stream
+
+    def render(self, snapshot: RuntimeStatusSnapshot) -> None:
+        gpu = snapshot.telemetry.gpu
+        payload = {
+            "phase": snapshot.phase,
+            "completed": snapshot.completed,
+            "total": snapshot.total,
+            "elapsed_seconds": snapshot.elapsed_seconds,
+            "remaining_seconds": snapshot.remaining_seconds,
+            "final": snapshot.final,
+            "cpu_percent": snapshot.telemetry.cpu_percent,
+            "gpu_percent": None if gpu is None else gpu.gpu_percent,
+            "vram_used_mb": None if gpu is None else gpu.vram_used_mb,
+            "vram_total_mb": None if gpu is None else gpu.vram_total_mb,
+        }
+        self._stream.write(f"{JSON_PROGRESS_PREFIX}{json.dumps(payload, separators=(',', ':'))}\n")
+        self._stream.flush()
+
+    def close(self) -> None:
+        if self._close_stream:
+            self._stream.close()
+
+
 class SilentRuntimeStatus:
     @property
     def renders_live(self) -> bool:
@@ -256,6 +285,12 @@ def open_cli_progress() -> StatusReporter:
     _claim_progress_ownership()
     if _progress_disabled():
         return SilentRuntimeStatus()
+    if os.environ.get("AIGEN_PROGRESS") == "json":
+        return RuntimeStatus(
+            interval_seconds=_progress_interval_seconds(),
+            renderer=JsonLineRenderer(stream=sys.stderr),
+            telemetry=SystemTelemetrySampler(),
+        )
     if os.environ.get("AIGEN_PROGRESS") == "stderr":
         return _stderr_progress()
     stream = _open_terminal_stream()
@@ -315,11 +350,11 @@ def _format_line(snapshot: RuntimeStatusSnapshot) -> str:
         parts.append(
             "eta --:--"
             if snapshot.remaining_seconds is None
-            else f"eta {_duration_text(snapshot.remaining_seconds)}"
+            else f"eta {format_duration(snapshot.remaining_seconds)}"
         )
     parts.extend(
         [
-            f"elapsed {_duration_text(snapshot.elapsed_seconds)}",
+            f"elapsed {format_duration(snapshot.elapsed_seconds)}",
             _cpu_text(snapshot.telemetry),
             _gpu_text(snapshot.telemetry),
         ]
@@ -350,7 +385,7 @@ def _gpu_text(telemetry: SystemTelemetry) -> str:
     )
 
 
-def _duration_text(seconds: float) -> str:
+def format_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)

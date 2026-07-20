@@ -168,15 +168,41 @@ applies to packs; FLUX.2 Klein, Qwen and HiDream accept multi-image packs.
 
 The Images tab has a free-text prompt, model, LoRA and character-reference-pack
 dropdowns, and free-text source-image slots. Multiple LoRAs can be selected with
-independent weights. LoRA files are discovered from `loras/`; reference packs
-are discovered from `assets/reference-packs/*.json`.
-Its visible buttons add and remove slots and start or stop generation. The Videos
-and SAM Edit tabs are reserved for later. TUI generations replace the contents
+independent weights, and multiple Seed slots produce a seed sweep. The aspect
+ratio dropdown uses backend-compatible presets; Width and Height provide a paired
+exact override. Empty Steps and Guidance fields retain backend-native defaults.
+The form uses Textual's responsive grid: value fields consume the available
+width, slot controls remain visible in fixed trailing columns, and action buttons
+reflow as the terminal resizes.
+New Seed slots start at the lowest unused non-negative seed value.
+Selecting a model replaces Steps and Guidance with that backend's standard
+sweet-spot values. Startup reapplies those values for the restored model;
+backends without CFG leave Guidance empty.
+LoRA files are discovered from `loras/` and filtered for the selected model;
+reference packs are discovered from `assets/reference-packs/*.json`.
+Its visible buttons add and remove slots and start or stop generation. Each
+movable field has compact `↑` and `↓` buttons; unavailable directions are dimmed.
+Tab and Shift-Tab focus those buttons; Enter activates the focused button. The
+Videos and SAM Edit tabs are reserved for later. TUI generations replace the contents
 of the selected output run directory so the same destination can be reused.
-`Browse` opens an image-file browser for the selected Image slot or a directory
-browser for the selected Output directory field. Clicking an image selects it;
-clicking a folder opens it. Arrow keys and Enter operate the list, while Tab and
-Shift-Tab move keyboard focus to the visible Select and Cancel buttons.
+The Images form is restored after a normal quit from
+`$XDG_CONFIG_HOME/aigen/image-tui.json` (or `~/.config/aigen/image-tui.json`).
+`Browse` opens a Textual directory tree for the selected Image slot or Output
+directory field. Files are selected directly; folders can be traversed with the
+mouse or keyboard.
+`Use Result` opens the current output directory and adds the chosen generated
+image to the form without replacing a populated Image slot.
+`Save Pack` writes the ordered, populated Image slots through the existing
+reference-pack builder and selects the new pack without overwriting an existing
+pack.
+`Save Config` stores the complete Images form as JSON in a folder selected with
+the terminal file browser. `Load Config` selects such a JSON file and replaces
+the complete form, including seeds, images, packs, LoRAs and their weights.
+Stop and Quit terminate the complete generation process group, including native
+backend workers, so a cancelled run cannot leave a worker holding GPU memory.
+While generation runs, the status line shows the backend's complete progress
+snapshot: progress bar, percentage, completed steps, phase, ETA, elapsed time,
+CPU usage, GPU usage and VRAM.
 
 ## Character Views
 

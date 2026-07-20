@@ -14,6 +14,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
+from aigen.image_edit_defaults import BOOGU_DEFAULT_GUIDANCE, BOOGU_DEFAULT_STEPS
 from aigen.image_dimensions import closest_aspect_match
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
@@ -23,8 +24,6 @@ BOOGU_SOURCE_REVISION = "29c040ff975d19231911753a0dbf976ae98621b1"
 BOOGU_MODEL_REVISION = "5f608c1680cb91ca88af88010c91e50f12c41d28"
 BOOGU_MODEL_DIRECTORY = "boogu/Boogu-Image-0.1-Edit-Turbo-fp8"
 BOOGU_DEFAULT_RESOLUTION = "1024x1024"
-BOOGU_DEFAULT_STEPS = 4
-BOOGU_DEFAULT_GUIDANCE = 1.0
 BOOGU_MAX_SIDE = 2048
 BOOGU_RECOMMENDED_1K_PIXEL_AREA = 1024 * 1024
 BOOGU_DIMENSION_ALIGNMENT = 16
