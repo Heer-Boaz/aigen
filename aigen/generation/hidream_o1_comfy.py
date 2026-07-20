@@ -13,6 +13,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
+from aigen.image_dimensions import closest_aspect_match
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
@@ -26,10 +27,27 @@ HIDREAM_DEFAULT_GUIDANCE = 5.0
 HIDREAM_DEFAULT_SAMPLER = "dpmpp_2m_sde_gpu"
 HIDREAM_DEFAULT_SCHEDULER = "normal"
 HIDREAM_NOISE_SCALE = 8.0
+HIDREAM_NATIVE_CANVASES = (
+    (2048, 2048),
+    (2304, 1728),
+    (1728, 2304),
+    (2560, 1440),
+    (1440, 2560),
+    (2496, 1664),
+    (1664, 2496),
+    (3104, 1312),
+    (1312, 3104),
+    (2304, 1792),
+    (1792, 2304),
+)
 
 
 class HiDreamO1Error(RuntimeError):
     pass
+
+
+def hidream_o1_native_canvas_size(aspect_ratio: tuple[int, int]) -> tuple[int, int]:
+    return closest_aspect_match(aspect_ratio, HIDREAM_NATIVE_CANVASES)
 
 
 @dataclass(frozen=True)

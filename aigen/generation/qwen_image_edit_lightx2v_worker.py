@@ -86,6 +86,9 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
         dit_quantized_ckpt=profile["transformer_model"],
         quant_scheme="fp8-triton",
     )
+    loras = profile.get("loras", [])
+    if loras:
+        pipe.enable_lora(loras, lora_dynamic_apply=True)
     pipe.tokenizer_max_length = profile["max_sequence_length"]
     pipe.create_generator(
         attn_mode="flash_attn2",

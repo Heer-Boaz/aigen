@@ -17,6 +17,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationOutputRequest,
 )
 from aigen.generation.prompt_encoding import ordered_unique
+from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
@@ -28,6 +29,8 @@ FLUX2_KLEIN_TRANSFORMER = (
 )
 FLUX2_KLEIN_TEXT_ENCODER = MODELS_ROOT / "flux2/Qwen/Qwen3-8B-FP8"
 FLUX2_KLEIN_STEPS = 4
+FLUX2_KLEIN_RECOMMENDED_MAX_SIDE = 1024
+FLUX2_KLEIN_RECOMMENDED_MIN_SIDE = 256
 
 
 class Flux2KleinError(RuntimeError):
@@ -36,6 +39,38 @@ class Flux2KleinError(RuntimeError):
 
 class Flux2KleinDependencyError(Flux2KleinError):
     pass
+
+
+def flux2_klein_recommended_canvas_size(
+    aspect_ratio: tuple[int, int],
+) -> tuple[int, int]:
+    ratio_width, ratio_height = aspect_ratio
+    if ratio_width >= ratio_height:
+        width = FLUX2_KLEIN_RECOMMENDED_MAX_SIDE
+        height = round(
+            FLUX2_KLEIN_RECOMMENDED_MAX_SIDE
+            * ratio_height
+            / ratio_width
+            / FLUX_TOKEN_SIZE
+        ) * FLUX_TOKEN_SIZE
+    else:
+        height = FLUX2_KLEIN_RECOMMENDED_MAX_SIDE
+        width = round(
+            FLUX2_KLEIN_RECOMMENDED_MAX_SIDE
+            * ratio_width
+            / ratio_height
+            / FLUX_TOKEN_SIZE
+        ) * FLUX_TOKEN_SIZE
+    return (
+        max(
+            FLUX2_KLEIN_RECOMMENDED_MIN_SIDE,
+            min(width, FLUX2_KLEIN_RECOMMENDED_MAX_SIDE),
+        ),
+        max(
+            FLUX2_KLEIN_RECOMMENDED_MIN_SIDE,
+            min(height, FLUX2_KLEIN_RECOMMENDED_MAX_SIDE),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -76,8 +111,7 @@ class Flux2KleinBatchResult:
     generation_ms: float
     model_load_ms: float
     peak_vram_mb: int
-    lora: str | None
-    lora_weight: float
+    loras: tuple[LoraLoadSpec, ...]
 
     def to_json(self) -> dict[str, Any]:
         payload = {
@@ -86,9 +120,8 @@ class Flux2KleinBatchResult:
             "model_load_ms": self.model_load_ms,
             "peak_vram_mb": self.peak_vram_mb,
         }
-        if self.lora is not None:
-            payload["lora"] = self.lora
-            payload["lora_weight"] = self.lora_weight
+        if self.loras:
+            payload["loras"] = [lora.to_json() for lora in self.loras]
         return payload
 
 
@@ -101,8 +134,7 @@ class Flux2KleinResult:
     reference_count: int
     elapsed_ms: float
     peak_vram_mb: int
-    lora: str | None
-    lora_weight: float
+    loras: tuple[LoraLoadSpec, ...]
 
     def to_json(self) -> dict[str, Any]:
         payload = {
@@ -114,9 +146,8 @@ class Flux2KleinResult:
             "elapsed_ms": self.elapsed_ms,
             "peak_vram_mb": self.peak_vram_mb,
         }
-        if self.lora is not None:
-            payload["lora"] = self.lora
-            payload["lora_weight"] = self.lora_weight
+        if self.loras:
+            payload["loras"] = [lora.to_json() for lora in self.loras]
         return payload
 
 
@@ -201,8 +232,7 @@ class Flux2KleinSession:
     def __init__(
         self,
         *,
-        lora: Path | None,
-        lora_weight: float,
+        loras: tuple[LoraLoadSpec, ...],
         strength: float | None = None,
         progress: StatusReporter,
     ) -> None:
@@ -223,8 +253,7 @@ class Flux2KleinSession:
         started = time.perf_counter()
         transformer = load_flux2_klein_scaled_fp8(
             FLUX2_KLEIN_TRANSFORMER,
-            lora=lora,
-            lora_weight=lora_weight,
+            loras=loras,
         )
         vae = AutoencoderKLFlux2.from_pretrained(
             FLUX2_KLEIN_MODEL_ROOT / "vae",
@@ -248,8 +277,7 @@ class Flux2KleinSession:
         self.torch = torch
         self.compute_empirical_mu = compute_empirical_mu
         self.retrieve_timesteps = retrieve_timesteps
-        self.lora = lora.resolve() if lora is not None else None
-        self.lora_weight = lora_weight
+        self.loras = loras
         self.strength = strength
         self.model_load_ms = (time.perf_counter() - started) * 1000
 
@@ -292,8 +320,7 @@ class Flux2KleinSession:
                 generation_ms=(time.perf_counter() - started) * 1000,
                 model_load_ms=self.model_load_ms,
                 peak_vram_mb=round(self.torch.cuda.max_memory_allocated() / 1024**2),
-                lora=self.lora.as_posix() if self.lora is not None else None,
-                lora_weight=self.lora_weight,
+                loras=self.loras,
             )
         except self.torch.cuda.OutOfMemoryError as exc:
             raise Flux2KleinError("FLUX.2 Klein 9B exceeded 16 GB VRAM") from exc
@@ -311,8 +338,7 @@ def generate_flux2_klein(
     width: int | None,
     height: int | None,
     seed: int,
-    lora: Path | None,
-    lora_weight: float,
+    loras: tuple[LoraLoadSpec, ...],
     strength: float | None = None,
     progress: StatusReporter,
 ) -> Flux2KleinResult:
@@ -324,8 +350,7 @@ def generate_flux2_klein(
         width=width,
         height=height,
         seeds=(seed,),
-        lora=lora,
-        lora_weight=lora_weight,
+        loras=loras,
         strength=strength,
         progress=progress,
     )
@@ -338,8 +363,7 @@ def generate_flux2_klein(
         reference_count=generated.reference_count,
         elapsed_ms=(time.perf_counter() - started) * 1000,
         peak_vram_mb=batch.peak_vram_mb,
-        lora=batch.lora,
-        lora_weight=batch.lora_weight,
+        loras=batch.loras,
     )
 
 
@@ -351,8 +375,7 @@ def generate_flux2_klein_seed_sweep(
     width: int | None,
     height: int | None,
     seeds: Sequence[int],
-    lora: Path | None,
-    lora_weight: float,
+    loras: tuple[LoraLoadSpec, ...],
     strength: float | None = None,
     progress: StatusReporter,
 ) -> Flux2KleinBatchResult:
@@ -397,8 +420,7 @@ def generate_flux2_klein_seed_sweep(
         progress=progress,
     )
     session = Flux2KleinSession(
-        lora=lora,
-        lora_weight=lora_weight,
+        loras=loras,
         strength=strength,
         progress=progress,
     )

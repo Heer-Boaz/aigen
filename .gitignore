@@ -20,6 +20,7 @@ aigen/models/
 catalogs/
 plans/
 runs/
+loras/
 tools/diffusers/
 model_sources/Pixal3D/
 model_sources/TRELLIS.2/

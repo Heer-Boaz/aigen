@@ -236,6 +236,7 @@ def run_planned_qwen_character_edit(
         overwrite=overwrite,
         nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
         aspect_ratio=aspect_ratio,
+        canvas_size=None,
         upscale_long_side=upscale_long_side,
         postprocess=postprocess,
         result_kind=result_kind,

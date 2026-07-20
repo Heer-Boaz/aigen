@@ -28,6 +28,7 @@ from aigen.generation.qwen_image_edit_lightx2v import (
     run_lightx2v_qwen_image_edit,
 )
 from aigen.generation.prompt_encoding import tensor_to_device
+from aigen.lora_weights import LoraLoadSpec
 from aigen.generation.qwen_prompt_encoding import (
     QWEN_IMAGE_EDIT_NEGATIVE_PROMPT,
     QwenImageEditPromptEmbedding,
@@ -47,6 +48,7 @@ from aigen.generation.vosr_backend import (
     upscale_files_with_vosr,
 )
 from aigen.image_assets import image_asset_json
+from aigen.image_dimensions import closest_aspect_match
 from aigen.keyframe_image_ops import exact_outside_mask_diff, save_contact_sheet
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight_limit
 from aigen.manifest_io import write_json
@@ -61,6 +63,16 @@ DEFAULT_QWEN_IDENTITY_SEED = 0
 DEFAULT_QWEN_IDENTITY_MAX_SEQUENCE_LENGTH = 512
 QWEN_IDENTITY_PREFLIGHT_LIMIT_MB = 4096
 QWEN_IMAGE_EDIT_2511_NATIVE_PIXELS = 1152 * 1536
+QWEN_IMAGE_EDIT_2511_MAX_CUSTOM_SIDE = 1664
+QWEN_IMAGE_EDIT_2511_NATIVE_CANVASES = {
+    (16, 9): (1664, 928),
+    (9, 16): (928, 1664),
+    (1, 1): (1328, 1328),
+    (4, 3): (1472, 1104),
+    (3, 4): (1104, 1472),
+    (3, 2): (1584, 1056),
+    (2, 3): (1056, 1584),
+}
 DEFAULT_QWEN_ASPECT_RATIO = (3, 4)
 DEFAULT_QWEN_UPSCALE_LONG_SIDE = 2048
 
@@ -71,6 +83,27 @@ class QwenImageEditIdentityError(RuntimeError):
 
 class QwenImageEditIdentityDependencyError(QwenImageEditIdentityError):
     pass
+
+
+def qwen_image_edit_2511_native_canvas_size(
+    aspect_ratio: tuple[int, int],
+    *,
+    closest: bool,
+) -> tuple[int, int]:
+    if aspect_ratio in QWEN_IMAGE_EDIT_2511_NATIVE_CANVASES:
+        return QWEN_IMAGE_EDIT_2511_NATIVE_CANVASES[aspect_ratio]
+    if closest:
+        return closest_aspect_match(
+            aspect_ratio,
+            tuple(QWEN_IMAGE_EDIT_2511_NATIVE_CANVASES.values()),
+        )
+    supported = ", ".join(
+        f"{width}:{height}" for width, height in QWEN_IMAGE_EDIT_2511_NATIVE_CANVASES
+    )
+    raise QwenImageEditIdentityError(
+        f"Qwen-Image-Edit-2511 has no native {aspect_ratio[0]}:{aspect_ratio[1]} canvas; "
+        f"use --width/--height or one of: {supported}"
+    )
 
 
 @dataclass(frozen=True)
@@ -308,18 +341,6 @@ def _native_canvas_pixels(profile: QwenImageEditProfile) -> int | None:
     return None
 
 
-def parse_qwen_aspect_ratio(value: str) -> tuple[int, int]:
-    width_text, separator, height_text = value.partition(":")
-    if not separator:
-        raise ValueError("aspect ratio must use W:H")
-    width_ratio = int(width_text)
-    height_ratio = int(height_text)
-    if width_ratio < 1 or height_ratio < 1:
-        raise ValueError("aspect ratio values must be positive integers")
-    divisor = gcd(width_ratio, height_ratio)
-    return width_ratio // divisor, height_ratio // divisor
-
-
 def run_qwen_image_edit_cases(
     *,
     source_images: Mapping[str, Path],
@@ -339,12 +360,33 @@ def run_qwen_image_edit_cases(
     overwrite: bool,
     nunchaku_blocks_on_gpu: int | None,
     aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
     upscale_long_side: int,
     postprocess: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
+    loras: Sequence[LoraLoadSpec] = (),
 ) -> dict[str, Any]:
+    resolved_loras = tuple(loras)
+    if resolved_loras:
+        if not isinstance(profile, QwenImageEditLightX2VProfile):
+            raise QwenImageEditIdentityError(
+                "LoRA loading is supported only by the Qwen-Image-Edit-2511 LightX2V backend"
+            )
+        from aigen.lora_weights import QWEN_IMAGE_ARCHITECTURE, inspect_lora_weights
+
+        checked_loras = []
+        for lora in resolved_loras:
+            lora_info = inspect_lora_weights(lora.path)
+            if lora_info.architecture != QWEN_IMAGE_ARCHITECTURE:
+                raise QwenImageEditIdentityError(
+                    f"Qwen-Image-Edit-2511 cannot load a {lora_info.architecture} LoRA: "
+                    f"{lora_info.path}"
+                )
+            checked_loras.append(LoraLoadSpec(path=lora_info.path, weight=lora.weight))
+        resolved_loras = tuple(checked_loras)
+    _validate_qwen_canvas_size(canvas_size, aspect_ratio=aspect_ratio)
     resolved_steps = profile.default_steps if steps is None else steps
     resolved_true_cfg_scale = profile.default_true_cfg_scale if true_cfg_scale is None else true_cfg_scale
     resolved_guidance_scale = profile.default_guidance_scale if guidance_scale is None else guidance_scale
@@ -397,10 +439,12 @@ def run_qwen_image_edit_cases(
                 max_sequence_length=max_sequence_length,
                 candidates_per_case=candidates_per_case,
                 aspect_ratio=aspect_ratio,
+                canvas_size=canvas_size,
                 upscale_long_side=upscale_long_side,
                 postprocess=postprocess,
                 result_kind=result_kind,
                 manifest_context=manifest_context,
+                loras=resolved_loras,
                 progress=progress,
             )
         except QwenImageEditLightX2VError as error:
@@ -421,6 +465,7 @@ def run_qwen_image_edit_cases(
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
             aspect_ratio=aspect_ratio,
+            canvas_size=canvas_size,
             progress=progress,
         )
         prompt_step = _encode_qwen_identity_prompts(
@@ -501,6 +546,7 @@ def run_qwen_image_edit_cases(
                 "native_canvas_pixels": native_canvas_pixels,
                 "output_canvas": _output_canvas_json(
                     aspect_ratio=aspect_ratio,
+                    canvas_size=canvas_size,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
                 ),
@@ -560,10 +606,12 @@ def _run_qwen_image_edit_cases_lightx2v(
     max_sequence_length: int,
     candidates_per_case: int,
     aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
     upscale_long_side: int,
     postprocess: str,
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
+    loras: tuple[LoraLoadSpec, ...],
     progress: StatusReporter,
 ) -> dict[str, Any]:
     preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
@@ -580,6 +628,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
             aspect_ratio=aspect_ratio,
+            canvas_size=canvas_size,
             progress=progress,
         )
         with TemporaryDirectory(prefix="aigen-qwen-2511-inputs-") as temporary_dir:
@@ -616,6 +665,7 @@ def _run_qwen_image_edit_cases_lightx2v(
                 true_cfg_scale=true_cfg_scale,
                 guidance_scale=guidance_scale,
                 max_sequence_length=max_sequence_length,
+                loras=loras,
                 progress=progress,
             )
 
@@ -695,6 +745,7 @@ def _run_qwen_image_edit_cases_lightx2v(
                 "native_canvas_pixels": native_canvas_pixels,
                 "output_canvas": _output_canvas_json(
                     aspect_ratio=aspect_ratio,
+                    canvas_size=canvas_size,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
                 ),
@@ -721,6 +772,8 @@ def _run_qwen_image_edit_cases_lightx2v(
                 "result": (output_dir / "result.json").as_posix(),
             },
         }
+        if loras:
+            result["generation"]["loras"] = [lora.to_json() for lora in loras]
         if manifest_context is not None:
             result["plan"] = dict(manifest_context)
         write_json(output_dir / "result.json", result)
@@ -939,6 +992,7 @@ def _prepare_qwen_identity_references(
     max_side: int,
     native_canvas_pixels: int | None,
     aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
     progress: StatusReporter,
 ) -> QwenIdentityReferenceStep:
     progress.phase("prepare qwen identity references")
@@ -969,6 +1023,7 @@ def _prepare_qwen_identity_references(
             max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
             aspect_ratio=aspect_ratio,
+            canvas_size=canvas_size,
         )
         canvas_sizes[case.name] = target_size
         for control_name in case.controls:
@@ -1639,6 +1694,27 @@ def _validate_generation_settings(
         raise QwenImageEditIdentityError("nunchaku_blocks_on_gpu must be at least 1")
 
 
+def _validate_qwen_canvas_size(
+    canvas_size: tuple[int, int] | None,
+    *,
+    aspect_ratio: tuple[int, int] | None,
+) -> None:
+    if canvas_size is None:
+        return
+    if aspect_ratio is not None:
+        raise QwenImageEditIdentityError("canvas_size and aspect_ratio are mutually exclusive")
+    width, height = canvas_size
+    if width < 256 or height < 256 or width % 16 or height % 16:
+        raise QwenImageEditIdentityError(
+            "Qwen-Image-Edit-2511 canvas dimensions must be multiples of 16 and at least 256"
+        )
+    if max(width, height) > QWEN_IMAGE_EDIT_2511_MAX_CUSTOM_SIDE:
+        raise QwenImageEditIdentityError(
+            f"Qwen-Image-Edit-2511 canvas dimensions must not exceed "
+            f"{QWEN_IMAGE_EDIT_2511_MAX_CUSTOM_SIDE}px per side"
+        )
+
+
 def _validate_inpaint_settings(*, strength: float, padding_mask_crop: int | None) -> None:
     if strength <= 0.0 or strength > 1.0:
         raise QwenImageEditIdentityError("strength must be greater than 0 and at most 1")
@@ -1858,7 +1934,10 @@ def _case_canvas(
     max_side: int,
     native_canvas_pixels: int | None,
     aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
 ) -> tuple[int, int]:
+    if canvas_size is not None:
+        return canvas_size
     if aspect_ratio is not None:
         width_ratio, height_ratio = aspect_ratio
     elif control is not None:
@@ -1931,19 +2010,31 @@ def _size_for_target_area(
 def _output_canvas_json(
     *,
     aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
     native_canvas_pixels: int | None,
     upscale_long_side: int,
 ) -> dict[str, Any]:
-    return {
-        "mode": "model_native_area" if native_canvas_pixels is not None else "long_side",
-        "aspect_owner": "explicit" if aspect_ratio is not None else "control_source_guide_or_default",
+    if canvas_size is not None:
+        mode = "explicit_size"
+        aspect_owner = "explicit_size"
+        target_pixels = canvas_size[0] * canvas_size[1]
+    else:
+        mode = "model_native_area" if native_canvas_pixels is not None else "long_side"
+        aspect_owner = "explicit" if aspect_ratio is not None else "control_source_guide_or_default"
+        target_pixels = native_canvas_pixels
+    payload: dict[str, Any] = {
+        "mode": mode,
+        "aspect_owner": aspect_owner,
         "aspect_ratio": list(aspect_ratio) if aspect_ratio is not None else None,
-        "target_pixels": native_canvas_pixels,
+        "target_pixels": target_pixels,
         "alignment": 16,
         "postprocess": VOSR_POSTPROCESS_NAME,
         "upscale_long_side": upscale_long_side,
         "upscale_model": VOSR_MODEL_NAME,
     }
+    if canvas_size is not None:
+        payload["target_size"] = list(canvas_size)
+    return payload
 
 
 def _qwen_inpaint_canvas_size(pipeline: Any, image: Image.Image) -> tuple[int, int]:

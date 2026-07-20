@@ -14,6 +14,15 @@ from flux2.model import Flux2, Klein9BParams
 from safetensors import safe_open
 from safetensors.torch import load_file
 
+from aigen.lora_weights import (
+    AI_TOOLKIT_LORA_FORMAT,
+    DIFFUSERS_PEFT_LORA_FORMAT,
+    FLUX2_KLEIN_ARCHITECTURE,
+    LoraLoadSpec,
+    LOKR_FORMAT,
+    inspect_lora_weights,
+)
+
 
 class ScaledFP8Linear(torch.nn.Module):
     def __init__(
@@ -44,12 +53,10 @@ class ScaledFP8Linear(torch.nn.Module):
             self.register_parameter("bias", None)
         self.register_buffer("weight_scale", torch.empty((), dtype=torch.float32, device=device))
         self.register_buffer("input_scale", torch.empty((), dtype=torch.float32, device=device))
-        self.register_buffer("lokr_w1", None, persistent=False)
-        self.register_buffer("lokr_w2", None, persistent=False)
-        self.lokr_weight = 1.0
+        self._lokr_adapters: list[tuple[str, str, float]] = []
         self._lora_adapters: list[tuple[str, str, slice | None, float]] = []
 
-    def set_lokr(
+    def add_lokr(
         self,
         w1: torch.Tensor,
         w2: torch.Tensor,
@@ -63,9 +70,12 @@ class ScaledFP8Linear(torch.nn.Module):
                 f"LoKr factors {tuple(w1.shape)} x {tuple(w2.shape)} do not match "
                 f"linear weight {(self.out_features, self.in_features)}"
             )
-        self.lokr_w1 = w1.to(torch.bfloat16).contiguous()
-        self.lokr_w2 = w2.to(torch.bfloat16).contiguous()
-        self.lokr_weight = weight
+        index = len(self._lokr_adapters)
+        w1_name = f"lokr_w1_{index}"
+        w2_name = f"lokr_w2_{index}"
+        self.register_buffer(w1_name, w1.to(torch.bfloat16).contiguous(), persistent=False)
+        self.register_buffer(w2_name, w2.to(torch.bfloat16).contiguous(), persistent=False)
+        self._lokr_adapters.append((w1_name, w2_name, weight))
 
     def add_lora(
         self,
@@ -115,21 +125,23 @@ class ScaledFP8Linear(torch.nn.Module):
             QuantizedTensor(self.weight, "TensorCoreFP8Layout", weight_params),
             self.bias,
         ).reshape(*original_shape[:-1], self.out_features)
-        if self.lokr_w1 is not None:
+        for w1_name, w2_name, weight in self._lokr_adapters:
+            lokr_w1 = getattr(self, w1_name)
+            lokr_w2 = getattr(self, w2_name)
             grouped = value.reshape(
                 *original_shape[:-1],
-                self.lokr_w1.shape[1],
-                self.lokr_w2.shape[1],
+                lokr_w1.shape[1],
+                lokr_w2.shape[1],
             )
-            w2_output = functional.linear(grouped, self.lokr_w2)
+            w2_output = functional.linear(grouped, lokr_w2)
             lokr_output = functional.linear(
                 w2_output.transpose(-1, -2),
-                self.lokr_w1,
+                lokr_w1,
             ).transpose(-1, -2).reshape(
                 *original_shape[:-1],
                 self.out_features,
             )
-            lokr_output.mul_(self.lokr_weight)
+            lokr_output.mul_(weight)
             output.add_(lokr_output)
         for a_name, b_name, output_slice, scale in self._lora_adapters:
             a = getattr(self, a_name)
@@ -184,8 +196,7 @@ class Flux2KleinTransformerAdapter(torch.nn.Module):
 def load_flux2_klein_scaled_fp8(
     checkpoint: Path,
     *,
-    lora: Path | None = None,
-    lora_weight: float = 1.0,
+    loras: tuple[LoraLoadSpec, ...] = (),
 ) -> Flux2KleinTransformerAdapter:
     with torch.device("meta"):
         model = Flux2(Klein9BParams()).to(torch.bfloat16)
@@ -209,20 +220,45 @@ def load_flux2_klein_scaled_fp8(
         setattr(parent, child_name, replacement)
 
     model.load_state_dict(state_dict, strict=True, assign=True)
-    if lora is not None:
-        lora_keys = _safetensor_keys(lora)
-        if any(key.endswith(".lora_A.weight") for key in lora_keys):
-            _load_peft_lora(model, lora, lora_weight)
+    for lora in loras:
+        lora_info = inspect_lora_weights(lora.path)
+        if lora_info.architecture != FLUX2_KLEIN_ARCHITECTURE:
+            raise ValueError(
+                f"FLUX.2 Klein cannot load a {lora_info.architecture} LoRA: {lora_info.path}"
+            )
+        if lora_info.format == AI_TOOLKIT_LORA_FORMAT:
+            _load_native_lora(model, lora_info.path, lora.weight)
+        elif lora_info.format == DIFFUSERS_PEFT_LORA_FORMAT:
+            _load_peft_lora(model, lora_info.path, lora.weight)
+        elif lora_info.format == LOKR_FORMAT:
+            _load_lokr(model, lora_info.path, lora.weight)
         else:
-            _load_lokr(model, lora, lora_weight)
+            raise ValueError(f"Unsupported FLUX.2 Klein LoRA format: {lora_info.format}")
     model.requires_grad_(False)
     model.eval()
     return Flux2KleinTransformerAdapter(model)
 
 
-def _safetensor_keys(path: Path) -> list[str]:
-    with safe_open(path, framework="pt", device="cpu") as weights:
-        return list(weights.keys())
+def _load_native_lora(model: Flux2, path: Path, weight: float) -> None:
+    state_dict = load_file(path, device="cpu")
+    a_suffix = ".lora_A.weight"
+    targets = sorted(key.removesuffix(a_suffix) for key in state_dict if key.endswith(a_suffix))
+    for target in targets:
+        module_name = target.removeprefix("diffusion_model.")
+        module = model.get_submodule(module_name)
+        if not isinstance(module, ScaledFP8Linear):
+            raise ValueError(f"Native LoRA target is not a scaled-FP8 linear: {module_name}")
+        a = state_dict[f"{target}.lora_A.weight"]
+        scale = weight
+        alpha = state_dict.get(f"{target}.alpha")
+        if alpha is not None:
+            scale *= float(alpha.item()) / a.shape[0]
+        module.add_lora(
+            a,
+            state_dict[f"{target}.lora_B.weight"],
+            None,
+            scale,
+        )
 
 
 def _load_peft_lora(model: Flux2, path: Path, weight: float) -> None:
@@ -301,7 +337,7 @@ def _load_lokr(model: Flux2, path: Path, weight: float) -> None:
         module = model.get_submodule(module_name)
         if not isinstance(module, ScaledFP8Linear):
             raise ValueError(f"LoKr target is not a scaled-FP8 linear: {module_name}")
-        module.set_lokr(
+        module.add_lokr(
             state_dict[f"{target}.lokr_w1"],
             state_dict[f"{target}.lokr_w2"],
             weight,

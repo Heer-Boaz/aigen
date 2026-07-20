@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,9 +11,6 @@ from aigen.character_reference_models import (
     load_character_reference_pack_payload,
 )
 from aigen.manifest_io import read_json, resolve_existing_path, write_json
-
-
-REFERENCE_PACK_FILENAME = "reference_pack.json"
 
 
 @dataclass(frozen=True)
@@ -69,25 +65,23 @@ def build_character_reference_pack(
     *,
     character_id: str,
     references: Mapping[str, Path],
-    output_dir: Path,
+    output: Path,
     overwrite: bool,
 ) -> dict[str, Any]:
     _validate_character_id(character_id)
     _validate_reference_mapping(references)
-    output_dir = output_dir.resolve()
-    pack_path = output_dir / REFERENCE_PACK_FILENAME
-    if output_dir.exists() and any(output_dir.iterdir()):
+    output = output.resolve()
+    if output.exists():
         if not overwrite:
-            raise CharacterReferenceError(f"Reference pack output exists and overwrite=false: {output_dir.as_posix()}")
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+            raise CharacterReferenceError(f"Reference pack output exists and overwrite=false: {output.as_posix()}")
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     pack = CharacterReferencePackSpec(
         character_id=character_id,
         references={name: path.as_posix() for name, path in references.items()},
     )
     payload = pack.model_dump(mode="json")
-    write_json(pack_path, payload, sort_keys=False)
+    write_json(output, payload, sort_keys=False)
     return payload
 
 

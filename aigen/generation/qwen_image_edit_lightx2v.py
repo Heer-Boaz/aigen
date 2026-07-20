@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from aigen.generation.image_generation_requests import ImageGenerationCaseRequest
+from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
@@ -119,6 +120,7 @@ def run_lightx2v_qwen_image_edit(
     true_cfg_scale: float,
     guidance_scale: float,
     max_sequence_length: int,
+    loras: tuple[LoraLoadSpec, ...],
     progress: StatusReporter,
 ) -> LightX2VQwenResult:
     if guidance_scale != 1.0:
@@ -139,6 +141,7 @@ def run_lightx2v_qwen_image_edit(
         Path(profile.base_model) / "model_index.json",
         profile.transformer_model,
         profile.conditioner_model / "config.json",
+        *(lora.path for lora in loras),
     )
     missing = [path.as_posix() for path in required_paths if not path.exists()]
     if missing:
@@ -151,20 +154,26 @@ def run_lightx2v_qwen_image_edit(
         request_path = temporary_path / "request.json"
         response_path = temporary_path / "response.json"
         worker_log_path = temporary_path / "worker.log"
+        worker_profile: dict[str, Any] = {
+            "name": profile.name,
+            "base_model": profile.base_model,
+            "transformer_model": profile.transformer_model.as_posix(),
+            "conditioner_model": profile.conditioner_model.as_posix(),
+            "steps": steps,
+            "true_cfg_scale": true_cfg_scale,
+            "guidance_scale": guidance_scale,
+            "max_sequence_length": max_sequence_length,
+        }
+        if loras:
+            worker_profile["loras"] = [
+                {"path": lora.path.as_posix(), "strength": lora.weight}
+                for lora in loras
+            ]
         request_path.write_text(
             json.dumps(
                 {
                     "kind": "aigen-qwen-image-edit-lightx2v-job",
-                    "profile": {
-                        "name": profile.name,
-                        "base_model": profile.base_model,
-                        "transformer_model": profile.transformer_model.as_posix(),
-                        "conditioner_model": profile.conditioner_model.as_posix(),
-                        "steps": steps,
-                        "true_cfg_scale": true_cfg_scale,
-                        "guidance_scale": guidance_scale,
-                        "max_sequence_length": max_sequence_length,
-                    },
+                    "profile": worker_profile,
                     "cases": [
                         {
                             "name": case.name,

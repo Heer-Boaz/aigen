@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 
 
@@ -45,6 +46,16 @@ def run_flux2_klein_command(
 
     try:
         seeds = tuple(args.seed or (42,))
+        loras = (
+            (
+                LoraLoadSpec(
+                    path=args.lora.expanduser().resolve(),
+                    weight=args.lora_weight,
+                ),
+            )
+            if args.lora is not None
+            else ()
+        )
         if len(seeds) == 1:
             result = generate_flux2_klein(
                 prompt=args.prompt,
@@ -53,8 +64,7 @@ def run_flux2_klein_command(
                 width=args.width,
                 height=args.height,
                 seed=seeds[0],
-                lora=args.lora,
-                lora_weight=args.lora_weight,
+                loras=loras,
                 strength=args.strength,
                 progress=progress,
             )
@@ -67,8 +77,7 @@ def run_flux2_klein_command(
                 width=args.width,
                 height=args.height,
                 seeds=seeds,
-                lora=args.lora,
-                lora_weight=args.lora_weight,
+                loras=loras,
                 strength=args.strength,
                 progress=progress,
             )

@@ -118,10 +118,65 @@ The character-keyframe workflow has four public owners:
 - `briefs`: plan and materialize keyframe jobs from identity images and example sprites.
 - `keyframes`: run, score, judge, refine and polish materialized jobs.
 
-Raw one-shot generation commands are not a supported character-keyframe
-workflow. Model pipelines are implementation modules behind character-view,
-keyframe and polish jobs. The optional HunyuanVideo command above is a separate
-I2V utility.
+Raw one-shot generation commands are separate experimentation utilities, not
+part of the character-keyframe workflow. The optional HunyuanVideo command
+above is likewise a separate I2V utility.
+
+## Direct Image Editing
+
+`image-edit` provides one command contract for the local image-edit backends.
+Repeat `--image` for multiple ordered inputs, use `--reference-pack` for a named
+ordered image bundle, and repeat `--seed` for a seed sweep. The command writes
+valid PNG names inside `--output-dir`; `--overwrite` replaces a non-empty output
+directory.
+
+```bash
+.venv/bin/aigen image-edit \
+  --backend flux2-klein \
+  --image path/to/source.png \
+  --image path/to/style-reference.png \
+  --prompt "Draw as pixel-art. Limited color palette, retro, 8-bit, no background." \
+  --output-dir runs/image-edit/example \
+  --aspect-ratio 1:1 \
+  --seed 0 \
+  --overwrite
+```
+
+Available backends are `flux2-klein`, `qwen-image-edit-2511-lightning`,
+`qwen-image-edit-2511-base`, `hidream-o1-full-fp8` and
+`boogu-image-edit-turbo-fp8`. `--aspect-ratio` selects that backend's
+recommended canvas: trained presets for Qwen and HiDream, a 1024px long side
+for FLUX.2 Klein, and an approximately one-megapixel 1K canvas for Boogu.
+`--width` and `--height` remain an exact expert override and cannot be combined
+with `--aspect-ratio`. When all three are omitted, the first resolved input
+image supplies only the aspect ratio while the backend supplies its recommended pixel
+dimensions. `--steps` and `--guidance` are also optional and remain
+backend-native when omitted. FLUX.2 Klein and both Qwen-2511 backends accept
+repeated `--lora path/to/weights.safetensors` arguments. Repeat `--lora-weight`
+in the same order to set individual strengths, or omit all weights to use 1.0.
+The command inspects every SafeTensors model keyspace before loading the backend
+and rejects a Qwen/FLUX mismatch. HiDream and Boogu do not expose LoRA loading
+through this command. Reference packs are expanded once before backend dispatch,
+preserving their declared image order. Boogu's native one-image limit also
+applies to packs; FLUX.2 Klein, Qwen and HiDream accept multi-image packs.
+
+### Terminal UI
+
+```bash
+.venv/bin/aigen-tui
+```
+
+The Images tab has a free-text prompt, model, LoRA and character-reference-pack
+dropdowns, and free-text source-image slots. Multiple LoRAs can be selected with
+independent weights. LoRA files are discovered from `loras/`; reference packs
+are discovered from `assets/reference-packs/*.json`.
+Its visible buttons add and remove slots and start or stop generation. The Videos
+and SAM Edit tabs are reserved for later. TUI generations replace the contents
+of the selected output run directory so the same destination can be reused.
+`Browse` opens an image-file browser for the selected Image slot or a directory
+browser for the selected Output directory field. Clicking an image selects it;
+clicking a folder opens it. Arrow keys and Enter operate the list, while Tab and
+Shift-Tab move keyboard focus to the visible Select and Cancel buttons.
 
 ## Character Views
 
@@ -157,7 +212,7 @@ images and resolves identity and appearance inside the edit model.
   --reference reference2=path/to/reference2.png \
   --reference reference3=path/to/reference3.png \
   --reference reference4=path/to/reference4.png \
-  --output-dir assets/characters/<character-id>/references
+  --output assets/reference-packs/<pack-name>.json
 ```
 
 When filenames already provide suitable handles, omit the manual `name=path`
@@ -169,18 +224,18 @@ mapping:
   --file path/to/fullbody-multiview.png \
   --file path/to/front-upperbody.png \
   --file path/to/clothes.png \
-  --output-dir assets/characters/<character-id>/references
+  --output assets/reference-packs/<pack-name>.json
 ```
 
-This writes `reference_pack.json`; each `--file` uses its filename stem as the
-stable pack-local handle, and repeated `--file` options establish model-input
-order. Qwen-Image-Edit receives that complete ordered pack plus the user's
-instruction and any structural inputs. No image descriptions, inferred
-reference roles or count-based selector enter the generation path.
+Each `--file` uses its filename stem as the stable pack-local handle, and
+repeated `--file` options establish model-input order. The selected native
+backend receives that complete ordered pack plus the user's instruction and any
+structural inputs. No image descriptions, inferred reference roles or
+count-based selector enter the generation path.
 
 ```bash
 .venv/bin/aigen characters qwen-edit-run \
-  --pack assets/characters/<character-id>/references/reference_pack.json \
+  --pack assets/reference-packs/<pack-name>.json \
   --instruction "Full-body three-quarter view. Keep the entire character and footwear visible." \
   --output-dir runs/characters/<character-id>/qwen_edit/three_quarter
 ```

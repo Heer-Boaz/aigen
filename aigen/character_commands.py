@@ -65,11 +65,11 @@ from aigen.generation.qwen_image_edit_identity import (
     DEFAULT_QWEN_INPAINT_PROFILE,
     DEFAULT_QWEN_UPSCALE_LONG_SIDE,
     QwenImageEditIdentityError,
-    parse_qwen_aspect_ratio,
     qwen_image_edit_identity_profile_for_name,
     qwen_image_edit_inpaint_model_names,
     qwen_image_edit_identity_model_names,
 )
+from aigen.image_dimensions import parse_aspect_ratio
 from aigen.keyframe_memory import KeyframeMemoryError
 from aigen.keyframe_grounding import GroundingConfig, KeyframeGroundingError
 from aigen.keyframe_segmentation import Sam2SegmentationConfig, KeyframeSegmentationError
@@ -133,8 +133,8 @@ def add_character_commands(subparsers: Any) -> None:
         type=Path,
         help="Reference image path; repeat for each image and use each filename stem as its pack handle",
     )
-    reference_pack_build.add_argument("--output-dir", type=Path, required=True, help="Reference pack directory")
-    reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
+    reference_pack_build.add_argument("--output", type=Path, required=True, help="Reference pack JSON file")
+    reference_pack_build.add_argument("--overwrite", action="store_true", help="Replace an existing reference pack")
     reference_pack_build.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     qwen_edit = character_subparsers.add_parser(
@@ -190,7 +190,7 @@ def add_character_commands(subparsers: Any) -> None:
     )
     qwen_edit.add_argument(
         "--aspect-ratio",
-        type=parse_qwen_aspect_ratio,
+        type=parse_aspect_ratio,
         help="Raw canvas aspect as W:H; source or structural input owns the aspect when omitted",
     )
     qwen_edit.add_argument(
@@ -446,7 +446,7 @@ def run_character_command(
                             if args.file
                             else parse_character_reference_args(args.reference, Path.cwd())
                         ),
-                        output_dir=args.output_dir,
+                        output=args.output,
                         overwrite=args.overwrite,
                     ),
                     pretty=not args.compact,

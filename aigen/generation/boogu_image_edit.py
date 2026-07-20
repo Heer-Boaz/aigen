@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import time
@@ -13,6 +14,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
+from aigen.image_dimensions import closest_aspect_match
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
@@ -23,10 +25,63 @@ BOOGU_MODEL_DIRECTORY = "boogu/Boogu-Image-0.1-Edit-Turbo-fp8"
 BOOGU_DEFAULT_RESOLUTION = "1024x1024"
 BOOGU_DEFAULT_STEPS = 4
 BOOGU_DEFAULT_GUIDANCE = 1.0
+BOOGU_MAX_SIDE = 2048
+BOOGU_RECOMMENDED_1K_PIXEL_AREA = 1024 * 1024
+BOOGU_DIMENSION_ALIGNMENT = 16
+BOOGU_SUPPORTED_ASPECT_RATIOS = (
+    (1, 1),
+    (2, 3),
+    (3, 2),
+    (3, 4),
+    (4, 3),
+    (1, 2),
+    (2, 1),
+    (9, 16),
+    (16, 9),
+)
 
 
 class BooguImageEditError(RuntimeError):
     pass
+
+
+def boogu_recommended_1k_canvas_size(
+    aspect_ratio: tuple[int, int],
+    *,
+    closest: bool,
+) -> tuple[int, int]:
+    selected_ratio = aspect_ratio
+    if selected_ratio not in BOOGU_SUPPORTED_ASPECT_RATIOS:
+        if closest:
+            selected_ratio = closest_aspect_match(
+                selected_ratio,
+                BOOGU_SUPPORTED_ASPECT_RATIOS,
+            )
+        else:
+            supported = ", ".join(
+                f"{width}:{height}" for width, height in BOOGU_SUPPORTED_ASPECT_RATIOS
+            )
+            raise BooguImageEditError(
+                f"Boogu-Image Edit Turbo does not support aspect ratio "
+                f"{aspect_ratio[0]}:{aspect_ratio[1]}; use --width/--height or one of: "
+                f"{supported}"
+            )
+
+    ratio_width, ratio_height = selected_ratio
+    scale = math.sqrt(
+        BOOGU_RECOMMENDED_1K_PIXEL_AREA / (ratio_width * ratio_height)
+    )
+    width = (
+        int(ratio_width * scale)
+        // BOOGU_DIMENSION_ALIGNMENT
+        * BOOGU_DIMENSION_ALIGNMENT
+    )
+    height = (
+        int(ratio_height * scale)
+        // BOOGU_DIMENSION_ALIGNMENT
+        * BOOGU_DIMENSION_ALIGNMENT
+    )
+    return width, height
 
 
 @dataclass(frozen=True)
@@ -203,6 +258,10 @@ def _validate_request(
         raise BooguImageEditError("Boogu-Image seed sweep contains duplicate seeds")
     if width <= 0 or width % 16 or height <= 0 or height % 16:
         raise BooguImageEditError("Boogu-Image dimensions must be positive multiples of 16")
+    if width > BOOGU_MAX_SIDE or height > BOOGU_MAX_SIDE:
+        raise BooguImageEditError(
+            f"Boogu-Image dimensions must not exceed {BOOGU_MAX_SIDE}px per side"
+        )
     if steps != BOOGU_DEFAULT_STEPS:
         raise BooguImageEditError("Boogu-Image Edit Turbo uses its official 4-step DMD schedule")
     if guidance != BOOGU_DEFAULT_GUIDANCE:
