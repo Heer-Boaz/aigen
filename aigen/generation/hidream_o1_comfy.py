@@ -13,7 +13,14 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
-from aigen.image_edit_defaults import HIDREAM_DEFAULT_GUIDANCE, HIDREAM_DEFAULT_STEPS
+from aigen.image_edit_defaults import (
+    HIDREAM_DEFAULT_GUIDANCE,
+    HIDREAM_DEFAULT_SAMPLER,
+    HIDREAM_DEFAULT_SCHEDULER,
+    HIDREAM_DEFAULT_STEPS,
+    HIDREAM_SAMPLERS,
+    HIDREAM_SCHEDULERS,
+)
 from aigen.image_dimensions import closest_aspect_match
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
@@ -23,8 +30,6 @@ COMFY_REVISION = "26515acd23fa291a8f5ab53c5997258598de0701"
 HIDREAM_CHECKPOINT_REVISION = "54d16b20496bbd1bdfa6f79ec1ad2d6f0bfd2dcc"
 HIDREAM_CHECKPOINT = "hidream_o1_image_fp8_scaled.safetensors"
 HIDREAM_DEFAULT_RESOLUTION = "2048x2048"
-HIDREAM_DEFAULT_SAMPLER = "dpmpp_2m_sde_gpu"
-HIDREAM_DEFAULT_SCHEDULER = "normal"
 HIDREAM_NOISE_SCALE = 8.0
 HIDREAM_NATIVE_CANVASES = (
     (2048, 2048),
@@ -59,6 +64,8 @@ class HiDreamO1Result:
     height: int
     steps: int
     guidance: float
+    sampler: str
+    scheduler: str
     elapsed_seconds: float
     environment: dict[str, Any]
 
@@ -75,8 +82,8 @@ class HiDreamO1Result:
             "height": self.height,
             "steps": self.steps,
             "guidance": self.guidance,
-            "sampler": HIDREAM_DEFAULT_SAMPLER,
-            "scheduler": HIDREAM_DEFAULT_SCHEDULER,
+            "sampler": self.sampler,
+            "scheduler": self.scheduler,
             "noise_scale": HIDREAM_NOISE_SCALE,
             "runtime": "ComfyUI native HiDream-O1",
             "runtime_revision": COMFY_REVISION,
@@ -96,6 +103,8 @@ def generate_hidream_o1_seed_sweep(
     seeds: Sequence[int],
     steps: int,
     guidance: float,
+    sampler: str,
+    scheduler: str,
     progress: StatusReporter,
 ) -> tuple[HiDreamO1Result, ...]:
     normalized_seeds = tuple(seeds)
@@ -108,6 +117,8 @@ def generate_hidream_o1_seed_sweep(
         seeds=normalized_seeds,
         steps=steps,
         guidance=guidance,
+        sampler=sampler,
+        scheduler=scheduler,
     )
     output = output.expanduser().resolve()
     outputs = tuple(
@@ -156,8 +167,8 @@ def generate_hidream_o1_seed_sweep(
             "height": case.height,
             "steps": steps,
             "guidance": guidance,
-            "sampler": HIDREAM_DEFAULT_SAMPLER,
-            "scheduler": HIDREAM_DEFAULT_SCHEDULER,
+            "sampler": sampler,
+            "scheduler": scheduler,
             "noise_scale": HIDREAM_NOISE_SCALE,
             "seed": generation.seed,
         }
@@ -207,6 +218,8 @@ def generate_hidream_o1_seed_sweep(
                 height=height,
                 steps=steps,
                 guidance=guidance,
+                sampler=sampler,
+                scheduler=scheduler,
                 elapsed_seconds=float(response["environment"]["elapsed_seconds"]),
                 environment=dict(response["environment"]),
             )
@@ -225,6 +238,8 @@ def _validate_request(
     seeds: tuple[int, ...],
     steps: int,
     guidance: float,
+    sampler: str,
+    scheduler: str,
 ) -> tuple[Path, ...]:
     if not prompt.strip():
         raise HiDreamO1Error("image edit prompt must not be empty")
@@ -244,6 +259,10 @@ def _validate_request(
         raise HiDreamO1Error("HiDream-O1 inference steps must be positive")
     if guidance < 0:
         raise HiDreamO1Error("HiDream-O1 guidance must not be negative")
+    if sampler not in HIDREAM_SAMPLERS:
+        raise HiDreamO1Error(f"unsupported HiDream-O1 sampler: {sampler}")
+    if scheduler not in HIDREAM_SCHEDULERS:
+        raise HiDreamO1Error(f"unsupported HiDream-O1 scheduler: {scheduler}")
 
     normalized = tuple(path.expanduser().resolve() for path in references)
     missing = next((path for path in normalized if not path.is_file()), None)

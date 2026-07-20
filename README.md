@@ -138,6 +138,7 @@ directory.
   --prompt "Draw as pixel-art. Limited color palette, retro, 8-bit, no background." \
   --output-dir runs/image-edit/example \
   --aspect-ratio 1:1 \
+  --sampler euler-ancestral \
   --seed 0 \
   --overwrite
 ```
@@ -151,7 +152,14 @@ for FLUX.2 Klein, and an approximately one-megapixel 1K canvas for Boogu.
 with `--aspect-ratio`. When all three are omitted, the first resolved input
 image supplies only the aspect ratio while the backend supplies its recommended pixel
 dimensions. `--steps` and `--guidance` are also optional and remain
-backend-native when omitted. FLUX.2 Klein and both Qwen-2511 backends accept
+backend-native when omitted. `--sampler` and `--scheduler` are likewise
+backend-specific. FLUX.2 Klein supports `flowmatch-euler` (default) and
+`euler-ancestral` on its native dynamic-shift schedule. Both Qwen-2511 routes
+support those samplers with either their native dynamic-shift schedule or
+ComfyUI-compatible `simple` scheduling. HiDream exposes the samplers and sigma
+schedulers provided by its pinned ComfyUI runtime. Boogu Turbo remains fixed to
+its checkpoint-native DMD path.
+FLUX.2 Klein and both Qwen-2511 backends accept
 repeated `--lora path/to/weights.safetensors` arguments. Repeat `--lora-weight`
 in the same order to set individual strengths, or omit all weights to use 1.0.
 The command inspects every SafeTensors model keyspace before loading the backend

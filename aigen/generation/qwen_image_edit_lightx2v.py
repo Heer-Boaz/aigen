@@ -15,6 +15,8 @@ from aigen.image_edit_defaults import (
     QWEN_2511_BASE_DEFAULT_STEPS,
     QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
     QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+    QWEN_2511_SAMPLERS,
+    QWEN_2511_SCHEDULERS,
 )
 from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
@@ -127,6 +129,8 @@ def run_lightx2v_qwen_image_edit(
     guidance_scale: float,
     max_sequence_length: int,
     loras: tuple[LoraLoadSpec, ...],
+    sampler: str,
+    scheduler: str,
     progress: StatusReporter,
 ) -> LightX2VQwenResult:
     if guidance_scale != 1.0:
@@ -137,6 +141,10 @@ def run_lightx2v_qwen_image_edit(
         raise QwenImageEditLightX2VError(
             "Qwen-Image-Edit-2511 Lightning FP8 runs without CFG; true_cfg_scale must be 1"
         )
+    if sampler not in QWEN_2511_SAMPLERS:
+        raise QwenImageEditLightX2VError(f"unsupported Qwen sampler: {sampler}")
+    if scheduler not in QWEN_2511_SCHEDULERS:
+        raise QwenImageEditLightX2VError(f"unsupported Qwen scheduler: {scheduler}")
 
     runtime_root = _lightx2v_runtime_root()
     python = runtime_root / "venv/bin/python"
@@ -169,6 +177,8 @@ def run_lightx2v_qwen_image_edit(
             "true_cfg_scale": true_cfg_scale,
             "guidance_scale": guidance_scale,
             "max_sequence_length": max_sequence_length,
+            "sampler": sampler,
+            "scheduler": scheduler,
         }
         if loras:
             worker_profile["loras"] = [

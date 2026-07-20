@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.image_edit_defaults import (
+    FLUX2_KLEIN_DEFAULT_SAMPLER,
+    FLUX2_KLEIN_SAMPLERS,
+)
 from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 
@@ -24,6 +28,11 @@ def add_flux2_klein_command(subparsers: Any) -> None:
     )
     command.add_argument("--lora", type=Path)
     command.add_argument("--lora-weight", type=float, default=1.0)
+    command.add_argument(
+        "--sampler",
+        choices=FLUX2_KLEIN_SAMPLERS,
+        default=FLUX2_KLEIN_DEFAULT_SAMPLER,
+    )
     command.add_argument(
         "--strength",
         type=float,
@@ -65,6 +74,7 @@ def run_flux2_klein_command(
                 height=args.height,
                 seed=seeds[0],
                 loras=loras,
+                sampler=args.sampler,
                 strength=args.strength,
                 progress=progress,
             )
@@ -78,6 +88,7 @@ def run_flux2_klein_command(
                 height=args.height,
                 seeds=seeds,
                 loras=loras,
+                sampler=args.sampler,
                 strength=args.strength,
                 progress=progress,
             )

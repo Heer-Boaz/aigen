@@ -8,8 +8,8 @@ from pathlib import Path
 from aigen.character_reference_pack import build_character_reference_pack
 from aigen.image_edit_commands import (
     IMAGE_EDIT_ASPECT_RATIOS,
-    IMAGE_EDIT_BACKEND_DEFAULTS,
     IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES,
+    IMAGE_EDIT_BACKEND_SETTINGS,
     IMAGE_EDIT_BACKENDS,
 )
 from aigen.lora_weights import inspect_lora_weights
@@ -38,18 +38,20 @@ class DropdownOption:
 class ImageEditForm:
     def __init__(self) -> None:
         default_model = IMAGE_EDIT_BACKENDS[0]
-        default_steps, default_guidance = IMAGE_EDIT_BACKEND_DEFAULTS[default_model]
+        defaults = IMAGE_EDIT_BACKEND_SETTINGS[default_model]
         self.fields = [
             FormField("prompt", "Prompt", ""),
             FormField("model", "Model", default_model),
+            FormField("sampler", "Sampler", defaults.sampler),
+            FormField("scheduler", "Scheduler", defaults.scheduler),
             FormField("aspect_ratio", "Aspect ratio", ""),
             FormField("width", "Width", ""),
             FormField("height", "Height", ""),
-            FormField("steps", "Steps", str(default_steps)),
+            FormField("steps", "Steps", str(defaults.steps)),
             FormField(
                 "guidance",
                 "Guidance",
-                "" if default_guidance is None else str(default_guidance),
+                "" if defaults.guidance is None else str(defaults.guidance),
             ),
             FormField("output_dir", "Output directory", "runs/image-tui"),
             FormField("seed", "Seed 1", "0", "seed", 1),
@@ -146,13 +148,31 @@ class ImageEditForm:
     def set_value(self, field: FormField, value: str) -> None:
         field.value = value
         if field.name == "model":
-            steps, guidance = IMAGE_EDIT_BACKEND_DEFAULTS[value]
-            self.field("steps").value = str(steps)
-            self.field("guidance").value = "" if guidance is None else str(guidance)
+            defaults = IMAGE_EDIT_BACKEND_SETTINGS[value]
+            self.field("sampler").value = defaults.sampler
+            self.field("scheduler").value = defaults.scheduler
+            self.field("steps").value = str(defaults.steps)
+            self.field("guidance").value = (
+                "" if defaults.guidance is None else str(defaults.guidance)
+            )
 
     def dropdown_options(self, field: FormField) -> tuple[DropdownOption, ...] | None:
         if field.name == "model":
             return tuple(DropdownOption(backend, backend) for backend in IMAGE_EDIT_BACKENDS)
+        if field.name == "sampler":
+            return tuple(
+                DropdownOption(sampler, sampler)
+                for sampler in IMAGE_EDIT_BACKEND_SETTINGS[
+                    self.field("model").value
+                ].samplers
+            )
+        if field.name == "scheduler":
+            return tuple(
+                DropdownOption(scheduler, scheduler)
+                for scheduler in IMAGE_EDIT_BACKEND_SETTINGS[
+                    self.field("model").value
+                ].schedulers
+            )
         if field.name == "aspect_ratio":
             return (
                 DropdownOption("Auto", ""),
@@ -210,8 +230,31 @@ class ImageEditForm:
 
     def load(self, path: Path) -> None:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload["version"] != 1:
+        if payload["version"] not in (1, 2, 3):
             raise ValueError(f"Unsupported image TUI configuration version in {path}.")
+        records = list(payload["fields"])
+        if payload["version"] < 3:
+            model_index = next(
+                index for index, record in enumerate(records) if record["name"] == "model"
+            )
+            model = records[model_index]["value"]
+            if model not in IMAGE_EDIT_BACKEND_SETTINGS:
+                raise ValueError(f"Saved TUI model is unknown in {path}: {model}")
+            if payload["version"] == 1:
+                records.insert(
+                    model_index + 1,
+                    {
+                        "name": "sampler",
+                        "value": IMAGE_EDIT_BACKEND_SETTINGS[model].sampler,
+                    },
+                )
+            records.insert(
+                model_index + 2,
+                {
+                    "name": "scheduler",
+                    "value": IMAGE_EDIT_BACKEND_SETTINGS[model].scheduler,
+                },
+            )
         fixed_labels = {
             field.name: field.label for field in self.fields if field.slot_kind is None
         }
@@ -223,14 +266,14 @@ class ImageEditForm:
                 record.get("slot_kind"),
                 record.get("slot_id"),
             )
-            for record in payload["fields"]
+            for record in records
         ]
         expected_fixed = [field.name for field in self.fields if field.slot_kind is None]
         loaded_fixed = [field.name for field in fields if field.slot_kind is None]
         if loaded_fixed != expected_fixed:
             raise ValueError(f"Saved TUI fields do not match this version in {path}.")
         loaded_model = next(field.value for field in fields if field.name == "model")
-        if loaded_model not in IMAGE_EDIT_BACKEND_DEFAULTS:
+        if loaded_model not in IMAGE_EDIT_BACKEND_SETTINGS:
             raise ValueError(f"Saved TUI model is unknown in {path}: {loaded_model}")
         slot_kinds = {"seed", "image", "reference_pack", "lora"}
         if any(
@@ -257,7 +300,7 @@ class ImageEditForm:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = path.with_name(f".{path.name}.tmp")
         temporary_path.write_text(
-            json.dumps({"version": 1, "fields": records}, indent=2) + "\n",
+            json.dumps({"version": 3, "fields": records}, indent=2) + "\n",
             encoding="utf-8",
         )
         temporary_path.replace(path)
@@ -304,6 +347,8 @@ class ImageEditForm:
             ("height", "--height"),
             ("steps", "--steps"),
             ("guidance", "--guidance"),
+            ("sampler", "--sampler"),
+            ("scheduler", "--scheduler"),
         ):
             value = self.field(field_name).value.strip()
             if value:

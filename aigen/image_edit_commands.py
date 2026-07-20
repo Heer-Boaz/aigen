@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import math
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -14,13 +15,26 @@ from aigen.command_io import command_error_payload, dump_json
 from aigen.image_edit_defaults import (
     BOOGU_DEFAULT_GUIDANCE,
     BOOGU_DEFAULT_STEPS,
+    BOOGU_SAMPLER,
+    BOOGU_SCHEDULER,
+    FLUX2_KLEIN_DEFAULT_SAMPLER,
+    FLUX2_KLEIN_SAMPLERS,
+    FLUX2_KLEIN_SCHEDULER,
     FLUX2_KLEIN_STEPS,
     HIDREAM_DEFAULT_GUIDANCE,
+    HIDREAM_DEFAULT_SAMPLER,
+    HIDREAM_DEFAULT_SCHEDULER,
     HIDREAM_DEFAULT_STEPS,
+    HIDREAM_SAMPLERS,
+    HIDREAM_SCHEDULERS,
     QWEN_2511_BASE_DEFAULT_GUIDANCE,
     QWEN_2511_BASE_DEFAULT_STEPS,
     QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
     QWEN_2511_LIGHTNING_DEFAULT_STEPS,
+    QWEN_2511_DEFAULT_SCHEDULER,
+    QWEN_2511_SAMPLER,
+    QWEN_2511_SAMPLERS,
+    QWEN_2511_SCHEDULERS,
 )
 from aigen.image_dimensions import normalized_aspect_ratio, parse_aspect_ratio
 from aigen.lora_weights import (
@@ -58,18 +72,59 @@ IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES = {
     QWEN_2511_LIGHTNING_BACKEND: QWEN_IMAGE_ARCHITECTURE,
     QWEN_2511_BASE_BACKEND: QWEN_IMAGE_ARCHITECTURE,
 }
-IMAGE_EDIT_BACKEND_DEFAULTS: dict[str, tuple[int, float | None]] = {
-    FLUX2_KLEIN_BACKEND: (FLUX2_KLEIN_STEPS, None),
-    QWEN_2511_LIGHTNING_BACKEND: (
+
+
+@dataclass(frozen=True)
+class ImageEditBackendSettings:
+    steps: int
+    guidance: float | None
+    sampler: str
+    samplers: tuple[str, ...]
+    scheduler: str
+    schedulers: tuple[str, ...]
+
+
+IMAGE_EDIT_BACKEND_SETTINGS = {
+    FLUX2_KLEIN_BACKEND: ImageEditBackendSettings(
+        FLUX2_KLEIN_STEPS,
+        None,
+        FLUX2_KLEIN_DEFAULT_SAMPLER,
+        FLUX2_KLEIN_SAMPLERS,
+        FLUX2_KLEIN_SCHEDULER,
+        (FLUX2_KLEIN_SCHEDULER,),
+    ),
+    QWEN_2511_LIGHTNING_BACKEND: ImageEditBackendSettings(
         QWEN_2511_LIGHTNING_DEFAULT_STEPS,
         QWEN_2511_LIGHTNING_DEFAULT_GUIDANCE,
+        QWEN_2511_SAMPLER,
+        QWEN_2511_SAMPLERS,
+        QWEN_2511_DEFAULT_SCHEDULER,
+        QWEN_2511_SCHEDULERS,
     ),
-    QWEN_2511_BASE_BACKEND: (
+    QWEN_2511_BASE_BACKEND: ImageEditBackendSettings(
         QWEN_2511_BASE_DEFAULT_STEPS,
         QWEN_2511_BASE_DEFAULT_GUIDANCE,
+        QWEN_2511_SAMPLER,
+        QWEN_2511_SAMPLERS,
+        QWEN_2511_DEFAULT_SCHEDULER,
+        QWEN_2511_SCHEDULERS,
     ),
-    HIDREAM_O1_BACKEND: (HIDREAM_DEFAULT_STEPS, HIDREAM_DEFAULT_GUIDANCE),
-    BOOGU_IMAGE_EDIT_BACKEND: (BOOGU_DEFAULT_STEPS, BOOGU_DEFAULT_GUIDANCE),
+    HIDREAM_O1_BACKEND: ImageEditBackendSettings(
+        HIDREAM_DEFAULT_STEPS,
+        HIDREAM_DEFAULT_GUIDANCE,
+        HIDREAM_DEFAULT_SAMPLER,
+        HIDREAM_SAMPLERS,
+        HIDREAM_DEFAULT_SCHEDULER,
+        HIDREAM_SCHEDULERS,
+    ),
+    BOOGU_IMAGE_EDIT_BACKEND: ImageEditBackendSettings(
+        BOOGU_DEFAULT_STEPS,
+        BOOGU_DEFAULT_GUIDANCE,
+        BOOGU_SAMPLER,
+        (BOOGU_SAMPLER,),
+        BOOGU_SCHEDULER,
+        (BOOGU_SCHEDULER,),
+    ),
 }
 
 
@@ -116,6 +171,14 @@ def add_image_edit_command(subparsers: Any) -> None:
         help="CFG scale; default is backend-native",
     )
     command.add_argument(
+        "--sampler",
+        help="Backend sampler; default is backend-native",
+    )
+    command.add_argument(
+        "--scheduler",
+        help="Backend sigma scheduler; default is backend-native",
+    )
+    command.add_argument(
         "--lora",
         type=Path,
         action="append",
@@ -147,6 +210,8 @@ def run_image_edit_command(
             raise ImageEditCommandError("--prompt must not be empty")
         images = _resolve_images(args.image, args.reference_pack)
         seeds = tuple(args.seed or (0,))
+        sampler = _resolve_sampler(args.backend, args.sampler)
+        scheduler = _resolve_scheduler(args.backend, args.scheduler)
         width, height = _resolve_dimensions(args.width, args.height, args.aspect_ratio)
         loras = _resolve_loras(args.lora, args.lora_weight, args.backend)
         if width is None:
@@ -169,6 +234,7 @@ def run_image_edit_command(
                 height=height,
                 steps=args.steps,
                 guidance=args.guidance,
+                sampler=sampler,
                 loras=loras,
                 progress=progress,
             )
@@ -183,6 +249,8 @@ def run_image_edit_command(
                 height=height,
                 steps=args.steps,
                 guidance=args.guidance,
+                sampler=sampler,
+                scheduler=scheduler,
                 loras=loras,
                 progress=progress,
             )
@@ -196,6 +264,8 @@ def run_image_edit_command(
                 height=height,
                 steps=args.steps,
                 guidance=args.guidance,
+                sampler=sampler,
+                scheduler=scheduler,
                 progress=progress,
             )
         else:
@@ -210,6 +280,8 @@ def run_image_edit_command(
                 guidance=args.guidance,
                 progress=progress,
             )
+        payload["sampler"] = sampler
+        payload["scheduler"] = scheduler
     except (CharacterReferenceError, ImageEditCommandError, OSError, ValueError) as error:
         dump_json(stderr, command_error_payload(error), pretty=True)
         return 1
@@ -228,6 +300,7 @@ def _run_flux2_klein(
     height: int,
     steps: int | None,
     guidance: float | None,
+    sampler: str,
     loras: tuple[LoraLoadSpec, ...],
     progress: StatusReporter,
 ) -> dict[str, Any]:
@@ -250,6 +323,7 @@ def _run_flux2_klein(
             width=width,
             height=height,
             seeds=seeds,
+            sampler=sampler,
             loras=loras,
             progress=progress,
         )
@@ -265,6 +339,28 @@ def _run_flux2_klein(
     }
 
 
+def _resolve_sampler(backend: str, sampler: str | None) -> str:
+    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
+    resolved = settings.sampler if sampler is None else sampler
+    if resolved not in settings.samplers:
+        raise ImageEditCommandError(
+            f"{backend} does not support sampler {resolved!r}; choose from: "
+            f"{', '.join(settings.samplers)}"
+        )
+    return resolved
+
+
+def _resolve_scheduler(backend: str, scheduler: str | None) -> str:
+    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
+    resolved = settings.scheduler if scheduler is None else scheduler
+    if resolved not in settings.schedulers:
+        raise ImageEditCommandError(
+            f"{backend} does not support scheduler {resolved!r}; choose from: "
+            f"{', '.join(settings.schedulers)}"
+        )
+    return resolved
+
+
 def _run_qwen_2511(
     *,
     backend: str,
@@ -276,6 +372,8 @@ def _run_qwen_2511(
     height: int,
     steps: int | None,
     guidance: float | None,
+    sampler: str,
+    scheduler: str,
     loras: tuple[LoraLoadSpec, ...],
     progress: StatusReporter,
 ) -> dict[str, Any]:
@@ -332,6 +430,8 @@ def _run_qwen_2511(
             result_kind="image-edit-result",
             manifest_context=None,
             loras=loras,
+            sampler=sampler,
+            scheduler=scheduler,
             progress=progress,
         )
     except QwenImageEditIdentityError as error:
@@ -353,6 +453,8 @@ def _run_hidream_o1(
     height: int,
     steps: int | None,
     guidance: float | None,
+    sampler: str,
+    scheduler: str,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     from aigen.generation.hidream_o1_comfy import (
@@ -370,6 +472,8 @@ def _run_hidream_o1(
             seeds=seeds,
             steps=HIDREAM_DEFAULT_STEPS if steps is None else steps,
             guidance=HIDREAM_DEFAULT_GUIDANCE if guidance is None else guidance,
+            sampler=sampler,
+            scheduler=scheduler,
             progress=progress,
         )
     except HiDreamO1Error as error:

@@ -48,6 +48,10 @@ from aigen.generation.vosr_backend import (
     upscale_files_with_vosr,
 )
 from aigen.image_assets import image_asset_json
+from aigen.image_edit_defaults import (
+    QWEN_2511_DEFAULT_SCHEDULER,
+    QWEN_2511_SAMPLER,
+)
 from aigen.image_dimensions import closest_aspect_match
 from aigen.keyframe_image_ops import exact_outside_mask_diff, save_contact_sheet
 from aigen.keyframe_memory import NvidiaSmiMemorySampler, nvidia_smi_preflight_limit
@@ -367,6 +371,8 @@ def run_qwen_image_edit_cases(
     manifest_context: Mapping[str, Any] | None,
     progress: StatusReporter,
     loras: Sequence[LoraLoadSpec] = (),
+    sampler: str = QWEN_2511_SAMPLER,
+    scheduler: str = QWEN_2511_DEFAULT_SCHEDULER,
 ) -> dict[str, Any]:
     resolved_loras = tuple(loras)
     if resolved_loras:
@@ -445,6 +451,8 @@ def run_qwen_image_edit_cases(
                 result_kind=result_kind,
                 manifest_context=manifest_context,
                 loras=resolved_loras,
+                sampler=sampler,
+                scheduler=scheduler,
                 progress=progress,
             )
         except QwenImageEditLightX2VError as error:
@@ -612,6 +620,8 @@ def _run_qwen_image_edit_cases_lightx2v(
     result_kind: str,
     manifest_context: Mapping[str, Any] | None,
     loras: tuple[LoraLoadSpec, ...],
+    sampler: str,
+    scheduler: str,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
@@ -666,6 +676,8 @@ def _run_qwen_image_edit_cases_lightx2v(
                 guidance_scale=guidance_scale,
                 max_sequence_length=max_sequence_length,
                 loras=loras,
+                sampler=sampler,
+                scheduler=scheduler,
                 progress=progress,
             )
 
@@ -739,6 +751,8 @@ def _run_qwen_image_edit_cases_lightx2v(
                 "steps": steps,
                 "true_cfg_scale": true_cfg_scale,
                 "guidance_scale": guidance_scale,
+                "sampler": sampler,
+                "scheduler": scheduler,
                 "negative_prompt": None,
                 "seed": seed,
                 "max_sequence_length": max_sequence_length,

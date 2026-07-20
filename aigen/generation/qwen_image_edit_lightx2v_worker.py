@@ -56,10 +56,35 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
 
     from lightx2v import LightX2VPipeline
     from lightx2v.common.ops import utils as ops_utils
+    from lightx2v.models.schedulers.qwen_image.scheduler import QwenImageScheduler
     from lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
     from lightx2v.utils.utils import seed_all
 
+    from aigen.generation.flow_match_sampling import euler_ancestral_step
     from aigen.generation.qwen_image_edit_conditioner import QwenImageEditFp8Conditioner
+
+    class QwenImageEulerAncestralScheduler(QwenImageScheduler):
+        def prepare(self, input_info: Any) -> None:
+            super().prepare(input_info)
+            self.ancestral_generator = torch.Generator(
+                device=self.latents.device
+            ).manual_seed(input_info.seed)
+
+        def step_post(self) -> None:
+            timestep = self.timesteps[self.step_index]
+            if self.scheduler.step_index is None:
+                self.scheduler._init_step_index(timestep)
+            sigma_index = self.scheduler.step_index
+            self.latents = euler_ancestral_step(
+                self.latents,
+                self.noise_pred,
+                sigma=self.scheduler.sigmas[sigma_index],
+                sigma_next=self.scheduler.sigmas[sigma_index + 1],
+                final=self.step_index + 1 == len(self.timesteps),
+                generator=self.ancestral_generator,
+                torch=torch,
+            )
+            self.scheduler._step_index += 1
 
     profile = request["profile"]
     cases = request["cases"]
@@ -105,6 +130,13 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
         runner.config["min_custom_size"] = min(
             min(case["width"], case["height"]) for case in cases
         )
+        if profile["scheduler"] == "simple":
+            # ComfyUI's simple scheduler samples the model's fixed-shift training
+            # sigmas uniformly. LightX2V's sample_shift path implements the same
+            # schedule directly, without resolution-dependent shifting.
+            runner.config["sample_shift"] = 1.15
+    if profile["sampler"] == "euler-ancestral":
+        runner.scheduler = QwenImageEulerAncestralScheduler(runner.config)
 
     _reset_cuda_peak(torch)
     conditioner_load_start = time.perf_counter()
@@ -349,6 +381,8 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
             "attention": "flash_attn2",
             "rope": "torch",
+            "sampler": profile["sampler"],
+            "scheduler": profile["scheduler"],
             "host_buffers": host_buffers["mode"],
             "pinned_blocks": host_buffers["pinned_blocks"],
             "pinned_gib": round(host_buffers["pinned_gib"], 2),

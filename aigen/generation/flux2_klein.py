@@ -16,8 +16,13 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
+from aigen.generation.flow_match_sampling import euler_ancestral_step
 from aigen.generation.prompt_encoding import ordered_unique
-from aigen.image_edit_defaults import FLUX2_KLEIN_STEPS
+from aigen.image_edit_defaults import (
+    FLUX2_KLEIN_DEFAULT_SAMPLER,
+    FLUX2_KLEIN_SAMPLERS,
+    FLUX2_KLEIN_STEPS,
+)
 from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
@@ -112,6 +117,7 @@ class Flux2KleinBatchResult:
     model_load_ms: float
     peak_vram_mb: int
     loras: tuple[LoraLoadSpec, ...]
+    sampler: str
 
     def to_json(self) -> dict[str, Any]:
         payload = {
@@ -119,6 +125,7 @@ class Flux2KleinBatchResult:
             "generation_ms": self.generation_ms,
             "model_load_ms": self.model_load_ms,
             "peak_vram_mb": self.peak_vram_mb,
+            "sampler": self.sampler,
         }
         if self.loras:
             payload["loras"] = [lora.to_json() for lora in self.loras]
@@ -135,6 +142,7 @@ class Flux2KleinResult:
     elapsed_ms: float
     peak_vram_mb: int
     loras: tuple[LoraLoadSpec, ...]
+    sampler: str
 
     def to_json(self) -> dict[str, Any]:
         payload = {
@@ -145,6 +153,7 @@ class Flux2KleinResult:
             "reference_count": self.reference_count,
             "elapsed_ms": self.elapsed_ms,
             "peak_vram_mb": self.peak_vram_mb,
+            "sampler": self.sampler,
         }
         if self.loras:
             payload["loras"] = [lora.to_json() for lora in self.loras]
@@ -233,6 +242,7 @@ class Flux2KleinSession:
         self,
         *,
         loras: tuple[LoraLoadSpec, ...],
+        sampler: str = FLUX2_KLEIN_DEFAULT_SAMPLER,
         strength: float | None = None,
         progress: StatusReporter,
     ) -> None:
@@ -278,6 +288,7 @@ class Flux2KleinSession:
         self.compute_empirical_mu = compute_empirical_mu
         self.retrieve_timesteps = retrieve_timesteps
         self.loras = loras
+        self.sampler = sampler
         self.strength = strength
         self.model_load_ms = (time.perf_counter() - started) * 1000
 
@@ -306,6 +317,7 @@ class Flux2KleinSession:
                     torch=self.torch,
                     compute_empirical_mu=self.compute_empirical_mu,
                     retrieve_timesteps=self.retrieve_timesteps,
+                    sampler=self.sampler,
                     strength=self.strength,
                     progress=progress,
                 )
@@ -321,6 +333,7 @@ class Flux2KleinSession:
                 model_load_ms=self.model_load_ms,
                 peak_vram_mb=round(self.torch.cuda.max_memory_allocated() / 1024**2),
                 loras=self.loras,
+                sampler=self.sampler,
             )
         except self.torch.cuda.OutOfMemoryError as exc:
             raise Flux2KleinError("FLUX.2 Klein 9B exceeded 16 GB VRAM") from exc
@@ -339,6 +352,7 @@ def generate_flux2_klein(
     height: int | None,
     seed: int,
     loras: tuple[LoraLoadSpec, ...],
+    sampler: str = FLUX2_KLEIN_DEFAULT_SAMPLER,
     strength: float | None = None,
     progress: StatusReporter,
 ) -> Flux2KleinResult:
@@ -351,6 +365,7 @@ def generate_flux2_klein(
         height=height,
         seeds=(seed,),
         loras=loras,
+        sampler=sampler,
         strength=strength,
         progress=progress,
     )
@@ -364,6 +379,7 @@ def generate_flux2_klein(
         elapsed_ms=(time.perf_counter() - started) * 1000,
         peak_vram_mb=batch.peak_vram_mb,
         loras=batch.loras,
+        sampler=batch.sampler,
     )
 
 
@@ -376,11 +392,17 @@ def generate_flux2_klein_seed_sweep(
     height: int | None,
     seeds: Sequence[int],
     loras: tuple[LoraLoadSpec, ...],
+    sampler: str = FLUX2_KLEIN_DEFAULT_SAMPLER,
     strength: float | None = None,
     progress: StatusReporter,
 ) -> Flux2KleinBatchResult:
     if strength is not None and not (0.0 < strength <= 1.0):
         raise Flux2KleinError("--strength must be in (0, 1]")
+    if sampler not in FLUX2_KLEIN_SAMPLERS:
+        raise Flux2KleinError(
+            f"unsupported FLUX.2 Klein sampler {sampler!r}; choose from: "
+            f"{', '.join(FLUX2_KLEIN_SAMPLERS)}"
+        )
     normalized_seeds = tuple(seeds)
     if not normalized_seeds:
         raise Flux2KleinError("FLUX.2 Klein seed sweep requires at least one seed")
@@ -421,6 +443,7 @@ def generate_flux2_klein_seed_sweep(
     )
     session = Flux2KleinSession(
         loras=loras,
+        sampler=sampler,
         strength=strength,
         progress=progress,
     )
@@ -563,6 +586,7 @@ def _denoise_flux2_klein_cases(
     torch: Any,
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
+    sampler: str,
     strength: float | None = None,
     progress: StatusReporter,
 ) -> tuple[_DenoisedFlux2KleinOutput, ...]:
@@ -581,6 +605,7 @@ def _denoise_flux2_klein_cases(
                     torch=torch,
                     compute_empirical_mu=compute_empirical_mu,
                     retrieve_timesteps=retrieve_timesteps,
+                    sampler=sampler,
                     strength=strength,
                     progress=progress,
                 )
@@ -599,6 +624,7 @@ def _denoise_flux2_klein_case(
     torch: Any,
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
+    sampler: str,
     strength: float | None = None,
     progress: StatusReporter,
 ) -> list[_DenoisedFlux2KleinOutput]:
@@ -651,6 +677,11 @@ def _denoise_flux2_klein_case(
             )
             latents = pipeline._pack_latents(noised)
         pipeline.scheduler.set_begin_index(begin_index)
+        ancestral_generator = (
+            torch.Generator(device="cuda").manual_seed(output.seed)
+            if sampler == "euler-ancestral"
+            else None
+        )
 
         with torch.no_grad():
             for step_index, timestep in enumerate(timesteps):
@@ -671,12 +702,27 @@ def _denoise_flux2_klein_case(
                     img_ids=latent_model_ids,
                     return_dict=False,
                 )[0][:, : latents.size(1)]
-                latents = pipeline.scheduler.step(
-                    noise_prediction,
-                    timestep,
-                    latents,
-                    return_dict=False,
-                )[0]
+                if sampler == "euler-ancestral":
+                    if pipeline.scheduler.step_index is None:
+                        pipeline.scheduler._init_step_index(timestep)
+                    sigma_index = pipeline.scheduler.step_index
+                    latents = euler_ancestral_step(
+                        latents,
+                        noise_prediction,
+                        sigma=pipeline.scheduler.sigmas[sigma_index],
+                        sigma_next=pipeline.scheduler.sigmas[sigma_index + 1],
+                        final=step_index + 1 == len(timesteps),
+                        generator=ancestral_generator,
+                        torch=torch,
+                    )
+                    pipeline.scheduler._step_index += 1
+                else:
+                    latents = pipeline.scheduler.step(
+                        noise_prediction,
+                        timestep,
+                        latents,
+                        return_dict=False,
+                    )[0]
                 progress.step(
                     f"{output.name}: denoising {step_index + 1}/{FLUX2_KLEIN_STEPS}"
                 )
