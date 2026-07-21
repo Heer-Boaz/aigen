@@ -3,7 +3,7 @@
   "fields": [
     {
       "name": "prompt",
-      "value": "Pixel Art"
+      "value": "Pixel Art Sprite"
     },
     {
       "name": "model",
@@ -11,7 +11,7 @@
     },
     {
       "name": "sampler",
-      "value": "euler-ancestral"
+      "value": "flowmatch-euler"
     },
     {
       "name": "scheduler",
@@ -23,11 +23,11 @@
     },
     {
       "name": "width",
-      "value": "1024"
+      "value": ""
     },
     {
       "name": "height",
-      "value": "1024"
+      "value": ""
     },
     {
       "name": "steps",
@@ -38,20 +38,8 @@
       "value": ""
     },
     {
-      "name": "lora",
-      "value": "loras/klein9b_high_resolution_pixel_art_v0.safetensors",
-      "slot_kind": "lora",
-      "slot_id": 4
-    },
-    {
-      "name": "lora_weight",
-      "value": "1",
-      "slot_kind": "lora",
-      "slot_id": 4
-    },
-    {
       "name": "output_dir",
-      "value": "runs/image-tui-flux-hr-eulara-1024"
+      "value": "runs/image-tui-flux-bare"
     },
     {
       "name": "seed",
@@ -63,13 +51,121 @@
       "name": "seed",
       "value": "1",
       "slot_kind": "seed",
-      "slot_id": 8
+      "slot_id": 10
     },
     {
       "name": "seed",
       "value": "2",
       "slot_kind": "seed",
-      "slot_id": 9
+      "slot_id": 11
+    },
+    {
+      "name": "seed",
+      "value": "3",
+      "slot_kind": "seed",
+      "slot_id": 12
+    },
+    {
+      "name": "seed",
+      "value": "4",
+      "slot_kind": "seed",
+      "slot_id": 13
+    },
+    {
+      "name": "seed",
+      "value": "5",
+      "slot_kind": "seed",
+      "slot_id": 14
+    },
+    {
+      "name": "seed",
+      "value": "6",
+      "slot_kind": "seed",
+      "slot_id": 15
+    },
+    {
+      "name": "seed",
+      "value": "7",
+      "slot_kind": "seed",
+      "slot_id": 16
+    },
+    {
+      "name": "seed",
+      "value": "8",
+      "slot_kind": "seed",
+      "slot_id": 17
+    },
+    {
+      "name": "seed",
+      "value": "9",
+      "slot_kind": "seed",
+      "slot_id": 18
+    },
+    {
+      "name": "seed",
+      "value": "10",
+      "slot_kind": "seed",
+      "slot_id": 19
+    },
+    {
+      "name": "seed",
+      "value": "11",
+      "slot_kind": "seed",
+      "slot_id": 20
+    },
+    {
+      "name": "seed",
+      "value": "12",
+      "slot_kind": "seed",
+      "slot_id": 21
+    },
+    {
+      "name": "seed",
+      "value": "13",
+      "slot_kind": "seed",
+      "slot_id": 22
+    },
+    {
+      "name": "seed",
+      "value": "14",
+      "slot_kind": "seed",
+      "slot_id": 23
+    },
+    {
+      "name": "seed",
+      "value": "15",
+      "slot_kind": "seed",
+      "slot_id": 24
+    },
+    {
+      "name": "seed",
+      "value": "16",
+      "slot_kind": "seed",
+      "slot_id": 25
+    },
+    {
+      "name": "seed",
+      "value": "17",
+      "slot_kind": "seed",
+      "slot_id": 26
+    },
+    {
+      "name": "seed",
+      "value": "18",
+      "slot_kind": "seed",
+      "slot_id": 27
+    },
+    {
+      "name": "seed",
+      "value": "19",
+      "slot_kind": "seed",
+      "slot_id": 28
+    },
+    {
+      "name": "seed",
+      "value": "20",
+      "slot_kind": "seed",
+      "slot_id": 29
     },
     {
       "name": "image",
