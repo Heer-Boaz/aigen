@@ -12,6 +12,7 @@ from safetensors import SafetensorError, safe_open
 
 QWEN_IMAGE_ARCHITECTURE = "qwen-image"
 FLUX2_KLEIN_ARCHITECTURE = "flux2-klein"
+FLUX2_DEV_ARCHITECTURE = "flux2-dev"
 
 AI_TOOLKIT_LORA_FORMAT = "ai-toolkit-lora"
 DIFFUSERS_PEFT_LORA_FORMAT = "diffusers-peft-lora"
@@ -99,7 +100,10 @@ def _inspect_lora_weights(
                     path,
                 )
             elif any(key.endswith((".lokr_w1", ".lokr_w2")) for key in keys):
-                architecture = FLUX2_KLEIN_ARCHITECTURE
+                architecture = (
+                    _metadata_architecture(metadata.get("ss_base_model_version"))
+                    or FLUX2_KLEIN_ARCHITECTURE
+                )
                 format_name = LOKR_FORMAT
                 targets = _inspect_lokr(weights, keys, path)
             else:
@@ -161,12 +165,20 @@ def _inspect_lora_pairs(
     if all(_QWEN_TARGET.fullmatch(target) for target in targets):
         return QWEN_IMAGE_ARCHITECTURE, AI_TOOLKIT_LORA_FORMAT, targets
     if all(_FLUX2_NATIVE_TARGET.fullmatch(target) for target in targets):
-        return FLUX2_KLEIN_ARCHITECTURE, AI_TOOLKIT_LORA_FORMAT, targets
+        architecture = (
+            _metadata_architecture(metadata.get("ss_base_model_version"))
+            or FLUX2_KLEIN_ARCHITECTURE
+        )
+        return architecture, AI_TOOLKIT_LORA_FORMAT, targets
     if metadata.get("lora_adapter_metadata") is not None and all(
         _FLUX2_PEFT_TARGET.fullmatch(target) for target in targets
     ):
         _inspect_peft_metadata(metadata["lora_adapter_metadata"], path)
-        return FLUX2_KLEIN_ARCHITECTURE, DIFFUSERS_PEFT_LORA_FORMAT, targets
+        architecture = (
+            _metadata_architecture(metadata.get("ss_base_model_version"))
+            or FLUX2_KLEIN_ARCHITECTURE
+        )
+        return architecture, DIFFUSERS_PEFT_LORA_FORMAT, targets
     raise LoraWeightsError(f"LoRA uses an unknown or mixed model keyspace: {path}")
 
 
@@ -204,4 +216,6 @@ def _metadata_architecture(value: str | None) -> str | None:
         return QWEN_IMAGE_ARCHITECTURE
     if value.startswith("flux2_klein"):
         return FLUX2_KLEIN_ARCHITECTURE
+    if value.startswith("flux2_dev"):
+        return FLUX2_DEV_ARCHITECTURE
     return None

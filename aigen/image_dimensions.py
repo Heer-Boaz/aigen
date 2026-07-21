@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import gcd, log
+from math import gcd, log, sqrt
 from typing import Sequence
 
 
@@ -28,4 +28,18 @@ def closest_aspect_match(
     return min(
         candidates,
         key=lambda candidate: abs(log(candidate[0] / candidate[1]) - target),
+    )
+
+
+def pixel_area_canvas_size(
+    aspect_ratio: tuple[int, int],
+    *,
+    target_pixels: int,
+    alignment: int,
+) -> tuple[int, int]:
+    ratio_width, ratio_height = aspect_ratio
+    scale = sqrt(target_pixels / (ratio_width * ratio_height))
+    return (
+        int(ratio_width * scale) // alignment * alignment,
+        int(ratio_height * scale) // alignment * alignment,
     )

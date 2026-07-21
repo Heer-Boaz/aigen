@@ -78,6 +78,11 @@ class PathInput(Input):
 
 
 class FieldRow(Horizontal):
+    class Selected(Message):
+        def __init__(self, field: FormField) -> None:
+            super().__init__()
+            self.field = field
+
     def __init__(self, form: ImageEditForm, field: FormField) -> None:
         movable = field.slot_id in form.slot_move_states and field.name != "lora_weight"
         super().__init__(classes="field-row movable" if movable else "field-row")
@@ -124,7 +129,13 @@ class FieldRow(Horizontal):
             )
 
     def on_click(self) -> None:
-        self.app.selected_field = self.field
+        self.post_message(self.Selected(self.field))
+
+    def on_enter(self) -> None:
+        self.add_class("hovered")
+
+    def on_leave(self) -> None:
+        self.set_class(self.is_mouse_over, "hovered")
 
 
 class FormFields(VerticalScroll):
@@ -296,7 +307,17 @@ class GenerationFailed(Message):
 
 class ImageGenerationApp(App[None]):
     ENABLE_COMMAND_PALETTE = False
-    BINDINGS = [Binding("ctrl+c", "quit", show=False)]
+    BINDINGS = [
+        Binding("ctrl+c", "quit", show=False),
+        Binding(
+            "backspace",
+            "remove_hovered_slot",
+            show=False,
+            priority=True,
+        ),
+        Binding("backspace", "remove_selected_slot", show=False),
+        Binding("delete", "clear_selected_field", show=False),
+    ]
     CSS = """
     Screen {
         background: #17131f;
@@ -327,6 +348,23 @@ class ImageGenerationApp(App[None]):
 
     .field-row.movable {
         grid-columns: 18 1fr 3 3;
+    }
+
+    .field-row.hovered .field-label {
+        background: #30273d;
+    }
+
+    .field-row.hovered .field-editor {
+        background: #d9d1df;
+    }
+
+    .field-row.selected .field-label {
+        background: #70598a;
+        color: #ffffff;
+    }
+
+    .field-row.selected .field-editor {
+        background: #c8b8d8;
     }
 
     .field-label {
@@ -485,13 +523,44 @@ class ImageGenerationApp(App[None]):
 
     async def _rebuild_fields(self) -> None:
         await self.query_one(FormFields).recompose()
+        self._refresh_selected_field()
+
+    @on(FieldRow.Selected)
+    def field_selected(self, event: FieldRow.Selected) -> None:
+        self._select_field(event.field)
+
+    def _select_field(self, field: FormField | None) -> None:
+        if self.selected_field is field:
+            return
+        self.selected_field = field
+        self._refresh_selected_field()
+
+    def _refresh_selected_field(self) -> None:
+        for row in self.query(FieldRow):
+            row.set_class(row.field is self.selected_field, "selected")
+
+    def _hovered_row(self) -> FieldRow | None:
+        return next(
+            (row for row in self.query(FieldRow) if row.has_class("hovered")),
+            None,
+        )
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        hovered = self._hovered_row()
+        if action == "remove_hovered_slot":
+            return hovered is not None and hovered.field.slot_id is not None
+        if action == "remove_selected_slot":
+            return hovered is None
+        return super().check_action(action, parameters)
 
     @on(Input.Changed)
     def input_changed(self, event: Input.Changed) -> None:
         row = event.input.parent
         if isinstance(row, FieldRow):
+            if row.field.value == event.value:
+                return
             row.field.value = event.value
-            self.selected_field = row.field
+            self._select_field(row.field)
 
     @on(Select.Changed)
     async def select_changed(self, event: Select.Changed) -> None:
@@ -500,10 +569,10 @@ class ImageGenerationApp(App[None]):
         row = event.select.parent
         if not isinstance(row, FieldRow):
             return
-        self.selected_field = row.field
         value = str(event.value)
         if row.field.value == value:
             return
+        self._select_field(row.field)
         self.form.set_value(row.field, value)
         if row.field.name == "model":
             await self._rebuild_fields()
@@ -522,7 +591,7 @@ class ImageGenerationApp(App[None]):
         row = button.parent
         if isinstance(row, FieldRow):
             assert row.field.slot_id is not None
-            self.selected_field = row.field
+            self._select_field(row.field)
             self.form.move_slot(
                 row.field.slot_id,
                 -1 if button.name == "move-up" else 1,
@@ -536,17 +605,12 @@ class ImageGenerationApp(App[None]):
         if action.startswith("add-"):
             slot_kind = action.removeprefix("add-").replace("-", "_")
             slot_id = self.form.add_slot(slot_kind)
-            self.selected_field = next(
-                field for field in self.form.fields if field.slot_id == slot_id
+            self._select_field(
+                next(field for field in self.form.fields if field.slot_id == slot_id)
             )
             await self._rebuild_fields()
         elif action == "remove":
-            if self.selected_field is None or self.selected_field.slot_id is None:
-                self._set_status("Select a seed, image, reference pack or LoRA slot.")
-            else:
-                self.form.remove_slot(self.selected_field.slot_id)
-                self.selected_field = None
-                await self._rebuild_fields()
+            await self.action_remove_selected_slot()
         elif action == "browse":
             if self.selected_field is not None:
                 self._browse_field(self.selected_field)
@@ -570,6 +634,37 @@ class ImageGenerationApp(App[None]):
                 self._cancel_generation()
         elif action == "quit":
             self.action_quit()
+
+    async def action_remove_selected_slot(self) -> None:
+        await self._remove_slot(self.selected_field)
+
+    async def action_remove_hovered_slot(self) -> None:
+        hovered = self._hovered_row()
+        assert hovered is not None and hovered.field.slot_id is not None
+        await self._remove_slot(hovered.field)
+
+    async def _remove_slot(self, field: FormField | None) -> None:
+        if field is None or field.slot_id is None:
+            self._set_status("Select a seed, image, reference pack or LoRA slot.")
+            return
+        self.form.remove_slot(field.slot_id)
+        if (
+            self.selected_field is not None
+            and self.selected_field.slot_id == field.slot_id
+        ):
+            self._select_field(None)
+        await self._rebuild_fields()
+
+    async def action_clear_selected_field(self) -> None:
+        if self.selected_field is None:
+            self._set_status("Select a field to clear.")
+            return
+        options = self.form.dropdown_options(self.selected_field)
+        if options is not None and not any(option.value == "" for option in options):
+            self._set_status(f"{self.selected_field.label} cannot be empty.")
+            return
+        self.form.set_value(self.selected_field, "")
+        await self._rebuild_fields()
 
     def _browse_field(self, field: FormField) -> None:
         if field.slot_kind == "image":
@@ -631,7 +726,7 @@ class ImageGenerationApp(App[None]):
             slot_id = self.form.add_slot("image")
             field = next(field for field in self.form.fields if field.slot_id == slot_id)
         field.value = self.form.display_path(path)
-        self.selected_field = field
+        self._select_field(field)
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
     def _save_reference_pack(self, pack_id: str | None) -> None:
@@ -661,7 +756,7 @@ class ImageGenerationApp(App[None]):
             slot_id = self.form.add_slot("reference_pack")
             field = next(field for field in self.form.fields if field.slot_id == slot_id)
         field.value = self.form.display_path(output)
-        self.selected_field = field
+        self._select_field(field)
         self._set_status(f"Saved reference pack: {field.value}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
@@ -748,7 +843,7 @@ class ImageGenerationApp(App[None]):
             self._show_error("Cannot load configuration", str(error))
             return
         self.configuration_path = path
-        self.selected_field = None
+        self._select_field(None)
         self._set_status(f"Loaded configuration: {self.form.display_path(path)}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 

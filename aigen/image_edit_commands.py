@@ -21,6 +21,10 @@ from aigen.image_edit_defaults import (
     FLUX2_KLEIN_SAMPLERS,
     FLUX2_KLEIN_SCHEDULER,
     FLUX2_KLEIN_STEPS,
+    FLUX2_DEV_GUIDANCE,
+    FLUX2_DEV_SAMPLER,
+    FLUX2_DEV_SCHEDULER,
+    FLUX2_DEV_STEPS,
     HIDREAM_DEFAULT_GUIDANCE,
     HIDREAM_DEFAULT_SAMPLER,
     HIDREAM_DEFAULT_SCHEDULER,
@@ -38,6 +42,7 @@ from aigen.image_edit_defaults import (
 )
 from aigen.image_dimensions import normalized_aspect_ratio, parse_aspect_ratio
 from aigen.lora_weights import (
+    FLUX2_DEV_ARCHITECTURE,
     FLUX2_KLEIN_ARCHITECTURE,
     QWEN_IMAGE_ARCHITECTURE,
     LoraLoadSpec,
@@ -47,12 +52,14 @@ from aigen.progress import StatusReporter
 
 
 FLUX2_KLEIN_BACKEND = "flux2-klein"
+FLUX2_DEV_BACKEND = "flux2-dev-nvfp4"
 QWEN_2511_LIGHTNING_BACKEND = "qwen-image-edit-2511-lightning"
 QWEN_2511_BASE_BACKEND = "qwen-image-edit-2511-base"
 HIDREAM_O1_BACKEND = "hidream-o1-full-fp8"
 BOOGU_IMAGE_EDIT_BACKEND = "boogu-image-edit-turbo-fp8"
 IMAGE_EDIT_BACKENDS = (
     FLUX2_KLEIN_BACKEND,
+    FLUX2_DEV_BACKEND,
     QWEN_2511_LIGHTNING_BACKEND,
     QWEN_2511_BASE_BACKEND,
     HIDREAM_O1_BACKEND,
@@ -69,6 +76,7 @@ IMAGE_EDIT_ASPECT_RATIOS = (
 )
 IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES = {
     FLUX2_KLEIN_BACKEND: FLUX2_KLEIN_ARCHITECTURE,
+    FLUX2_DEV_BACKEND: FLUX2_DEV_ARCHITECTURE,
     QWEN_2511_LIGHTNING_BACKEND: QWEN_IMAGE_ARCHITECTURE,
     QWEN_2511_BASE_BACKEND: QWEN_IMAGE_ARCHITECTURE,
 }
@@ -92,6 +100,14 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         FLUX2_KLEIN_SAMPLERS,
         FLUX2_KLEIN_SCHEDULER,
         (FLUX2_KLEIN_SCHEDULER,),
+    ),
+    FLUX2_DEV_BACKEND: ImageEditBackendSettings(
+        FLUX2_DEV_STEPS,
+        FLUX2_DEV_GUIDANCE,
+        FLUX2_DEV_SAMPLER,
+        (FLUX2_DEV_SAMPLER,),
+        FLUX2_DEV_SCHEDULER,
+        (FLUX2_DEV_SCHEDULER,),
     ),
     QWEN_2511_LIGHTNING_BACKEND: ImageEditBackendSettings(
         QWEN_2511_LIGHTNING_DEFAULT_STEPS,
@@ -238,6 +254,19 @@ def run_image_edit_command(
                 loras=loras,
                 progress=progress,
             )
+        elif args.backend == FLUX2_DEV_BACKEND:
+            payload = _run_flux2_dev(
+                prompt=prompt,
+                images=images,
+                output_dir=output_dir,
+                seeds=seeds,
+                width=width,
+                height=height,
+                steps=args.steps,
+                guidance=args.guidance,
+                loras=loras,
+                progress=progress,
+            )
         elif args.backend in (QWEN_2511_LIGHTNING_BACKEND, QWEN_2511_BASE_BACKEND):
             payload = _run_qwen_2511(
                 backend=args.backend,
@@ -348,6 +377,47 @@ def _resolve_sampler(backend: str, sampler: str | None) -> str:
             f"{', '.join(settings.samplers)}"
         )
     return resolved
+
+
+def _run_flux2_dev(
+    *,
+    prompt: str,
+    images: tuple[Path, ...],
+    output_dir: Path,
+    seeds: tuple[int, ...],
+    width: int,
+    height: int,
+    steps: int | None,
+    guidance: float | None,
+    loras: tuple[LoraLoadSpec, ...],
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    from aigen.generation.flux2_dev_wangp import (
+        Flux2DevError,
+        generate_flux2_dev_seed_sweep,
+    )
+
+    try:
+        results = generate_flux2_dev_seed_sweep(
+            prompt=prompt,
+            references=images,
+            output=output_dir / "image.png",
+            width=width,
+            height=height,
+            seeds=seeds,
+            steps=FLUX2_DEV_STEPS if steps is None else steps,
+            guidance=FLUX2_DEV_GUIDANCE if guidance is None else guidance,
+            loras=loras,
+            progress=progress,
+        )
+    except Flux2DevError as error:
+        raise ImageEditCommandError(str(error)) from error
+    return _image_edit_payload(
+        backend=FLUX2_DEV_BACKEND,
+        output_dir=output_dir,
+        seeds=seeds,
+        outputs=[result.to_json() for result in results],
+    )
 
 
 def _resolve_scheduler(backend: str, scheduler: str | None) -> str:
@@ -619,6 +689,12 @@ def _recommended_canvas_size(
         from aigen.generation.flux2_klein import flux2_klein_recommended_canvas_size
 
         return flux2_klein_recommended_canvas_size(aspect_ratio)
+    if backend == FLUX2_DEV_BACKEND:
+        from aigen.generation.flux2_dimensions import (
+            flux2_dev_recommended_canvas_size,
+        )
+
+        return flux2_dev_recommended_canvas_size(aspect_ratio)
     if backend in (QWEN_2511_LIGHTNING_BACKEND, QWEN_2511_BASE_BACKEND):
         from aigen.generation.qwen_image_edit_identity import (
             QwenImageEditIdentityError,

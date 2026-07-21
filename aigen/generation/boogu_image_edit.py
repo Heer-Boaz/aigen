@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import subprocess
 import time
@@ -15,7 +14,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationOutputRequest,
 )
 from aigen.image_edit_defaults import BOOGU_DEFAULT_GUIDANCE, BOOGU_DEFAULT_STEPS
-from aigen.image_dimensions import closest_aspect_match
+from aigen.image_dimensions import closest_aspect_match, pixel_area_canvas_size
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
@@ -66,21 +65,11 @@ def boogu_recommended_1k_canvas_size(
                 f"{supported}"
             )
 
-    ratio_width, ratio_height = selected_ratio
-    scale = math.sqrt(
-        BOOGU_RECOMMENDED_1K_PIXEL_AREA / (ratio_width * ratio_height)
+    return pixel_area_canvas_size(
+        selected_ratio,
+        target_pixels=BOOGU_RECOMMENDED_1K_PIXEL_AREA,
+        alignment=BOOGU_DIMENSION_ALIGNMENT,
     )
-    width = (
-        int(ratio_width * scale)
-        // BOOGU_DIMENSION_ALIGNMENT
-        * BOOGU_DIMENSION_ALIGNMENT
-    )
-    height = (
-        int(ratio_height * scale)
-        // BOOGU_DIMENSION_ALIGNMENT
-        * BOOGU_DIMENSION_ALIGNMENT
-    )
-    return width, height
 
 
 @dataclass(frozen=True)
