@@ -564,9 +564,10 @@ class ImageGenerationApp(App[None]):
         elif action == "load-config":
             self._load_configuration()
         elif action == "generate":
-            self._start_generation()
-        elif action == "stop":
-            self._cancel_generation()
+            if self.process is None:
+                self._start_generation()
+            else:
+                self._cancel_generation()
         elif action == "quit":
             self.action_quit()
 
@@ -779,7 +780,6 @@ class ImageGenerationApp(App[None]):
         self._set_status("Starting generation...")
         generate = self.query_one("#generation-action", Button)
         generate.label = "Stop"
-        generate.name = "stop"
         self.run_worker(
             lambda: self._watch_generation(process, output_dir),
             thread=True,
@@ -850,7 +850,6 @@ class ImageGenerationApp(App[None]):
         self.query_one("#generation-progress", ProgressBar).display = False
         generate = self.query_one("#generation-action", Button)
         generate.label = "Generate"
-        generate.name = "generate"
 
     def _cancel_generation(self) -> None:
         if self.process is None:

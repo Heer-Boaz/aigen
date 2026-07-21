@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "fields": [
+    {
+      "name": "prompt",
+      "value": "Pixel Art"
+    },
+    {
+      "name": "model",
+      "value": "flux2-klein"
+    },
+    {
+      "name": "aspect_ratio",
+      "value": ""
+    },
+    {
+      "name": "width",
+      "value": ""
+    },
+    {
+      "name": "height",
+      "value": ""
+    },
+    {
+      "name": "steps",
+      "value": "4"
+    },
+    {
+      "name": "guidance",
+      "value": ""
+    },
+    {
+      "name": "lora",
+      "value": "loras/[FLUX.2.Klein]PixelArt_Redmond.safetensors",
+      "slot_kind": "lora",
+      "slot_id": 4
+    },
+    {
+      "name": "lora_weight",
+      "value": ".5",
+      "slot_kind": "lora",
+      "slot_id": 4
+    },
+    {
+      "name": "output_dir",
+      "value": "runs/image-tui-flux-w0_5-redmond"
+    },
+    {
+      "name": "seed",
+      "value": "0",
+      "slot_kind": "seed",
+      "slot_id": 1
+    },
+    {
+      "name": "seed",
+      "value": "1",
+      "slot_kind": "seed",
+      "slot_id": 8
+    },
+    {
+      "name": "seed",
+      "value": "2",
+      "slot_kind": "seed",
+      "slot_id": 9
+    },
+    {
+      "name": "image",
+      "value": "assets/lora/JSEED/masters/front-full.png",
+      "slot_kind": "image",
+      "slot_id": 2
+    }
+  ]
+}

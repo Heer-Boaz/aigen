@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "fields": [
+    {
+      "name": "prompt",
+      "value": "Pixel Art"
+    },
+    {
+      "name": "model",
+      "value": "flux2-klein"
+    },
+    {
+      "name": "sampler",
+      "value": "euler-ancestral"
+    },
+    {
+      "name": "scheduler",
+      "value": "flowmatch-dynamic-shift"
+    },
+    {
+      "name": "aspect_ratio",
+      "value": ""
+    },
+    {
+      "name": "width",
+      "value": "1024"
+    },
+    {
+      "name": "height",
+      "value": "1024"
+    },
+    {
+      "name": "steps",
+      "value": "4"
+    },
+    {
+      "name": "guidance",
+      "value": ""
+    },
+    {
+      "name": "lora",
+      "value": "loras/klein9b_high_resolution_pixel_art_v0.safetensors",
+      "slot_kind": "lora",
+      "slot_id": 4
+    },
+    {
+      "name": "lora_weight",
+      "value": "1",
+      "slot_kind": "lora",
+      "slot_id": 4
+    },
+    {
+      "name": "output_dir",
+      "value": "runs/image-tui-flux-hr-eulara-1024"
+    },
+    {
+      "name": "seed",
+      "value": "0",
+      "slot_kind": "seed",
+      "slot_id": 1
+    },
+    {
+      "name": "seed",
+      "value": "1",
+      "slot_kind": "seed",
+      "slot_id": 8
+    },
+    {
+      "name": "seed",
+      "value": "2",
+      "slot_kind": "seed",
+      "slot_id": 9
+    },
+    {
+      "name": "image",
+      "value": "assets/lora/JSEED/masters/front-full.png",
+      "slot_kind": "image",
+      "slot_id": 2
+    }
+  ]
+}
