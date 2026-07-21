@@ -1,0 +1,51 @@
+{
+  "version": 3,
+  "fields": [
+    {
+      "name": "prompt",
+      "value": "Low resolution, Pixel Art, limited color palette, sharp edges, thick outline, flat shading, white blouse, a brown leather skirt, and a pair of brown boots. short brown hair, white shirt, blue eyes, long sleeves, brown leather skirt, brown leather gloves, blue ribbon bow, kneehigh brown boots, brown leather jacket, collared shirt, open jacket, neck ribbon, knee boots, brown boots, brown gloves, brown jacket, brown skirt, shirt tucked in, blue thighhighs, leather, leather jacket, leather boots"
+    },
+    {
+      "name": "model",
+      "value": "flux2-dev-nvfp4"
+    },
+    {
+      "name": "sampler",
+      "value": "flowmatch-euler"
+    },
+    {
+      "name": "scheduler",
+      "value": "flowmatch-dynamic-shift"
+    },
+    {
+      "name": "aspect_ratio",
+      "value": ""
+    },
+    {
+      "name": "width",
+      "value": ""
+    },
+    {
+      "name": "height",
+      "value": ""
+    },
+    {
+      "name": "steps",
+      "value": "50"
+    },
+    {
+      "name": "guidance",
+      "value": "4.0"
+    },
+    {
+      "name": "output_dir",
+      "value": "runs/image-tui-fluxd-2"
+    },
+    {
+      "name": "image",
+      "value": "assets/lora/JSEED/masters/front-full.png",
+      "slot_kind": "image",
+      "slot_id": 2
+    }
+  ]
+}

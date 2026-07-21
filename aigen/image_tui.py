@@ -28,6 +28,7 @@ from textual.widgets import (
 )
 
 from aigen.character_reference_models import CharacterReferenceError
+from aigen.image_postprocess_tui_model import ImagePostprocessForm
 from aigen.image_tui_model import (
     PROJECT_ROOT,
     DropdownOption,
@@ -35,6 +36,9 @@ from aigen.image_tui_model import (
     ImageEditForm,
 )
 from aigen.progress import JSON_PROGRESS_PREFIX, format_duration
+
+
+FormModel = ImageEditForm | ImagePostprocessForm
 
 
 CONFIG_ROOT = (
@@ -83,7 +87,7 @@ class FieldRow(Horizontal):
             super().__init__()
             self.field = field
 
-    def __init__(self, form: ImageEditForm, field: FormField) -> None:
+    def __init__(self, form: FormModel, field: FormField) -> None:
         movable = field.slot_id in form.slot_move_states and field.name != "lora_weight"
         super().__init__(classes="field-row movable" if movable else "field-row")
         self.form = form
@@ -139,8 +143,8 @@ class FieldRow(Horizontal):
 
 
 class FormFields(VerticalScroll):
-    def __init__(self, form: ImageEditForm) -> None:
-        super().__init__(id="image-fields")
+    def __init__(self, form: FormModel, *, id: str) -> None:
+        super().__init__(id=id, classes="form-fields")
         self.form = form
 
     def compose(self) -> ComposeResult:
@@ -332,7 +336,7 @@ class ImageGenerationApp(App[None]):
         padding: 0;
     }
 
-    #image-fields {
+    .form-fields {
         height: 1fr;
         scrollbar-size: 1 1;
         padding: 0 1;
@@ -397,7 +401,7 @@ class ImageGenerationApp(App[None]):
         padding: 0;
     }
 
-    #actions {
+    #actions, #postprocess-actions {
         width: 100%;
         height: auto;
         max-height: 4;
@@ -405,7 +409,7 @@ class ImageGenerationApp(App[None]):
         grid-gutter: 0;
     }
 
-    #actions Button, .dialog-actions Button {
+    #actions Button, #postprocess-actions Button, .dialog-actions Button {
         height: 1;
         min-height: 1;
         border: none;
@@ -471,9 +475,12 @@ class ImageGenerationApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.form = ImageEditForm()
+        self.postprocess_form = ImagePostprocessForm()
         self.configuration_path: Path | None = None
         self.selected_field: FormField | None = None
         self.process: subprocess.Popen[str] | None = None
+        self.active_action_button_id: str | None = None
+        self.active_action_idle_label = ""
         self.generation_progress: GenerationProgress | None = None
         self.startup_error: str | None = None
         try:
@@ -486,11 +493,25 @@ class ImageGenerationApp(App[None]):
     def compose(self) -> ComposeResult:
         with TabbedContent(initial="images", id="tabs"):
             with TabPane("Images", id="images"):
-                yield FormFields(self.form)
+                yield FormFields(self.form, id="image-fields")
             with TabPane("Videos", id="videos"):
                 yield Static("")
             with TabPane("SAM Edit", id="sam-edit"):
                 yield Static("")
+            with TabPane("Post-processing", id="postprocessing"):
+                yield FormFields(self.postprocess_form, id="postprocess-fields")
+                yield ItemGrid(
+                    Button(
+                        "Process",
+                        name="postprocess",
+                        id="postprocess-action",
+                        variant="primary",
+                        compact=True,
+                    ),
+                    min_column_width=12,
+                    stretch_height=False,
+                    id="postprocess-actions",
+                )
         yield ItemGrid(
             Button("+ Seed", name="add-seed", compact=True),
             Button("+ Image", name="add-image", compact=True),
@@ -522,7 +543,11 @@ class ImageGenerationApp(App[None]):
             self._show_error("Cannot load saved form", self.startup_error)
 
     async def _rebuild_fields(self) -> None:
-        await self.query_one(FormFields).recompose()
+        await self._rebuild_form(self.form)
+
+    async def _rebuild_form(self, form: FormModel) -> None:
+        fields_id = "#image-fields" if form is self.form else "#postprocess-fields"
+        await self.query_one(fields_id, FormFields).recompose()
         self._refresh_selected_field()
 
     @on(FieldRow.Selected)
@@ -573,9 +598,9 @@ class ImageGenerationApp(App[None]):
         if row.field.value == value:
             return
         self._select_field(row.field)
-        self.form.set_value(row.field, value)
-        if row.field.name == "model":
-            await self._rebuild_fields()
+        row.form.set_value(row.field, value)
+        if row.field.name in {"operation", "model"}:
+            await self._rebuild_form(row.form)
 
     @on(PathInput.BrowseRequested)
     def browse_requested(self, event: PathInput.BrowseRequested) -> None:
@@ -632,6 +657,11 @@ class ImageGenerationApp(App[None]):
                 self._start_generation()
             else:
                 self._cancel_generation()
+        elif action == "postprocess":
+            if self.process is None:
+                self._start_postprocess()
+            else:
+                self._cancel_generation()
         elif action == "quit":
             self.action_quit()
 
@@ -659,12 +689,13 @@ class ImageGenerationApp(App[None]):
         if self.selected_field is None:
             self._set_status("Select a field to clear.")
             return
-        options = self.form.dropdown_options(self.selected_field)
+        form = self._form_for_field(self.selected_field)
+        options = form.dropdown_options(self.selected_field)
         if options is not None and not any(option.value == "" for option in options):
             self._set_status(f"{self.selected_field.label} cannot be empty.")
             return
-        self.form.set_value(self.selected_field, "")
-        await self._rebuild_fields()
+        form.set_value(self.selected_field, "")
+        await self._rebuild_form(form)
 
     def _browse_field(self, field: FormField) -> None:
         if field.slot_kind == "image":
@@ -693,7 +724,19 @@ class ImageGenerationApp(App[None]):
     def _set_browsed_path(self, field: FormField, path: Path | None) -> None:
         if path is not None:
             field.value = self.form.display_path(path)
-            self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
+            form = self._form_for_field(field)
+            self.run_worker(
+                self._rebuild_form(form),
+                group="fields",
+                exclusive=True,
+            )
+
+    def _form_for_field(self, field: FormField) -> FormModel:
+        return (
+            self.form
+            if any(candidate is field for candidate in self.form.fields)
+            else self.postprocess_form
+        )
 
     def _browse_result(self) -> None:
         output = self.form.resolve_path(self.form.field("output_dir").value)
@@ -853,8 +896,46 @@ class ImageGenerationApp(App[None]):
             return
         try:
             command, output_dir = self.form.generation_command()
-            environment = os.environ.copy()
-            environment["AIGEN_PROGRESS"] = "json"
+        except ValueError as error:
+            self._show_error("Cannot start generation", str(error))
+            return
+        self._start_command(
+            command,
+            output_dir,
+            action_button_id="generation-action",
+            idle_label="Generate",
+            error_title="Cannot start generation",
+        )
+
+    def _start_postprocess(self) -> None:
+        if self.process is not None:
+            self._set_status("Processing is already running.")
+            return
+        try:
+            command, output_dir = self.postprocess_form.generation_command()
+        except ValueError as error:
+            self._show_error("Cannot start post-processing", str(error))
+            return
+        self._start_command(
+            command,
+            output_dir,
+            action_button_id="postprocess-action",
+            idle_label="Process",
+            error_title="Cannot start post-processing",
+        )
+
+    def _start_command(
+        self,
+        command: list[str],
+        output_dir: str,
+        *,
+        action_button_id: str,
+        idle_label: str,
+        error_title: str,
+    ) -> None:
+        environment = os.environ.copy()
+        environment["AIGEN_PROGRESS"] = "json"
+        try:
             process = subprocess.Popen(
                 command,
                 cwd=PROJECT_ROOT,
@@ -867,14 +948,21 @@ class ImageGenerationApp(App[None]):
                 bufsize=1,
                 start_new_session=True,
             )
-        except (OSError, ValueError) as error:
-            self._show_error("Cannot start generation", str(error))
+        except OSError as error:
+            self._show_error(error_title, str(error))
             return
         self.process = process
+        self.active_action_button_id = action_button_id
+        self.active_action_idle_label = idle_label
         self.generation_progress = None
-        self._set_status("Starting generation...")
-        generate = self.query_one("#generation-action", Button)
-        generate.label = "Stop"
+        self._set_status("Starting...")
+        self.query_one(f"#{action_button_id}", Button).label = "Stop"
+        other_action = (
+            "postprocess-action"
+            if action_button_id == "generation-action"
+            else "generation-action"
+        )
+        self.query_one(f"#{other_action}", Button).disabled = True
         self.run_worker(
             lambda: self._watch_generation(process, output_dir),
             thread=True,
@@ -943,8 +1031,14 @@ class ImageGenerationApp(App[None]):
         self.process = None
         self.generation_progress = None
         self.query_one("#generation-progress", ProgressBar).display = False
-        generate = self.query_one("#generation-action", Button)
-        generate.label = "Generate"
+        if self.active_action_button_id is not None:
+            self.query_one(f"#{self.active_action_button_id}", Button).label = (
+                self.active_action_idle_label
+            )
+        self.query_one("#generation-action", Button).disabled = False
+        self.query_one("#postprocess-action", Button).disabled = False
+        self.active_action_button_id = None
+        self.active_action_idle_label = ""
 
     def _cancel_generation(self) -> None:
         if self.process is None:

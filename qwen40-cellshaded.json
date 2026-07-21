@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "fields": [
+    {
+      "name": "prompt",
+      "value": "Convert to cel-shaded anime"
+    },
+    {
+      "name": "model",
+      "value": "qwen-image-edit-2511-base"
+    },
+    {
+      "name": "sampler",
+      "value": "flowmatch-euler"
+    },
+    {
+      "name": "scheduler",
+      "value": "flowmatch-dynamic-shift"
+    },
+    {
+      "name": "aspect_ratio",
+      "value": ""
+    },
+    {
+      "name": "width",
+      "value": ""
+    },
+    {
+      "name": "height",
+      "value": ""
+    },
+    {
+      "name": "steps",
+      "value": "40"
+    },
+    {
+      "name": "guidance",
+      "value": "4.0"
+    },
+    {
+      "name": "output_dir",
+      "value": "runs/image-tui-qwen40-cellshaded2"
+    },
+    {
+      "name": "seed",
+      "value": "0",
+      "slot_kind": "seed",
+      "slot_id": 3
+    },
+    {
+      "name": "seed",
+      "value": "1",
+      "slot_kind": "seed",
+      "slot_id": 4
+    },
+    {
+      "name": "image",
+      "value": "assets/lora/JSEED/masters/front-full.png",
+      "slot_kind": "image",
+      "slot_id": 2
+    }
+  ]
+}
