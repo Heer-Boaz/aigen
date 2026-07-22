@@ -691,7 +691,7 @@ class ImageGenerationApp(App[None]):
             return
         self._select_field(FieldSelection(row.form, row.field))
         row.form.set_value(row.field, value)
-        if row.field.name in {"operation", "model", "prompt_mode"}:
+        if row.field.name in {"operation", "model", "prompt_mode", "engine"}:
             await self._rebuild_form(row.form)
 
     @on(PathInput.BrowseRequested)

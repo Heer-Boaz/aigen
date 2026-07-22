@@ -268,12 +268,6 @@ class SamEditForm:
             self.field("engine").value,
             "--device",
             self.field("device").value,
-            "--prompt-mode",
-            self.field("prompt_mode").value,
-            "--mask-candidate",
-            self.field("mask_candidate").value,
-            "--threshold",
-            self.field("threshold").value.strip(),
             "--grow",
             self.field("grow").value.strip(),
             "--feather",
@@ -290,16 +284,27 @@ class SamEditForm:
             output_dir,
             "--overwrite",
         ]
-        box = self.field("box").value.strip()
-        if box:
-            command.extend(("--box", box))
-        for name, option in (
-            ("positive_points", "--positive-points"),
-            ("negative_points", "--negative-points"),
-        ):
-            points = self.field(name).value.strip()
-            if points:
-                command.extend((option, points))
+        if self.field("engine").value != "anime":
+            command.extend(
+                (
+                    "--prompt-mode",
+                    self.field("prompt_mode").value,
+                    "--mask-candidate",
+                    self.field("mask_candidate").value,
+                    "--threshold",
+                    self.field("threshold").value.strip(),
+                )
+            )
+            box = self.field("box").value.strip()
+            if box:
+                command.extend(("--box", box))
+            for name, option in (
+                ("positive_points", "--positive-points"),
+                ("negative_points", "--negative-points"),
+            ):
+                points = self.field(name).value.strip()
+                if points:
+                    command.extend((option, points))
         return command, output_dir
 
     def _rebuild_fields(self) -> None:
