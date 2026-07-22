@@ -40,6 +40,9 @@ from aigen.runtime_profiles import (
     display_project_path,
     resolve_project_path,
 )
+from aigen.sam_prompt_canvas import SAMPromptCanvas
+from aigen.sam_prompt_dialog import SAMPromptDialog
+from aigen.sam_prompt_selection import SAMPromptSelection
 from aigen.sam_tui_model import SamEditForm
 from aigen.video_tui_model import VideoForm
 
@@ -61,6 +64,7 @@ CONFIG_ROOT = (
 STATE_PATH = CONFIG_ROOT / "aigen" / "image-tui.json"
 IMAGE_EXTENSIONS = frozenset({".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"})
 CONFIG_EXTENSIONS = frozenset({".json"})
+SAM_SELECTION_EXTENSIONS = frozenset({".json"})
 
 
 @dataclass(frozen=True)
@@ -440,6 +444,45 @@ class ImageGenerationApp(App[None]):
         grid-gutter: 0;
     }
 
+    .sam-prompt-dialog-screen {
+        align: center middle;
+        background: #000000 70%;
+    }
+
+    .sam-prompt-dialog {
+        width: 96%;
+        height: 94%;
+        min-width: 60;
+        min-height: 20;
+        padding: 1 2;
+        background: #211a2d;
+        border: solid #8c72aa;
+    }
+
+    #sam-dialog-canvas {
+        width: 1fr;
+        height: 1fr;
+        min-height: 8;
+        border: round #70598a;
+        background: #111111;
+        content-align: center middle;
+    }
+
+    #sam-prompt-dialog-actions {
+        width: 100%;
+        height: auto;
+        max-height: 2;
+        padding: 0;
+        grid-gutter: 0;
+    }
+
+    #sam-prompt-dialog-actions Button {
+        height: 1;
+        min-height: 1;
+        border: none;
+        padding: 0 1;
+    }
+
     #actions Button, #video-actions Button, #sam-actions Button, #postprocess-actions Button, .dialog-actions Button {
         height: 1;
         min-height: 1;
@@ -510,6 +553,8 @@ class ImageGenerationApp(App[None]):
         self.sam_form = SamEditForm()
         self.postprocess_form = ImagePostprocessForm()
         self.configuration_path: Path | None = None
+        self.sam_selection_path: Path | None = None
+        self.sam_prompt_dialog: SAMPromptDialog | None = None
         self.selected_field: FieldSelection | None = None
         self.process: subprocess.Popen[str] | None = None
         self.active_action_button_id: str | None = None
@@ -549,6 +594,8 @@ class ImageGenerationApp(App[None]):
                 yield FormFields(self.sam_form, id="sam-fields")
                 yield ItemGrid(
                     Button("Browse", name="browse-sam", compact=True),
+                    Button("Edit prompts", name="sam-edit", id="sam-edit-prompts", compact=True),
+                    Button("Clear prompts", name="sam-clear", compact=True),
                     Button(
                         "Run",
                         name="sam-segment",
@@ -603,6 +650,7 @@ class ImageGenerationApp(App[None]):
     def on_mount(self) -> None:
         if self.startup_error is not None:
             self._show_error("Cannot load saved form", self.startup_error)
+        self._update_sam_prompt_canvas()
 
     async def _rebuild_fields(self) -> None:
         await self._rebuild_form(self.form)
@@ -624,12 +672,149 @@ class ImageGenerationApp(App[None]):
             self._select_field(None)
         await self.query_one(fields_id, FormFields).recompose()
         self._refresh_selected_field()
-        self._update_video_actions()
+        if form is self.video_form:
+            self._update_video_actions()
+        if form is self.sam_form:
+            self._update_sam_prompt_canvas()
 
     def _update_video_actions(self) -> None:
         backend = self.video_form.field("backend").value
         self.query_one("#video-add-keyframe", Button).disabled = backend != "ltx23-keyframes"
         self.query_one("#video-add-seed", Button).disabled = backend != "ltx23-keyframes"
+
+    def _update_sam_prompt_canvas(self) -> None:
+        form = self.sam_form
+        active = (
+            form.field("operation").value == "segment"
+            and form.field("engine").value != "anime"
+            and form.field("prompt_mode").value in {"box", "points", "box+points"}
+        )
+        self.query_one("#sam-edit-prompts", Button).disabled = not active
+        if self.sam_prompt_dialog is not None:
+            self.sam_prompt_dialog.set_state(
+                image=form.field("input").value,
+                prompt_mode=form.field("prompt_mode").value,
+                box=form.field("box").value,
+                positive_points=form.field("positive_points").value,
+                negative_points=form.field("negative_points").value,
+            )
+
+    def _open_sam_prompt_editor(self) -> None:
+        form = self.sam_form
+        if self.sam_prompt_dialog is not None:
+            return
+        dialog = SAMPromptDialog(
+            image=form.field("input").value,
+            prompt_mode=form.field("prompt_mode").value,
+            box=form.field("box").value,
+            positive_points=form.field("positive_points").value,
+            negative_points=form.field("negative_points").value,
+        )
+        self.sam_prompt_dialog = dialog
+        self.push_screen(dialog, self._close_sam_prompt_editor)
+
+    def _close_sam_prompt_editor(self, _: None) -> None:
+        self.sam_prompt_dialog = None
+        self._update_sam_prompt_canvas()
+
+    def _sam_prompt_selection(self) -> SAMPromptSelection:
+        form = self.sam_form
+        return SAMPromptSelection(
+            image=form.field("input").value,
+            prompt_mode=form.field("prompt_mode").value,
+            box=form.field("box").value,
+            positive_points=form.field("positive_points").value,
+            negative_points=form.field("negative_points").value,
+        )
+
+    def _choose_sam_selection_directory(self) -> None:
+        start = self.sam_selection_path.parent if self.sam_selection_path else PROJECT_ROOT
+        self.push_screen(
+            FileBrowser(
+                start,
+                title="Save SAM selection",
+                directories_only=True,
+                extensions=SAM_SELECTION_EXTENSIONS,
+                select_label="Select folder",
+            ),
+            self._choose_sam_selection_name,
+        )
+
+    def _choose_sam_selection_name(self, directory: Path | None) -> None:
+        if directory is None:
+            return
+        name = self.sam_selection_path.name if self.sam_selection_path else "sam-selection.json"
+        self.push_screen(
+            PromptDialog("Save SAM selection", "Selection filename", name),
+            lambda filename: self._save_sam_prompt_selection(directory, filename),
+        )
+
+    def _save_sam_prompt_selection(
+        self,
+        directory: Path | None = None,
+        filename: str | None = None,
+    ) -> None:
+        if directory is None:
+            self._choose_sam_selection_directory()
+            return
+        if filename is None:
+            return
+        filename = filename.strip()
+        if not filename or Path(filename).name != filename:
+            self._show_error(
+                "Cannot save SAM selection",
+                "Selection filename must be a non-empty filename without a path.",
+            )
+            return
+        output = directory / filename
+        if output.suffix == "":
+            output = output.with_suffix(".json")
+        elif output.suffix.casefold() != ".json":
+            self._show_error(
+                "Cannot save SAM selection",
+                "Selection filename must use the .json extension.",
+            )
+            return
+        if output.exists() and output != self.sam_selection_path:
+            self._show_error("Cannot save SAM selection", f"Selection already exists: {output}")
+            return
+        try:
+            self._sam_prompt_selection().save(output)
+        except (OSError, ValueError) as error:
+            self._show_error("Cannot save SAM selection", str(error))
+            return
+        self.sam_selection_path = output
+        self._set_status(f"Saved SAM selection: {display_project_path(output)}")
+
+    def _load_sam_prompt_selection(self) -> None:
+        start = self.sam_selection_path or PROJECT_ROOT
+        self.push_screen(
+            FileBrowser(
+                self._browser_start(start.as_posix()),
+                title="Load SAM selection",
+                directories_only=False,
+                extensions=SAM_SELECTION_EXTENSIONS,
+                select_label="Load",
+            ),
+            self._apply_sam_prompt_selection,
+        )
+
+    def _apply_sam_prompt_selection(self, path: Path | None) -> None:
+        if path is None:
+            return
+        try:
+            selection = SAMPromptSelection.load(path)
+        except (OSError, ValueError, TypeError) as error:
+            self._show_error("Cannot load SAM selection", str(error))
+            return
+        form = self.sam_form
+        form.set_value(form.field("prompt_mode"), selection.prompt_mode)
+        form.set_value(form.field("box"), selection.box)
+        form.set_value(form.field("positive_points"), selection.positive_points)
+        form.set_value(form.field("negative_points"), selection.negative_points)
+        self.sam_selection_path = path
+        self._set_status(f"Loaded SAM selection: {display_project_path(path)}")
+        self.run_worker(self._rebuild_form(form), group="fields", exclusive=True)
 
     @on(FieldRow.Selected)
     def field_selected(self, event: FieldRow.Selected) -> None:
@@ -678,6 +863,13 @@ class ImageGenerationApp(App[None]):
                 return
             row.form.set_value(row.field, event.value)
             self._select_field(FieldSelection(row.form, row.field))
+            if row.form is self.sam_form and row.field.name in {
+                "input",
+                "box",
+                "positive_points",
+                "negative_points",
+            }:
+                self._update_sam_prompt_canvas()
 
     @on(Select.Changed)
     async def select_changed(self, event: Select.Changed) -> None:
@@ -697,6 +889,14 @@ class ImageGenerationApp(App[None]):
     @on(PathInput.BrowseRequested)
     def browse_requested(self, event: PathInput.BrowseRequested) -> None:
         self._browse_field(event.form, event.field)
+
+    @on(SAMPromptCanvas.PromptChanged)
+    def sam_prompt_changed(self, event: SAMPromptCanvas.PromptChanged) -> None:
+        form = self.sam_form
+        form.set_value(form.field("box"), event.box)
+        form.set_value(form.field("positive_points"), event.positive_points)
+        form.set_value(form.field("negative_points"), event.negative_points)
+        self._update_sam_prompt_canvas()
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self, event: TabbedContent.TabActivated) -> None:
@@ -797,6 +997,24 @@ class ImageGenerationApp(App[None]):
                 self._browse_field(self.selected_field.form, self.selected_field.field)
             else:
                 self._set_status("Select a SAM file or Output directory field to browse.")
+        elif action == "sam-edit":
+            self._open_sam_prompt_editor()
+        elif action == "sam-prompt-clear":
+            assert self.sam_prompt_dialog is not None
+            self.sam_prompt_dialog.clear_prompts()
+        elif action == "sam-prompt-save":
+            self._save_sam_prompt_selection()
+        elif action == "sam-prompt-load":
+            self._load_sam_prompt_selection()
+        elif action == "sam-prompt-close":
+            assert self.sam_prompt_dialog is not None
+            self.sam_prompt_dialog.close()
+        elif action == "sam-clear":
+            form = self.sam_form
+            form.set_value(form.field("box"), "")
+            form.set_value(form.field("positive_points"), "")
+            form.set_value(form.field("negative_points"), "")
+            self._update_sam_prompt_canvas()
         elif action == "quit":
             self.action_quit()
 

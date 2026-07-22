@@ -195,6 +195,10 @@ The Videos tab exposes the configured video backends. The SAM Edit tab exposes s
 SAM mask/cutout/preview generation, Florence-2/SAM2 region plans, and a direct Qwen masked
 edit form that consumes either an existing white-on-black mask or a selected region from a
 region-plan result through the character refine owner.
+For SAM box/point prompting, select `Box`, `Points`, or `Box + points` and open `Edit prompts`
+to edit the input image in a large overlay: box mode uses two left clicks for opposite
+corners, left click adds a positive point, and right click (or Shift+left click) adds a
+negative point. The overlay can clear, save, and load prompt selections as JSON files.
 SAM runs write a `result.json` manifest alongside their selected artefacts; rerunning an
 existing output directory requires the explicit overwrite action.
 TUI generations replace the contents
