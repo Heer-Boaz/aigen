@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 
-# cudaHostAlloc on this WSL2 host starts refusing past ~14 GiB even with 15 GiB of RAM
-# still free -- a driver ceiling, not a shortage. Stay well under it: the CUDA context and
-# the denoise activations still need host memory, and page-locked pages cannot be reclaimed.
-PINNED_HOST_BUDGET_BYTES = 10 * 1024**3
+# cudaHostAlloc on this WSL2 host starts refusing past ~14 GiB.  With the
+# expanded host allocation, 13 GiB pins all remaining streamed denoiser blocks
+# while keeping a margin below that driver ceiling.
+PINNED_HOST_BUDGET_BYTES = 13 * 1024**3
 
 os.environ.setdefault("PROFILING_DEBUG_LEVEL", "0")
 os.environ.setdefault("DTYPE", "BF16")
@@ -515,10 +515,8 @@ def _pin_streamed_host_weights(torch: Any, runner: Any, streamed_start: int) -> 
     is what makes the step time, so this is the difference between a transfer-bound and a
     compute-bound denoise.
 
-    Only the streamed blocks are pinned. Pinning at load time (LightX2V's own default)
-    would lock all 60 blocks, i.e. the entire 20 GiB checkpoint, in unswappable memory --
-    which does not fit next to the activations on a 30 GiB host. The resident blocks
-    already live on the GPU and never transfer, so their host copies stay file-backed.
+    Only the streamed blocks are pinned. The resident blocks already live on the GPU and
+    never transfer, so their host copies stay file-backed.
     """
     mode = os.environ.get("AIGEN_LIGHTX2V_HOST_BUFFERS", "pinned")
     blocks = runner.model.transformer_weights.blocks

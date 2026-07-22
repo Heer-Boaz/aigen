@@ -42,7 +42,7 @@ class VideoForm:
             "overlap_group_offloading": FormField(
                 "overlap_group_offloading",
                 "Overlap group offloading",
-                "false",
+                "true",
             ),
             "output_dir": FormField(
                 "output_dir",
@@ -231,8 +231,11 @@ class VideoForm:
                     self.field("seed").value.strip(),
                 )
             )
-            if self.field("overlap_group_offloading").value == "true":
-                command.append("--overlap-group-offloading")
+            command.append(
+                "--overlap-group-offloading"
+                if self.field("overlap_group_offloading").value == "true"
+                else "--no-overlap-group-offloading"
+            )
         return command, output_dir
 
     def _set_backend_defaults(self, backend: str) -> None:
@@ -261,7 +264,7 @@ class VideoForm:
                     "overlap_group_offloading": FormField(
                         "overlap_group_offloading",
                         "Overlap group offloading",
-                        "false",
+                        "true",
                     ),
                 }
             )

@@ -11,9 +11,12 @@ from pathlib import Path
 from typing import Any, TextIO
 
 
-RUNTIME_PROFILE = "4"
-# mmgp can consume roughly twice its configured budget;
-# 4000 MiB leaves headroom on 16 GiB GPUs.
+# Profile 2 keeps every WanGP component in pinned host memory while profile 4
+# only pins the transformer.  The 92 GB WSL allocation makes the former viable
+# and removes the Gemma text-encoder's pageable-memory bottleneck.
+RUNTIME_PROFILE = "2"
+# mmgp can consume roughly twice its configured budget; 4000 MiB still leaves
+# denoising headroom on the fixed 16 GiB GPU.
 PRELOAD_MIB = 4000
 ATTENTION_MODE = "sdpa"
 

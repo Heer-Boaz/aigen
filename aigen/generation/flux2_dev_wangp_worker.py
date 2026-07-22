@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any, TextIO
 
 
-RUNTIME_PROFILE = "4"
+# Profile 2 pins every WanGP component in host memory.  It uses the enlarged
+# WSL memory allocation without increasing the fixed 16 GiB VRAM budget.
+RUNTIME_PROFILE = "2"
 PRELOAD_MIB = 4000
 ATTENTION_MODE = "sdpa"
 MODEL_TYPE = "flux2_dev_nvfp4"

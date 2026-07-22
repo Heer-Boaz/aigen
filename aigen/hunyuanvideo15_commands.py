@@ -21,8 +21,9 @@ def add_hunyuanvideo15_command(subparsers: Any) -> None:
     command.add_argument("--seed", type=int, default=42)
     command.add_argument(
         "--overlap-group-offloading",
-        action="store_true",
-        help="Trade substantially more host RAM for faster transformer offloading",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use extra host RAM to overlap transformer transfers (default: enabled)",
     )
 
 
