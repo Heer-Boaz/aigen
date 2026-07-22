@@ -13,9 +13,13 @@ from aigen.image_edit_commands import (
     IMAGE_EDIT_BACKENDS,
 )
 from aigen.lora_weights import inspect_lora_weights
+from aigen.runtime_profiles import (
+    PROJECT_ROOT,
+    display_project_path,
+    resolve_project_path,
+)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LORA_ROOT = PROJECT_ROOT / "loras"
 REFERENCE_PACK_ROOT = PROJECT_ROOT / "assets" / "reference-packs"
 
@@ -212,7 +216,7 @@ class ImageEditForm:
 
     def save_reference_pack(self, pack_id: str) -> Path:
         images = [
-            self.resolve_path(field.value)
+            resolve_project_path(field.value)
             for field in self.fields
             if field.slot_kind == "image" and field.value.strip()
         ]
@@ -396,16 +400,3 @@ class ImageEditForm:
             for slot_ids in slot_ids_by_kind.values()
             for index, slot_id in enumerate(slot_ids)
         }
-
-    @staticmethod
-    def resolve_path(value: str) -> Path:
-        path = Path(value).expanduser()
-        return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
-
-    @staticmethod
-    def display_path(path: Path) -> str:
-        resolved = path.resolve()
-        try:
-            return resolved.relative_to(PROJECT_ROOT).as_posix()
-        except ValueError:
-            return resolved.as_posix()

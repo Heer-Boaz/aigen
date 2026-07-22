@@ -56,4 +56,4 @@ aigen = "aigen.cli:main"
 aigen-tui = "aigen.image_tui:main"
 
 [tool.setuptools]
-packages = ["aigen", "aigen.generation", "aigen.models"]
+packages = ["aigen", "aigen.generation", "aigen.models", "aigen.pixelfixer"]

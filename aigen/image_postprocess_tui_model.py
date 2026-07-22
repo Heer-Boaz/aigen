@@ -21,9 +21,10 @@ POSTPROCESS_OPERATIONS = (UPSCALE_OPERATION, DOWNSCALE_OPERATION)
 VOSR_MODEL = VOSR_POSTPROCESS_NAME
 WU_PIXELIZATION_MODEL = "wu-pixelization"
 SD_PIXL_MODEL = "sd-pixl"
+PIXEL_ART_FIXER_MODEL = "pixel-art-fixer"
 
 UPSCALE_MODELS = (VOSR_MODEL, *upscale_model_names())
-DOWNSCALE_MODELS = (WU_PIXELIZATION_MODEL, SD_PIXL_MODEL)
+DOWNSCALE_MODELS = (WU_PIXELIZATION_MODEL, SD_PIXL_MODEL, PIXEL_ART_FIXER_MODEL)
 POSTPROCESS_MODEL_LABELS = {
     VOSR_MODEL: VOSR_MODEL_NAME,
     "illustrationjanai-dat2": "IllustrationJaNai DAT2",
@@ -31,6 +32,7 @@ POSTPROCESS_MODEL_LABELS = {
     "animesharp-x4": "AnimeSharp x4",
     WU_PIXELIZATION_MODEL: "Wu Pixelization",
     SD_PIXL_MODEL: "SD-piXL",
+    PIXEL_ART_FIXER_MODEL: "Pixel Art Fixer",
 }
 
 
@@ -54,6 +56,9 @@ class ImagePostprocessForm:
             "steps": FormField("steps", "Steps", "10001"),
             "prompt": FormField("prompt", "Prompt", ""),
             "seed": FormField("seed", "Seed", "0"),
+            "mode": FormField("mode", "Detection mode", "full"),
+            "low_memory": FormField("low_memory", "Low memory", "false"),
+            "force_step": FormField("force_step", "Force cell size", ""),
         }
         self.fields: list[FormField] = []
         self._rebuild_fields()
@@ -82,6 +87,16 @@ class ImagePostprocessForm:
             return tuple(
                 DropdownOption(POSTPROCESS_MODEL_LABELS[model], model)
                 for model in models
+            )
+        if field.name == "mode":
+            return (
+                DropdownOption("Full", "full"),
+                DropdownOption("Fast", "fast"),
+            )
+        if field.name == "low_memory":
+            return (
+                DropdownOption("Off", "false"),
+                DropdownOption("On", "true"),
             )
         return None
 
@@ -136,6 +151,23 @@ class ImagePostprocessForm:
                     self._fields["cell_size"].value.strip(),
                 )
             )
+        elif model == PIXEL_ART_FIXER_MODEL:
+            command.extend(
+                (
+                    "pixel-art-fixer",
+                    "--input",
+                    input_path,
+                    "--output",
+                    output,
+                    "--mode",
+                    self._fields["mode"].value.strip(),
+                )
+            )
+            if self._fields["low_memory"].value == "true":
+                command.append("--low-memory")
+            force_step = self._fields["force_step"].value.strip()
+            if force_step:
+                command.extend(("--force-step", force_step))
         else:
             command.extend(
                 (
@@ -168,6 +200,8 @@ class ImagePostprocessForm:
             names.append("long_side")
         elif model == WU_PIXELIZATION_MODEL:
             names.append("cell_size")
+        elif model == PIXEL_ART_FIXER_MODEL:
+            names.extend(("mode", "low_memory", "force_step"))
         else:
             names.extend(("width", "height", "colors", "steps", "prompt", "seed"))
         self.fields = [self._fields[name] for name in names]

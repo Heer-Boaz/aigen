@@ -30,15 +30,27 @@ from textual.widgets import (
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.image_postprocess_tui_model import ImagePostprocessForm
 from aigen.image_tui_model import (
-    PROJECT_ROOT,
     DropdownOption,
     FormField,
     ImageEditForm,
 )
 from aigen.progress import JSON_PROGRESS_PREFIX, format_duration
+from aigen.runtime_profiles import (
+    PROJECT_ROOT,
+    display_project_path,
+    resolve_project_path,
+)
+from aigen.sam_tui_model import SamEditForm
+from aigen.video_tui_model import VideoForm
 
 
-FormModel = ImageEditForm | ImagePostprocessForm
+FormModel = ImageEditForm | ImagePostprocessForm | VideoForm | SamEditForm
+
+
+@dataclass(frozen=True)
+class FieldSelection:
+    form: FormModel
+    field: FormField
 
 
 CONFIG_ROOT = (
@@ -67,24 +79,27 @@ class GenerationProgress:
 
 class PathInput(Input):
     class BrowseRequested(Message):
-        def __init__(self, field: FormField) -> None:
+        def __init__(self, form: FormModel, field: FormField) -> None:
             super().__init__()
+            self.form = form
             self.field = field
 
-    def __init__(self, field: FormField) -> None:
+    def __init__(self, form: FormModel, field: FormField) -> None:
         super().__init__(field.value, compact=True, classes="field-editor")
+        self.form = form
         self.field = field
 
     def on_click(self, event: events.Click) -> None:
         if event.chain == 2:
             event.stop()
-            self.post_message(self.BrowseRequested(self.field))
+            self.post_message(self.BrowseRequested(self.form, self.field))
 
 
 class FieldRow(Horizontal):
     class Selected(Message):
-        def __init__(self, field: FormField) -> None:
+        def __init__(self, form: FormModel, field: FormField) -> None:
             super().__init__()
+            self.form = form
             self.field = field
 
     def __init__(self, form: FormModel, field: FormField) -> None:
@@ -98,8 +113,8 @@ class FieldRow(Horizontal):
         yield Label(self.field.label, classes="field-label")
         options = self.form.dropdown_options(self.field)
         if options is None:
-            if self.field.slot_kind == "image" or self.field.name == "output_dir":
-                yield PathInput(self.field)
+            if self.field.slot_kind in {"image", "keyframe", "reference_pack", "config"} or self.field.name == "output_dir":
+                yield PathInput(self.form, self.field)
             else:
                 yield Input(self.field.value, compact=True, classes="field-editor")
         else:
@@ -133,7 +148,7 @@ class FieldRow(Horizontal):
             )
 
     def on_click(self) -> None:
-        self.post_message(self.Selected(self.field))
+        self.post_message(self.Selected(self.form, self.field))
 
     def on_enter(self) -> None:
         self.add_class("hovered")
@@ -409,7 +424,23 @@ class ImageGenerationApp(App[None]):
         grid-gutter: 0;
     }
 
-    #actions Button, #postprocess-actions Button, .dialog-actions Button {
+    #video-actions {
+        width: 100%;
+        height: auto;
+        max-height: 4;
+        padding: 0 1;
+        grid-gutter: 0;
+    }
+
+    #sam-actions {
+        width: 100%;
+        height: auto;
+        max-height: 4;
+        padding: 0 1;
+        grid-gutter: 0;
+    }
+
+    #actions Button, #video-actions Button, #sam-actions Button, #postprocess-actions Button, .dialog-actions Button {
         height: 1;
         min-height: 1;
         border: none;
@@ -475,9 +506,11 @@ class ImageGenerationApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.form = ImageEditForm()
+        self.video_form = VideoForm()
+        self.sam_form = SamEditForm()
         self.postprocess_form = ImagePostprocessForm()
         self.configuration_path: Path | None = None
-        self.selected_field: FormField | None = None
+        self.selected_field: FieldSelection | None = None
         self.process: subprocess.Popen[str] | None = None
         self.active_action_button_id: str | None = None
         self.active_action_idle_label = ""
@@ -495,9 +528,38 @@ class ImageGenerationApp(App[None]):
             with TabPane("Images", id="images"):
                 yield FormFields(self.form, id="image-fields")
             with TabPane("Videos", id="videos"):
-                yield Static("")
+                yield FormFields(self.video_form, id="video-fields")
+                yield ItemGrid(
+                    Button("+ Keyframe", name="add-keyframe", id="video-add-keyframe", compact=True),
+                    Button("+ Seed", name="add-video-seed", id="video-add-seed", compact=True),
+                    Button("Remove", name="remove-video", compact=True),
+                    Button("Browse", name="browse-video", compact=True),
+                    Button(
+                        "Generate",
+                        name="video-generate",
+                        id="video-action",
+                        variant="primary",
+                        compact=True,
+                    ),
+                    min_column_width=12,
+                    stretch_height=False,
+                    id="video-actions",
+                )
             with TabPane("SAM Edit", id="sam-edit"):
-                yield Static("")
+                yield FormFields(self.sam_form, id="sam-fields")
+                yield ItemGrid(
+                    Button("Browse", name="browse-sam", compact=True),
+                    Button(
+                        "Run",
+                        name="sam-segment",
+                        id="sam-action",
+                        variant="primary",
+                        compact=True,
+                    ),
+                    min_column_width=12,
+                    stretch_height=False,
+                    id="sam-actions",
+                )
             with TabPane("Post-processing", id="postprocessing"):
                 yield FormFields(self.postprocess_form, id="postprocess-fields")
                 yield ItemGrid(
@@ -546,23 +608,53 @@ class ImageGenerationApp(App[None]):
         await self._rebuild_form(self.form)
 
     async def _rebuild_form(self, form: FormModel) -> None:
-        fields_id = "#image-fields" if form is self.form else "#postprocess-fields"
+        if form is self.form:
+            fields_id = "#image-fields"
+        elif form is self.video_form:
+            fields_id = "#video-fields"
+        elif form is self.sam_form:
+            fields_id = "#sam-fields"
+        else:
+            fields_id = "#postprocess-fields"
+        if (
+            self.selected_field is not None
+            and self.selected_field.form is form
+            and not any(field is self.selected_field.field for field in form.fields)
+        ):
+            self._select_field(None)
         await self.query_one(fields_id, FormFields).recompose()
         self._refresh_selected_field()
+        self._update_video_actions()
+
+    def _update_video_actions(self) -> None:
+        backend = self.video_form.field("backend").value
+        self.query_one("#video-add-keyframe", Button).disabled = backend != "ltx23-keyframes"
+        self.query_one("#video-add-seed", Button).disabled = backend != "ltx23-keyframes"
 
     @on(FieldRow.Selected)
     def field_selected(self, event: FieldRow.Selected) -> None:
-        self._select_field(event.field)
+        self._select_field(FieldSelection(event.form, event.field))
 
-    def _select_field(self, field: FormField | None) -> None:
-        if self.selected_field is field:
+    def _select_field(self, selection: FieldSelection | None) -> None:
+        if (
+            self.selected_field is not None
+            and selection is not None
+            and self.selected_field.form is selection.form
+            and self.selected_field.field is selection.field
+        ):
             return
-        self.selected_field = field
+        self.selected_field = selection
         self._refresh_selected_field()
 
     def _refresh_selected_field(self) -> None:
         for row in self.query(FieldRow):
-            row.set_class(row.field is self.selected_field, "selected")
+            selected = self.selected_field
+            row.set_class(
+                selected is not None
+                and selected.form is row.form
+                and selected.field is row.field,
+                "selected",
+            )
 
     def _hovered_row(self) -> FieldRow | None:
         return next(
@@ -584,8 +676,8 @@ class ImageGenerationApp(App[None]):
         if isinstance(row, FieldRow):
             if row.field.value == event.value:
                 return
-            row.field.value = event.value
-            self._select_field(row.field)
+            row.form.set_value(row.field, event.value)
+            self._select_field(FieldSelection(row.form, row.field))
 
     @on(Select.Changed)
     async def select_changed(self, event: Select.Changed) -> None:
@@ -597,14 +689,14 @@ class ImageGenerationApp(App[None]):
         value = str(event.value)
         if row.field.value == value:
             return
-        self._select_field(row.field)
+        self._select_field(FieldSelection(row.form, row.field))
         row.form.set_value(row.field, value)
-        if row.field.name in {"operation", "model"}:
+        if row.field.name in {"operation", "model", "prompt_mode"}:
             await self._rebuild_form(row.form)
 
     @on(PathInput.BrowseRequested)
     def browse_requested(self, event: PathInput.BrowseRequested) -> None:
-        self._browse_field(event.field)
+        self._browse_field(event.form, event.field)
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self, event: TabbedContent.TabActivated) -> None:
@@ -616,29 +708,47 @@ class ImageGenerationApp(App[None]):
         row = button.parent
         if isinstance(row, FieldRow):
             assert row.field.slot_id is not None
-            self._select_field(row.field)
-            self.form.move_slot(
+            self._select_field(FieldSelection(row.form, row.field))
+            row.form.move_slot(
                 row.field.slot_id,
                 -1 if button.name == "move-up" else 1,
             )
-            await self._rebuild_fields()
+            await self._rebuild_form(row.form)
             return
 
         action = button.name
         if action is None:
             return
         if action.startswith("add-"):
-            slot_kind = action.removeprefix("add-").replace("-", "_")
-            slot_id = self.form.add_slot(slot_kind)
+            if action == "add-video-seed":
+                slot_kind = "seed"
+                form = self.video_form
+            elif action == "add-keyframe":
+                slot_kind = "keyframe"
+                form = self.video_form
+            else:
+                slot_kind = action.removeprefix("add-").replace("-", "_")
+                form = self.form
+            try:
+                slot_id = form.add_slot(slot_kind)
+            except ValueError as error:
+                self._show_error("Cannot add video slot", str(error))
+                return
             self._select_field(
-                next(field for field in self.form.fields if field.slot_id == slot_id)
+                FieldSelection(
+                    form,
+                    next(field for field in form.fields if field.slot_id == slot_id),
+                )
             )
-            await self._rebuild_fields()
+            await self._rebuild_form(form)
         elif action == "remove":
             await self.action_remove_selected_slot()
         elif action == "browse":
             if self.selected_field is not None:
-                self._browse_field(self.selected_field)
+                self._browse_field(
+                    self.selected_field.form,
+                    self.selected_field.field,
+                )
             else:
                 self._set_status("Select an Image or Output directory field to browse.")
         elif action == "use-result":
@@ -662,6 +772,31 @@ class ImageGenerationApp(App[None]):
                 self._start_postprocess()
             else:
                 self._cancel_generation()
+        elif action == "video-generate":
+            if self.process is None:
+                self._start_video()
+            else:
+                self._cancel_generation()
+        elif action == "sam-segment":
+            if self.process is None:
+                self._start_sam()
+            else:
+                self._cancel_generation()
+        elif action == "remove-video":
+            if self.selected_field is not None and self.selected_field.form is self.video_form:
+                await self._remove_slot(self.selected_field)
+            else:
+                self._set_status("Select a video keyframe or seed slot.")
+        elif action == "browse-video":
+            if self.selected_field is not None and self.selected_field.form is self.video_form:
+                self._browse_field(self.selected_field.form, self.selected_field.field)
+            else:
+                self._set_status("Select a video input or Output directory field to browse.")
+        elif action == "browse-sam":
+            if self.selected_field is not None and self.selected_field.form is self.sam_form:
+                self._browse_field(self.selected_field.form, self.selected_field.field)
+            else:
+                self._set_status("Select a SAM file or Output directory field to browse.")
         elif action == "quit":
             self.action_quit()
 
@@ -671,43 +806,59 @@ class ImageGenerationApp(App[None]):
     async def action_remove_hovered_slot(self) -> None:
         hovered = self._hovered_row()
         assert hovered is not None and hovered.field.slot_id is not None
-        await self._remove_slot(hovered.field)
+        await self._remove_slot(FieldSelection(hovered.form, hovered.field))
 
-    async def _remove_slot(self, field: FormField | None) -> None:
-        if field is None or field.slot_id is None:
+    async def _remove_slot(
+        self,
+        selection: FieldSelection | None,
+    ) -> None:
+        if selection is None or selection.field.slot_id is None:
             self._set_status("Select a seed, image, reference pack or LoRA slot.")
             return
-        self.form.remove_slot(field.slot_id)
+        selection.form.remove_slot(selection.field.slot_id)
         if (
             self.selected_field is not None
-            and self.selected_field.slot_id == field.slot_id
+            and self.selected_field == selection
         ):
             self._select_field(None)
-        await self._rebuild_fields()
+        await self._rebuild_form(selection.form)
 
     async def action_clear_selected_field(self) -> None:
         if self.selected_field is None:
             self._set_status("Select a field to clear.")
             return
-        form = self._form_for_field(self.selected_field)
-        options = form.dropdown_options(self.selected_field)
+        form = self.selected_field.form
+        field = self.selected_field.field
+        options = form.dropdown_options(field)
         if options is not None and not any(option.value == "" for option in options):
-            self._set_status(f"{self.selected_field.label} cannot be empty.")
+            self._set_status(f"{field.label} cannot be empty.")
             return
-        form.set_value(self.selected_field, "")
+        form.set_value(field, "")
         await self._rebuild_form(form)
 
-    def _browse_field(self, field: FormField) -> None:
-        if field.slot_kind == "image":
+    def _browse_field(self, form: FormModel, field: FormField) -> None:
+        if field.slot_kind in {"image", "keyframe"}:
             directories_only = False
             title = field.label
             select_label = "Select image"
+            extensions = IMAGE_EXTENSIONS
+        elif field.slot_kind == "reference_pack":
+            directories_only = False
+            title = field.label
+            select_label = "Select pack"
+            extensions = CONFIG_EXTENSIONS
+        elif field.slot_kind == "config":
+            directories_only = False
+            title = field.label
+            select_label = "Select JSON"
+            extensions = CONFIG_EXTENSIONS
         elif field.name == "output_dir":
             directories_only = True
             title = field.label
             select_label = "Select folder"
+            extensions = IMAGE_EXTENSIONS
         else:
-            self._set_status("Select an Image or Output directory field to browse.")
+            self._set_status("Select a file or Output directory field to browse.")
             return
         start = self._browser_start(field.value)
         self.push_screen(
@@ -715,31 +866,28 @@ class ImageGenerationApp(App[None]):
                 start,
                 title=title,
                 directories_only=directories_only,
-                extensions=IMAGE_EXTENSIONS,
+                extensions=extensions,
                 select_label=select_label,
             ),
-            lambda path: self._set_browsed_path(field, path),
+            lambda path: self._set_browsed_path(form, field, path),
         )
 
-    def _set_browsed_path(self, field: FormField, path: Path | None) -> None:
+    def _set_browsed_path(
+        self,
+        form: FormModel,
+        field: FormField,
+        path: Path | None,
+    ) -> None:
         if path is not None:
-            field.value = self.form.display_path(path)
-            form = self._form_for_field(field)
+            form.set_value(field, display_project_path(path))
             self.run_worker(
                 self._rebuild_form(form),
                 group="fields",
                 exclusive=True,
             )
 
-    def _form_for_field(self, field: FormField) -> FormModel:
-        return (
-            self.form
-            if any(candidate is field for candidate in self.form.fields)
-            else self.postprocess_form
-        )
-
     def _browse_result(self) -> None:
-        output = self.form.resolve_path(self.form.field("output_dir").value)
+        output = resolve_project_path(self.form.field("output_dir").value)
         if not output.is_dir():
             self._set_status(f"Output directory does not exist: {output}")
             return
@@ -768,8 +916,8 @@ class ImageGenerationApp(App[None]):
         if field is None:
             slot_id = self.form.add_slot("image")
             field = next(field for field in self.form.fields if field.slot_id == slot_id)
-        field.value = self.form.display_path(path)
-        self._select_field(field)
+        field.value = display_project_path(path)
+        self._select_field(FieldSelection(self.form, field))
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
     def _save_reference_pack(self, pack_id: str | None) -> None:
@@ -798,8 +946,8 @@ class ImageGenerationApp(App[None]):
         if field is None:
             slot_id = self.form.add_slot("reference_pack")
             field = next(field for field in self.form.fields if field.slot_id == slot_id)
-        field.value = self.form.display_path(output)
-        self._select_field(field)
+        field.value = display_project_path(output)
+        self._select_field(FieldSelection(self.form, field))
         self._set_status(f"Saved reference pack: {field.value}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
@@ -859,7 +1007,7 @@ class ImageGenerationApp(App[None]):
             self._show_error("Cannot save configuration", str(error))
             return
         self.configuration_path = output
-        self._set_status(f"Saved configuration: {self.form.display_path(output)}")
+        self._set_status(f"Saved configuration: {display_project_path(output)}")
 
     def _load_configuration(self) -> None:
         if self.process is not None:
@@ -887,7 +1035,7 @@ class ImageGenerationApp(App[None]):
             return
         self.configuration_path = path
         self._select_field(None)
-        self._set_status(f"Loaded configuration: {self.form.display_path(path)}")
+        self._set_status(f"Loaded configuration: {display_project_path(path)}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
     def _start_generation(self) -> None:
@@ -924,6 +1072,40 @@ class ImageGenerationApp(App[None]):
             error_title="Cannot start post-processing",
         )
 
+    def _start_video(self) -> None:
+        if self.process is not None:
+            self._set_status("Video generation is already running.")
+            return
+        try:
+            command, output_dir = self.video_form.generation_command()
+        except ValueError as error:
+            self._show_error("Cannot start video generation", str(error))
+            return
+        self._start_command(
+            command,
+            output_dir,
+            action_button_id="video-action",
+            idle_label="Generate",
+            error_title="Cannot start video generation",
+        )
+
+    def _start_sam(self) -> None:
+        if self.process is not None:
+            self._set_status("SAM operation is already running.")
+            return
+        try:
+            command, output_dir = self.sam_form.generation_command()
+        except ValueError as error:
+            self._show_error("Cannot start SAM operation", str(error))
+            return
+        self._start_command(
+            command,
+            output_dir,
+            action_button_id="sam-action",
+            idle_label="Run",
+            error_title="Cannot start SAM operation",
+        )
+
     def _start_command(
         self,
         command: list[str],
@@ -957,12 +1139,13 @@ class ImageGenerationApp(App[None]):
         self.generation_progress = None
         self._set_status("Starting...")
         self.query_one(f"#{action_button_id}", Button).label = "Stop"
-        other_action = (
-            "postprocess-action"
-            if action_button_id == "generation-action"
-            else "generation-action"
-        )
-        self.query_one(f"#{other_action}", Button).disabled = True
+        for button_id in (
+            "generation-action",
+            "video-action",
+            "sam-action",
+            "postprocess-action",
+        ):
+            self.query_one(f"#{button_id}", Button).disabled = button_id != action_button_id
         self.run_worker(
             lambda: self._watch_generation(process, output_dir),
             thread=True,
@@ -1035,8 +1218,13 @@ class ImageGenerationApp(App[None]):
             self.query_one(f"#{self.active_action_button_id}", Button).label = (
                 self.active_action_idle_label
             )
-        self.query_one("#generation-action", Button).disabled = False
-        self.query_one("#postprocess-action", Button).disabled = False
+        for button_id in (
+            "generation-action",
+            "video-action",
+            "sam-action",
+            "postprocess-action",
+        ):
+            self.query_one(f"#{button_id}", Button).disabled = False
         self.active_action_button_id = None
         self.active_action_idle_label = ""
 
@@ -1084,7 +1272,7 @@ class ImageGenerationApp(App[None]):
 
     @staticmethod
     def _browser_start(value: str) -> Path:
-        path = ImageEditForm.resolve_path(value) if value.strip() else PROJECT_ROOT
+        path = resolve_project_path(value) if value.strip() else PROJECT_ROOT
         if path.is_dir():
             return path
         if path.parent.is_dir():

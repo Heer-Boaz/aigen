@@ -61,13 +61,53 @@ class SamForegroundSegmenter:
         self._device = config.device
         self._threshold = config.prompt_threshold
 
-    def segment(self, image_path: Path) -> np.ndarray:
+    def segment(
+        self,
+        image_path: Path,
+        threshold: float | None = None,
+        mask_index: int | None = None,
+    ) -> np.ndarray:
         image = _load_rgb(image_path)
-        box = _foreground_box(image, self._threshold)
-        return self.segment_image_box(image, box)
+        box = _foreground_box(image, self._threshold if threshold is None else threshold)
+        return self.segment_image_box(image, box, mask_index=mask_index)
 
-    def segment_image_box(self, image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
-        return self.segment_image_boxes(image, [box])[0]
+    def segment_image_box(
+        self,
+        image: np.ndarray,
+        box: tuple[int, int, int, int],
+        mask_index: int | None = None,
+    ) -> np.ndarray:
+        return self.segment_image_prompt(image, box=box, mask_index=mask_index)
+
+    def segment_image_prompt(
+        self,
+        image: np.ndarray,
+        *,
+        points: list[tuple[int, int]] | None = None,
+        labels: list[int] | None = None,
+        box: tuple[int, int, int, int] | None = None,
+        mask_index: int | None = None,
+    ) -> np.ndarray:
+        points = points or []
+        labels = labels or []
+        if len(points) != len(labels):
+            raise KeyframeSegmentationError("SAM point coordinates and labels must have the same length")
+        if not points and box is None:
+            raise KeyframeSegmentationError("SAM requires a box or at least one point prompt")
+        self._predictor.set_image(image)
+        masks, scores, _ = self._predictor.predict(
+            point_coords=np.asarray(points, dtype=np.float32) if points else None,
+            point_labels=np.asarray(labels, dtype=np.int32) if labels else None,
+            box=np.asarray(box, dtype=np.float32) if box is not None else None,
+            multimask_output=True,
+        )
+        selected_index = int(np.asarray(scores).argmax()) if mask_index is None else mask_index
+        if not 0 <= selected_index < len(masks):
+            raise KeyframeSegmentationError(f"SAM mask candidate must be between 1 and {len(masks)}")
+        mask = masks[selected_index].astype(bool)
+        if not mask.any():
+            raise KeyframeSegmentationError("SAM returned an empty mask for the prompt")
+        return mask
 
     def segment_image_boxes(self, image: np.ndarray, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
         self._predictor.set_image(image)
@@ -187,6 +227,54 @@ class Sam2RegionSegmenter:
         self._device = config.device
         self._multimask_output = config.multimask_output
 
+    def segment(self, image_path: Path, threshold: float = 28.0, mask_index: int | None = None) -> np.ndarray:
+        image = _load_rgb(image_path)
+        return self.segment_image_prompt(
+            image,
+            box=_foreground_box(image, threshold),
+            mask_index=mask_index,
+        )
+
+    def segment_image_box(
+        self,
+        image: np.ndarray,
+        box: tuple[int, int, int, int],
+        mask_index: int | None = None,
+    ) -> np.ndarray:
+        return self.segment_image_prompt(image, box=box, mask_index=mask_index)
+
+    def segment_image_prompt(
+        self,
+        image: np.ndarray,
+        *,
+        points: list[tuple[int, int]] | None = None,
+        labels: list[int] | None = None,
+        box: tuple[int, int, int, int] | None = None,
+        mask_index: int | None = None,
+    ) -> np.ndarray:
+        points = points or []
+        labels = labels or []
+        if len(points) != len(labels):
+            raise KeyframeSegmentationError("SAM2 point coordinates and labels must have the same length")
+        if not points and box is None:
+            raise KeyframeSegmentationError("SAM2 requires a box or at least one point prompt")
+        pil_image = Image.fromarray(image, mode="RGB")
+        kwargs: dict[str, object] = {
+            "images": pil_image,
+            "return_tensors": "pt",
+        }
+        if points:
+            kwargs["input_points"] = [[[[x, y] for x, y in points]]]
+            kwargs["input_labels"] = [[labels]]
+        if box is not None:
+            kwargs["input_boxes"] = [[[x for x in box]]]
+        inputs = self._processor(**kwargs).to(self._device)
+        with self._torch.inference_mode():
+            outputs = self._model(**inputs, multimask_output=self._multimask_output)
+        masks = self._processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+        scores = outputs.iou_scores.detach().cpu()[0]
+        return _best_sam2_mask(masks[0], scores[0], "prompt", mask_index=mask_index)
+
     def segment_image_boxes(self, image: np.ndarray, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
         if not boxes:
             return []
@@ -209,9 +297,17 @@ class Sam2RegionSegmenter:
             self._torch.cuda.empty_cache()
 
 
-def _best_sam2_mask(masks: Any, scores: Any, box: tuple[int, int, int, int]) -> np.ndarray:
-    mask_index = int(np.asarray(scores).argmax())
-    mask = np.asarray(masks[mask_index], dtype=bool)
+def _best_sam2_mask(
+    masks: Any,
+    scores: Any,
+    box: tuple[int, int, int, int] | str,
+    *,
+    mask_index: int | None = None,
+) -> np.ndarray:
+    selected_index = int(np.asarray(scores).argmax()) if mask_index is None else mask_index
+    if not 0 <= selected_index < len(masks):
+        raise KeyframeSegmentationError(f"SAM2 mask candidate must be between 1 and {len(masks)}")
+    mask = np.asarray(masks[selected_index], dtype=bool)
     if not mask.any():
         raise KeyframeSegmentationError(f"SAM2 returned an empty mask for box {box}")
     return mask

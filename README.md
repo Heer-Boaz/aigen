@@ -191,7 +191,13 @@ reference packs are discovered from `assets/reference-packs/*.json`.
 Its visible buttons add and remove slots and start or stop generation. Each
 movable field has compact `↑` and `↓` buttons; unavailable directions are dimmed.
 Tab and Shift-Tab focus those buttons; Enter activates the focused button. The
-Videos and SAM Edit tabs are reserved for later. TUI generations replace the contents
+The Videos tab exposes the configured video backends. The SAM Edit tab exposes standalone
+SAM mask/cutout/preview generation, Florence-2/SAM2 region plans, and a direct Qwen masked
+edit form that consumes either an existing white-on-black mask or a selected region from a
+region-plan result through the character refine owner.
+SAM runs write a `result.json` manifest alongside their selected artefacts; rerunning an
+existing output directory requires the explicit overwrite action.
+TUI generations replace the contents
 of the selected output run directory so the same destination can be reused.
 The Images form is restored after a normal quit from
 `$XDG_CONFIG_HOME/aigen/image-tui.json` (or `~/.config/aigen/image-tui.json`).

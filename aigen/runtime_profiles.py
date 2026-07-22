@@ -10,6 +10,19 @@ from aigen.keyframe_refine_models import KeyframeRefineError
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODELS_ROOT = PROJECT_ROOT / "aigen" / "models"
 
+
+def resolve_project_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
+
+
+def display_project_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
 KEYFRAME_MODEL_REVISIONS = {
     "kontext": {
         "repo_id": "eramth/flux-kontext-4bit-fp4",
