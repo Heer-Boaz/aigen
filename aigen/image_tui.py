@@ -577,6 +577,7 @@ class ImageGenerationApp(App[None]):
                 yield ItemGrid(
                     Button("+ Keyframe", name="add-keyframe", id="video-add-keyframe", compact=True),
                     Button("+ Seed", name="add-video-seed", id="video-add-seed", compact=True),
+                    Button("+ Image", name="add-video-image", id="video-add-image", compact=True),
                     Button("Remove", name="remove-video", compact=True),
                     Button("Browse", name="browse-video", compact=True),
                     Button(
@@ -678,9 +679,15 @@ class ImageGenerationApp(App[None]):
             self._update_sam_prompt_canvas()
 
     def _update_video_actions(self) -> None:
-        backend = self.video_form.field("backend").value
-        self.query_one("#video-add-keyframe", Button).disabled = backend != "ltx23-keyframes"
-        self.query_one("#video-add-seed", Button).disabled = backend != "ltx23-keyframes"
+        self.query_one("#video-add-keyframe", Button).disabled = (
+            not self.video_form.can_add_slot("keyframe")
+        )
+        self.query_one("#video-add-seed", Button).disabled = (
+            not self.video_form.can_add_slot("seed")
+        )
+        self.query_one("#video-add-image", Button).disabled = (
+            not self.video_form.can_add_slot("image")
+        )
 
     def _update_sam_prompt_canvas(self) -> None:
         form = self.sam_form
@@ -922,6 +929,9 @@ class ImageGenerationApp(App[None]):
         if action.startswith("add-"):
             if action == "add-video-seed":
                 slot_kind = "seed"
+                form = self.video_form
+            elif action == "add-video-image":
+                slot_kind = "image"
                 form = self.video_form
             elif action == "add-keyframe":
                 slot_kind = "keyframe"

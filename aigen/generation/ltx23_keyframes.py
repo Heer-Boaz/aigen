@@ -20,9 +20,12 @@ LTX23_MODEL_TYPES = {
 }
 LTX23_DEFAULT_MODEL = "nvfp4"
 LTX23_DEFAULT_FPS = 24
+LTX23_DEFAULT_PHASES = 1
 LTX23_DEFAULT_CONDITIONING_STRENGTH = 1.0
+LTX23_DEFAULT_NEGATIVE_PROMPT = "Morphing, warping, flicker."
 LTX23_MINIMUM_FRAMES = 17
 LTX23_FRAME_STEP = 8
+LTX23_PHASES = frozenset({1, 2})
 LTX23_SOLVERS = frozenset({"distilled_8_steps", "euler", "res2s"})
 
 
@@ -49,7 +52,9 @@ class Ltx23KeyframesResult:
     frames: int
     fps: int
     steps: int
+    phases: int
     solver: str
+    negative_prompt: str
     conditioning_strength: float
     model: str
     model_type: str
@@ -61,7 +66,7 @@ class Ltx23KeyframesResult:
     def to_json(self) -> dict[str, Any]:
         return {
             "status": "completed",
-            "kind": "ltx-2.3-multi-keyframe-video",
+            "kind": "ltx-2.3-keyframe-conditioned-video",
             "output": self.output.as_posix(),
             "output_bytes": self.output.stat().st_size,
             "config": self.config.as_posix(),
@@ -75,7 +80,9 @@ class Ltx23KeyframesResult:
             "frames": self.frames,
             "fps": self.fps,
             "steps": self.steps,
+            "phases": self.phases,
             "solver": self.solver,
+            "negative_prompt": self.negative_prompt,
             "conditioning_strength": self.conditioning_strength,
             "seed": self.seed,
             "prompt_enhancer": False,
@@ -98,7 +105,9 @@ def generate_ltx23_keyframes(
     frames: int,
     fps: int,
     steps: int,
+    phases: int,
     solver: str,
+    negative_prompt: str,
     conditioning_strength: float,
     model: str,
     seed: int,
@@ -112,7 +121,9 @@ def generate_ltx23_keyframes(
         frames=frames,
         fps=fps,
         steps=steps,
+        phases=phases,
         solver=solver,
+        negative_prompt=negative_prompt,
         conditioning_strength=conditioning_strength,
         model=model,
         seeds=(seed,),
@@ -129,7 +140,9 @@ def generate_ltx23_keyframes_seed_sweep(
     frames: int,
     fps: int,
     steps: int,
+    phases: int,
     solver: str,
+    negative_prompt: str,
     conditioning_strength: float,
     model: str,
     seeds: Sequence[int],
@@ -148,7 +161,9 @@ def generate_ltx23_keyframes_seed_sweep(
         frames=frames,
         fps=fps,
         steps=steps,
+        phases=phases,
         solver=solver,
+        negative_prompt=negative_prompt,
         conditioning_strength=conditioning_strength,
         model=model,
     )
@@ -190,7 +205,9 @@ def generate_ltx23_keyframes_seed_sweep(
             "frames": frames,
             "fps": fps,
             "steps": steps,
+            "phases": phases,
             "solver": solver,
+            "negative_prompt": negative_prompt.strip(),
             "conditioning_strength": conditioning_strength,
             "model_type": model_type,
             "seed": seed,
@@ -248,7 +265,9 @@ def generate_ltx23_keyframes_seed_sweep(
                 frames=frames,
                 fps=fps,
                 steps=steps,
+                phases=phases,
                 solver=solver,
+                negative_prompt=negative_prompt.strip(),
                 conditioning_strength=conditioning_strength,
                 model=model,
                 model_type=model_type,
@@ -271,12 +290,16 @@ def _validate_request(
     frames: int,
     fps: int,
     steps: int,
+    phases: int,
     solver: str,
+    negative_prompt: str,
     conditioning_strength: float,
     model: str,
 ) -> tuple[Ltx23Keyframe, ...]:
     if not prompt.strip():
         raise Ltx23KeyframesError("video motion prompt must not be empty")
+    if not negative_prompt.strip():
+        raise Ltx23KeyframesError("video negative prompt must not be empty")
     if output.suffix.lower() != ".mp4":
         raise Ltx23KeyframesError("LTX-2.3 output must use the .mp4 extension")
     if frames < LTX23_MINIMUM_FRAMES or (frames - 1) % LTX23_FRAME_STEP != 0:
@@ -287,6 +310,8 @@ def _validate_request(
         raise Ltx23KeyframesError("frames per second must be positive")
     if steps <= 0:
         raise Ltx23KeyframesError("inference steps must be positive")
+    if phases not in LTX23_PHASES:
+        raise Ltx23KeyframesError(f"unsupported LTX-2.3 phase count: {phases}")
     if solver not in LTX23_SOLVERS:
         raise Ltx23KeyframesError(f"unsupported LTX-2.3 solver: {solver}")
     if model not in LTX23_MODEL_TYPES:
@@ -302,8 +327,8 @@ def _validate_request(
         raise Ltx23KeyframesError("resolution must use WIDTHxHEIGHT") from error
     if width <= 0 or height <= 0:
         raise Ltx23KeyframesError("resolution dimensions must be positive")
-    if len(keyframes) < 2:
-        raise Ltx23KeyframesError("LTX-2.3 multi-keyframe generation requires at least two keyframes")
+    if not keyframes:
+        raise Ltx23KeyframesError("LTX-2.3 requires at least one keyframe")
 
     normalized = tuple(
         sorted(
@@ -332,6 +357,8 @@ def _validate_request(
         raise Ltx23KeyframesError(
             f"keyframe position {invalid_position} is outside video frame range 0..{frames - 1}"
         )
+    if len(normalized) == 1 and normalized[0].frame != 0:
+        raise Ltx23KeyframesError("a single LTX-2.3 keyframe must target frame 0")
     missing = next((keyframe.image for keyframe in normalized if not keyframe.image.is_file()), None)
     if missing is not None:
         raise Ltx23KeyframesError(f"keyframe image does not exist: {missing}")

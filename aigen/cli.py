@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+from aigen.animegen_commands import add_animegen_command, run_animegen_command
 from aigen.brief_commands import add_brief_commands, run_brief_command
 from aigen.character_commands import add_character_commands, run_character_command
 from aigen.flux2_commands import add_flux2_klein_command, run_flux2_klein_command
@@ -39,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="AI character generation pipeline tooling",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_animegen_command(subparsers)
     add_brief_commands(subparsers)
     add_character_commands(subparsers)
     add_flux2_klein_command(subparsers)
@@ -71,6 +73,8 @@ def _run_command(args: argparse.Namespace) -> int:
 
 
 def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporter) -> int:
+    if args.command == "animegen-i2v":
+        return run_animegen_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "briefs":
         return run_brief_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "characters":

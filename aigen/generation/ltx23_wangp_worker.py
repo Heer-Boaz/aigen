@@ -20,16 +20,14 @@ RUNTIME_PROFILE = "2"
 PRELOAD_MIB = 4000
 ATTENTION_MODE = "sdpa"
 
-TWO_STAGE_SOLVER_SETTINGS = {
+SOLVER_SETTINGS = {
     "distilled_8_steps": {
-        "guidance_phases": 2,
         "guidance_scale": 1.0,
         "audio_guidance_scale": 1.0,
         "alt_guidance_scale": 1.0,
         "alt_scale": 0.0,
     },
     "res2s": {
-        "guidance_phases": 2,
         "guidance_scale": 3.0,
         "audio_guidance_scale": 7.0,
         "alt_guidance_scale": 3.0,
@@ -40,12 +38,11 @@ TWO_STAGE_SOLVER_SETTINGS = {
         "self_refiner_setting": 0,
     },
     "euler": {
-        "guidance_phases": 2,
         "guidance_scale": 3.0,
         "audio_guidance_scale": 7.0,
         "alt_guidance_scale": 3.0,
         "alt_scale": 0.7,
-        "perturbation_switch": 2,
+        "perturbation_switch": 0,
         "perturbation_layers": [28],
         "perturbation_start_perc": 0,
         "perturbation_end_perc": 100,
@@ -227,6 +224,7 @@ def _build_wangp_settings(
     settings.update(
         model_type=model_type,
         prompt=request["prompt"],
+        negative_prompt=request["negative_prompt"],
         resolution=request["resolution"],
         image_mode=0,
         image_prompt_type=image_prompt_type,
@@ -238,7 +236,7 @@ def _build_wangp_settings(
         input_video_strength=request["conditioning_strength"],
         remove_background_images_ref=0,
         prompt_enhancer="",
-        audio_prompt_type="A",
+        audio_prompt_type="",
         postprocess_audio="",
         temporal_upsampling="",
         spatial_upsampling="",
@@ -250,7 +248,8 @@ def _build_wangp_settings(
         repeat_generation=1,
         seed=request["seed"],
     )
-    settings.update(TWO_STAGE_SOLVER_SETTINGS.get(request["solver"], {}))
+    settings.update(SOLVER_SETTINGS.get(request["solver"], {}))
+    settings["guidance_phases"] = request["phases"]
     return settings
 
 

@@ -3,22 +3,33 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from aigen.generation.animegen_i2v import (
+    ANIMEGEN_DEFAULT_FPS,
+    ANIMEGEN_DEFAULT_FRAMES,
+    ANIMEGEN_DEFAULT_PRECISION,
+    ANIMEGEN_PRECISIONS,
+)
 from aigen.generation.hunyuanvideo15 import HUNYUANVIDEO15_STEPS
 from aigen.generation.ltx23_keyframes import (
     LTX23_DEFAULT_CONDITIONING_STRENGTH,
     LTX23_DEFAULT_FPS,
     LTX23_DEFAULT_MODEL,
+    LTX23_DEFAULT_NEGATIVE_PROMPT,
+    LTX23_DEFAULT_PHASES,
     LTX23_MODEL_TYPES,
+    LTX23_PHASES,
     LTX23_SOLVERS,
 )
 from aigen.image_tui_model import DropdownOption, FormField
 
 
 LTX23_BACKEND = "ltx23-keyframes"
+ANIMEGEN_BACKEND = "animegen-i2v"
 HUNYUANVIDEO15_BACKEND = "hunyuanvideo15-i2v"
-VIDEO_BACKENDS = (LTX23_BACKEND, HUNYUANVIDEO15_BACKEND)
+VIDEO_BACKENDS = (LTX23_BACKEND, ANIMEGEN_BACKEND, HUNYUANVIDEO15_BACKEND)
 VIDEO_BACKEND_LABELS = {
     LTX23_BACKEND: "LTX-2.3 keyframes",
+    ANIMEGEN_BACKEND: "AnimeGen-I2V (4-step Lightning)",
     HUNYUANVIDEO15_BACKEND: "HunyuanVideo-1.5 I2V",
 }
 
@@ -28,10 +39,16 @@ class VideoForm:
         self._fields = {
             "backend": FormField("backend", "Backend", LTX23_BACKEND),
             "prompt": FormField("prompt", "Prompt", ""),
+            "negative_prompt": FormField(
+                "negative_prompt",
+                "Negative prompt",
+                LTX23_DEFAULT_NEGATIVE_PROMPT,
+            ),
             "resolution": FormField("resolution", "Resolution", "640x640"),
             "frames": FormField("frames", "Frames", "121"),
             "fps": FormField("fps", "FPS", str(LTX23_DEFAULT_FPS)),
             "steps": FormField("steps", "Steps", "15"),
+            "phases": FormField("phases", "Phases", str(LTX23_DEFAULT_PHASES)),
             "solver": FormField("solver", "Solver", "res2s"),
             "conditioning_strength": FormField(
                 "conditioning_strength",
@@ -39,6 +56,11 @@ class VideoForm:
                 str(LTX23_DEFAULT_CONDITIONING_STRENGTH),
             ),
             "model": FormField("model", "Model", LTX23_DEFAULT_MODEL),
+            "precision": FormField(
+                "precision",
+                "Precision",
+                ANIMEGEN_DEFAULT_PRECISION,
+            ),
             "overlap_group_offloading": FormField(
                 "overlap_group_offloading",
                 "Overlap group offloading",
@@ -91,6 +113,16 @@ class VideoForm:
             return tuple(DropdownOption(model, model) for model in LTX23_MODEL_TYPES)
         if field.name == "solver" and backend == LTX23_BACKEND:
             return tuple(DropdownOption(solver, solver) for solver in sorted(LTX23_SOLVERS))
+        if field.name == "phases" and backend == LTX23_BACKEND:
+            return tuple(
+                DropdownOption(str(phases), str(phases))
+                for phases in sorted(LTX23_PHASES)
+            )
+        if field.name == "precision" and backend == ANIMEGEN_BACKEND:
+            return tuple(
+                DropdownOption(precision.upper(), precision)
+                for precision in ANIMEGEN_PRECISIONS
+            )
         if field.name == "steps" and backend == HUNYUANVIDEO15_BACKEND:
             return tuple(
                 DropdownOption(str(steps), str(steps))
@@ -104,10 +136,21 @@ class VideoForm:
         return None
 
     def add_slot(self, slot_kind: str) -> int:
-        if slot_kind not in {"keyframe", "seed"}:
+        if slot_kind not in {"image", "keyframe", "seed"}:
             raise ValueError(f"Unknown video slot kind: {slot_kind}")
-        if slot_kind == "keyframe" and self.field("backend").value != LTX23_BACKEND:
-            raise ValueError("HunyuanVideo-1.5 accepts one input image")
+        backend = self.field("backend").value
+        if slot_kind == "keyframe" and backend != LTX23_BACKEND:
+            raise ValueError("Only LTX-2.3 accepts positioned keyframes")
+        if slot_kind == "seed" and backend not in {LTX23_BACKEND, ANIMEGEN_BACKEND}:
+            raise ValueError("HunyuanVideo-1.5 accepts one seed")
+        if slot_kind == "image":
+            if backend != ANIMEGEN_BACKEND:
+                raise ValueError("Only AnimeGen-I2V accepts a second input image")
+            image_count = sum(kind == "image" for kind, _ in self._slots)
+            if image_count >= 2:
+                raise ValueError(
+                    "AnimeGen-I2V accepts a start frame and one optional end frame"
+                )
         slot_id = self.next_slot_id
         self.next_slot_id += 1
         if slot_kind == "keyframe":
@@ -117,7 +160,7 @@ class VideoForm:
                 "keyframe": "",
                 "frame": frame,
             }
-        else:
+        elif slot_kind == "seed":
             used = {
                 self._slot_values[(kind, slot_id)]["seed"]
                 for kind, slot_id in self._slots
@@ -127,9 +170,23 @@ class VideoForm:
             while str(seed) in used:
                 seed += 1
             self._slot_values[(slot_kind, slot_id)] = {"seed": str(seed)}
+        else:
+            self._slot_values[(slot_kind, slot_id)] = {"image": ""}
         self._slots.append((slot_kind, slot_id))
         self._rebuild_fields()
         return slot_id
+
+    def can_add_slot(self, slot_kind: str) -> bool:
+        backend = self.field("backend").value
+        if slot_kind in {"keyframe", "seed"}:
+            return backend == LTX23_BACKEND or (
+                slot_kind == "seed" and backend == ANIMEGEN_BACKEND
+            )
+        if slot_kind == "image":
+            return backend == ANIMEGEN_BACKEND and sum(
+                kind == "image" for kind, _ in self._slots
+            ) < 2
+        return False
 
     def remove_slot(self, slot_id: int) -> None:
         slot = next((slot for slot in self._slots if slot[1] == slot_id), None)
@@ -172,10 +229,21 @@ class VideoForm:
         if output_path.suffix.casefold() != ".mp4":
             raise ValueError("Video filename must use the .mp4 extension.")
         output = (Path(output_dir) / output_path).as_posix()
-        command = [sys.executable, "-m", "aigen.cli", backend, "--prompt", prompt, "--output", output]
+        command = [
+            sys.executable,
+            "-m",
+            "aigen.cli",
+            backend,
+            "--prompt",
+            prompt,
+            "--output",
+            output,
+        ]
         if backend == LTX23_BACKEND:
             command.extend(
                 (
+                    "--negative-prompt",
+                    self.field("negative_prompt").value.strip(),
                     "--resolution",
                     self.field("resolution").value.strip(),
                     "--frames",
@@ -184,6 +252,8 @@ class VideoForm:
                     self.field("fps").value.strip(),
                     "--steps",
                     self.field("steps").value.strip(),
+                    "--phases",
+                    self.field("phases").value.strip(),
                     "--solver",
                     self.field("solver").value.strip(),
                     "--conditioning-strength",
@@ -202,16 +272,53 @@ class VideoForm:
             for seed in seeds:
                 command.extend(("--seed", seed))
             keyframes = [
-                (field, next(item for item in self.fields if item.name == "frame" and item.slot_id == field.slot_id))
+                (
+                    field,
+                    next(
+                        item
+                        for item in self.fields
+                        if item.name == "frame" and item.slot_id == field.slot_id
+                    ),
+                )
                 for field in self.fields
                 if field.slot_kind == "keyframe" and field.name == "keyframe"
             ]
-            if len(keyframes) < 2:
-                raise ValueError("LTX-2.3 requires at least two keyframes.")
+            if not keyframes:
+                raise ValueError("LTX-2.3 requires at least one keyframe.")
             for image, frame in keyframes:
                 if not image.value.strip():
                     raise ValueError(f"{image.label} is required.")
                 command.extend(("--keyframe", image.value.strip(), frame.value.strip()))
+        elif backend == ANIMEGEN_BACKEND:
+            command.extend(
+                (
+                    "--frames",
+                    self.field("frames").value.strip(),
+                    "--fps",
+                    self.field("fps").value.strip(),
+                    "--precision",
+                    self.field("precision").value.strip(),
+                )
+            )
+            images = [
+                field.value.strip()
+                for field in self.fields
+                if field.slot_kind == "image" and field.value.strip()
+            ]
+            if not images:
+                raise ValueError("AnimeGen-I2V requires a start image.")
+            command.extend(("--image", images[0]))
+            if len(images) == 2:
+                command.extend(("--last-image", images[1]))
+            seeds = [
+                field.value.strip()
+                for field in self.fields
+                if field.slot_kind == "seed" and field.value.strip()
+            ]
+            if not seeds:
+                raise ValueError("At least one seed is required.")
+            for seed in seeds:
+                command.extend(("--seed", seed))
         else:
             image = next(
                 (field for field in self.fields if field.slot_kind == "image"),
@@ -243,9 +350,19 @@ class VideoForm:
             self._fields.update(
                 {
                     "resolution": FormField("resolution", "Resolution", "640x640"),
+                    "negative_prompt": FormField(
+                        "negative_prompt",
+                        "Negative prompt",
+                        LTX23_DEFAULT_NEGATIVE_PROMPT,
+                    ),
                     "frames": FormField("frames", "Frames", "121"),
                     "fps": FormField("fps", "FPS", str(LTX23_DEFAULT_FPS)),
                     "steps": FormField("steps", "Steps", "15"),
+                    "phases": FormField(
+                        "phases",
+                        "Phases",
+                        str(LTX23_DEFAULT_PHASES),
+                    ),
                     "solver": FormField("solver", "Solver", "res2s"),
                     "conditioning_strength": FormField(
                         "conditioning_strength",
@@ -268,6 +385,26 @@ class VideoForm:
                     ),
                 }
             )
+        elif backend == ANIMEGEN_BACKEND:
+            self._fields.update(
+                {
+                    "frames": FormField(
+                        "frames",
+                        "Frames",
+                        str(ANIMEGEN_DEFAULT_FRAMES),
+                    ),
+                    "fps": FormField(
+                        "fps",
+                        "FPS",
+                        str(ANIMEGEN_DEFAULT_FPS),
+                    ),
+                    "precision": FormField(
+                        "precision",
+                        "Precision",
+                        ANIMEGEN_DEFAULT_PRECISION,
+                    ),
+                }
+            )
         else:
             raise ValueError(f"Unknown video backend: {backend}")
 
@@ -277,30 +414,37 @@ class VideoForm:
         if backend == LTX23_BACKEND:
             fixed_names.extend(
                 (
+                    "negative_prompt",
                     "resolution",
                     "frames",
                     "fps",
                     "steps",
+                    "phases",
                     "solver",
                     "conditioning_strength",
                     "model",
                 )
             )
             slot_kinds = {"keyframe", "seed"}
+        elif backend == ANIMEGEN_BACKEND:
+            fixed_names.extend(("frames", "fps", "precision"))
+            slot_kinds = {"image", "seed"}
         else:
             fixed_names.extend(("frames", "steps", "overlap_group_offloading"))
             slot_kinds = {"image"}
         fixed_names.extend(("output_dir", "filename"))
         fields = [self._fields[name] for name in fixed_names]
         visible_slots = [slot for slot in self._slots if slot[0] in slot_kinds]
-        if backend == HUNYUANVIDEO15_BACKEND and not any(
+        if backend == HUNYUANVIDEO15_BACKEND:
+            visible_slots = visible_slots[:1]
+        if backend in {ANIMEGEN_BACKEND, HUNYUANVIDEO15_BACKEND} and not any(
             slot[0] == "image" for slot in self._slots
         ):
             slot_id = self.next_slot_id
             self.next_slot_id += 1
             self._slots.append(("image", slot_id))
             self._slot_values[("image", slot_id)] = {"image": ""}
-            visible_slots = [("image", slot_id)]
+            visible_slots = [slot for slot in self._slots if slot[0] in slot_kinds]
         for kind, slot_id in visible_slots:
             values = self._slot_values[(kind, slot_id)]
             if kind == "keyframe":
@@ -320,6 +464,7 @@ class VideoForm:
         self._renumber_slots()
 
     def _renumber_slots(self) -> None:
+        backend = self.field("backend").value
         counts: dict[str, int] = {}
         slot_ids: dict[str, list[int]] = {}
         for field in self.fields:
@@ -332,7 +477,10 @@ class VideoForm:
             if field.name == "frame":
                 field.label = f"Keyframe {number} frame"
             elif field.slot_kind == "image":
-                field.label = f"Input image {number}"
+                if backend == ANIMEGEN_BACKEND:
+                    field.label = "Start image" if number == 1 else "End image"
+                else:
+                    field.label = "Input image"
             elif field.slot_kind == "seed":
                 field.label = f"Seed {number}"
             else:

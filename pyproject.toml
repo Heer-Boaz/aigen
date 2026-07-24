@@ -31,6 +31,8 @@ generation = [
   "einops>=0.8",
   "fairscale>=0.4.13",
   "ftfy",
+  "imageio>=2.37",
+  "imageio-ffmpeg>=0.6",
   "Jinja2",
   "kernels==0.15.2",
   "opencv-python-headless>=4.10",

@@ -9,6 +9,8 @@ from aigen.generation.ltx23_keyframes import (
     LTX23_DEFAULT_CONDITIONING_STRENGTH,
     LTX23_DEFAULT_FPS,
     LTX23_DEFAULT_MODEL,
+    LTX23_DEFAULT_NEGATIVE_PROMPT,
+    LTX23_DEFAULT_PHASES,
     LTX23_MODEL_TYPES,
 )
 from aigen.progress import StatusReporter
@@ -17,9 +19,14 @@ from aigen.progress import StatusReporter
 def add_ltx23_command(subparsers: Any) -> None:
     command = subparsers.add_parser(
         "ltx23-keyframes",
-        help="Interpolate LTX-2.3 video between positioned keyframes",
+        help="Generate LTX-2.3 video from one or more positioned keyframes",
     )
     command.add_argument("--prompt", required=True, help="Motion and camera instruction")
+    command.add_argument(
+        "--negative-prompt",
+        default=LTX23_DEFAULT_NEGATIVE_PROMPT,
+        help="Artifacts to suppress during guided generation",
+    )
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--resolution", required=True, help="Output size as WIDTHxHEIGHT")
     command.add_argument("--frames", type=int, default=121)
@@ -34,6 +41,13 @@ def add_ltx23_command(subparsers: Any) -> None:
         type=int,
         default=15,
         help="Stage-1 inference steps (default: 15 for HQ Res2S)",
+    )
+    command.add_argument(
+        "--phases",
+        type=int,
+        choices=(1, 2),
+        default=LTX23_DEFAULT_PHASES,
+        help="Generation phases; one phase generates directly at the requested resolution",
     )
     command.add_argument(
         "--solver",
@@ -97,7 +111,9 @@ def run_ltx23_command(
                 frames=args.frames,
                 fps=args.fps,
                 steps=args.steps,
+                phases=args.phases,
                 solver=args.solver,
+                negative_prompt=args.negative_prompt,
                 conditioning_strength=args.conditioning_strength,
                 model=args.model,
                 seed=seeds[0],
@@ -113,7 +129,9 @@ def run_ltx23_command(
                 frames=args.frames,
                 fps=args.fps,
                 steps=args.steps,
+                phases=args.phases,
                 solver=args.solver,
+                negative_prompt=args.negative_prompt,
                 conditioning_strength=args.conditioning_strength,
                 model=args.model,
                 seeds=seeds,
@@ -121,7 +139,7 @@ def run_ltx23_command(
             )
             payload = {
                 "status": "completed",
-                "kind": "ltx-2.3-multi-keyframe-video-seed-sweep",
+                "kind": "ltx-2.3-keyframe-conditioned-video-seed-sweep",
                 "seeds": list(seeds),
                 "results": [result.to_json() for result in results],
             }

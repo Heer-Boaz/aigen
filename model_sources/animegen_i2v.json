@@ -1,0 +1,65 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "host_ram_gb": 96,
+    "runtime": "Official AnimeGen-I2V 4-step Lightning recipe with FP8 layer storage, BF16 compute and streamed group offloading"
+  },
+  "downloads": [
+    {
+      "name": "animegen-i2v-transformers",
+      "repo_id": "aidealab/AnimeGen-I2V",
+      "revision": "6278659f803518d72dd312a1f522e3b34b1afd72",
+      "local_path": "animegen/aidealab/AnimeGen-I2V",
+      "include": [
+        "LICENSE",
+        "README.md",
+        "transformer/**",
+        "transformer_2/**"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.mp4",
+        "*.png",
+        "high_noise.safetensors",
+        "low_noise.safetensors"
+      ]
+    },
+    {
+      "name": "wan2.2-i2v-a14b-runtime-components",
+      "repo_id": "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+      "revision": "596658fd9ca6b7b71d5057529bbf319ecbc61d74",
+      "local_path": "animegen/Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+      "include": [
+        "model_index.json",
+        "scheduler/**",
+        "text_encoder/**",
+        "tokenizer/**",
+        "vae/**"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md",
+        "assets/**",
+        "examples/**",
+        "transformer/**",
+        "transformer_2/**"
+      ]
+    },
+    {
+      "name": "wan2.2-i2v-a14b-lightning-loras",
+      "repo_id": "lightx2v/Wan2.2-Lightning",
+      "revision": "18bccf8884ec0a078eed79785eb4ef13ea16ce1e",
+      "local_path": "animegen/lightx2v/Wan2.2-Lightning",
+      "include": [
+        "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors",
+        "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.json",
+        "*.mp4"
+      ]
+    }
+  ]
+}
