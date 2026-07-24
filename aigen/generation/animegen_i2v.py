@@ -16,15 +16,49 @@ from aigen.runtime_profiles import MODELS_ROOT
 ANIMEGEN_MODEL_REVISION = "6278659f803518d72dd312a1f522e3b34b1afd72"
 ANIMEGEN_BASE_MODEL_REVISION = "596658fd9ca6b7b71d5057529bbf319ecbc61d74"
 ANIMEGEN_LIGHTNING_REVISION = "18bccf8884ec0a078eed79785eb4ef13ea16ce1e"
-ANIMEGEN_PROMPT_PREFIX = "Japanese anime style, "
 ANIMEGEN_DEFAULT_PRECISION = "fp8"
 ANIMEGEN_PRECISIONS = ("fp8", "bf16")
-ANIMEGEN_STEPS = 4
-ANIMEGEN_GUIDANCE = 1.0
-ANIMEGEN_FLOW_SHIFT = 3.0
 ANIMEGEN_DEFAULT_FRAMES = 81
 ANIMEGEN_DEFAULT_FPS = 16
 ANIMEGEN_MAX_AREA = 832 * 480
+
+
+@dataclass(frozen=True)
+class AnimeGenSamplingProfile:
+    steps: int
+    guidance: float
+    flow_shift: float
+    lightning: bool
+
+
+ANIMEGEN_SAMPLING_PROFILES = {
+    "lightning-4": AnimeGenSamplingProfile(
+        steps=4,
+        guidance=1.0,
+        flow_shift=3.0,
+        lightning=True,
+    ),
+    "lightning-8": AnimeGenSamplingProfile(
+        steps=8,
+        guidance=1.0,
+        flow_shift=3.0,
+        lightning=True,
+    ),
+    "lightning-16": AnimeGenSamplingProfile(
+        steps=16,
+        guidance=1.0,
+        flow_shift=3.0,
+        lightning=True,
+    ),
+    "full-40": AnimeGenSamplingProfile(
+        steps=40,
+        guidance=3.5,
+        flow_shift=5.0,
+        lightning=False,
+    ),
+}
+ANIMEGEN_SAMPLINGS = tuple(ANIMEGEN_SAMPLING_PROFILES)
+ANIMEGEN_DEFAULT_SAMPLING = "lightning-8"
 
 
 class AnimeGenI2VError(RuntimeError):
@@ -41,6 +75,11 @@ class AnimeGenI2VResult:
     height: int
     frames: int
     fps: int
+    sampling: str
+    steps: int
+    guidance: float
+    flow_shift: float
+    scheduler: str
     precision: str
     seed: int
     elapsed_seconds: float
@@ -49,7 +88,7 @@ class AnimeGenI2VResult:
     def to_json(self) -> dict[str, Any]:
         return {
             "status": "completed",
-            "kind": "animegen-i2v-lightning",
+            "kind": f"animegen-i2v-{self.sampling}",
             "output": self.output.as_posix(),
             "output_bytes": self.output.stat().st_size,
             "config": self.config.as_posix(),
@@ -59,9 +98,11 @@ class AnimeGenI2VResult:
             "height": self.height,
             "frames": self.frames,
             "fps": self.fps,
-            "steps": ANIMEGEN_STEPS,
-            "guidance": ANIMEGEN_GUIDANCE,
-            "flow_shift": ANIMEGEN_FLOW_SHIFT,
+            "sampling": self.sampling,
+            "steps": self.steps,
+            "guidance": self.guidance,
+            "flow_shift": self.flow_shift,
+            "scheduler": self.scheduler,
             "precision": self.precision,
             "seed": self.seed,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
@@ -77,6 +118,8 @@ def generate_animegen_i2v(
     output: Path,
     frames: int,
     fps: int,
+    sampling: str,
+    steps: int | None,
     precision: str,
     seed: int,
     progress: StatusReporter,
@@ -88,6 +131,8 @@ def generate_animegen_i2v(
         output=output,
         frames=frames,
         fps=fps,
+        sampling=sampling,
+        steps=steps,
         precision=precision,
         seeds=(seed,),
         progress=progress,
@@ -102,6 +147,8 @@ def generate_animegen_i2v_seed_sweep(
     output: Path,
     frames: int,
     fps: int,
+    sampling: str,
+    steps: int | None,
     precision: str,
     seeds: Sequence[int],
     progress: StatusReporter,
@@ -113,9 +160,13 @@ def generate_animegen_i2v_seed_sweep(
         output=output,
         frames=frames,
         fps=fps,
+        sampling=sampling,
+        steps=steps,
         precision=precision,
         seeds=seeds,
     )
+    sampling_profile = ANIMEGEN_SAMPLING_PROFILES[sampling]
+    effective_steps = sampling_profile.steps if steps is None else steps
     outputs = tuple(
         output
         if len(normalized_seeds) == 1
@@ -136,7 +187,12 @@ def generate_animegen_i2v_seed_sweep(
     animegen_model = _animegen_model_root()
     base_model = _base_model_root()
     lightning_model = _lightning_model_root()
-    _validate_models(animegen_model, base_model, lightning_model)
+    _validate_models(
+        animegen_model,
+        base_model,
+        lightning_model,
+        lightning_required=sampling_profile.lightning,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
 
     progress.phase(f"load AnimeGen-I2V {precision}")
@@ -144,6 +200,7 @@ def generate_animegen_i2v_seed_sweep(
         animegen_model=animegen_model,
         base_model=base_model,
         lightning_model=lightning_model,
+        sampling=sampling_profile,
         precision=precision,
         progress=progress,
     )
@@ -170,23 +227,27 @@ def generate_animegen_i2v_seed_sweep(
         strict=True,
     ):
         torch.cuda.reset_peak_memory_stats()
-        progress.begin(ANIMEGEN_STEPS, f"AnimeGen-I2V seed {seed}")
+        progress.begin(
+            effective_steps,
+            f"AnimeGen-I2V {sampling} seed {seed}",
+        )
         started = time.monotonic()
-        effective_prompt = f"{ANIMEGEN_PROMPT_PREFIX}{prompt.strip()}"
+        generation_prompt = prompt.strip()
         frames_output = pipeline(
             image=start,
             last_image=end,
-            prompt=effective_prompt,
+            prompt=generation_prompt,
             height=height,
             width=width,
             num_frames=frames,
-            guidance_scale=ANIMEGEN_GUIDANCE,
-            num_inference_steps=ANIMEGEN_STEPS,
+            guidance_scale=sampling_profile.guidance,
+            guidance_scale_2=sampling_profile.guidance,
+            num_inference_steps=effective_steps,
             generator=torch.Generator("cuda").manual_seed(seed),
             callback_on_step_end=_denoise_progress_callback(
                 progress,
                 seed=seed,
-                steps=ANIMEGEN_STEPS,
+                steps=effective_steps,
             ),
         ).frames[0]
         progress.phase(f"encode AnimeGen-I2V seed {seed}")
@@ -194,7 +255,7 @@ def generate_animegen_i2v_seed_sweep(
         elapsed_seconds = time.monotonic() - started
         memory = cuda_memory_stats(torch, "cuda")
         config_payload = {
-            "kind": "animegen-i2v-lightning-config",
+            "kind": f"animegen-i2v-{sampling}-config",
             "model": {
                 "repo_id": "aidealab/AnimeGen-I2V",
                 "revision": ANIMEGEN_MODEL_REVISION,
@@ -205,23 +266,18 @@ def generate_animegen_i2v_seed_sweep(
                 "revision": ANIMEGEN_BASE_MODEL_REVISION,
                 "path": base_model.as_posix(),
             },
-            "lightning": {
-                "repo_id": "lightx2v/Wan2.2-Lightning",
-                "revision": ANIMEGEN_LIGHTNING_REVISION,
-                "path": lightning_model.as_posix(),
-            },
             "request": {
-                "prompt": prompt.strip(),
-                "effective_prompt": effective_prompt,
+                "prompt": generation_prompt,
                 "image": image.as_posix(),
                 "last_image": last_image.as_posix() if last_image is not None else None,
                 "width": width,
                 "height": height,
                 "frames": frames,
                 "fps": fps,
-                "steps": ANIMEGEN_STEPS,
-                "guidance": ANIMEGEN_GUIDANCE,
-                "flow_shift": ANIMEGEN_FLOW_SHIFT,
+                "sampling": sampling,
+                "steps": effective_steps,
+                "guidance": sampling_profile.guidance,
+                "flow_shift": sampling_profile.flow_shift,
                 "precision": precision,
                 "seed": seed,
             },
@@ -229,11 +285,21 @@ def generate_animegen_i2v_seed_sweep(
                 "scheduler": type(pipeline.scheduler).__name__,
                 "storage_dtype": "float8_e4m3fn" if precision == "fp8" else "bfloat16",
                 "compute_dtype": "bfloat16",
-                "offload": "leaf-level group offload with CUDA stream prefetch",
+                "offload": (
+                    "leaf-level group offload with streamed on-demand pinning"
+                    if precision == "bf16"
+                    else "leaf-level group offload with CUDA stream prefetch"
+                ),
                 "cuda_memory": memory,
             },
             "elapsed_seconds": round(elapsed_seconds, 3),
         }
+        if sampling_profile.lightning:
+            config_payload["lightning"] = {
+                "repo_id": "lightx2v/Wan2.2-Lightning",
+                "revision": ANIMEGEN_LIGHTNING_REVISION,
+                "path": lightning_model.as_posix(),
+            }
         config.write_text(
             json.dumps(config_payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -248,6 +314,11 @@ def generate_animegen_i2v_seed_sweep(
                 height=height,
                 frames=frames,
                 fps=fps,
+                sampling=sampling,
+                steps=effective_steps,
+                guidance=sampling_profile.guidance,
+                flow_shift=sampling_profile.flow_shift,
+                scheduler=type(pipeline.scheduler).__name__,
                 precision=precision,
                 seed=seed,
                 elapsed_seconds=elapsed_seconds,
@@ -264,6 +335,7 @@ def _load_pipeline(
     animegen_model: Path,
     base_model: Path,
     lightning_model: Path,
+    sampling: AnimeGenSamplingProfile,
     precision: str,
     progress: StatusReporter,
 ) -> tuple[Any, Any, Any, Any]:
@@ -272,6 +344,7 @@ def _load_pipeline(
         from diffusers import (
             AutoencoderKLWan,
             FlowMatchEulerDiscreteScheduler,
+            UniPCMultistepScheduler,
             WanImageToVideoPipeline,
             WanTransformer3DModel,
         )
@@ -303,36 +376,47 @@ def _load_pipeline(
         torch_dtype=torch.float32,
         local_files_only=True,
     )
+    scheduler = (
+        FlowMatchEulerDiscreteScheduler(shift=sampling.flow_shift)
+        if sampling.lightning
+        else UniPCMultistepScheduler.from_pretrained(
+            base_model,
+            subfolder="scheduler",
+            flow_shift=sampling.flow_shift,
+            local_files_only=True,
+        )
+    )
     pipeline = WanImageToVideoPipeline.from_pretrained(
         base_model,
         transformer=transformer_high,
         transformer_2=transformer_low,
-        scheduler=FlowMatchEulerDiscreteScheduler(shift=ANIMEGEN_FLOW_SHIFT),
+        scheduler=scheduler,
         vae=vae,
         torch_dtype=torch.bfloat16,
         local_files_only=True,
     )
-    lightning = (
-        lightning_model
-        / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
-    )
-    pipeline.load_lora_weights(
-        lightning,
-        weight_name="high_noise_model.safetensors",
-        adapter_name="high",
-        local_files_only=True,
-    )
-    pipeline.load_lora_weights(
-        lightning,
-        weight_name="low_noise_model.safetensors",
-        adapter_name="low",
-        load_into_transformer_2=True,
-        local_files_only=True,
-    )
-    pipeline.set_adapters(
-        ["high", "low"],
-        adapter_weights=[1.0, 1.0],
-    )
+    if sampling.lightning:
+        lightning = (
+            lightning_model
+            / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1"
+        )
+        pipeline.load_lora_weights(
+            lightning,
+            weight_name="high_noise_model.safetensors",
+            adapter_name="high",
+            local_files_only=True,
+        )
+        pipeline.load_lora_weights(
+            lightning,
+            weight_name="low_noise_model.safetensors",
+            adapter_name="low",
+            load_into_transformer_2=True,
+            local_files_only=True,
+        )
+        pipeline.set_adapters(
+            ["high", "low"],
+            adapter_weights=[1.0, 1.0],
+        )
     if precision == "fp8":
         transformer_high.enable_layerwise_casting(
             storage_dtype=torch.float8_e4m3fn,
@@ -343,13 +427,14 @@ def _load_pipeline(
             compute_dtype=torch.bfloat16,
         )
     pipeline.set_progress_bar_config(disable=True)
+    progress.phase("configure streamed AnimeGen-I2V group offload")
     pipeline.enable_group_offload(
         onload_device=torch.device("cuda"),
         offload_device=torch.device("cpu"),
         offload_type="leaf_level",
         non_blocking=True,
         use_stream=True,
-        low_cpu_mem_usage=False,
+        low_cpu_mem_usage=precision == "bf16",
     )
     progress.step("configured streamed AnimeGen-I2V group offload")
     return torch, pipeline, export_to_video, load_image
@@ -394,6 +479,8 @@ def _validate_request(
     output: Path,
     frames: int,
     fps: int,
+    sampling: str,
+    steps: int | None,
     precision: str,
     seeds: Sequence[int],
 ) -> tuple[Path, Path | None, Path, tuple[int, ...]]:
@@ -412,6 +499,10 @@ def _validate_request(
         raise AnimeGenI2VError("AnimeGen-I2V frames must be 5 or more in increments of 4")
     if fps <= 0:
         raise AnimeGenI2VError("frames per second must be positive")
+    if sampling not in ANIMEGEN_SAMPLING_PROFILES:
+        raise AnimeGenI2VError(f"unsupported AnimeGen-I2V sampling profile: {sampling}")
+    if steps is not None and steps <= 0:
+        raise AnimeGenI2VError("AnimeGen-I2V steps must be positive")
     if precision not in ANIMEGEN_PRECISIONS:
         raise AnimeGenI2VError(f"unsupported AnimeGen-I2V precision: {precision}")
     normalized_seeds = tuple(seeds)
@@ -438,8 +529,10 @@ def _validate_models(
     animegen_model: Path,
     base_model: Path,
     lightning_model: Path,
+    *,
+    lightning_required: bool,
 ) -> None:
-    required = (
+    required = [
         animegen_model / "transformer/config.json",
         animegen_model / "transformer/diffusion_pytorch_model.safetensors.index.json",
         animegen_model / "transformer_2/config.json",
@@ -449,11 +542,16 @@ def _validate_models(
         base_model / "text_encoder/model.safetensors.index.json",
         base_model / "tokenizer/tokenizer.json",
         base_model / "vae/diffusion_pytorch_model.safetensors",
-        lightning_model
-        / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors",
-        lightning_model
-        / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors",
-    )
+    ]
+    if lightning_required:
+        required.extend(
+            (
+                lightning_model
+                / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors",
+                lightning_model
+                / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors",
+            )
+        )
     missing = next((path for path in required if not path.is_file()), None)
     if missing is not None:
         raise AnimeGenI2VError(

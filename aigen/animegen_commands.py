@@ -9,7 +9,9 @@ from aigen.generation.animegen_i2v import (
     ANIMEGEN_DEFAULT_FPS,
     ANIMEGEN_DEFAULT_FRAMES,
     ANIMEGEN_DEFAULT_PRECISION,
+    ANIMEGEN_DEFAULT_SAMPLING,
     ANIMEGEN_PRECISIONS,
+    ANIMEGEN_SAMPLINGS,
 )
 from aigen.progress import StatusReporter
 
@@ -25,6 +27,17 @@ def add_animegen_command(subparsers: Any) -> None:
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--frames", type=int, default=ANIMEGEN_DEFAULT_FRAMES)
     command.add_argument("--fps", type=int, default=ANIMEGEN_DEFAULT_FPS)
+    command.add_argument(
+        "--sampling",
+        choices=ANIMEGEN_SAMPLINGS,
+        default=ANIMEGEN_DEFAULT_SAMPLING,
+        help="Official 4-step Lightning, experimental 8/16-step Lightning, or full 40-step Wan sampling",
+    )
+    command.add_argument(
+        "--steps",
+        type=int,
+        help="Override the sampling profile's inference-step count",
+    )
     command.add_argument(
         "--precision",
         choices=ANIMEGEN_PRECISIONS,
@@ -62,6 +75,8 @@ def run_animegen_command(
                 output=args.output,
                 frames=args.frames,
                 fps=args.fps,
+                sampling=args.sampling,
+                steps=args.steps,
                 precision=args.precision,
                 seed=seeds[0],
                 progress=progress,
@@ -75,13 +90,16 @@ def run_animegen_command(
                 output=args.output,
                 frames=args.frames,
                 fps=args.fps,
+                sampling=args.sampling,
+                steps=args.steps,
                 precision=args.precision,
                 seeds=seeds,
                 progress=progress,
             )
             payload = {
                 "status": "completed",
-                "kind": "animegen-i2v-lightning-seed-sweep",
+                "kind": f"animegen-i2v-{args.sampling}-seed-sweep",
+                "sampling": args.sampling,
                 "seeds": list(seeds),
                 "results": [result.to_json() for result in results],
             }

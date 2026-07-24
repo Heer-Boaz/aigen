@@ -28,12 +28,16 @@ from textual.widgets import (
 )
 
 from aigen.character_reference_models import CharacterReferenceError
-from aigen.image_postprocess_tui_model import ImagePostprocessForm
+from aigen.generation.video_postprocess import (
+    VideoPostprocessError,
+    create_video_contact_sheet,
+)
 from aigen.image_tui_model import (
     DropdownOption,
     FormField,
     ImageEditForm,
 )
+from aigen.postprocess_tui_model import PostprocessForm
 from aigen.progress import JSON_PROGRESS_PREFIX, format_duration
 from aigen.runtime_profiles import (
     PROJECT_ROOT,
@@ -47,7 +51,7 @@ from aigen.sam_tui_model import SamEditForm
 from aigen.video_tui_model import VideoForm
 
 
-FormModel = ImageEditForm | ImagePostprocessForm | VideoForm | SamEditForm
+FormModel = ImageEditForm | PostprocessForm | VideoForm | SamEditForm
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,7 @@ CONFIG_ROOT = (
 )
 STATE_PATH = CONFIG_ROOT / "aigen" / "image-tui.json"
 IMAGE_EXTENSIONS = frozenset({".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"})
+VIDEO_EXTENSIONS = frozenset({".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"})
 CONFIG_EXTENSIONS = frozenset({".json"})
 SAM_SELECTION_EXTENSIONS = frozenset({".json"})
 
@@ -117,7 +122,13 @@ class FieldRow(Horizontal):
         yield Label(self.field.label, classes="field-label")
         options = self.form.dropdown_options(self.field)
         if options is None:
-            if self.field.slot_kind in {"image", "keyframe", "reference_pack", "config"} or self.field.name == "output_dir":
+            if self.field.slot_kind in {
+                "image",
+                "keyframe",
+                "reference_pack",
+                "config",
+                "video",
+            } or self.field.name == "output_dir":
                 yield PathInput(self.form, self.field)
             else:
                 yield Input(self.field.value, compact=True, classes="field-editor")
@@ -317,14 +328,26 @@ class GenerationUpdated(Message):
 
 
 class GenerationFinished(Message):
-    def __init__(self, output_dir: str) -> None:
+    def __init__(
+        self,
+        output_dir: str,
+        contact_sheets: tuple[Path, ...] = (),
+    ) -> None:
         super().__init__()
         self.output_dir = output_dir
+        self.contact_sheets = contact_sheets
 
 
 class GenerationFailed(Message):
     def __init__(self, error: str) -> None:
         super().__init__()
+        self.error = error
+
+
+class ContactSheetFailed(Message):
+    def __init__(self, output_dir: str, error: str) -> None:
+        super().__init__()
+        self.output_dir = output_dir
         self.error = error
 
 
@@ -551,7 +574,7 @@ class ImageGenerationApp(App[None]):
         self.form = ImageEditForm()
         self.video_form = VideoForm()
         self.sam_form = SamEditForm()
-        self.postprocess_form = ImagePostprocessForm()
+        self.postprocess_form = PostprocessForm()
         self.configuration_path: Path | None = None
         self.sam_selection_path: Path | None = None
         self.sam_prompt_dialog: SAMPromptDialog | None = None
@@ -890,7 +913,13 @@ class ImageGenerationApp(App[None]):
             return
         self._select_field(FieldSelection(row.form, row.field))
         row.form.set_value(row.field, value)
-        if row.field.name in {"operation", "model", "prompt_mode", "engine"}:
+        if row.field.name in {
+            "operation",
+            "model",
+            "sampling",
+            "prompt_mode",
+            "engine",
+        }:
             await self._rebuild_form(row.form)
 
     @on(PathInput.BrowseRequested)
@@ -1070,6 +1099,11 @@ class ImageGenerationApp(App[None]):
             title = field.label
             select_label = "Select image"
             extensions = IMAGE_EXTENSIONS
+        elif field.slot_kind == "video":
+            directories_only = False
+            title = field.label
+            select_label = "Select video"
+            extensions = VIDEO_EXTENSIONS
         elif field.slot_kind == "reference_pack":
             directories_only = False
             title = field.label
@@ -1305,7 +1339,7 @@ class ImageGenerationApp(App[None]):
             self._set_status("Video generation is already running.")
             return
         try:
-            command, output_dir = self.video_form.generation_command()
+            command, output_dir, outputs = self.video_form.generation_command()
         except ValueError as error:
             self._show_error("Cannot start video generation", str(error))
             return
@@ -1315,6 +1349,7 @@ class ImageGenerationApp(App[None]):
             action_button_id="video-action",
             idle_label="Generate",
             error_title="Cannot start video generation",
+            contact_sheet_videos=outputs,
         )
 
     def _start_sam(self) -> None:
@@ -1342,6 +1377,7 @@ class ImageGenerationApp(App[None]):
         action_button_id: str,
         idle_label: str,
         error_title: str,
+        contact_sheet_videos: tuple[Path, ...] = (),
     ) -> None:
         environment = os.environ.copy()
         environment["AIGEN_PROGRESS"] = "json"
@@ -1375,13 +1411,22 @@ class ImageGenerationApp(App[None]):
         ):
             self.query_one(f"#{button_id}", Button).disabled = button_id != action_button_id
         self.run_worker(
-            lambda: self._watch_generation(process, output_dir),
+            lambda: self._watch_generation(
+                process,
+                output_dir,
+                contact_sheet_videos,
+            ),
             thread=True,
             name="image-generation",
             exit_on_error=False,
         )
 
-    def _watch_generation(self, process: subprocess.Popen[str], output_dir: str) -> None:
+    def _watch_generation(
+        self,
+        process: subprocess.Popen[str],
+        output_dir: str,
+        contact_sheet_videos: tuple[Path, ...],
+    ) -> None:
         assert process.stdout is not None
         output_lines: deque[str] = deque(maxlen=200)
         for raw_line in process.stdout:
@@ -1410,7 +1455,15 @@ class ImageGenerationApp(App[None]):
             )
         returncode = process.wait()
         if returncode == 0:
-            self.post_message(GenerationFinished(output_dir))
+            try:
+                contact_sheets = tuple(
+                    create_video_contact_sheet(video)
+                    for video in contact_sheet_videos
+                )
+            except VideoPostprocessError as error:
+                self.post_message(ContactSheetFailed(output_dir, str(error)))
+                return
+            self.post_message(GenerationFinished(output_dir, contact_sheets))
         else:
             self.post_message(
                 GenerationFailed(self._error_message("\n".join(output_lines), returncode))
@@ -1431,7 +1484,22 @@ class ImageGenerationApp(App[None]):
     @on(GenerationFinished)
     def generation_finished(self, event: GenerationFinished) -> None:
         self._generation_stopped()
-        self._set_status(f"Output: {event.output_dir}")
+        status = f"Output: {event.output_dir}"
+        if event.contact_sheets:
+            sheets = ", ".join(
+                display_project_path(path)
+                for path in event.contact_sheets
+            )
+            status += f" | Contact sheet: {sheets}"
+        self._set_status(status)
+
+    @on(ContactSheetFailed)
+    def contact_sheet_failed(self, event: ContactSheetFailed) -> None:
+        self._generation_stopped()
+        self._show_error(
+            "Contact sheet failed",
+            f"Video output: {event.output_dir}\n{event.error}",
+        )
 
     @on(GenerationFailed)
     def generation_failed(self, event: GenerationFailed) -> None:

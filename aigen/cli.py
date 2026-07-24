@@ -28,6 +28,10 @@ from aigen.pixel_art_fixer_commands import (
 )
 from aigen.sam_commands import add_sam_command, run_sam_command
 from aigen.progress import StatusReporter, open_cli_progress
+from aigen.video_postprocess_commands import (
+    add_video_postprocess_commands,
+    run_video_postprocess_command,
+)
 from aigen.wu_pixelization_commands import (
     add_wu_pixelization_command,
     run_wu_pixelization_command,
@@ -54,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_pixel_art_command(subparsers)
     add_pixel_art_fixer_command(subparsers)
     add_sam_command(subparsers)
+    add_video_postprocess_commands(subparsers)
     add_wu_pixelization_command(subparsers)
     return parser
 
@@ -118,6 +123,13 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         )
     if args.command == "sam-segment":
         return run_sam_command(args, sys.stdout, sys.stderr, progress=progress)
+    if args.command == "video-postprocess":
+        return run_video_postprocess_command(
+            args,
+            sys.stdout,
+            sys.stderr,
+            progress=progress,
+        )
     raise RuntimeError("unsupported command")
 
 

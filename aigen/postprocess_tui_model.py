@@ -16,7 +16,17 @@ from aigen.image_tui_model import DropdownOption, FormField
 
 UPSCALE_OPERATION = "upscale"
 DOWNSCALE_OPERATION = "downscale"
-POSTPROCESS_OPERATIONS = (UPSCALE_OPERATION, DOWNSCALE_OPERATION)
+EXTRACT_VIDEO_FRAMES_OPERATION = "extract-video-frames"
+POSTPROCESS_OPERATIONS = (
+    UPSCALE_OPERATION,
+    DOWNSCALE_OPERATION,
+    EXTRACT_VIDEO_FRAMES_OPERATION,
+)
+POSTPROCESS_OPERATION_LABELS = {
+    UPSCALE_OPERATION: "Upscale image",
+    DOWNSCALE_OPERATION: "Downscale image",
+    EXTRACT_VIDEO_FRAMES_OPERATION: "Extract video frames",
+}
 
 VOSR_MODEL = VOSR_POSTPROCESS_NAME
 WU_PIXELIZATION_MODEL = "wu-pixelization"
@@ -36,7 +46,7 @@ POSTPROCESS_MODEL_LABELS = {
 }
 
 
-class ImagePostprocessForm:
+class PostprocessForm:
     def __init__(self) -> None:
         self.slot_move_states: dict[int, tuple[bool, bool]] = {}
         self._fields = {
@@ -63,19 +73,31 @@ class ImagePostprocessForm:
         self.fields: list[FormField] = []
         self._rebuild_fields()
 
+    def field(self, name: str) -> FormField:
+        return self._fields[name]
+
     def set_value(self, field: FormField, value: str) -> None:
         field.value = value
         if field.name == "operation":
-            self._fields["model"].value = (
-                VOSR_MODEL if value == UPSCALE_OPERATION else WU_PIXELIZATION_MODEL
-            )
+            input_field = self._fields["input"]
+            if value == EXTRACT_VIDEO_FRAMES_OPERATION:
+                input_field.label = "Input video"
+                input_field.slot_kind = "video"
+            else:
+                input_field.label = "Input image"
+                input_field.slot_kind = "image"
+                self._fields["model"].value = (
+                    VOSR_MODEL
+                    if value == UPSCALE_OPERATION
+                    else WU_PIXELIZATION_MODEL
+                )
         if field.name in {"operation", "model"}:
             self._rebuild_fields()
 
     def dropdown_options(self, field: FormField) -> tuple[DropdownOption, ...] | None:
         if field.name == "operation":
             return tuple(
-                DropdownOption(operation.title(), operation)
+                DropdownOption(POSTPROCESS_OPERATION_LABELS[operation], operation)
                 for operation in POSTPROCESS_OPERATIONS
             )
         if field.name == "model":
@@ -104,9 +126,33 @@ class ImagePostprocessForm:
         input_path = self._fields["input"].value.strip()
         output_dir = self._fields["output_dir"].value.strip()
         if not input_path:
-            raise ValueError("Input image is required.")
+            media_type = (
+                "video"
+                if self._fields["operation"].value == EXTRACT_VIDEO_FRAMES_OPERATION
+                else "image"
+            )
+            raise ValueError(f"Input {media_type} is required.")
         if not output_dir:
             raise ValueError("Output directory is required.")
+
+        if self._fields["operation"].value == EXTRACT_VIDEO_FRAMES_OPERATION:
+            frames_dir = (
+                Path(output_dir) / f"{Path(input_path).stem}-frames"
+            ).as_posix()
+            return (
+                [
+                    sys.executable,
+                    "-m",
+                    "aigen.cli",
+                    "video-postprocess",
+                    "extract-frames",
+                    "--input",
+                    input_path,
+                    "--output-dir",
+                    frames_dir,
+                ],
+                frames_dir,
+            )
 
         model = self._fields["model"].value
         output = (Path(output_dir) / f"{Path(input_path).stem}-{model}.png").as_posix()
@@ -194,6 +240,12 @@ class ImagePostprocessForm:
         return command, output_dir
 
     def _rebuild_fields(self) -> None:
+        if self._fields["operation"].value == EXTRACT_VIDEO_FRAMES_OPERATION:
+            self.fields = [
+                self._fields[name]
+                for name in ("operation", "input", "output_dir")
+            ]
+            return
         model = self._fields["model"].value
         names = ["operation", "model", "input", "output_dir"]
         if model in UPSCALE_MODELS:

@@ -7,7 +7,10 @@ from aigen.generation.animegen_i2v import (
     ANIMEGEN_DEFAULT_FPS,
     ANIMEGEN_DEFAULT_FRAMES,
     ANIMEGEN_DEFAULT_PRECISION,
+    ANIMEGEN_DEFAULT_SAMPLING,
     ANIMEGEN_PRECISIONS,
+    ANIMEGEN_SAMPLING_PROFILES,
+    ANIMEGEN_SAMPLINGS,
 )
 from aigen.generation.hunyuanvideo15 import HUNYUANVIDEO15_STEPS
 from aigen.generation.ltx23_keyframes import (
@@ -29,7 +32,7 @@ HUNYUANVIDEO15_BACKEND = "hunyuanvideo15-i2v"
 VIDEO_BACKENDS = (LTX23_BACKEND, ANIMEGEN_BACKEND, HUNYUANVIDEO15_BACKEND)
 VIDEO_BACKEND_LABELS = {
     LTX23_BACKEND: "LTX-2.3 keyframes",
-    ANIMEGEN_BACKEND: "AnimeGen-I2V (4-step Lightning)",
+    ANIMEGEN_BACKEND: "AnimeGen-I2V",
     HUNYUANVIDEO15_BACKEND: "HunyuanVideo-1.5 I2V",
 }
 
@@ -60,6 +63,11 @@ class VideoForm:
                 "precision",
                 "Precision",
                 ANIMEGEN_DEFAULT_PRECISION,
+            ),
+            "sampling": FormField(
+                "sampling",
+                "Sampling",
+                ANIMEGEN_DEFAULT_SAMPLING,
             ),
             "overlap_group_offloading": FormField(
                 "overlap_group_offloading",
@@ -101,6 +109,10 @@ class VideoForm:
         if field.name == "backend":
             self._set_backend_defaults(value)
             self._rebuild_fields()
+        elif field.name == "sampling":
+            self._fields["steps"].value = str(
+                ANIMEGEN_SAMPLING_PROFILES[value].steps
+            )
 
     def dropdown_options(self, field: FormField) -> tuple[DropdownOption, ...] | None:
         if field.name == "backend":
@@ -122,6 +134,11 @@ class VideoForm:
             return tuple(
                 DropdownOption(precision.upper(), precision)
                 for precision in ANIMEGEN_PRECISIONS
+            )
+        if field.name == "sampling" and backend == ANIMEGEN_BACKEND:
+            return tuple(
+                DropdownOption(sampling, sampling)
+                for sampling in ANIMEGEN_SAMPLINGS
             )
         if field.name == "steps" and backend == HUNYUANVIDEO15_BACKEND:
             return tuple(
@@ -210,7 +227,7 @@ class VideoForm:
         )
         self._rebuild_fields()
 
-    def generation_command(self) -> tuple[list[str], str]:
+    def generation_command(self) -> tuple[list[str], str, tuple[Path, ...]]:
         backend = self.field("backend").value
         prompt = self.field("prompt").value.strip()
         output_dir = self.field("output_dir").value.strip()
@@ -239,6 +256,7 @@ class VideoForm:
             "--output",
             output,
         ]
+        seed_values: list[str] = []
         if backend == LTX23_BACKEND:
             command.extend(
                 (
@@ -262,14 +280,14 @@ class VideoForm:
                     self.field("model").value.strip(),
                 )
             )
-            seeds = [
+            seed_values = [
                 field.value.strip()
                 for field in self.fields
                 if field.slot_kind == "seed" and field.value.strip()
             ]
-            if not seeds:
+            if not seed_values:
                 raise ValueError("At least one seed is required.")
-            for seed in seeds:
+            for seed in seed_values:
                 command.extend(("--seed", seed))
             keyframes = [
                 (
@@ -296,6 +314,10 @@ class VideoForm:
                     self.field("frames").value.strip(),
                     "--fps",
                     self.field("fps").value.strip(),
+                    "--sampling",
+                    self.field("sampling").value.strip(),
+                    "--steps",
+                    self.field("steps").value.strip(),
                     "--precision",
                     self.field("precision").value.strip(),
                 )
@@ -310,14 +332,14 @@ class VideoForm:
             command.extend(("--image", images[0]))
             if len(images) == 2:
                 command.extend(("--last-image", images[1]))
-            seeds = [
+            seed_values = [
                 field.value.strip()
                 for field in self.fields
                 if field.slot_kind == "seed" and field.value.strip()
             ]
-            if not seeds:
+            if not seed_values:
                 raise ValueError("At least one seed is required.")
-            for seed in seeds:
+            for seed in seed_values:
                 command.extend(("--seed", seed))
         else:
             image = next(
@@ -343,7 +365,18 @@ class VideoForm:
                 if self.field("overlap_group_offloading").value == "true"
                 else "--no-overlap-group-offloading"
             )
-        return command, output_dir
+        base_output = Path(output)
+        outputs = (
+            tuple(
+                base_output.with_name(
+                    f"{base_output.stem}-seed{seed}{base_output.suffix}"
+                )
+                for seed in seed_values
+            )
+            if len(seed_values) > 1
+            else (base_output,)
+        )
+        return command, output_dir, outputs
 
     def _set_backend_defaults(self, backend: str) -> None:
         if backend == LTX23_BACKEND:
@@ -403,6 +436,20 @@ class VideoForm:
                         "Precision",
                         ANIMEGEN_DEFAULT_PRECISION,
                     ),
+                    "sampling": FormField(
+                        "sampling",
+                        "Sampling",
+                        ANIMEGEN_DEFAULT_SAMPLING,
+                    ),
+                    "steps": FormField(
+                        "steps",
+                        "Steps",
+                        str(
+                            ANIMEGEN_SAMPLING_PROFILES[
+                                ANIMEGEN_DEFAULT_SAMPLING
+                            ].steps
+                        ),
+                    ),
                 }
             )
         else:
@@ -427,7 +474,7 @@ class VideoForm:
             )
             slot_kinds = {"keyframe", "seed"}
         elif backend == ANIMEGEN_BACKEND:
-            fixed_names.extend(("frames", "fps", "precision"))
+            fixed_names.extend(("frames", "fps", "sampling", "steps", "precision"))
             slot_kinds = {"image", "seed"}
         else:
             fixed_names.extend(("frames", "steps", "overlap_group_offloading"))
