@@ -99,6 +99,8 @@ class ImageEditBackendSettings:
     samplers: tuple[str, ...]
     scheduler: str
     schedulers: tuple[str, ...]
+    strength: float | None = None
+    supports_strength: bool = False
     supports_empty_prompt: bool = False
     image_slot_labels: tuple[str, ...] = ()
 
@@ -111,6 +113,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         FLUX2_KLEIN_SAMPLERS,
         FLUX2_KLEIN_SCHEDULER,
         (FLUX2_KLEIN_SCHEDULER,),
+        supports_strength=True,
     ),
     FLUX2_DEV_BACKEND: ImageEditBackendSettings(
         FLUX2_DEV_STEPS,
@@ -208,6 +211,11 @@ def add_image_edit_command(subparsers: Any) -> None:
         help="CFG scale; default is backend-native",
     )
     command.add_argument(
+        "--strength",
+        type=float,
+        help="Image-to-image denoise strength; default is backend-native",
+    )
+    command.add_argument(
         "--sampler",
         help="Backend sampler; default is backend-native",
     )
@@ -250,6 +258,7 @@ def run_image_edit_command(
         seeds = tuple(args.seed or (0,))
         sampler = _resolve_sampler(args.backend, args.sampler)
         scheduler = _resolve_scheduler(args.backend, args.scheduler)
+        strength = _resolve_edit_strength(args.backend, args.strength)
         width, height = _resolve_dimensions(args.width, args.height, args.aspect_ratio)
         loras = _resolve_loras(args.lora, args.lora_weight, args.backend)
         if width is None:
@@ -274,6 +283,7 @@ def run_image_edit_command(
                 guidance=args.guidance,
                 sampler=sampler,
                 loras=loras,
+                strength=strength,
                 progress=progress,
             )
         elif args.backend == FLUX2_DEV_BACKEND:
@@ -347,6 +357,8 @@ def run_image_edit_command(
             raise ImageEditCommandError(f"unsupported image-edit backend: {args.backend}")
         payload["sampler"] = sampler
         payload["scheduler"] = scheduler
+        if strength is not None:
+            payload["strength"] = strength
     except (CharacterReferenceError, ImageEditCommandError, OSError, ValueError) as error:
         dump_json(stderr, command_error_payload(error), pretty=True)
         return 1
@@ -367,6 +379,7 @@ def _run_flux2_klein(
     guidance: float | None,
     sampler: str,
     loras: tuple[LoraLoadSpec, ...],
+    strength: float | None,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     from aigen.generation.flux2_klein import (
@@ -390,6 +403,7 @@ def _run_flux2_klein(
             seeds=seeds,
             sampler=sampler,
             loras=loras,
+            strength=strength,
             progress=progress,
         )
     except Flux2KleinError as error:
@@ -465,6 +479,16 @@ def _resolve_scheduler(backend: str, scheduler: str | None) -> str:
             f"{', '.join(settings.schedulers)}"
         )
     return resolved
+
+
+def _resolve_edit_strength(
+    backend: str,
+    strength: float | None,
+) -> float | None:
+    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
+    if strength is not None and not settings.supports_strength:
+        raise ImageEditCommandError(f"{backend} does not expose image-to-image strength")
+    return settings.strength if strength is None else strength
 
 
 def _run_qwen_2511(

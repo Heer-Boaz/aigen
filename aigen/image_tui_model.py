@@ -57,6 +57,11 @@ class ImageEditForm:
                 "Guidance",
                 "" if defaults.guidance is None else str(defaults.guidance),
             ),
+            FormField(
+                "strength",
+                "Strength",
+                "" if defaults.strength is None else str(defaults.strength),
+            ),
             FormField("output_dir", "Output directory", "runs/image-tui"),
             FormField("seed", "Seed 1", "0", "seed", 1),
             FormField("image", "Image 1", "", "image", 2),
@@ -159,6 +164,9 @@ class ImageEditForm:
             self.field("guidance").value = (
                 "" if defaults.guidance is None else str(defaults.guidance)
             )
+            self.field("strength").value = (
+                "" if defaults.strength is None else str(defaults.strength)
+            )
             self._renumber_slots()
 
     def dropdown_options(self, field: FormField) -> tuple[DropdownOption, ...] | None:
@@ -235,7 +243,7 @@ class ImageEditForm:
 
     def load(self, path: Path) -> None:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload["version"] not in (1, 2, 3):
+        if payload["version"] not in (1, 2, 3, 4):
             raise ValueError(f"Unsupported image TUI configuration version in {path}.")
         records = list(payload["fields"])
         if payload["version"] < 3:
@@ -258,6 +266,25 @@ class ImageEditForm:
                 {
                     "name": "scheduler",
                     "value": IMAGE_EDIT_BACKEND_SETTINGS[model].scheduler,
+                },
+            )
+        if payload["version"] < 4:
+            guidance_index = next(
+                index
+                for index, record in enumerate(records)
+                if record["name"] == "guidance"
+            )
+            model = next(
+                record["value"] for record in records if record["name"] == "model"
+            )
+            defaults = IMAGE_EDIT_BACKEND_SETTINGS[model]
+            records.insert(
+                guidance_index + 1,
+                {
+                    "name": "strength",
+                    "value": (
+                        "" if defaults.strength is None else str(defaults.strength)
+                    ),
                 },
             )
         fixed_labels = {
@@ -305,7 +332,7 @@ class ImageEditForm:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = path.with_name(f".{path.name}.tmp")
         temporary_path.write_text(
-            json.dumps({"version": 3, "fields": records}, indent=2) + "\n",
+            json.dumps({"version": 4, "fields": records}, indent=2) + "\n",
             encoding="utf-8",
         )
         temporary_path.replace(path)
@@ -353,6 +380,7 @@ class ImageEditForm:
             ("height", "--height"),
             ("steps", "--steps"),
             ("guidance", "--guidance"),
+            ("strength", "--strength"),
             ("sampler", "--sampler"),
             ("scheduler", "--scheduler"),
         ):
