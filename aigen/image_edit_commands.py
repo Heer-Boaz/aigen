@@ -39,8 +39,15 @@ from aigen.image_edit_defaults import (
     QWEN_2511_SAMPLER,
     QWEN_2511_SAMPLERS,
     QWEN_2511_SCHEDULERS,
+    USO_FLUX1_DEFAULT_GUIDANCE,
+    USO_FLUX1_DEFAULT_STEPS,
+    USO_FLUX1_SAMPLER,
+    USO_FLUX1_SCHEDULER,
 )
-from aigen.image_dimensions import normalized_aspect_ratio, parse_aspect_ratio
+from aigen.image_dimensions import (
+    normalized_aspect_ratio,
+    parse_aspect_ratio,
+)
 from aigen.lora_weights import (
     FLUX2_DEV_ARCHITECTURE,
     FLUX2_KLEIN_ARCHITECTURE,
@@ -57,6 +64,7 @@ QWEN_2511_LIGHTNING_BACKEND = "qwen-image-edit-2511-lightning"
 QWEN_2511_BASE_BACKEND = "qwen-image-edit-2511-base"
 HIDREAM_O1_BACKEND = "hidream-o1-full-fp8"
 BOOGU_IMAGE_EDIT_BACKEND = "boogu-image-edit-turbo-fp8"
+USO_FLUX1_BACKEND = "uso-flux1-dev-fp8"
 IMAGE_EDIT_BACKENDS = (
     FLUX2_KLEIN_BACKEND,
     FLUX2_DEV_BACKEND,
@@ -64,6 +72,7 @@ IMAGE_EDIT_BACKENDS = (
     QWEN_2511_BASE_BACKEND,
     HIDREAM_O1_BACKEND,
     BOOGU_IMAGE_EDIT_BACKEND,
+    USO_FLUX1_BACKEND,
 )
 IMAGE_EDIT_ASPECT_RATIOS = (
     (1, 1),
@@ -90,6 +99,8 @@ class ImageEditBackendSettings:
     samplers: tuple[str, ...]
     scheduler: str
     schedulers: tuple[str, ...]
+    supports_empty_prompt: bool = False
+    image_slot_labels: tuple[str, ...] = ()
 
 
 IMAGE_EDIT_BACKEND_SETTINGS = {
@@ -140,6 +151,16 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         (BOOGU_SAMPLER,),
         BOOGU_SCHEDULER,
         (BOOGU_SCHEDULER,),
+    ),
+    USO_FLUX1_BACKEND: ImageEditBackendSettings(
+        USO_FLUX1_DEFAULT_STEPS,
+        USO_FLUX1_DEFAULT_GUIDANCE,
+        USO_FLUX1_SAMPLER,
+        (USO_FLUX1_SAMPLER,),
+        USO_FLUX1_SCHEDULER,
+        (USO_FLUX1_SCHEDULER,),
+        supports_empty_prompt=True,
+        image_slot_labels=("Content image", "Style image 1", "Style image 2"),
     ),
 }
 
@@ -221,8 +242,9 @@ def run_image_edit_command(
     progress: StatusReporter,
 ) -> int:
     try:
+        settings = IMAGE_EDIT_BACKEND_SETTINGS[args.backend]
         prompt = args.prompt.strip()
-        if not prompt:
+        if not prompt and not settings.supports_empty_prompt:
             raise ImageEditCommandError("--prompt must not be empty")
         images = _resolve_images(args.image, args.reference_pack)
         seeds = tuple(args.seed or (0,))
@@ -297,7 +319,7 @@ def run_image_edit_command(
                 scheduler=scheduler,
                 progress=progress,
             )
-        else:
+        elif args.backend == BOOGU_IMAGE_EDIT_BACKEND:
             payload = _run_boogu_image_edit(
                 prompt=prompt,
                 images=images,
@@ -309,6 +331,20 @@ def run_image_edit_command(
                 guidance=args.guidance,
                 progress=progress,
             )
+        elif args.backend == USO_FLUX1_BACKEND:
+            payload = _run_uso_flux1(
+                prompt=prompt,
+                images=images,
+                output_dir=output_dir,
+                seeds=seeds,
+                width=width,
+                height=height,
+                steps=args.steps,
+                guidance=args.guidance,
+                progress=progress,
+            )
+        else:
+            raise ImageEditCommandError(f"unsupported image-edit backend: {args.backend}")
         payload["sampler"] = sampler
         payload["scheduler"] = scheduler
     except (CharacterReferenceError, ImageEditCommandError, OSError, ValueError) as error:
@@ -595,6 +631,47 @@ def _run_boogu_image_edit(
     )
 
 
+def _run_uso_flux1(
+    *,
+    prompt: str,
+    images: tuple[Path, ...],
+    output_dir: Path,
+    seeds: tuple[int, ...],
+    width: int,
+    height: int,
+    steps: int | None,
+    guidance: float | None,
+    progress: StatusReporter,
+) -> dict[str, Any]:
+    from aigen.generation.uso_flux1 import (
+        UsoFlux1Error,
+        generate_uso_flux1_seed_sweep,
+    )
+
+    try:
+        results = generate_uso_flux1_seed_sweep(
+            prompt=prompt,
+            references=images,
+            output=output_dir / "image.png",
+            width=width,
+            height=height,
+            seeds=seeds,
+            steps=USO_FLUX1_DEFAULT_STEPS if steps is None else steps,
+            guidance=(
+                USO_FLUX1_DEFAULT_GUIDANCE if guidance is None else guidance
+            ),
+            progress=progress,
+        )
+    except UsoFlux1Error as error:
+        raise ImageEditCommandError(str(error)) from error
+    return _image_edit_payload(
+        backend=USO_FLUX1_BACKEND,
+        output_dir=output_dir,
+        seeds=seeds,
+        outputs=[result.to_json() for result in results],
+    )
+
+
 def _image_edit_payload(
     *,
     backend: str,
@@ -709,7 +786,10 @@ def _recommended_canvas_size(
         from aigen.generation.hidream_o1_comfy import hidream_o1_native_canvas_size
 
         return hidream_o1_native_canvas_size(aspect_ratio)
+    if backend == USO_FLUX1_BACKEND:
+        from aigen.generation.uso_flux1 import uso_flux1_recommended_canvas_size
 
+        return uso_flux1_recommended_canvas_size(aspect_ratio)
     from aigen.generation.boogu_image_edit import (
         BooguImageEditError,
         boogu_recommended_1k_canvas_size,

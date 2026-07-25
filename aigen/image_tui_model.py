@@ -159,6 +159,7 @@ class ImageEditForm:
             self.field("guidance").value = (
                 "" if defaults.guidance is None else str(defaults.guidance)
             )
+            self._renumber_slots()
 
     def dropdown_options(self, field: FormField) -> tuple[DropdownOption, ...] | None:
         if field.name == "model":
@@ -313,10 +314,11 @@ class ImageEditForm:
         prompt = self.field("prompt").value.strip()
         model = self.field("model").value.strip()
         output_dir = self.field("output_dir").value.strip()
-        if not prompt:
-            raise ValueError("Prompt is required.")
         if not model:
             raise ValueError("Model is required.")
+        settings = IMAGE_EDIT_BACKEND_SETTINGS[model]
+        if not prompt and not settings.supports_empty_prompt:
+            raise ValueError("Prompt is required.")
         if not output_dir:
             raise ValueError("Output directory is required.")
         images = [
@@ -391,6 +393,15 @@ class ImageEditForm:
             number = slot_numbers[key]
             if field.name == "lora_weight":
                 field.label = f"LoRA {number} weight"
+            elif field.slot_kind == "image":
+                labels = IMAGE_EDIT_BACKEND_SETTINGS[
+                    self.field("model").value
+                ].image_slot_labels
+                field.label = (
+                    labels[number - 1]
+                    if number <= len(labels)
+                    else f"Image {number}"
+                )
             elif field.slot_kind == "reference_pack":
                 field.label = f"Reference pack {number}"
             else:

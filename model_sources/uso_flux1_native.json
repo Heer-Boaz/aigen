@@ -1,0 +1,106 @@
+{
+  "target_hardware": {
+    "gpu": "RTX 5070 Ti",
+    "vram_gb": 16,
+    "host_ram_gb": 96,
+    "runtime": "Official ByteDance USO native FP8 inference with sequential CPU offload"
+  },
+  "downloads": [
+    {
+      "name": "uso-lora-and-projector",
+      "repo_id": "bytedance-research/USO",
+      "revision": "18feb32b915cd0c577eb43fbcaf28a593bb629f5",
+      "local_path": "uso/bytedance-research/USO",
+      "include": [
+        "config.json",
+        "uso_flux_v1.0/dit_lora.safetensors",
+        "uso_flux_v1.0/projector.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md",
+        "assets/**"
+      ]
+    },
+    {
+      "name": "uso-t5-xxl",
+      "repo_id": "xlabs-ai/xflux_text_encoders",
+      "revision": "5ce032c6b9bfe31a4ffb220c8afa147e8de6acea",
+      "local_path": "uso/xlabs-ai/xflux_text_encoders",
+      "include": [
+        "added_tokens.json",
+        "config.json",
+        "model-*.safetensors",
+        "model.safetensors.index.json",
+        "special_tokens_map.json",
+        "spiece.model",
+        "tokenizer_config.json"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md"
+      ]
+    },
+    {
+      "name": "uso-clip-vit-large-patch14",
+      "repo_id": "openai/clip-vit-large-patch14",
+      "revision": "32bd64288804d66eefd0ccbe215aa642df71cc41",
+      "local_path": "uso/openai/clip-vit-large-patch14",
+      "include": [
+        "config.json",
+        "merges.txt",
+        "model.safetensors",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md",
+        "*.bin",
+        "*.msgpack",
+        "*.h5"
+      ]
+    },
+    {
+      "name": "uso-siglip-vision",
+      "repo_id": "google/siglip-so400m-patch14-384",
+      "revision": "9fdffc58afc957d1a03a25b10dba0329ab15c2a3",
+      "local_path": "uso/google/siglip-so400m-patch14-384",
+      "include": [
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.md",
+        "tokenizer*",
+        "*.model"
+      ]
+    },
+    {
+      "name": "uso-flux1-dev-and-vae",
+      "repo_id": "black-forest-labs/FLUX.1-dev",
+      "revision": "3de623fc3c33e44ffbe2bad470d0f45bccf2eb21",
+      "local_path": "uso/black-forest-labs/FLUX.1-dev",
+      "include": [
+        "LICENSE.md",
+        "ae.safetensors",
+        "flux1-dev.safetensors"
+      ],
+      "exclude": [
+        ".gitattributes",
+        "*.jpg",
+        "scheduler/**",
+        "text_encoder/**",
+        "text_encoder_2/**",
+        "tokenizer/**",
+        "tokenizer_2/**",
+        "transformer/**",
+        "vae/**"
+      ]
+    }
+  ]
+}
