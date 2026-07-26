@@ -35,23 +35,52 @@ reclaim_kib=$((cache_before_kib - cache_floor_kib))
 
 if (( reclaim_kib <= 0 )); then
   log "WSL cache is already below 1024 MiB; nothing to reclaim"
-  exit 0
+else
+  log "request $((reclaim_kib / 1024)) MiB of WSL file-cache reclaim"
+  remaining_kib=$reclaim_kib
+  while (( remaining_kib > 0 )); do
+    chunk_kib=$reclaim_chunk_kib
+    (( chunk_kib > remaining_kib )) && chunk_kib=$remaining_kib
+
+    if ! printf '%s swappiness=0\n' "$((chunk_kib * 1024))" > "$reclaim_control"; then
+      log "kernel reached the currently reclaimable cache limit"
+      break
+    fi
+
+    remaining_kib=$((remaining_kib - chunk_kib))
+  done
 fi
-
-log "request $((reclaim_kib / 1024)) MiB of WSL file-cache reclaim"
-remaining_kib=$reclaim_kib
-while (( remaining_kib > 0 )); do
-  chunk_kib=$reclaim_chunk_kib
-  (( chunk_kib > remaining_kib )) && chunk_kib=$remaining_kib
-
-  if ! printf '%s swappiness=0\n' "$((chunk_kib * 1024))" > "$reclaim_control"; then
-    log "kernel reached the currently reclaimable cache limit"
-    break
-  fi
-
-  remaining_kib=$((remaining_kib - chunk_kib))
-done
 
 read -r available_after_kib cache_after_kib < <(read_memory_state)
 log "WSL file cache: $((cache_before_kib / 1024)) MiB -> $((cache_after_kib / 1024)) MiB"
 log "WSL available memory: $((available_before_kib / 1024)) MiB -> $((available_after_kib / 1024)) MiB"
+
+if fuser /dev/dxg >/dev/null 2>&1; then
+  die "active WSL GPU processes must exit before resetting the NVIDIA driver"
+fi
+
+log "reset Windows NVIDIA driver"
+powershell.exe -NoProfile -NonInteractive -Command '
+  $reset = Start-Process `
+    -FilePath "$env:WINDIR\System32\nvidia-smi.exe" `
+    -ArgumentList "--gpu-reset" `
+    -Verb RunAs `
+    -Wait `
+    -PassThru
+
+  if ($reset.ExitCode -ne 0) {
+    exit $reset.ExitCode
+  }
+
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Start-Sleep -Milliseconds 500
+
+    if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) {
+      Start-Process "$env:WINDIR\explorer.exe"
+    }
+  }
+'
+
+nvidia-smi.exe \
+  --query-gpu=name,driver_model.current,memory.used,utilization.gpu,pstate \
+  --format=csv,noheader
