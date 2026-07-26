@@ -30,18 +30,16 @@ POSTPROCESS_OPERATION_LABELS = {
 
 VOSR_MODEL = VOSR_POSTPROCESS_NAME
 WU_PIXELIZATION_MODEL = "wu-pixelization"
-SD_PIXL_MODEL = "sd-pixl"
 PIXEL_ART_FIXER_MODEL = "pixel-art-fixer"
 
 UPSCALE_MODELS = (VOSR_MODEL, *upscale_model_names())
-DOWNSCALE_MODELS = (WU_PIXELIZATION_MODEL, SD_PIXL_MODEL, PIXEL_ART_FIXER_MODEL)
+DOWNSCALE_MODELS = (WU_PIXELIZATION_MODEL, PIXEL_ART_FIXER_MODEL)
 POSTPROCESS_MODEL_LABELS = {
     VOSR_MODEL: VOSR_MODEL_NAME,
     "illustrationjanai-dat2": "IllustrationJaNai DAT2",
     "illustrationjanai-esrgan": "IllustrationJaNai ESRGAN",
     "animesharp-x4": "AnimeSharp x4",
     WU_PIXELIZATION_MODEL: "Wu Pixelization",
-    SD_PIXL_MODEL: "SD-piXL",
     PIXEL_ART_FIXER_MODEL: "Pixel Art Fixer",
 }
 
@@ -60,12 +58,6 @@ class PostprocessForm:
             ),
             "long_side": FormField("long_side", "Long side", "2048"),
             "cell_size": FormField("cell_size", "Cell size", "16"),
-            "width": FormField("width", "Width", "128"),
-            "height": FormField("height", "Height", "128"),
-            "colors": FormField("colors", "Colors", "16"),
-            "steps": FormField("steps", "Steps", "10001"),
-            "prompt": FormField("prompt", "Prompt", ""),
-            "seed": FormField("seed", "Seed", "0"),
             "mode": FormField("mode", "Detection mode", "full"),
             "low_memory": FormField("low_memory", "Low memory", "false"),
             "force_step": FormField("force_step", "Force cell size", ""),
@@ -215,28 +207,7 @@ class PostprocessForm:
             if force_step:
                 command.extend(("--force-step", force_step))
         else:
-            command.extend(
-                (
-                    "pixel-art",
-                    "--input",
-                    input_path,
-                    "--output",
-                    output,
-                    "--width",
-                    self._fields["width"].value.strip(),
-                    "--height",
-                    self._fields["height"].value.strip(),
-                    "--colors",
-                    self._fields["colors"].value.strip(),
-                    "--steps",
-                    self._fields["steps"].value.strip(),
-                    "--seed",
-                    self._fields["seed"].value.strip(),
-                )
-            )
-            prompt = self._fields["prompt"].value.strip()
-            if prompt:
-                command.extend(("--prompt", prompt))
+            raise RuntimeError(f"unsupported postprocessing model: {model}")
         return command, output_dir
 
     def _rebuild_fields(self) -> None:
@@ -255,5 +226,5 @@ class PostprocessForm:
         elif model == PIXEL_ART_FIXER_MODEL:
             names.extend(("mode", "low_memory", "force_step"))
         else:
-            names.extend(("width", "height", "colors", "steps", "prompt", "seed"))
+            raise RuntimeError(f"unsupported postprocessing model: {model}")
         self.fields = [self._fields[name] for name in names]

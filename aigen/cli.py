@@ -21,7 +21,6 @@ from aigen.keyframe_commands import add_keyframe_commands, run_keyframe_command
 from aigen.lora_commands import add_lora_commands, run_lora_command
 from aigen.ltx23_commands import add_ltx23_command, run_ltx23_command
 from aigen.model_commands import add_model_commands, run_model_command
-from aigen.pixel_art_commands import add_pixel_art_command, run_pixel_art_command
 from aigen.pixel_art_fixer_commands import (
     add_pixel_art_fixer_command,
     run_pixel_art_fixer_command,
@@ -55,7 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_lora_commands(subparsers)
     add_ltx23_command(subparsers)
     add_model_commands(subparsers)
-    add_pixel_art_command(subparsers)
     add_pixel_art_fixer_command(subparsers)
     add_sam_command(subparsers)
     add_video_postprocess_commands(subparsers)
@@ -105,8 +103,6 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_ltx23_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "models":
         return run_model_command(args, sys.stdout, sys.stderr, progress=progress)
-    if args.command == "pixel-art":
-        return run_pixel_art_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "pixel-art-fixer":
         return run_pixel_art_fixer_command(
             args,
