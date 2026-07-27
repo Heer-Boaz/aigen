@@ -17,6 +17,7 @@ dependencies = [
   "pydantic>=2",
   "scipy>=1.18",
   "textual>=8.2,<9",
+  "textual-image>=0.13,<0.14",
 ]
 
 [project.optional-dependencies]

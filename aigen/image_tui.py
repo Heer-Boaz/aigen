@@ -7,17 +7,15 @@ import subprocess
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, ItemGrid, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
-    DirectoryTree,
     Input,
     Label,
     ProgressBar,
@@ -32,6 +30,7 @@ from aigen.generation.video_postprocess import (
     VideoPostprocessError,
     create_video_contact_sheet,
 )
+from aigen.image_tui_footer import ImageTUIFooter
 from aigen.image_tui_model import (
     DropdownOption,
     FormField,
@@ -48,6 +47,7 @@ from aigen.sam_prompt_canvas import SAMPromptCanvas
 from aigen.sam_prompt_dialog import SAMPromptDialog
 from aigen.sam_prompt_selection import SAMPromptSelection
 from aigen.sam_tui_model import SamEditForm
+from aigen.tui_file_browser import FileBrowser
 from aigen.video_tui_model import VideoForm
 
 
@@ -181,33 +181,6 @@ class FormFields(VerticalScroll):
         yield from (FieldRow(self.form, field) for field in self.form.fields)
 
 
-class FilteredDirectoryTree(DirectoryTree):
-    def __init__(
-        self,
-        path: Path,
-        *,
-        directories_only: bool,
-        extensions: frozenset[str],
-    ) -> None:
-        super().__init__(path)
-        self.directories_only = directories_only
-        self.extensions = extensions
-
-    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
-        return (
-            path
-            for path in paths
-            if not path.name.startswith(".")
-            and (
-                path.is_dir()
-                or (
-                    not self.directories_only
-                    and path.suffix.casefold() in self.extensions
-                )
-            )
-        )
-
-
 class MessageDialog(ModalScreen[None]):
     def __init__(self, title: str, message: str) -> None:
         super().__init__()
@@ -250,73 +223,6 @@ class PromptDialog(ModalScreen[str | None]):
         self.dismiss(self.query_one(Input).value)
 
     @on(Button.Pressed, "#dialog-cancel")
-    def cancel(self) -> None:
-        self.dismiss(None)
-
-
-class FileBrowser(ModalScreen[Path | None]):
-    def __init__(
-        self,
-        start: Path,
-        *,
-        title: str,
-        directories_only: bool,
-        extensions: frozenset[str],
-        select_label: str,
-    ) -> None:
-        super().__init__()
-        self.start = start
-        self.title = title
-        self.directories_only = directories_only
-        self.extensions = extensions
-        self.select_label = select_label
-
-    def compose(self) -> ComposeResult:
-        with Container(classes="browser-dialog"):
-            yield Label(self.title, classes="dialog-title")
-            yield Label(self.start.as_posix(), id="browser-path")
-            yield FilteredDirectoryTree(
-                self.start,
-                directories_only=self.directories_only,
-                extensions=self.extensions,
-            )
-            with Horizontal(classes="dialog-actions"):
-                yield Button("Up", id="browser-up", compact=True)
-                yield Button(
-                    self.select_label,
-                    variant="primary",
-                    id="browser-select",
-                    compact=True,
-                )
-                yield Button("Cancel", id="browser-cancel", compact=True)
-
-    @on(DirectoryTree.FileSelected)
-    def file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        if not self.directories_only:
-            self.dismiss(event.path)
-
-    @on(Button.Pressed, "#browser-up")
-    async def go_up(self) -> None:
-        tree = self.query_one(FilteredDirectoryTree)
-        parent = Path(tree.path).parent
-        if parent != Path(tree.path):
-            tree.path = parent
-            await tree.reload()
-            self.query_one("#browser-path", Label).update(parent.as_posix())
-
-    @on(Button.Pressed, "#browser-select")
-    def select_current(self) -> None:
-        tree = self.query_one(FilteredDirectoryTree)
-        node = tree.cursor_node
-        if node is None or node.data is None:
-            return
-        path = node.data.path
-        if self.directories_only:
-            self.dismiss(path if path.is_dir() else path.parent)
-        elif path.is_file():
-            self.dismiss(path)
-
-    @on(Button.Pressed, "#browser-cancel")
     def cancel(self) -> None:
         self.dismiss(None)
 
@@ -443,30 +349,6 @@ class ImageGenerationApp(App[None]):
         padding: 0;
     }
 
-    #actions, #postprocess-actions {
-        width: 100%;
-        height: auto;
-        max-height: 4;
-        padding: 0 1;
-        grid-gutter: 0;
-    }
-
-    #video-actions {
-        width: 100%;
-        height: auto;
-        max-height: 4;
-        padding: 0 1;
-        grid-gutter: 0;
-    }
-
-    #sam-actions {
-        width: 100%;
-        height: auto;
-        max-height: 4;
-        padding: 0 1;
-        grid-gutter: 0;
-    }
-
     .sam-prompt-dialog-screen {
         align: center middle;
         background: #000000 70%;
@@ -506,7 +388,7 @@ class ImageGenerationApp(App[None]):
         padding: 0 1;
     }
 
-    #actions Button, #video-actions Button, #sam-actions Button, #postprocess-actions Button, .dialog-actions Button {
+    .dialog-actions Button {
         height: 1;
         min-height: 1;
         border: none;
@@ -540,14 +422,6 @@ class ImageGenerationApp(App[None]):
         border: solid #8c72aa;
     }
 
-    .browser-dialog {
-        width: 90%;
-        height: 85%;
-        padding: 1 2;
-        background: #211a2d;
-        border: solid #8c72aa;
-    }
-
     .dialog-title {
         height: 1;
         text-style: bold;
@@ -564,9 +438,6 @@ class ImageGenerationApp(App[None]):
         align-horizontal: center;
     }
 
-    DirectoryTree {
-        height: 1fr;
-    }
     """
 
     def __init__(self) -> None:
@@ -597,77 +468,11 @@ class ImageGenerationApp(App[None]):
                 yield FormFields(self.form, id="image-fields")
             with TabPane("Videos", id="videos"):
                 yield FormFields(self.video_form, id="video-fields")
-                yield ItemGrid(
-                    Button("+ Keyframe", name="add-keyframe", id="video-add-keyframe", compact=True),
-                    Button("+ Seed", name="add-video-seed", id="video-add-seed", compact=True),
-                    Button("+ Image", name="add-video-image", id="video-add-image", compact=True),
-                    Button("Remove", name="remove-video", compact=True),
-                    Button("Browse", name="browse-video", compact=True),
-                    Button(
-                        "Generate",
-                        name="video-generate",
-                        id="video-action",
-                        variant="primary",
-                        compact=True,
-                    ),
-                    min_column_width=12,
-                    stretch_height=False,
-                    id="video-actions",
-                )
             with TabPane("SAM Edit", id="sam-edit"):
                 yield FormFields(self.sam_form, id="sam-fields")
-                yield ItemGrid(
-                    Button("Browse", name="browse-sam", compact=True),
-                    Button("Edit prompts", name="sam-edit", id="sam-edit-prompts", compact=True),
-                    Button("Clear prompts", name="sam-clear", compact=True),
-                    Button(
-                        "Run",
-                        name="sam-segment",
-                        id="sam-action",
-                        variant="primary",
-                        compact=True,
-                    ),
-                    min_column_width=12,
-                    stretch_height=False,
-                    id="sam-actions",
-                )
             with TabPane("Post-processing", id="postprocessing"):
                 yield FormFields(self.postprocess_form, id="postprocess-fields")
-                yield ItemGrid(
-                    Button(
-                        "Process",
-                        name="postprocess",
-                        id="postprocess-action",
-                        variant="primary",
-                        compact=True,
-                    ),
-                    min_column_width=12,
-                    stretch_height=False,
-                    id="postprocess-actions",
-                )
-        yield ItemGrid(
-            Button("+ Seed", name="add-seed", compact=True),
-            Button("+ Image", name="add-image", compact=True),
-            Button("+ Pack", name="add-reference-pack", compact=True),
-            Button("+ LoRA", name="add-lora", compact=True),
-            Button("Remove", name="remove", compact=True),
-            Button("Browse", name="browse", compact=True),
-            Button("Use Result", name="use-result", compact=True),
-            Button("Save Pack", name="save-pack", compact=True),
-            Button("Save Config", name="save-config", compact=True),
-            Button("Load Config", name="load-config", compact=True),
-            Button(
-                "Generate",
-                name="generate",
-                id="generation-action",
-                variant="primary",
-                compact=True,
-            ),
-            Button("Quit", name="quit", compact=True),
-            min_column_width=12,
-            stretch_height=False,
-            id="actions",
-        )
+        yield ImageTUIFooter(id="action-footer")
         yield ProgressBar(id="generation-progress")
         yield Static("Ready.", id="status")
 
@@ -936,7 +741,7 @@ class ImageGenerationApp(App[None]):
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self, event: TabbedContent.TabActivated) -> None:
-        self.query_one("#actions").display = event.pane.id == "images"
+        self.query_one(ImageTUIFooter).show_tab(event.pane.id)
 
     @on(Button.Pressed)
     async def button_pressed(self, event: Button.Pressed) -> None:
