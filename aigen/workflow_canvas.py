@@ -14,7 +14,6 @@ from aigen.workflow_graph import (
     WorkflowGraph,
 )
 from aigen.workflow_scene import (
-    NODE_WIDTH,
     NodeGeometry,
     PortHit,
     WorkflowScene,
@@ -58,10 +57,14 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             self,
             node_id: str | None,
             connection_id: str | None,
+            previous_node_id: str | None,
+            previous_connection_id: str | None,
         ) -> None:
             super().__init__()
             self.node_id = node_id
             self.connection_id = connection_id
+            self.previous_node_id = previous_node_id
+            self.previous_connection_id = previous_connection_id
 
     class NodeMoved(Message):
         def __init__(self, node_id: str, x: int, y: int) -> None:
@@ -117,31 +120,19 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             return
         self._editable = editable
         if not editable:
-            had_captured_gesture = (
-                self._drag_node_id is not None
-                or self._connection_source is not None
-                or self._panning
-            )
-            if self._drag_node_id is not None:
-                self._scene.move_node(
-                    self._drag_node_id,
-                    self._drag_node_origin.x,
-                    self._drag_node_origin.y,
-                )
-            self._drag_node_id = None
-            self._drag_layout = None
-            self._connection_source = None
-            self._connection_pointer = None
-            self._panning = False
-            self._scene.clear_preview_connection()
-            if had_captured_gesture:
-                self.release_mouse()
-            self._sync_virtual_size()
-            self.refresh()
+            self._cancel_gesture()
+
+    def on_hide(self, event: events.Hide) -> None:
+        self._cancel_gesture()
+
+    def on_unmount(self) -> None:
+        self._clear_gesture()
+
+    def on_mouse_release(self, event: events.MouseRelease) -> None:
+        self._cancel_gesture()
 
     def set_document(self, document: WorkflowGraph) -> None:
-        self._drag_node_id = None
-        self._drag_layout = None
+        self._cancel_gesture()
         selected_node_id = self.selected_node_id
         selected_connection_id = self.selected_connection_id
         if (
@@ -184,6 +175,13 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     def set_runtime_statuses(self, statuses: Mapping[str, str]) -> None:
         self._scene.set_runtime_statuses(statuses)
         self.refresh()
+
+    def set_runtime_status(self, node_id: str, status: str) -> None:
+        if not self._scene.set_runtime_status(node_id, status):
+            return
+        geometry = self._scene.node_geometries.get(node_id)
+        if geometry is not None:
+            self.refresh_line(geometry.y)
 
     def node_geometry(self, node_id: str) -> NodeGeometry:
         return self._scene.node_geometry(node_id)
@@ -313,24 +311,24 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             return
         if self._drag_node_id is not None:
             assert self._drag_layout is not None
+            node_id = self._drag_node_id
+            layout = self._drag_layout
+            self._clear_gesture()
+            self.release_mouse()
             self.post_message(
                 self.NodeMoved(
-                    self._drag_node_id,
-                    self._drag_layout.x,
-                    self._drag_layout.y,
+                    node_id,
+                    layout.x,
+                    layout.y,
                 )
             )
-            self._drag_node_id = None
-            self.release_mouse()
             event.stop()
             return
 
         if self._connection_source is not None:
             source = self._connection_source
             target = self._scene.input_at(self._virtual_pointer(event))
-            self._connection_source = None
-            self._connection_pointer = None
-            self._scene.clear_preview_connection()
+            self._clear_gesture()
             self.release_mouse()
             self.refresh()
             if target is not None and self._scene.ports_compatible(source, target):
@@ -344,7 +342,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             return
 
         if self._panning:
-            self._panning = False
+            self._clear_gesture()
             self.release_mouse()
             event.stop()
 
@@ -388,8 +386,17 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             and connection_id == self.selected_connection_id
         ):
             return
+        previous_node_id = self.selected_node_id
+        previous_connection_id = self.selected_connection_id
         self._scene.set_selection(node_id, connection_id)
-        self.post_message(self.SelectionChanged(node_id, connection_id))
+        self.post_message(
+            self.SelectionChanged(
+                node_id,
+                connection_id,
+                previous_node_id,
+                previous_connection_id,
+            )
+        )
         self.refresh()
 
     def _select_in_direction(self, delta_x: int, delta_y: int) -> None:
@@ -471,6 +478,32 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             max(self.size.width, content_size.width),
             max(self.size.height, content_size.height),
         )
+
+    def _cancel_gesture(self) -> None:
+        if (
+            self._drag_node_id is None
+            and self._connection_source is None
+            and not self._panning
+        ):
+            return
+        if self._drag_node_id is not None:
+            self._scene.move_node(
+                self._drag_node_id,
+                self._drag_node_origin.x,
+                self._drag_node_origin.y,
+            )
+        self._clear_gesture()
+        self.release_mouse()
+        self._sync_virtual_size()
+        self.refresh()
+
+    def _clear_gesture(self) -> None:
+        self._drag_node_id = None
+        self._drag_layout = None
+        self._connection_source = None
+        self._connection_pointer = None
+        self._panning = False
+        self._scene.clear_preview_connection()
 
     def _virtual_pointer(self, event: events.MouseEvent) -> Offset:
         offset = event.get_content_offset_capture(self)

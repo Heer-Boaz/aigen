@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from graphlib import CycleError, TopologicalSorter
@@ -38,7 +39,7 @@ class NodeKind(StrEnum):
 
 
 class WorkflowModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class NodeLayout(WorkflowModel):
@@ -237,6 +238,16 @@ class NodeDefinition:
         return next((port for port in self.outputs if port.name == name), None)
 
 
+def port_definitions_compatible(
+    source: PortDefinition,
+    target: PortDefinition,
+) -> bool:
+    return any(
+        artifact_type in target.artifact_types
+        for artifact_type in source.artifact_types
+    )
+
+
 _IMAGE_OUTPUT = PortDefinition("image", (ArtifactType.IMAGE,), label="Image")
 _VIDEO_OUTPUT = PortDefinition("video", (ArtifactType.VIDEO,), label="Video")
 _SEQUENCE_OUTPUT = PortDefinition(
@@ -367,6 +378,7 @@ NODE_DEFINITIONS = MappingProxyType(
     }
 )
 
+
 def node_definition(kind: NodeKind) -> NodeDefinition:
     return NODE_DEFINITIONS[kind]
 
@@ -374,8 +386,8 @@ def node_definition(kind: NodeKind) -> NodeDefinition:
 class WorkflowGraph(WorkflowModel):
     version: Literal[WORKFLOW_DOCUMENT_VERSION] = WORKFLOW_DOCUMENT_VERSION
     name: str = Field(min_length=1, max_length=160)
-    nodes: list[WorkflowNode] = Field(default_factory=list)
-    connections: list[WorkflowConnection] = Field(default_factory=list)
+    nodes: tuple[WorkflowNode, ...] = ()
+    connections: tuple[WorkflowConnection, ...] = ()
 
     @model_validator(mode="after")
     def validate_graph(self) -> WorkflowGraph:
@@ -415,9 +427,7 @@ class WorkflowGraph(WorkflowModel):
                     f"connection {connection.id!r} references unknown input "
                     f"{connection.target.node_id}.{connection.target.port}"
                 )
-            if not set(source_port.artifact_types).intersection(
-                target_port.artifact_types
-            ):
+            if not port_definitions_compatible(source_port, target_port):
                 source_types = ", ".join(source_port.artifact_types)
                 target_types = ", ".join(target_port.artifact_types)
                 raise ValueError(
@@ -477,7 +487,7 @@ ItemT = TypeVar("ItemT", WorkflowNodeBase, WorkflowConnection)
 
 
 def _unique_by_id(
-    items: list[ItemT],
+    items: Sequence[ItemT],
     label: str,
 ) -> dict[str, ItemT]:
     indexed: dict[str, ItemT] = {}

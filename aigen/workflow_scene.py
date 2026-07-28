@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import Counter, OrderedDict
 from dataclasses import dataclass
 from typing import Mapping
@@ -16,10 +17,11 @@ from aigen.workflow_graph import (
     WorkflowGraph,
     WorkflowNode,
     node_definition,
+    port_definitions_compatible,
 )
+from aigen.workflow_layout import NODE_WIDTH, node_height
 
 
-NODE_WIDTH = 34
 CANVAS_MARGIN_X = 4
 CANVAS_MARGIN_Y = 2
 
@@ -74,7 +76,7 @@ _ARTIFACT_LABELS = {
 _ROW_CACHE_SIZE = 1024
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortHit:
     node_id: str
     port: str
@@ -82,7 +84,7 @@ class PortHit:
     y: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NodeGeometry:
     node_id: str
     x: int
@@ -104,7 +106,7 @@ class NodeGeometry:
         return self.x <= x <= self.right and self.y <= y <= self.bottom
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WireGeometry:
     connection: WorkflowConnection | None
     source: PortHit
@@ -142,7 +144,8 @@ class WireGeometry:
             and min(elbow_x, self.target_x) <= x <= max(elbow_x, self.target_x)
         )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, slots=True)
 class _CachedRow:
     scroll_x: int
     width: int
@@ -194,9 +197,50 @@ class WorkflowScene:
         )
 
     def set_document(self, document: WorkflowGraph) -> None:
-        self.document = document
         self._preview_wire = None
-        self._build(document)
+        if not self._can_reconcile(document):
+            self.document = document
+            self._build(document)
+            return
+
+        previous_nodes = self._nodes_by_id
+        nodes_by_id = {node.id: node for node in document.nodes}
+        connections_by_id = {
+            connection.id: connection
+            for connection in document.connections
+        }
+        moved_node_ids = tuple(
+            node.id
+            for node in document.nodes
+            if (
+                self._node_geometries[node.id].x != node.layout.x
+                or self._node_geometries[node.id].y != node.layout.y
+            )
+        )
+
+        self.document = document
+        self._nodes_by_id = nodes_by_id
+        self._connections_by_id = connections_by_id
+        self._reconcile_node_layouts(moved_node_ids)
+
+        for connection in document.connections:
+            wire = self._wires_by_id[connection.id]
+            if wire.connection is connection:
+                continue
+            self._wires_by_id[connection.id] = WireGeometry(
+                connection=connection,
+                source=wire.source,
+                target_x=wire.target_x,
+                target_y=wire.target_y,
+            )
+
+        for node in document.nodes:
+            previous = previous_nodes[node.id]
+            if previous.title != node.title:
+                self._row_cache.pop(
+                    self._node_geometries[node.id].y,
+                    None,
+                )
 
     def set_selection(
         self,
@@ -228,6 +272,15 @@ class WorkflowScene:
             geometry = self._node_geometries.get(node_id)
             if geometry is not None:
                 self._row_cache.pop(geometry.y, None)
+
+    def set_runtime_status(self, node_id: str, status: str) -> bool:
+        if self.runtime_statuses.get(node_id) == status:
+            return False
+        self.runtime_statuses[node_id] = status
+        geometry = self._node_geometries.get(node_id)
+        if geometry is not None:
+            self._row_cache.pop(geometry.y, None)
+        return True
 
     def node_geometry(self, node_id: str) -> NodeGeometry:
         return self._node_geometries[node_id]
@@ -447,9 +500,9 @@ class WorkflowScene:
         )
         assert source_definition is not None
         assert target_definition is not None
-        return any(
-            artifact_type in target_definition.artifact_types
-            for artifact_type in source_definition.artifact_types
+        return port_definitions_compatible(
+            source_definition,
+            target_definition,
         )
 
     def _build(self, document: WorkflowGraph) -> None:
@@ -483,57 +536,109 @@ class WorkflowScene:
             node_id: tuple(wire_ids)
             for node_id, wire_ids in incident_wires.items()
         }
+
+        for node in document.nodes:
+            self._node_geometries[node.id] = self._node_geometry(node)
+
+        for connection in document.connections:
+            self._wires_by_id[connection.id] = self._wire_geometry(connection)
+
+        self._rebuild_spatial_indexes()
+
+    def _can_reconcile(self, document: WorkflowGraph) -> bool:
+        if tuple(self._nodes_by_id) != tuple(
+            node.id for node in document.nodes
+        ):
+            return False
+        if tuple(self._connections_by_id) != tuple(
+            connection.id for connection in document.connections
+        ):
+            return False
+        if any(
+            self._nodes_by_id[node.id].kind != node.kind
+            for node in document.nodes
+        ):
+            return False
+        return all(
+            self._connections_by_id[connection.id].source
+            == connection.source
+            and self._connections_by_id[connection.id].target
+            == connection.target
+            for connection in document.connections
+        )
+
+    def _reconcile_node_layouts(
+        self,
+        moved_node_ids: tuple[str, ...],
+    ) -> None:
+        if not moved_node_ids:
+            return
+        moved_wire_ids = {
+            wire_id
+            for node_id in moved_node_ids
+            for wire_id in self._incident_wires[node_id]
+        }
+        for node_id in moved_node_ids:
+            self._node_geometries[node_id] = self._node_geometry(
+                self._nodes_by_id[node_id]
+            )
+        for wire_id in moved_wire_ids:
+            self._wires_by_id[wire_id] = self._wire_geometry(
+                self._connections_by_id[wire_id]
+            )
+        self._rebuild_spatial_indexes()
+
+    def _rebuild_spatial_indexes(self) -> None:
         self._node_rows.clear()
         self._wire_rows.clear()
         self._input_hits.clear()
         self._output_hits.clear()
         self._connected_inputs = {
             (connection.target.node_id, connection.target.port)
-            for connection in document.connections
+            for connection in self.document.connections
         }
         self._right_edges.clear()
         self._wire_right_edges.clear()
         self._bottom_edges.clear()
         self._row_cache.clear()
 
-        for node in document.nodes:
-            definition = self._definitions_by_node_id[node.id]
-            port_rows = max(len(definition.inputs), len(definition.outputs), 1)
-            geometry = NodeGeometry(
-                node_id=node.id,
-                x=node.layout.x,
-                y=node.layout.y,
-                width=NODE_WIDTH,
-                height=port_rows + 2,
-                inputs=tuple(
-                    PortHit(
-                        node.id,
-                        port.name,
-                        node.layout.x,
-                        node.layout.y + index + 1,
-                    )
-                    for index, port in enumerate(definition.inputs)
-                ),
-                outputs=tuple(
-                    PortHit(
-                        node.id,
-                        port.name,
-                        node.layout.x + NODE_WIDTH - 1,
-                        node.layout.y + index + 1,
-                    )
-                    for index, port in enumerate(definition.outputs)
-                ),
-            )
-            self._node_geometries[node.id] = geometry
+        for node in self.document.nodes:
+            geometry = self._node_geometries[node.id]
             self._right_edges[geometry.right] += 1
             self._bottom_edges[geometry.bottom] += 1
-            self._add_node_indexes(geometry)
-
-        for connection in document.connections:
-            wire = self._wire_geometry(connection)
-            self._wires_by_id[connection.id] = wire
+            self._append_node_indexes(geometry)
+        for connection in self.document.connections:
+            wire = self._wires_by_id[connection.id]
             self._wire_right_edges[wire.right] += 1
-            self._add_wire_indexes(wire)
+            self._append_wire_indexes(wire)
+
+    def _node_geometry(self, node: WorkflowNode) -> NodeGeometry:
+        definition = self._definitions_by_node_id[node.id]
+        return NodeGeometry(
+            node_id=node.id,
+            x=node.layout.x,
+            y=node.layout.y,
+            width=NODE_WIDTH,
+            height=node_height(node.kind),
+            inputs=tuple(
+                PortHit(
+                    node.id,
+                    port.name,
+                    node.layout.x,
+                    node.layout.y + index + 1,
+                )
+                for index, port in enumerate(definition.inputs)
+            ),
+            outputs=tuple(
+                PortHit(
+                    node.id,
+                    port.name,
+                    node.layout.x + NODE_WIDTH - 1,
+                    node.layout.y + index + 1,
+                )
+                for index, port in enumerate(definition.outputs)
+            ),
+        )
 
     def _wire_geometry(self, connection: WorkflowConnection) -> WireGeometry:
         source_geometry = self._node_geometries[connection.source.node_id]
@@ -570,6 +675,14 @@ class WorkflowScene:
                 port,
             )
 
+    def _append_node_indexes(self, geometry: NodeGeometry) -> None:
+        for y in range(geometry.y, geometry.bottom + 1):
+            self._node_rows.setdefault(y, []).append(geometry.node_id)
+        for port in geometry.inputs:
+            self._input_hits.setdefault((port.x, port.y), []).append(port)
+        for port in geometry.outputs:
+            self._output_hits.setdefault((port.x, port.y), []).append(port)
+
     def _remove_node_indexes(self, geometry: NodeGeometry) -> None:
         for y in range(geometry.y, geometry.bottom + 1):
             node_ids = self._node_rows[y]
@@ -589,6 +702,12 @@ class WorkflowScene:
             self._insert_wire_id(self._wire_rows.setdefault(y, []), wire_id)
             self._row_cache.pop(y, None)
 
+    def _append_wire_indexes(self, wire: WireGeometry) -> None:
+        assert wire.connection is not None
+        wire_id = wire.connection.id
+        for y in range(wire.top, wire.bottom + 1):
+            self._wire_rows.setdefault(y, []).append(wire_id)
+
     def _remove_wire_indexes(self, wire: WireGeometry) -> None:
         assert wire.connection is not None
         wire_id = wire.connection.id
@@ -601,27 +720,30 @@ class WorkflowScene:
 
     def _insert_node_id(self, node_ids: list[str], node_id: str) -> None:
         rank = self._node_rank[node_id]
-        for index, other_id in enumerate(node_ids):
-            if rank < self._node_rank[other_id]:
-                node_ids.insert(index, node_id)
-                return
-        node_ids.append(node_id)
+        index = bisect_left(
+            node_ids,
+            rank,
+            key=self._node_rank.__getitem__,
+        )
+        node_ids.insert(index, node_id)
 
     def _insert_wire_id(self, wire_ids: list[str], wire_id: str) -> None:
         rank = self._wire_rank[wire_id]
-        for index, other_id in enumerate(wire_ids):
-            if rank < self._wire_rank[other_id]:
-                wire_ids.insert(index, wire_id)
-                return
-        wire_ids.append(wire_id)
+        index = bisect_left(
+            wire_ids,
+            rank,
+            key=self._wire_rank.__getitem__,
+        )
+        wire_ids.insert(index, wire_id)
 
     def _insert_port_hit(self, hits: list[PortHit], hit: PortHit) -> None:
         rank = self._node_rank[hit.node_id]
-        for index, other in enumerate(hits):
-            if rank < self._node_rank[other.node_id]:
-                hits.insert(index, hit)
-                return
-        hits.append(hit)
+        index = bisect_left(
+            hits,
+            rank,
+            key=lambda other: self._node_rank[other.node_id],
+        )
+        hits.insert(index, hit)
 
     @staticmethod
     def _remove_port_hit(

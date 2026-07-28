@@ -438,6 +438,10 @@ def _resolve_cached_file(
         raise WorkflowCacheCorruptionError(
             f"workflow cache output modification time changed: {path}"
         )
+    if sha256_file(path) != cached_file.sha256:
+        raise WorkflowCacheCorruptionError(
+            f"workflow cache output content changed: {path}"
+        )
     return path
 
 

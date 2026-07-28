@@ -9,13 +9,13 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.message import Message
-from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
     Input,
@@ -50,13 +50,19 @@ from aigen.sam_prompt_dialog import SAMPromptDialog
 from aigen.sam_prompt_selection import SAMPromptSelection
 from aigen.sam_tui_model import SamEditForm
 from aigen.tui_file_browser import FileBrowser
+from aigen.tui_dialogs import (
+    ConfirmationDialog,
+    MessageDialog,
+    PromptDialog,
+)
 from aigen.video_tui_model import VideoForm
-from aigen.workflow_editor import WorkflowEditor
 from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
 from aigen.workflow_document_io import (
     load_workflow_document,
     save_workflow_document,
 )
+from aigen.workflow_edit_buffer import WorkflowEditBuffer
+from aigen.workflow_editor import WorkflowEditor
 from aigen.workflow_execution import WORKFLOW_EVENT_PREFIX
 from aigen.workflow_graph import (
     ImageSourceNode,
@@ -224,52 +230,6 @@ class FormFields(VerticalScroll):
 
     def compose(self) -> ComposeResult:
         yield from (FieldRow(self.form, field) for field in self.form.fields)
-
-
-class MessageDialog(ModalScreen[None]):
-    def __init__(self, title: str, message: str) -> None:
-        super().__init__()
-        self.title = title
-        self.message = message
-
-    def compose(self) -> ComposeResult:
-        with Container(classes="dialog"):
-            yield Label(self.title, classes="dialog-title")
-            yield Static(self.message, classes="dialog-message")
-            yield Button("Close", variant="primary", id="close-dialog", compact=True)
-
-    @on(Button.Pressed, "#close-dialog")
-    def close_dialog(self) -> None:
-        self.dismiss()
-
-
-class PromptDialog(ModalScreen[str | None]):
-    def __init__(self, title: str, label: str, value: str = "") -> None:
-        super().__init__()
-        self.title = title
-        self.label = label
-        self.value = value
-
-    def compose(self) -> ComposeResult:
-        with Container(classes="dialog"):
-            yield Label(self.title, classes="dialog-title")
-            yield Label(self.label)
-            yield Input(self.value, id="dialog-input", compact=True)
-            with Horizontal(classes="dialog-actions"):
-                yield Button("OK", variant="primary", id="dialog-ok", compact=True)
-                yield Button("Cancel", id="dialog-cancel", compact=True)
-
-    def on_mount(self) -> None:
-        self.query_one(Input).focus()
-
-    @on(Input.Submitted, "#dialog-input")
-    @on(Button.Pressed, "#dialog-ok")
-    def accept(self) -> None:
-        self.dismiss(self.query_one(Input).value)
-
-    @on(Button.Pressed, "#dialog-cancel")
-    def cancel(self) -> None:
-        self.dismiss(None)
 
 
 class GenerationUpdated(Message):
@@ -507,10 +467,12 @@ class ImageGenerationApp(App[None]):
         self.video_form = VideoForm()
         self.sam_form = SamEditForm()
         self.postprocess_form = PostprocessForm()
-        self.workflow_document = keyframed_video_workflow_template()
-        self.workflow_path: Path | None = None
+        self.workflow_buffer = WorkflowEditBuffer(
+            keyframed_video_workflow_template()
+        )
         self.workflow_editor: WorkflowEditor | None = None
         self.workflow_runtime_statuses: dict[str, str] = {}
+        self.workflow_request_path: Path | None = None
         self.configuration_path: Path | None = None
         self.sam_selection_path: Path | None = None
         self.sam_prompt_dialog: SAMPromptDialog | None = None
@@ -933,11 +895,11 @@ class ImageGenerationApp(App[None]):
         elif action == "workflow-open":
             self._open_workflow_editor()
         elif action == "workflow-new":
-            self._new_workflow()
+            await self._new_workflow()
         elif action == "workflow-load":
-            self._load_workflow()
+            await self._load_workflow()
         elif action == "quit":
-            self.action_quit()
+            await self.action_quit()
 
     async def action_remove_selected_slot(self) -> None:
         await self._remove_slot(self.selected_field)
@@ -1184,11 +1146,12 @@ class ImageGenerationApp(App[None]):
 
     def _workflow_summary_text(self) -> str:
         path = (
-            display_project_path(self.workflow_path)
-            if self.workflow_path is not None
+            display_project_path(self.workflow_buffer.document_path)
+            if self.workflow_buffer.document_path is not None
             else "Unsaved"
         )
-        return f"{self.workflow_document.name} | {path}"
+        dirty = " *" if self.workflow_buffer.dirty else ""
+        return f"{self.workflow_buffer.document.name} | {path}{dirty}"
 
     def _update_workflow_summary(self) -> None:
         for summary in self.query("#workflow-summary"):
@@ -1198,10 +1161,7 @@ class ImageGenerationApp(App[None]):
     def _open_workflow_editor(self) -> None:
         if self.workflow_editor is not None:
             return
-        editor = WorkflowEditor(
-            self.workflow_document,
-            document_path=self.workflow_path,
-        )
+        editor = WorkflowEditor(self.workflow_buffer)
         self.workflow_editor = editor
         self.push_screen(editor, self._close_workflow_editor)
         self.call_after_refresh(
@@ -1215,31 +1175,49 @@ class ImageGenerationApp(App[None]):
 
     def _close_workflow_editor(
         self,
-        document: WorkflowGraph | None,
+        _result: None,
     ) -> None:
-        editor = self.workflow_editor
-        if document is not None:
-            self.workflow_document = document
-            if editor is not None:
-                self.workflow_path = editor.document_path
         self.workflow_editor = None
         self._update_workflow_summary()
 
-    def _new_workflow(self) -> None:
+    async def _new_workflow(self) -> None:
         if self.process is not None:
             self._set_status("Stop the active operation before creating a workflow.")
             return
-        self.workflow_document = keyframed_video_workflow_template()
-        self.workflow_path = None
-        self.workflow_runtime_statuses.clear()
-        self._update_workflow_summary()
-        self._open_workflow_editor()
+        if not await self._commit_workflow_draft():
+            return
+        if self.workflow_buffer.dirty:
+            self.push_screen(
+                ConfirmationDialog(
+                    "Discard workflow changes?",
+                    "Create a new workflow and discard the unsaved changes?",
+                    confirm_label="Discard and create",
+                ),
+                self._new_workflow_confirmed,
+            )
+            return
+        self._replace_workflow_document(
+            keyframed_video_workflow_template(),
+            document_path=None,
+            status="New workflow",
+        )
 
-    def _load_workflow(self) -> None:
+    def _new_workflow_confirmed(self, discard: bool) -> None:
+        if not discard:
+            return
+        self._replace_workflow_document(
+            keyframed_video_workflow_template(),
+            document_path=None,
+            status="New workflow",
+        )
+
+    async def _load_workflow(self) -> None:
         if self.process is not None:
             self._set_status("Stop the active operation before loading a workflow.")
             return
-        start = self.workflow_path or PROJECT_ROOT
+        if not await self._commit_workflow_draft():
+            return
+        start = self.workflow_buffer.document_path or PROJECT_ROOT
         self.push_screen(
             FileBrowser(
                 self._browser_start(start.as_posix()),
@@ -1259,41 +1237,82 @@ class ImageGenerationApp(App[None]):
         except (OSError, ValueError) as error:
             self._show_error("Cannot load workflow", str(error))
             return
-        self.workflow_document = document
-        self.workflow_path = path
+        if self.workflow_buffer.dirty:
+            self.push_screen(
+                ConfirmationDialog(
+                    "Discard workflow changes?",
+                    "Load the selected workflow and discard the unsaved changes?",
+                    confirm_label="Discard and load",
+                ),
+                lambda discard: self._workflow_load_confirmed(
+                    discard,
+                    document,
+                    path,
+                ),
+            )
+            return
+        self._replace_workflow_document(
+            document,
+            document_path=path,
+            status=f"Loaded {path}",
+        )
+
+    def _workflow_load_confirmed(
+        self,
+        discard: bool,
+        document: WorkflowGraph,
+        path: Path,
+    ) -> None:
+        if not discard:
+            return
+        self._replace_workflow_document(
+            document,
+            document_path=path,
+            status=f"Loaded {path}",
+        )
+
+    def _replace_workflow_document(
+        self,
+        document: WorkflowGraph,
+        *,
+        document_path: Path | None,
+        status: str,
+    ) -> None:
+        if document_path is None:
+            self.workflow_buffer.replace_document(document)
+        else:
+            self.workflow_buffer.load_document(document, document_path)
         self.workflow_runtime_statuses.clear()
         self._update_workflow_summary()
         if self.workflow_editor is None:
             self._open_workflow_editor()
             return
         self.run_worker(
-            self.workflow_editor.apply_loaded_document(document, path),
+            self.workflow_editor.show_replaced_document(status),
             group="workflow-document",
             exclusive=True,
         )
 
+    async def _commit_workflow_draft(self) -> bool:
+        if self.workflow_editor is None:
+            return True
+        return await self.workflow_editor.commit_pending_property()
+
     @on(WorkflowEditor.SaveRequested)
     def workflow_save_requested(
         self,
-        event: WorkflowEditor.SaveRequested,
+        _event: WorkflowEditor.SaveRequested,
     ) -> None:
-        editor = self.workflow_editor
-        if editor is None:
+        if self.workflow_buffer.document_path is not None:
+            self._save_workflow_to(
+                self.workflow_buffer.document_path
+            )
             return
-        if editor.document_path is not None:
-            try:
-                editor.save_to(editor.document_path)
-            except OSError as error:
-                self._show_error("Cannot save workflow", str(error))
-                return
-            self.workflow_document = event.document
-            self.workflow_path = editor.document_path
-            self._update_workflow_summary()
-            return
-        self._choose_workflow_directory(event.document)
+        self._choose_workflow_directory()
 
-    def _choose_workflow_directory(self, document: WorkflowGraph) -> None:
-        start = self.workflow_path.parent if self.workflow_path else PROJECT_ROOT
+    def _choose_workflow_directory(self) -> None:
+        path = self.workflow_buffer.document_path
+        start = path.parent if path is not None else PROJECT_ROOT
         self.push_screen(
             FileBrowser(
                 start,
@@ -1302,27 +1321,26 @@ class ImageGenerationApp(App[None]):
                 extensions=WORKFLOW_EXTENSIONS,
                 select_label="Select folder",
             ),
-            lambda directory: self._choose_workflow_name(directory, document),
+            self._choose_workflow_name,
         )
 
     def _choose_workflow_name(
         self,
         directory: Path | None,
-        document: WorkflowGraph,
     ) -> None:
         if directory is None:
             return
-        name = self.workflow_path.name if self.workflow_path else "workflow.json"
+        path = self.workflow_buffer.document_path
+        name = path.name if path is not None else "workflow.json"
         self.push_screen(
             PromptDialog("Save workflow", "Workflow filename", name),
-            lambda filename: self._save_workflow(directory, filename, document),
+            lambda filename: self._save_workflow(directory, filename),
         )
 
     def _save_workflow(
         self,
         directory: Path,
         filename: str | None,
-        document: WorkflowGraph,
     ) -> None:
         if filename is None:
             return
@@ -1342,27 +1360,34 @@ class ImageGenerationApp(App[None]):
                 "Workflow filename must use the .json extension.",
             )
             return
-        if output.exists() and output != self.workflow_path:
+        if (
+            output.exists()
+            and output != self.workflow_buffer.document_path
+        ):
             self._show_error(
                 "Cannot save workflow",
                 f"Workflow already exists: {output}",
             )
             return
+        self._save_workflow_to(output)
+
+    def _save_workflow_to(self, output: Path) -> None:
         try:
-            if self.workflow_editor is not None:
-                self.workflow_editor.save_to(output)
-            else:
-                save_workflow_document(document, output)
+            save_workflow_document(
+                self.workflow_buffer.document,
+                output,
+            )
         except OSError as error:
             self._show_error("Cannot save workflow", str(error))
             return
-        self.workflow_document = document
-        self.workflow_path = output
+        self.workflow_buffer.mark_saved(output)
+        if self.workflow_editor is not None:
+            self.workflow_editor.document_saved()
         self._update_workflow_summary()
 
     @on(WorkflowEditor.LoadRequested)
-    def workflow_load_requested(self) -> None:
-        self._load_workflow()
+    async def workflow_load_requested(self) -> None:
+        await self._load_workflow()
 
     @on(WorkflowEditor.BrowseRequested)
     def workflow_browse_requested(
@@ -1372,7 +1397,7 @@ class ImageGenerationApp(App[None]):
         editor = self.workflow_editor
         if editor is None:
             return
-        node = editor.document.node(event.node_id)
+        node = self.workflow_buffer.document.node(event.node_id)
         if isinstance(node, ImageSourceNode):
             title = "Select image"
             extensions = IMAGE_EXTENSIONS
@@ -1425,19 +1450,17 @@ class ImageGenerationApp(App[None]):
         if self.process is not None:
             self._set_status("An operation is already running.")
             return
-        workflow = event.workflow
-        document = workflow.document
+        document = event.document
         request_path = (
             DEFAULT_WORKFLOW_RUNS_ROOT
             / "requests"
-            / f"{workflow.digest}.json"
+            / f"request-{uuid4().hex}.json"
         )
         try:
             save_workflow_document(document, request_path)
         except OSError as error:
             self._show_error("Cannot start workflow", str(error))
             return
-        self.workflow_document = document
         self.workflow_runtime_statuses = {
             node.id: "queued"
             for node in document.nodes
@@ -1446,11 +1469,6 @@ class ImageGenerationApp(App[None]):
             self.workflow_editor.set_runtime_statuses(
                 self.workflow_runtime_statuses
             )
-        run_dir = (
-            DEFAULT_WORKFLOW_RUNS_ROOT
-            / "runs"
-            / workflow.digest
-        )
         self._start_command(
             [
                 sys.executable,
@@ -1463,13 +1481,20 @@ class ImageGenerationApp(App[None]):
                 "--runs-root",
                 DEFAULT_WORKFLOW_RUNS_ROOT.as_posix(),
             ],
-            display_project_path(run_dir),
+            display_project_path(DEFAULT_WORKFLOW_RUNS_ROOT / "runs"),
             action_button_id="workflow-run",
             idle_label="Run",
             error_title="Cannot start workflow",
             running_label=None,
         )
-        if self.process is not None and self.workflow_editor is not None:
+        if self.process is None:
+            request_path.unlink(missing_ok=True)
+            self.workflow_runtime_statuses.clear()
+            if self.workflow_editor is not None:
+                self.workflow_editor.set_runtime_statuses({})
+            return
+        self.workflow_request_path = request_path
+        if self.workflow_editor is not None:
             self.workflow_editor.set_running(True)
 
     @on(WorkflowEditor.StopRequested)
@@ -1477,8 +1502,8 @@ class ImageGenerationApp(App[None]):
         self._cancel_generation()
 
     @on(WorkflowEditor.QuitRequested)
-    def workflow_quit_requested(self) -> None:
-        self.action_quit()
+    async def workflow_quit_requested(self) -> None:
+        await self.action_quit()
 
     def _start_generation(self) -> None:
         if self.process is not None:
@@ -1671,9 +1696,7 @@ class ImageGenerationApp(App[None]):
         status = str(event.payload["status"])
         self.workflow_runtime_statuses[node_id] = status
         if self.workflow_editor is not None:
-            self.workflow_editor.set_runtime_statuses(
-                self.workflow_runtime_statuses
-            )
+            self.workflow_editor.set_runtime_status(node_id, status)
             node_progress = event.payload.get("progress")
             if isinstance(node_progress, dict):
                 detail = self._progress_text(
@@ -1714,6 +1737,7 @@ class ImageGenerationApp(App[None]):
         self._set_status("Stopped.")
 
     def _generation_stopped(self) -> None:
+        self._discard_workflow_request()
         self.process = None
         self.cancel_requested = False
         self.generation_progress = None
@@ -1765,14 +1789,40 @@ class ImageGenerationApp(App[None]):
                 pass
             process.wait()
 
-    def action_quit(self) -> None:
+    async def action_quit(self) -> None:
+        if not await self._commit_workflow_draft():
+            return
+        if self.workflow_buffer.dirty:
+            self.push_screen(
+                ConfirmationDialog(
+                    "Discard workflow changes?",
+                    "Quit and discard the unsaved workflow changes?",
+                    confirm_label="Discard and quit",
+                ),
+                self._quit_confirmed,
+            )
+            return
+        self._quit()
+
+    def _quit_confirmed(self, discard: bool) -> None:
+        if discard:
+            self._quit()
+
+    def _quit(self) -> None:
         try:
             self.form.save(STATE_PATH)
         except OSError as error:
             self._show_error("Cannot save form", str(error))
             return
         self._stop_generation()
+        self._discard_workflow_request()
         self.exit()
+
+    def _discard_workflow_request(self) -> None:
+        if self.workflow_request_path is None:
+            return
+        self.workflow_request_path.unlink(missing_ok=True)
+        self.workflow_request_path = None
 
     def _show_error(self, title: str, message: str) -> None:
         self.push_screen(MessageDialog(title, message))
