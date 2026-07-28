@@ -29,6 +29,7 @@ from aigen.pixel_art_fixer_commands import (
     add_pixel_art_fixer_command,
     run_pixel_art_fixer_command,
 )
+from aigen.pix2pix_commands import add_pix2pix_commands, run_pix2pix_command
 from aigen.sam_commands import add_sam_command, run_sam_command
 from aigen.progress import StatusReporter, open_cli_progress
 from aigen.video_postprocess_commands import (
@@ -61,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_ltx23_command(subparsers)
     add_model_commands(subparsers)
     add_pixel_art_fixer_command(subparsers)
+    add_pix2pix_commands(subparsers)
     add_sam_command(subparsers)
     add_video_postprocess_commands(subparsers)
     add_workflow_commands(subparsers)
@@ -119,6 +121,13 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_model_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "pixel-art-fixer":
         return run_pixel_art_fixer_command(
+            args,
+            sys.stdout,
+            sys.stderr,
+            progress=progress,
+        )
+    if args.command == "pix2pix":
+        return run_pix2pix_command(
             args,
             sys.stdout,
             sys.stderr,

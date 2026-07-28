@@ -14,6 +14,7 @@ from aigen.generation.image_edit import (
     QWEN_2511_LIGHTNING_BACKEND,
     USO_FLUX1_BACKEND,
 )
+from aigen.model_artifacts import model_artifact_stat_revision
 from aigen.workflow_cache import NodeExecutionProvenance, RevisionedComponent
 from aigen.workflow_graph import (
     AnimeGenI2VNode,
@@ -88,25 +89,16 @@ def _image_edit_provenance(
         ),
     )
     if backend == FLUX2_KLEIN_BACKEND:
-        from aigen.generation.flux2_klein import (
-            FLUX2_KLEIN_MODEL_ROOT,
-            FLUX2_KLEIN_TEXT_ENCODER,
-            FLUX2_KLEIN_TRANSFORMER,
+        from aigen.generation.flux2_klein_artifacts import (
+            flux2_klein_model_artifacts,
         )
 
-        models = (
+        models = tuple(
             _component(
-                "FLUX.2 Klein scaled-FP8 transformer",
-                _path_inventory_revision(FLUX2_KLEIN_TRANSFORMER),
-            ),
-            _component(
-                "FLUX.2 Klein VAE and scheduler",
-                _path_inventory_revision(FLUX2_KLEIN_MODEL_ROOT),
-            ),
-            _component(
-                "Qwen3-8B-FP8 conditioner",
-                _path_inventory_revision(FLUX2_KLEIN_TEXT_ENCODER),
-            ),
+                component.name,
+                model_artifact_stat_revision(component),
+            )
+            for component in flux2_klein_model_artifacts()
         )
     elif backend in {
         QWEN_2511_LIGHTNING_BACKEND,

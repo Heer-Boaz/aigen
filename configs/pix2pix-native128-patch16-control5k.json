@@ -1,0 +1,24 @@
+{
+  "format": "aigen.pix2pix.training.v1",
+  "model": {
+    "image_size": 128,
+    "input_channels": 3,
+    "output_channels": 3,
+    "generator_channels": 64,
+    "discriminator_channels": 64,
+    "discriminator_layers": 1,
+    "generator_dropout": true
+  },
+  "batch_size": 1,
+  "max_steps": 5000,
+  "learning_rate": 0.0002,
+  "beta1": 0.5,
+  "beta2": 0.999,
+  "lambda_l1": 100.0,
+  "horizontal_flip": true,
+  "precision": "fp32",
+  "checkpoint_every": 5000,
+  "log_every": 100,
+  "seed": 42,
+  "num_workers": 4
+}

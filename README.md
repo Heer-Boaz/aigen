@@ -122,6 +122,24 @@ Raw one-shot generation commands are separate experimentation utilities, not
 part of the character-keyframe workflow. The optional HunyuanVideo command
 above is likewise a separate I2V utility.
 
+## Paired pix2pix training
+
+`pix2pix` is a separate supervised pixel-art translation route built around a
+U-Net-128 or U-Net-256 generator and a conditional PatchGAN-16 or PatchGAN-70.
+It requires exact aligned RGB source/target pairs; it does not replace the
+FLUX.2 Klein or Qwen character pipelines.
+
+```bash
+.venv/bin/aigen pix2pix contract
+.venv/bin/aigen pix2pix audit path/to/paired-dataset
+.venv/bin/aigen pix2pix train path/to/paired-dataset \
+  --output-dir runs/pix2pix/my-run
+```
+
+The complete data contract, baseline configuration, resume flow, artifact
+layout, inference command and evaluation workflow are documented in
+[`docs/pix2pix.md`](docs/pix2pix.md).
+
 ## Direct Image Editing
 
 `image-edit` provides one command contract for the local image-edit backends.

@@ -1,0 +1,27 @@
+{
+  "format": "aigen.pix2pix.qwen-source.v1",
+  "name": "ragnarok-player-qwen2511-lightning-native128-gate512-v1",
+  "backend": "qwen-image-edit-2511-lightning",
+  "prompt": "Redraw the supplied pixel-art sprite as a clean anime illustration with smooth continuous linework and shading. Preserve the subject’s design, pose, proportions, colors, clothing, accessories, held objects, white background, and exact normalized canvas composition: keep every element at the same position, scale, orientation, and framing without cropping or repositioning. Remove all pixelated edges and pixel-art rendering.",
+  "seed_base": 700000,
+  "shard_size": 16,
+  "width": 1328,
+  "height": 1328,
+  "steps": 8,
+  "guidance": 1.0,
+  "sampler": "flowmatch-euler",
+  "scheduler": "flowmatch-dynamic-shift",
+  "source_raster": {
+    "canvas_size": 128,
+    "inner_width": 128,
+    "inner_height": 128,
+    "offset_x": 0,
+    "offset_y": 0,
+    "resample": "lanczos",
+    "background_rgb": [
+      255,
+      255,
+      255
+    ]
+  }
+}

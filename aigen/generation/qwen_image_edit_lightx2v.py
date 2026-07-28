@@ -146,7 +146,7 @@ def run_lightx2v_qwen_image_edit(
     if scheduler not in QWEN_2511_SCHEDULERS:
         raise QwenImageEditLightX2VError(f"unsupported Qwen scheduler: {scheduler}")
 
-    runtime_root = _lightx2v_runtime_root()
+    runtime_root = lightx2v_runtime_root()
     python = runtime_root / "venv/bin/python"
     source = runtime_root / "LightX2V"
     required_paths = (
@@ -295,13 +295,13 @@ def lightx2v_profile_json(profile: QwenImageEditLightX2VProfile) -> dict[str, An
             "engine": {
                 "repo_id": "ModelTC/LightX2V",
                 "revision": LIGHTX2V_REVISION,
-                "path": (_lightx2v_runtime_root() / "LightX2V").as_posix(),
+                "path": (lightx2v_runtime_root() / "LightX2V").as_posix(),
             },
         },
     }
 
 
-def _lightx2v_runtime_root() -> Path:
+def lightx2v_runtime_root() -> Path:
     configured = os.environ.get("AIGEN_LIGHTX2V_ROOT")
     return Path(configured).expanduser().resolve() if configured else Path.home() / ".cache/aigen-lightx2v"
 

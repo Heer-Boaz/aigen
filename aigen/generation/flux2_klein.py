@@ -17,6 +17,11 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationOutputRequest,
 )
 from aigen.generation.flow_match_sampling import euler_ancestral_step
+from aigen.generation.flux2_klein_artifacts import (
+    FLUX2_KLEIN_MODEL_ROOT,
+    FLUX2_KLEIN_TEXT_ENCODER,
+    FLUX2_KLEIN_TRANSFORMER,
+)
 from aigen.generation.prompt_encoding import ordered_unique
 from aigen.image_edit_defaults import (
     FLUX2_KLEIN_DEFAULT_SAMPLER,
@@ -25,15 +30,6 @@ from aigen.image_edit_defaults import (
 )
 from aigen.lora_weights import LoraLoadSpec
 from aigen.progress import StatusReporter
-from aigen.runtime_profiles import MODELS_ROOT
-
-
-FLUX2_KLEIN_MODEL_ROOT = MODELS_ROOT / "flux2/black-forest-labs/FLUX.2-klein-9B"
-FLUX2_KLEIN_TRANSFORMER = (
-    MODELS_ROOT
-    / "flux2/black-forest-labs/FLUX.2-klein-9b-fp8/flux-2-klein-9b-fp8.safetensors"
-)
-FLUX2_KLEIN_TEXT_ENCODER = MODELS_ROOT / "flux2/Qwen/Qwen3-8B-FP8"
 FLUX2_KLEIN_RECOMMENDED_MAX_SIDE = 1024
 FLUX2_KLEIN_RECOMMENDED_MIN_SIDE = 256
 
@@ -246,6 +242,8 @@ class Flux2KleinSession:
         strength: float | None = None,
         progress: StatusReporter,
     ) -> None:
+        if sampler not in FLUX2_KLEIN_SAMPLERS:
+            raise Flux2KleinError(f"unsupported FLUX.2 Klein sampler: {sampler}")
         (
             torch,
             AutoencoderKLFlux2,

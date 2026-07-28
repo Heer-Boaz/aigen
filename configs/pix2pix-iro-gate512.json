@@ -1,0 +1,195 @@
+{
+  "format": "aigen.pix2pix.iro-corpus.v1",
+  "name": "ragnarok-player-flux2-klein-native128-gate512-v1",
+  "endpoint": "https://api.costume.irowiki.org/render?downloadimage&accesstoken=3iznpprsozjn3nh6rvdvqn2fl89mo1jd",
+  "canvas": "128x128+64+112",
+  "image_size": 128,
+  "identity_seed": 20260728,
+  "head_palettes": [1, 2, 3, 4, 5, 6, 7, 8],
+  "lineage_splits": {
+    "novice": "train",
+    "swordman": "train",
+    "magician": "train",
+    "archer": "train",
+    "acolyte": "train",
+    "merchant": "train",
+    "thief": "train",
+    "taekwon": "validation",
+    "ninja": "test",
+    "gunslinger": "test",
+    "summoner": "test"
+  },
+  "lineage_pair_quotas": [
+    {"lineage": "novice", "split": "train", "female": 13, "male": 13},
+    {"lineage": "swordman", "split": "train", "female": 30, "male": 30},
+    {"lineage": "magician", "split": "train", "female": 30, "male": 29},
+    {"lineage": "archer", "split": "train", "female": 30, "male": 30},
+    {"lineage": "acolyte", "split": "train", "female": 30, "male": 30},
+    {"lineage": "merchant", "split": "train", "female": 29, "male": 30},
+    {"lineage": "thief", "split": "train", "female": 30, "male": 30},
+    {"lineage": "taekwon", "split": "validation", "female": 32, "male": 32},
+    {"lineage": "ninja", "split": "test", "female": 12, "male": 12},
+    {"lineage": "gunslinger", "split": "test", "female": 12, "male": 12},
+    {"lineage": "summoner", "split": "test", "female": 8, "male": 8}
+  ],
+  "split_axis_quotas": {
+    "train": {
+      "directions": {"0": 48, "1": 48, "2": 48, "3": 48, "4": 48, "5": 48, "6": 48, "7": 48},
+      "head_palettes": {"1": 48, "2": 48, "3": 48, "4": 48, "5": 48, "6": 48, "7": 48, "8": 48},
+      "actions": {"0": 35, "8": 35, "16": 35, "24": 35, "32": 35, "40": 35, "48": 35, "64": 34, "80": 35, "88": 35, "96": 35},
+      "heads_by_species": {
+        "human": [1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 24, 26, 27, 28, 29, 31, 32, 33, 34, 36, 37, 38, 39, 41, 42]
+      }
+    },
+    "validation": {
+      "directions": {"0": 8, "1": 8, "2": 8, "3": 8, "4": 8, "5": 8, "6": 8, "7": 8},
+      "head_palettes": {"1": 8, "2": 8, "3": 8, "4": 8, "5": 8, "6": 8, "7": 8, "8": 8},
+      "actions": {"0": 6, "8": 6, "16": 6, "24": 6, "32": 5, "40": 6, "48": 5, "64": 6, "80": 6, "88": 6, "96": 6},
+      "heads_by_species": {
+        "human": [10, 20, 30, 40]
+      }
+    },
+    "test": {
+      "directions": {"0": 8, "1": 8, "2": 8, "3": 8, "4": 8, "5": 8, "6": 8, "7": 8},
+      "head_palettes": {"1": 8, "2": 8, "3": 8, "4": 8, "5": 8, "6": 8, "7": 8, "8": 8},
+      "actions": {"0": 6, "8": 6, "16": 6, "24": 6, "32": 6, "40": 6, "48": 6, "64": 5, "80": 5, "88": 6, "96": 6},
+      "heads_by_species": {
+        "human": [5, 15, 25, 35],
+        "doram": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      }
+    }
+  },
+  "actions": [
+    {"name": "idle", "base": 0},
+    {"name": "walk", "base": 8},
+    {"name": "sitting", "base": 16},
+    {"name": "picking", "base": 24},
+    {"name": "standby", "base": 32},
+    {"name": "attacking", "base": 40},
+    {"name": "damage", "base": 48},
+    {"name": "dead", "base": 64},
+    {"name": "attack1", "base": 80},
+    {"name": "attack2", "base": 88},
+    {"name": "casting", "base": 96}
+  ],
+  "defaults": {
+    "head_direction": 0,
+    "headgear": [0, 0, 0],
+    "garment": 0,
+    "body_palette": -1,
+    "madogear_type": 0,
+    "outfit": 0
+  },
+  "jobs": [
+    {"id": 0, "name": "Novice", "lineage": "novice", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 23, "name": "Super Novice", "lineage": "novice", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4190, "name": "Ex. Super Novice", "lineage": "novice", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4307, "name": "Hyper Novice", "lineage": "novice", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 1, "name": "Swordman", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 7, "name": "Knight", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 14, "name": "Crusader", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4008, "name": "Lord Knight", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4015, "name": "Paladin", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4060, "name": "Rune Knight", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4066, "name": "Royal Guard", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4252, "name": "Dragon Knight", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4258, "name": "Imperial Guard", "lineage": "swordman", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 2, "name": "Magician", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 9, "name": "Wizard", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 16, "name": "Sage", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4010, "name": "High Wizard", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4017, "name": "Professor", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4061, "name": "Warlock", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4067, "name": "Sorcerer", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4255, "name": "Arch Mage", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4261, "name": "Elemental Master", "lineage": "magician", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 3, "name": "Archer", "lineage": "archer", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 11, "name": "Hunter", "lineage": "archer", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 19, "name": "Bard", "lineage": "archer", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 20, "name": "Dancer", "lineage": "archer", "species": "human", "genders": [0], "head_max": 42},
+    {"id": 4012, "name": "Sniper", "lineage": "archer", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4020, "name": "Clown", "lineage": "archer", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 4021, "name": "Gypsy", "lineage": "archer", "species": "human", "genders": [0], "head_max": 42},
+    {"id": 4062, "name": "Ranger", "lineage": "archer", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4068, "name": "Minstrel", "lineage": "archer", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 4069, "name": "Wanderer", "lineage": "archer", "species": "human", "genders": [0], "head_max": 42},
+    {"id": 4257, "name": "Windhawk", "lineage": "archer", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4263, "name": "Troubadour", "lineage": "archer", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 4264, "name": "Trouvere", "lineage": "archer", "species": "human", "genders": [0], "head_max": 42},
+
+    {"id": 4, "name": "Acolyte", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 8, "name": "Priest", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 15, "name": "Monk", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4009, "name": "High Priest", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4016, "name": "Champion", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4063, "name": "Arch Bishop", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4070, "name": "Sura", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4256, "name": "Cardinal", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4262, "name": "Inquisitor", "lineage": "acolyte", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 5, "name": "Merchant", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 10, "name": "Blacksmith", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 18, "name": "Alchemist", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4011, "name": "Whitesmith", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4019, "name": "Creator", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4064, "name": "Mechanic", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4071, "name": "Genetic", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4253, "name": "Meister", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4259, "name": "Biolo", "lineage": "merchant", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 6, "name": "Thief", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 12, "name": "Assassin", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 17, "name": "Rogue", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4013, "name": "Assassin Cross", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4018, "name": "Stalker", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4065, "name": "Guillotine Cross", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4072, "name": "Shadow Chaser", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4254, "name": "Shadow Cross", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4260, "name": "Abyss Chaser", "lineage": "thief", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 4046, "name": "Taekwon", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4047, "name": "Star Gladiator", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4049, "name": "Soul Linker", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4239, "name": "Star Emperor", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4240, "name": "Soul Reaper", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4302, "name": "Sky Emperor", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4303, "name": "Soul Ascetic", "lineage": "taekwon", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 25, "name": "Ninja", "lineage": "ninja", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4211, "name": "Kagerou", "lineage": "ninja", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 4212, "name": "Oboro", "lineage": "ninja", "species": "human", "genders": [0], "head_max": 42},
+    {"id": 4304, "name": "Shinkiro", "lineage": "ninja", "species": "human", "genders": [1], "head_max": 42},
+    {"id": 4305, "name": "Shiranui", "lineage": "ninja", "species": "human", "genders": [0], "head_max": 42},
+
+    {"id": 24, "name": "Gunslinger", "lineage": "gunslinger", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4215, "name": "Rebellion", "lineage": "gunslinger", "species": "human", "genders": [0, 1], "head_max": 42},
+    {"id": 4306, "name": "Night Watch", "lineage": "gunslinger", "species": "human", "genders": [0, 1], "head_max": 42},
+
+    {"id": 4218, "name": "Summoner", "lineage": "summoner", "species": "doram", "genders": [0, 1], "head_max": 10},
+    {"id": 4308, "name": "Spirit Handler", "lineage": "summoner", "species": "doram", "genders": [0, 1], "head_max": 10}
+  ],
+  "render_workers": 4,
+  "request_timeout_seconds": 60.0,
+  "flux": {
+    "prompt": "Redraw the supplied pixel-art sprite as a clean high-resolution anime illustration with smooth linework and shading. Preserve exactly the visible design, pose, proportions, colors, clothing, accessories, objects, framing, and white background. Add nothing; do not keep pixelated edges.",
+    "width": 768,
+    "height": 1024,
+    "seed_base": 600000,
+    "shard_size": 16,
+    "steps": 4,
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift"
+  },
+  "source_raster": {
+    "canvas_size": 128,
+    "inner_width": 96,
+    "inner_height": 128,
+    "offset_x": 16,
+    "offset_y": 0,
+    "resample": "lanczos",
+    "background_rgb": [255, 255, 255]
+  }
+}
