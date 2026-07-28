@@ -31,7 +31,7 @@ from aigen.workflow_artifacts import (
 from aigen.workflow_graph import ArtifactType, NodeKind
 
 
-WORKFLOW_CACHE_VERSION = 1
+WORKFLOW_CACHE_VERSION = 2
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _CACHEABLE_ARTIFACT_TYPES = frozenset(
     (
@@ -87,6 +87,7 @@ class NodeInputIdentity(_CacheModel):
 class _CachedFile(_CacheModel):
     path: str = Field(min_length=1)
     size: int = Field(ge=0)
+    mtime_ns: int = Field(ge=0)
     sha256: str = Field(pattern=_SHA256_PATTERN)
 
 
@@ -110,7 +111,7 @@ class _CachedArtifact(_CacheModel):
 
 
 class _NodeCacheManifest(_CacheModel):
-    version: Literal[WORKFLOW_CACHE_VERSION] = WORKFLOW_CACHE_VERSION
+    version: Literal[2] = WORKFLOW_CACHE_VERSION
     signature: str = Field(pattern=_SHA256_PATTERN)
     node_kind: NodeKind
     provenance: NodeExecutionProvenance
@@ -142,7 +143,6 @@ class GeneratedNodeOutput:
 class NodeCacheHit:
     signature: str
     node_kind: NodeKind
-    manifest_path: Path
     outputs: Mapping[
         str,
         ImageArtifact | VideoArtifact | ImageSequenceArtifact,
@@ -238,7 +238,7 @@ class WorkflowNodeCache:
             raise WorkflowCacheCorruptionError(
                 f"workflow cache provenance mismatch: {manifest_path}"
             )
-        return _cache_hit(entry_dir, manifest, verify_bytes=True)
+        return _cache_hit(entry_dir, manifest)
 
     def begin(
         self,
@@ -341,7 +341,7 @@ class NodeCacheWrite:
             return winner
 
         self._published = True
-        return _cache_hit(entry_dir, manifest, verify_bytes=False)
+        return _cache_hit(entry_dir, manifest)
 
 
 def _capture_artifact(
@@ -374,6 +374,7 @@ def _capture_file(resolved_staging: Path, path: Path) -> _CachedFile:
     return _CachedFile(
         path=relative.as_posix(),
         size=file_stat.st_size,
+        mtime_ns=file_stat.st_mtime_ns,
         sha256=sha256_file(resolved),
     )
 
@@ -381,8 +382,6 @@ def _capture_file(resolved_staging: Path, path: Path) -> _CachedFile:
 def _cache_hit(
     entry_dir: Path,
     manifest: _NodeCacheManifest,
-    *,
-    verify_bytes: bool,
 ) -> NodeCacheHit:
     outputs: dict[str, ImageArtifact | VideoArtifact | ImageSequenceArtifact] = {}
     resolved_entry_dir = entry_dir.resolve(strict=True)
@@ -391,7 +390,6 @@ def _cache_hit(
             _resolve_cached_file(
                 resolved_entry_dir,
                 file,
-                verify_bytes=verify_bytes,
             )
             for file in artifact.files
         )
@@ -407,7 +405,6 @@ def _cache_hit(
     return NodeCacheHit(
         signature=manifest.signature,
         node_kind=manifest.node_kind,
-        manifest_path=entry_dir / "result.json",
         outputs=MappingProxyType(outputs),
     )
 
@@ -415,8 +412,6 @@ def _cache_hit(
 def _resolve_cached_file(
     resolved_entry_dir: Path,
     cached_file: _CachedFile,
-    *,
-    verify_bytes: bool,
 ) -> Path:
     relative = Path(cached_file.path)
     if relative.is_absolute():
@@ -435,15 +430,14 @@ def _resolve_cached_file(
         raise WorkflowCacheCorruptionError(
             f"workflow cache output is not a file: {path}"
         )
-    if verify_bytes:
-        if file_stat.st_size != cached_file.size:
-            raise WorkflowCacheCorruptionError(
-                f"workflow cache output size changed: {path}"
-            )
-        if sha256_file(path) != cached_file.sha256:
-            raise WorkflowCacheCorruptionError(
-                f"workflow cache output bytes changed: {path}"
-            )
+    if file_stat.st_size != cached_file.size:
+        raise WorkflowCacheCorruptionError(
+            f"workflow cache output size changed: {path}"
+        )
+    if file_stat.st_mtime_ns != cached_file.mtime_ns:
+        raise WorkflowCacheCorruptionError(
+            f"workflow cache output modification time changed: {path}"
+        )
     return path
 
 

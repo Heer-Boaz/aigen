@@ -128,13 +128,22 @@ def run_workflow_command(
 
             signal.signal(signal.SIGTERM, interrupt_workflow)
             try:
-                payload = execute_workflow(
+                run_result = execute_workflow(
                     workflow,
                     runs_root=args.runs_root,
                     progress=progress,
                     event_sink=emit_event,
                     node_progress_sink=emit_node_progress,
-                ).to_json()
+                )
+                payload = run_result.to_json()
+                emit_event(
+                    {
+                        "kind": payload["kind"],
+                        "status": payload["status"],
+                        "run_dir": payload["run_dir"],
+                        "result": payload["result"],
+                    }
+                )
             finally:
                 signal.signal(signal.SIGTERM, previous_sigterm)
         else:

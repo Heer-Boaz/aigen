@@ -1607,16 +1607,19 @@ class ImageGenerationApp(App[None]):
     ) -> None:
         assert process.stdout is not None
         output_lines: deque[str] = deque(maxlen=200)
+        completed_output_dir = output_dir
         for raw_line in process.stdout:
             line = raw_line.strip()
             if not line:
                 continue
             if line.startswith(WORKFLOW_EVENT_PREFIX):
-                self.post_message(
-                    WorkflowNodeUpdated(
-                        json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
+                payload = json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
+                if payload.get("kind") == "workflow-run":
+                    completed_output_dir = display_project_path(
+                        Path(payload["run_dir"])
                     )
-                )
+                else:
+                    self.post_message(WorkflowNodeUpdated(payload))
                 continue
             if not line.startswith(JSON_PROGRESS_PREFIX):
                 output_lines.append(line)
@@ -1637,7 +1640,9 @@ class ImageGenerationApp(App[None]):
             except VideoPostprocessError as error:
                 self.post_message(ContactSheetFailed(output_dir, str(error)))
                 return
-            self.post_message(GenerationFinished(output_dir, contact_sheets))
+            self.post_message(
+                GenerationFinished(completed_output_dir, contact_sheets)
+            )
         else:
             if self.cancel_requested:
                 self.post_message(GenerationCancelled())

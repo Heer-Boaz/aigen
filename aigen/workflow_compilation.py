@@ -165,8 +165,8 @@ class CompiledNode:
 class CompiledWorkflow:
     document: WorkflowGraph
     nodes: MappingProxyType[str, CompiledNode]
+    predecessors: MappingProxyType[str, tuple[str, ...]]
     execution_order: tuple[str, ...]
-    execution_layers: tuple[tuple[str, ...], ...]
     terminal_node_ids: tuple[str, ...]
     digest: str
 
@@ -195,10 +195,15 @@ def compile_workflow(document: WorkflowGraph) -> CompiledWorkflow:
             config=_compile_node_config(node),
         )
 
-    execution_order = tuple(
-        TopologicalSorter(predecessors).static_order()
+    frozen_predecessors = MappingProxyType(
+        {
+            node_id: tuple(sorted(node_predecessors))
+            for node_id, node_predecessors in predecessors.items()
+        }
     )
-    layers = _execution_layers(execution_order, predecessors)
+    execution_order = tuple(
+        TopologicalSorter(frozen_predecessors).static_order()
+    )
     connected_sources = {
         connection.source.node_id
         for connection in document.connections
@@ -207,8 +212,8 @@ def compile_workflow(document: WorkflowGraph) -> CompiledWorkflow:
     return CompiledWorkflow(
         document=document,
         nodes=frozen_nodes,
+        predecessors=frozen_predecessors,
         execution_order=execution_order,
-        execution_layers=layers,
         terminal_node_ids=tuple(
             node_id
             for node_id in execution_order
@@ -420,27 +425,6 @@ def _incoming_connections(
         }
         for node_id, ports in incoming.items()
     }
-
-
-def _execution_layers(
-    execution_order: tuple[str, ...],
-    predecessors: dict[str, set[str]],
-) -> tuple[tuple[str, ...], ...]:
-    depth_by_node: dict[str, int] = {}
-    layers: list[list[str]] = []
-    for node_id in execution_order:
-        depth = max(
-            (
-                depth_by_node[predecessor] + 1
-                for predecessor in predecessors[node_id]
-            ),
-            default=0,
-        )
-        depth_by_node[node_id] = depth
-        while len(layers) <= depth:
-            layers.append([])
-        layers[depth].append(node_id)
-    return tuple(tuple(layer) for layer in layers)
 
 
 def _execution_digest(

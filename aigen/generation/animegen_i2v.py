@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import math
 import time
@@ -257,130 +258,135 @@ def generate_animegen_i2v_seed_sweep(
         precision=precision,
         progress=progress,
     )
-    start = load_image(image.as_posix())
-    width, height = _canvas_size(
-        start.width,
-        start.height,
-        max_area=ANIMEGEN_MAX_AREA,
-        multiple_of=pipeline.vae_scale_factor_spatial
-        * pipeline.transformer.config.patch_size[1],
-    )
-    start = start.resize((width, height))
-    end = (
-        load_image(last_image.as_posix()).resize((width, height))
-        if last_image is not None
-        else None
-    )
+    try:
+        start = load_image(image.as_posix())
+        width, height = _canvas_size(
+            start.width,
+            start.height,
+            max_area=ANIMEGEN_MAX_AREA,
+            multiple_of=pipeline.vae_scale_factor_spatial
+            * pipeline.transformer.config.patch_size[1],
+        )
+        start = start.resize((width, height))
+        end = (
+            load_image(last_image.as_posix()).resize((width, height))
+            if last_image is not None
+            else None
+        )
 
-    results = []
-    for seed, job_output, config in zip(
-        normalized_seeds,
-        outputs,
-        configs,
-        strict=True,
-    ):
-        torch.cuda.reset_peak_memory_stats()
-        progress.begin(
-            effective_steps,
-            f"AnimeGen-I2V {sampling} seed {seed}",
-        )
-        started = time.monotonic()
-        generation_prompt = prompt.strip()
-        frames_output = pipeline(
-            image=start,
-            last_image=end,
-            prompt=generation_prompt,
-            height=height,
-            width=width,
-            num_frames=frames,
-            guidance_scale=sampling_profile.guidance,
-            guidance_scale_2=sampling_profile.guidance,
-            num_inference_steps=effective_steps,
-            generator=torch.Generator("cuda").manual_seed(seed),
-            callback_on_step_end=_denoise_progress_callback(
-                progress,
-                seed=seed,
-                steps=effective_steps,
-            ),
-        ).frames[0]
-        progress.phase(f"encode AnimeGen-I2V seed {seed}")
-        export_to_video(frames_output, job_output.as_posix(), fps=fps)
-        elapsed_seconds = time.monotonic() - started
-        memory = cuda_memory_stats(torch, "cuda")
-        config_payload = {
-            "kind": f"animegen-i2v-{sampling}-config",
-            "model": {
-                "repo_id": "aidealab/AnimeGen-I2V",
-                "revision": ANIMEGEN_MODEL_REVISION,
-                "path": animegen_model.as_posix(),
-            },
-            "base_model": {
-                "repo_id": "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-                "revision": ANIMEGEN_BASE_MODEL_REVISION,
-                "path": base_model.as_posix(),
-            },
-            "request": {
-                "prompt": generation_prompt,
-                "image": image.as_posix(),
-                "last_image": last_image.as_posix() if last_image is not None else None,
-                "width": width,
-                "height": height,
-                "frames": frames,
-                "fps": fps,
-                "sampling": sampling,
-                "steps": effective_steps,
-                "guidance": sampling_profile.guidance,
-                "flow_shift": sampling_profile.flow_shift,
-                "precision": precision,
-                "seed": seed,
-            },
-            "runtime": {
-                "scheduler": type(pipeline.scheduler).__name__,
-                "storage_dtype": "float8_e4m3fn" if precision == "fp8" else "bfloat16",
-                "compute_dtype": "bfloat16",
-                "offload": (
-                    "leaf-level group offload with streamed on-demand pinning"
-                    if precision == "bf16"
-                    else "leaf-level group offload with CUDA stream prefetch"
-                ),
-                "cuda_memory": memory,
-            },
-            "elapsed_seconds": round(elapsed_seconds, 3),
-        }
-        if sampling_profile.lightning:
-            config_payload["lightning"] = {
-                "repo_id": "lightx2v/Wan2.2-Lightning",
-                "revision": ANIMEGEN_LIGHTNING_REVISION,
-                "path": lightning_model.as_posix(),
-            }
-        config.write_text(
-            json.dumps(config_payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        results.append(
-            AnimeGenI2VResult(
-                output=job_output,
-                config=config,
-                image=image,
-                last_image=last_image,
-                width=width,
-                height=height,
-                frames=frames,
-                fps=fps,
-                sampling=sampling,
-                steps=effective_steps,
-                guidance=sampling_profile.guidance,
-                flow_shift=sampling_profile.flow_shift,
-                scheduler=type(pipeline.scheduler).__name__,
-                precision=precision,
-                seed=seed,
-                elapsed_seconds=elapsed_seconds,
-                cuda_memory=memory,
+        results = []
+        for seed, job_output, config in zip(
+            normalized_seeds,
+            outputs,
+            configs,
+            strict=True,
+        ):
+            torch.cuda.reset_peak_memory_stats()
+            progress.begin(
+                effective_steps,
+                f"AnimeGen-I2V {sampling} seed {seed}",
             )
-        )
+            started = time.monotonic()
+            generation_prompt = prompt.strip()
+            frames_output = pipeline(
+                image=start,
+                last_image=end,
+                prompt=generation_prompt,
+                height=height,
+                width=width,
+                num_frames=frames,
+                guidance_scale=sampling_profile.guidance,
+                guidance_scale_2=sampling_profile.guidance,
+                num_inference_steps=effective_steps,
+                generator=torch.Generator("cuda").manual_seed(seed),
+                callback_on_step_end=_denoise_progress_callback(
+                    progress,
+                    seed=seed,
+                    steps=effective_steps,
+                ),
+            ).frames[0]
+            progress.phase(f"encode AnimeGen-I2V seed {seed}")
+            export_to_video(frames_output, job_output.as_posix(), fps=fps)
+            elapsed_seconds = time.monotonic() - started
+            memory = cuda_memory_stats(torch, "cuda")
+            config_payload = {
+                "kind": f"animegen-i2v-{sampling}-config",
+                "model": {
+                    "repo_id": "aidealab/AnimeGen-I2V",
+                    "revision": ANIMEGEN_MODEL_REVISION,
+                    "path": animegen_model.as_posix(),
+                },
+                "base_model": {
+                    "repo_id": "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+                    "revision": ANIMEGEN_BASE_MODEL_REVISION,
+                    "path": base_model.as_posix(),
+                },
+                "request": {
+                    "prompt": generation_prompt,
+                    "image": image.as_posix(),
+                    "last_image": last_image.as_posix() if last_image is not None else None,
+                    "width": width,
+                    "height": height,
+                    "frames": frames,
+                    "fps": fps,
+                    "sampling": sampling,
+                    "steps": effective_steps,
+                    "guidance": sampling_profile.guidance,
+                    "flow_shift": sampling_profile.flow_shift,
+                    "precision": precision,
+                    "seed": seed,
+                },
+                "runtime": {
+                    "scheduler": type(pipeline.scheduler).__name__,
+                    "storage_dtype": "float8_e4m3fn" if precision == "fp8" else "bfloat16",
+                    "compute_dtype": "bfloat16",
+                    "offload": (
+                        "leaf-level group offload with streamed on-demand pinning"
+                        if precision == "bf16"
+                        else "leaf-level group offload with CUDA stream prefetch"
+                    ),
+                    "cuda_memory": memory,
+                },
+                "elapsed_seconds": round(elapsed_seconds, 3),
+            }
+            if sampling_profile.lightning:
+                config_payload["lightning"] = {
+                    "repo_id": "lightx2v/Wan2.2-Lightning",
+                    "revision": ANIMEGEN_LIGHTNING_REVISION,
+                    "path": lightning_model.as_posix(),
+                }
+            config.write_text(
+                json.dumps(config_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            results.append(
+                AnimeGenI2VResult(
+                    output=job_output,
+                    config=config,
+                    image=image,
+                    last_image=last_image,
+                    width=width,
+                    height=height,
+                    frames=frames,
+                    fps=fps,
+                    sampling=sampling,
+                    steps=effective_steps,
+                    guidance=sampling_profile.guidance,
+                    flow_shift=sampling_profile.flow_shift,
+                    scheduler=type(pipeline.scheduler).__name__,
+                    precision=precision,
+                    seed=seed,
+                    elapsed_seconds=elapsed_seconds,
+                    cuda_memory=memory,
+                )
+            )
 
-    progress.phase("AnimeGen-I2V generation completed")
-    return tuple(results)
+        progress.phase("AnimeGen-I2V generation completed")
+        return tuple(results)
+    finally:
+        del pipeline
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 def _load_pipeline(
