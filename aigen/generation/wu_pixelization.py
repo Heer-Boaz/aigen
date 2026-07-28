@@ -95,113 +95,150 @@ def pixelize_with_wu(
     *,
     cell_size: int,
 ) -> WuPixelizationResult:
-    if not input_path.is_file():
-        raise WuPixelizationError(f"input image does not exist: {input_path}")
-    if cell_size < 2:
-        raise WuPixelizationError("cell-size must be at least 2")
-    missing = [
-        path.as_posix()
-        for path in (WU_ALIAS_WEIGHTS, WU_I2P_WEIGHTS)
-        if not path.is_file()
-    ]
-    if missing:
-        raise WuPixelizationError(
-            "Wu pixelization weights are missing; run scripts/download_wu_pixelization.sh"
+    with WuPixelizer() as pixelizer:
+        return pixelizer.pixelize(
+            input_path,
+            output_path,
+            cell_size=cell_size,
         )
-    if not torch.cuda.is_available():
-        raise WuPixelizationError("Wu pixelization requires an available CUDA GPU")
 
-    started = time.monotonic()
-    source = _load_source(input_path)
-    native_width = source.width // cell_size
-    native_height = source.height // cell_size
-    if native_width == 0 or native_height == 0:
-        raise WuPixelizationError("cell-size is larger than the prepared input image")
-    prepared = source.resize(
-        (
-            native_width * _INTERNAL_CELL_SIZE,
-            native_height * _INTERNAL_CELL_SIZE,
-        ),
-        Image.Resampling.BICUBIC,
-    )
-    device = torch.device("cuda")
-    torch.cuda.reset_peak_memory_stats(device)
-    i2p: WuI2PNetwork | None = None
-    alias: WuAliasNetwork | None = None
-    try:
-        i2p = WuI2PNetwork()
-        i2p_state = torch.load(
-            WU_I2P_WEIGHTS,
-            map_location="cpu",
-            weights_only=True,
-            mmap=True,
-        )
-        i2p_state = {
-            name: value
-            for name, value in i2p_state.items()
-            if not name.startswith("PBEnc.")
-        }
-        i2p.load_state_dict(i2p_state, strict=True)
-        del i2p_state
-        alias = WuAliasNetwork()
-        alias.load_state_dict(
-            torch.load(
-                WU_ALIAS_WEIGHTS,
+
+class WuPixelizer:
+    def __init__(self) -> None:
+        missing = [
+            path.as_posix()
+            for path in (WU_ALIAS_WEIGHTS, WU_I2P_WEIGHTS)
+            if not path.is_file()
+        ]
+        if missing:
+            raise WuPixelizationError(
+                "Wu pixelization weights are missing; run scripts/download_wu_pixelization.sh"
+            )
+        if not torch.cuda.is_available():
+            raise WuPixelizationError("Wu pixelization requires an available CUDA GPU")
+
+        self.device = torch.device("cuda")
+        try:
+            i2p = WuI2PNetwork()
+            i2p_state = torch.load(
+                WU_I2P_WEIGHTS,
                 map_location="cpu",
                 weights_only=True,
                 mmap=True,
-            ),
-            strict=True,
-        )
-        i2p = i2p.eval().requires_grad_(False).to(device)
-        alias = alias.eval().requires_grad_(False).to(device)
-        image = torch.from_numpy(
-            np.asarray(prepared, dtype=np.float32).transpose(2, 0, 1).copy()
-        )
-        image = image.unsqueeze(0).to(device).div_(127.5).sub_(1.0)
-        cell_feature = torch.tensor(
-            _CELL_FEATURE,
-            device=device,
-            dtype=image.dtype,
-        ).view(1, 256, 1, 1)
-        with torch.inference_mode():
-            result = alias(i2p(image, cell_feature))
-        pixels = (
-            result[0]
-            .permute(1, 2, 0)
-            .add(1.0)
-            .mul(127.5)
-            .clamp_(0, 255)
-            .byte()
-            .cpu()
-            .numpy()
-        )
-        native = Image.fromarray(pixels).resize(
-            (native_width, native_height),
-            Image.Resampling.NEAREST,
-        )
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        native.save(output_path)
-        peak_vram_mb = round(torch.cuda.max_memory_allocated(device) / (1024 * 1024))
-    except torch.cuda.OutOfMemoryError as error:
-        raise WuPixelizationError(
-            "Wu pixelization ran out of CUDA memory; use a larger cell-size"
-        ) from error
-    finally:
-        del i2p
-        del alias
+            )
+            i2p_state = {
+                name: value
+                for name, value in i2p_state.items()
+                if not name.startswith("PBEnc.")
+            }
+            i2p.load_state_dict(i2p_state, strict=True)
+            del i2p_state
+            alias = WuAliasNetwork()
+            alias.load_state_dict(
+                torch.load(
+                    WU_ALIAS_WEIGHTS,
+                    map_location="cpu",
+                    weights_only=True,
+                    mmap=True,
+                ),
+                strict=True,
+            )
+            self.i2p = i2p.eval().requires_grad_(False).to(self.device)
+            self.alias = alias.eval().requires_grad_(False).to(self.device)
+            self.cell_feature = torch.tensor(
+                _CELL_FEATURE,
+                device=self.device,
+                dtype=torch.float32,
+            ).view(1, 256, 1, 1)
+        except torch.cuda.OutOfMemoryError as error:
+            raise WuPixelizationError(
+                "Wu pixelization ran out of CUDA memory while loading its models"
+            ) from error
+
+    def __enter__(self) -> WuPixelizer:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        del self.i2p
+        del self.alias
+        del self.cell_feature
         gc.collect()
         torch.cuda.empty_cache()
 
-    return WuPixelizationResult(
-        input=input_path.resolve().as_posix(),
-        output=output_path.resolve().as_posix(),
-        cell_size=cell_size,
-        width=native_width,
-        height=native_height,
-        elapsed_seconds=time.monotonic() - started,
-        peak_vram_mb=peak_vram_mb,
-    )
+    def pixelize(
+        self,
+        input_path: Path,
+        output_path: Path,
+        *,
+        cell_size: int,
+    ) -> WuPixelizationResult:
+        if not input_path.is_file():
+            raise WuPixelizationError(f"input image does not exist: {input_path}")
+        if cell_size < 2:
+            raise WuPixelizationError("cell-size must be at least 2")
+
+        started = time.monotonic()
+        source = _load_source(input_path)
+        native_width = source.width // cell_size
+        native_height = source.height // cell_size
+        if native_width == 0 or native_height == 0:
+            raise WuPixelizationError("cell-size is larger than the prepared input image")
+        prepared = source.resize(
+            (
+                native_width * _INTERNAL_CELL_SIZE,
+                native_height * _INTERNAL_CELL_SIZE,
+            ),
+            Image.Resampling.BICUBIC,
+        )
+        torch.cuda.reset_peak_memory_stats(self.device)
+        try:
+            image = torch.from_numpy(
+                np.asarray(prepared, dtype=np.float32).transpose(2, 0, 1).copy()
+            )
+            image = image.unsqueeze(0).to(self.device).div_(127.5).sub_(1.0)
+            with torch.inference_mode():
+                result = self.alias(self.i2p(image, self.cell_feature))
+            pixels = (
+                result[0]
+                .permute(1, 2, 0)
+                .add(1.0)
+                .mul(127.5)
+                .clamp_(0, 255)
+                .byte()
+                .cpu()
+                .numpy()
+            )
+            native = Image.fromarray(pixels).resize(
+                (native_width, native_height),
+                Image.Resampling.NEAREST,
+            )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            native.save(output_path)
+            peak_vram_mb = round(
+                torch.cuda.max_memory_allocated(self.device) / (1024 * 1024)
+            )
+        except torch.cuda.OutOfMemoryError as error:
+            raise WuPixelizationError(
+                "Wu pixelization ran out of CUDA memory; use a larger cell-size"
+            ) from error
+
+        return WuPixelizationResult(
+            input=input_path.resolve().as_posix(),
+            output=output_path.resolve().as_posix(),
+            cell_size=cell_size,
+            width=native_width,
+            height=native_height,
+            elapsed_seconds=time.monotonic() - started,
+            peak_vram_mb=peak_vram_mb,
+        )
 
 
 def _load_source(path: Path) -> Image.Image:

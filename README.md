@@ -218,6 +218,27 @@ the terminal file browser. `Load Config` selects such a JSON file and replaces
 the complete form, including seeds, images, packs, LoRAs and their weights.
 Stop and Quit terminate the complete generation process group, including native
 backend workers, so a cancelled run cannot leave a worker holding GPU memory.
+
+The Workflows tab opens a fullscreen ASCII node editor. Nodes and typed ports
+can be connected with the mouse, moved on a scrollable canvas, reordered where
+an input accepts multiple values, and edited through the inspector. Workflow
+nodes can also be selected with the arrow keys and moved with Shift+arrow; the
+visible Connect action provides keyboard access to typed port connections.
+Workflow documents are ordinary JSON files. The built-in template generates
+first and last keyframes, post-processes both, feeds them to AnimeGen-I2V,
+creates a contact sheet, extracts every frame, and post-processes that frame
+sequence.
+Execution artifacts use a shared content-verified node cache under
+`runs/workflows/cache`; changing a downstream node therefore keeps compatible
+upstream results, even across different workflow documents.
+
+The same documents can be managed without the TUI:
+
+```bash
+.venv/bin/aigen workflow new --output workflow.json
+.venv/bin/aigen workflow validate --input workflow.json
+.venv/bin/aigen workflow run --input workflow.json
+```
 While generation runs, the status line shows the backend's complete progress
 snapshot: progress bar, percentage, completed steps, phase, ETA, elapsed time,
 CPU usage, GPU usage and VRAM.

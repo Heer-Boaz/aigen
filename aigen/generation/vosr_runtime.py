@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+import gc
 import importlib
 import json
 import sys
@@ -17,123 +17,174 @@ from aigen.progress import StatusReporter
 VAE_SCALE_FACTOR = 8
 
 
-def upscale_vosr_images(
-    images: Sequence[tuple[Image.Image, tuple[int, int]]],
-    *,
-    source_root: Path,
-    checkpoint: Path,
-    vae_path: Path,
-    torch_cache: Path,
-    infer_steps: int,
-    cfg_scale: float,
-    weak_cond_strength_aelq: float,
-    align_method: str,
-    tile_size: int,
-    seed: int,
-    progress: StatusReporter,
-) -> tuple[Image.Image, ...]:
-    import torch
-    import torch.nn.functional as functional
-    from safetensors.torch import load_file
-    from torchvision import transforms
+class VosrRuntime:
+    def __init__(
+        self,
+        *,
+        source_root: Path,
+        checkpoint: Path,
+        vae_path: Path,
+        torch_cache: Path,
+        infer_steps: int,
+        cfg_scale: float,
+        weak_cond_strength_aelq: float,
+        align_method: str,
+        tile_size: int,
+        seed: int,
+        progress: StatusReporter,
+    ) -> None:
+        import torch
+        import torch.nn.functional as functional
+        from safetensors.torch import load_file
+        from torchvision import transforms
 
-    official = _official_vosr(source_root, torch_cache)
-    vae_class = importlib.import_module("models.qwenimage_vae2d").AutoencoderKLQwenImage2D
-    args = _runtime_args(
-        checkpoint / "args.json",
-        checkpoint=checkpoint,
-        infer_steps=infer_steps,
-        cfg_scale=cfg_scale,
-        weak_cond_strength_aelq=weak_cond_strength_aelq,
-        align_method=align_method,
-        tile_size=tile_size,
-        seed=seed,
-    )
-    device = torch.device("cuda:0")
-    dtype = torch.bfloat16
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+        self.torch = torch
+        self.functional = functional
+        self.transforms = transforms
+        self.official = _official_vosr(source_root, torch_cache)
+        self.args = _runtime_args(
+            checkpoint / "args.json",
+            checkpoint=checkpoint,
+            infer_steps=infer_steps,
+            cfg_scale=cfg_scale,
+            weak_cond_strength_aelq=weak_cond_strength_aelq,
+            align_method=align_method,
+            tile_size=tile_size,
+            seed=seed,
+        )
+        self.device = torch.device("cuda:0")
+        self.dtype = torch.bfloat16
+        self.align_method = align_method
+        self.tile_size = tile_size
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
-    progress.phase("load VOSR VAE")
-    vae = vae_class.from_pretrained(
-        vae_path,
-        torch_dtype=dtype,
-    ).to(device).eval().requires_grad_(False)
-
-    progress.phase("load VOSR DINOv2")
-    venc = official.load_dinov2(args, "cpu").to(device=device, dtype=dtype)
-
-    progress.phase("load VOSR diffusion model")
-    model = official.LightningDiT(
-        input_size=args.resolution // VAE_SCALE_FACTOR,
-        patch_size=args.patch_size,
-        in_channels=32,
-        out_channels=16,
-        hidden_size=args.dim,
-        depth=args.depth,
-        num_heads=args.num_heads,
-        mlp_ratio=args.mlp_ratio,
-        z_dims=args.enc_dim,
-        encdim_ratio=args.encdim_ratio,
-        auxiliary_time_cond=False,
-        use_qknorm=args.use_qknorm,
-        use_swiglu=args.use_swiglu,
-        use_rope=args.use_rope,
-        use_rmsnorm=args.use_rmsnorm,
-        wo_shift=args.wo_shift,
-        num_fused_layers=len(args.layer_dinov2b_list),
-    ).eval().requires_grad_(False)
-    state_dict = load_file(
-        checkpoint / "checkpoints/ema_model.safetensors",
-        device="cpu",
-    )
-    model.load_state_dict(state_dict, strict=False)
-    del state_dict
-    model.to(device=device, dtype=dtype)
-    model.forward = model.forward_flexible
-
-    vosr = official.VOSR(
-        time_dist=args.time_dist,
-        cfg_ratio=args.cfg_ratio,
-        cfg_scale=args.cfg_scale,
-        interp_type=args.interp_type,
-        accelerator=SimpleNamespace(device=device),
-        t_start=getattr(args, "t_start", 0.0),
-        t_end=getattr(args, "t_end", 1.0),
-        args=args,
-    )
-
-    outputs = []
-    with (
-        torch.inference_mode(),
-        torch.autocast("cuda", dtype=dtype),
-        _tiled_vae(vae, tile_size),
-    ):
-        for index, (image, target_size) in enumerate(images, start=1):
-            progress.phase(f"run VOSR-1.4B-ms image {index}/{len(images)}")
-            condition_image = image.resize(target_size, Image.Resampling.BICUBIC)
-            lq = transforms.ToTensor()(condition_image).unsqueeze(0).mul_(2.0).sub_(1.0)
-            pad_height = (-lq.shape[-2]) % VAE_SCALE_FACTOR
-            pad_width = (-lq.shape[-1]) % VAE_SCALE_FACTOR
-            if pad_height or pad_width:
-                lq = functional.pad(lq, (0, pad_width, 0, pad_height), mode="replicate")
-            sr_tensor = official.tiled_latent_inference(
-                model,
-                vosr,
-                vae,
-                venc,
-                lq.to(device),
-                args,
-                device=device,
+        progress.phase("load VOSR VAE")
+        vae_class = importlib.import_module("models.qwenimage_vae2d").AutoencoderKLQwenImage2D
+        self.vae = (
+            vae_class.from_pretrained(
+                vae_path,
+                torch_dtype=self.dtype,
             )
-            sr_tensor = sr_tensor[..., : target_size[1], : target_size[0]]
-            sr_image = transforms.ToPILImage()(sr_tensor[0].float().cpu().mul_(0.5).add_(0.5))
-            if align_method == "wavelet":
-                sr_image = official.wavelet_color_fix(sr_image, condition_image)
-            elif align_method == "adain":
-                sr_image = official.adain_color_fix(sr_image, condition_image)
-            outputs.append(sr_image)
-    return tuple(outputs)
+            .to(self.device)
+            .eval()
+            .requires_grad_(False)
+        )
+
+        progress.phase("load VOSR DINOv2")
+        self.venc = self.official.load_dinov2(self.args, "cpu").to(
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        progress.phase("load VOSR diffusion model")
+        self.model = (
+            self.official.LightningDiT(
+                input_size=self.args.resolution // VAE_SCALE_FACTOR,
+                patch_size=self.args.patch_size,
+                in_channels=32,
+                out_channels=16,
+                hidden_size=self.args.dim,
+                depth=self.args.depth,
+                num_heads=self.args.num_heads,
+                mlp_ratio=self.args.mlp_ratio,
+                z_dims=self.args.enc_dim,
+                encdim_ratio=self.args.encdim_ratio,
+                auxiliary_time_cond=False,
+                use_qknorm=self.args.use_qknorm,
+                use_swiglu=self.args.use_swiglu,
+                use_rope=self.args.use_rope,
+                use_rmsnorm=self.args.use_rmsnorm,
+                wo_shift=self.args.wo_shift,
+                num_fused_layers=len(self.args.layer_dinov2b_list),
+            )
+            .eval()
+            .requires_grad_(False)
+        )
+        state_dict = load_file(
+            checkpoint / "checkpoints/ema_model.safetensors",
+            device="cpu",
+        )
+        self.model.load_state_dict(state_dict, strict=False)
+        del state_dict
+        self.model.to(device=self.device, dtype=self.dtype)
+        self.model.forward = self.model.forward_flexible
+
+        self.vosr = self.official.VOSR(
+            time_dist=self.args.time_dist,
+            cfg_ratio=self.args.cfg_ratio,
+            cfg_scale=self.args.cfg_scale,
+            interp_type=self.args.interp_type,
+            accelerator=SimpleNamespace(device=self.device),
+            t_start=getattr(self.args, "t_start", 0.0),
+            t_end=getattr(self.args, "t_end", 1.0),
+            args=self.args,
+        )
+
+    def __enter__(self) -> VosrRuntime:
+        self.inference_context = ExitStack()
+        self.inference_context.enter_context(self.torch.inference_mode())
+        self.inference_context.enter_context(
+            self.torch.autocast("cuda", dtype=self.dtype)
+        )
+        self.inference_context.enter_context(_tiled_vae(self.vae, self.tile_size))
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None:
+        self.inference_context.close()
+        del self.vosr
+        del self.model
+        del self.venc
+        del self.vae
+        gc.collect()
+        self.torch.cuda.empty_cache()
+
+    def upscale(
+        self,
+        image: Image.Image,
+        *,
+        target_size: tuple[int, int],
+    ) -> Image.Image:
+        condition_image = image.resize(target_size, Image.Resampling.BICUBIC)
+        lq = (
+            self.transforms.ToTensor()(condition_image)
+            .unsqueeze(0)
+            .mul_(2.0)
+            .sub_(1.0)
+        )
+        pad_height = (-lq.shape[-2]) % VAE_SCALE_FACTOR
+        pad_width = (-lq.shape[-1]) % VAE_SCALE_FACTOR
+        if pad_height or pad_width:
+            lq = self.functional.pad(
+                lq,
+                (0, pad_width, 0, pad_height),
+                mode="replicate",
+            )
+        sr_tensor = self.official.tiled_latent_inference(
+            self.model,
+            self.vosr,
+            self.vae,
+            self.venc,
+            lq.to(self.device),
+            self.args,
+            device=self.device,
+        )
+        sr_tensor = sr_tensor[..., : target_size[1], : target_size[0]]
+        pixels = sr_tensor[0].float().cpu().mul_(0.5).add_(0.5)
+        del sr_tensor
+        del lq
+        sr_image = self.transforms.ToPILImage()(pixels)
+        del pixels
+        if self.align_method == "wavelet":
+            sr_image = self.official.wavelet_color_fix(sr_image, condition_image)
+        elif self.align_method == "adain":
+            sr_image = self.official.adain_color_fix(sr_image, condition_image)
+        return sr_image
 
 
 def _official_vosr(source_root: Path, torch_cache: Path) -> Any:

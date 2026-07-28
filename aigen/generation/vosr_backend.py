@@ -12,7 +12,7 @@ from PIL import Image
 from aigen.image_assets import image_asset_json
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
-from aigen.generation.vosr_runtime import upscale_vosr_images
+from aigen.generation.vosr_runtime import VosrRuntime
 
 
 VOSR_SOURCE_REVISION = "25fbf8e6cb9656b8991c24474f408bdce6fcb1b1"
@@ -71,14 +71,10 @@ def upscale_files_with_vosr(
     source_root = _vosr_source_root()
     _require_vosr_installation(source_root)
     device = _require_cuda()
-    prepared = tuple(
-        _prepare_vosr_file(input_path, output_path, scale, long_side)
-        for input_path, output_path in files
-    )
+    outputs = []
 
     try:
-        upscaled_images = upscale_vosr_images(
-            tuple((item.image, item.target_size) for item in prepared),
+        with VosrRuntime(
             source_root=source_root,
             checkpoint=VOSR_CHECKPOINT,
             vae_path=VOSR_VAE,
@@ -90,7 +86,57 @@ def upscale_files_with_vosr(
             tile_size=tile_size,
             seed=seed,
             progress=progress,
-        )
+        ) as runtime:
+            for index, (input_path, output_path) in enumerate(files, start=1):
+                progress.phase(f"run VOSR-1.4B-ms image {index}/{len(files)}")
+                item = _prepare_vosr_file(input_path, output_path, scale, long_side)
+                try:
+                    output = runtime.upscale(
+                        item.image,
+                        target_size=item.target_size,
+                    )
+                    try:
+                        if item.alpha is not None:
+                            resized_alpha = item.alpha.resize(
+                                output.size,
+                                Image.Resampling.LANCZOS,
+                            )
+                            try:
+                                output.putalpha(resized_alpha)
+                            finally:
+                                resized_alpha.close()
+                        item.output_path.parent.mkdir(parents=True, exist_ok=True)
+                        output.save(item.output_path, **item.metadata)
+                        outputs.append(
+                            {
+                                "status": "completed",
+                                "kind": "vosr-upscale-result",
+                                "input": image_asset_json(item.input_path),
+                                "output": image_asset_json(item.output_path),
+                                "backend": "aigen-vosr",
+                                "source_revision": VOSR_SOURCE_REVISION,
+                                "model_revision": VOSR_MODEL_REVISION,
+                                "model": VOSR_MODEL_NAME,
+                                "device": device,
+                                "scale": item.target_size[0] / item.image.width,
+                                "long_side": long_side,
+                                "target_width": item.target_size[0],
+                                "target_height": item.target_size[1],
+                                "infer_steps": infer_steps,
+                                "cfg_scale": cfg_scale,
+                                "weak_cond_strength_aelq": weak_cond_strength_aelq,
+                                "align_method": align_method,
+                                "tile_size": tile_size,
+                                "seed": seed,
+                                "alpha_preserved": item.alpha is not None,
+                            }
+                        )
+                    finally:
+                        output.close()
+                finally:
+                    item.image.close()
+                    if item.alpha is not None:
+                        item.alpha.close()
     except RuntimeError as error:
         detail = str(error)
         if "out of memory" in detail.lower():
@@ -98,36 +144,6 @@ def upscale_files_with_vosr(
         if "cuda" in detail.lower():
             raise VosrBackendError(f"VOSR CUDA failure: {detail}") from error
         raise
-    outputs = []
-    for item, output in zip(prepared, upscaled_images, strict=True):
-        if item.alpha is not None:
-            output.putalpha(item.alpha.resize(output.size, Image.Resampling.LANCZOS))
-        item.output_path.parent.mkdir(parents=True, exist_ok=True)
-        output.save(item.output_path, **item.metadata)
-        outputs.append(
-            {
-                "status": "completed",
-                "kind": "vosr-upscale-result",
-                "input": image_asset_json(item.input_path),
-                "output": image_asset_json(item.output_path),
-                "backend": "aigen-vosr",
-                "source_revision": VOSR_SOURCE_REVISION,
-                "model_revision": VOSR_MODEL_REVISION,
-                "model": VOSR_MODEL_NAME,
-                "device": device,
-                "scale": item.target_size[0] / item.image.width,
-                "long_side": long_side,
-                "target_width": item.target_size[0],
-                "target_height": item.target_size[1],
-                "infer_steps": infer_steps,
-                "cfg_scale": cfg_scale,
-                "weak_cond_strength_aelq": weak_cond_strength_aelq,
-                "align_method": align_method,
-                "tile_size": tile_size,
-                "seed": seed,
-                "alpha_preserved": item.alpha is not None,
-            }
-        )
     return VosrUpscaleBatch(
         outputs=tuple(outputs),
         elapsed_ms=(perf_counter() - started) * 1000.0,

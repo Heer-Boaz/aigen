@@ -8,6 +8,10 @@ from collections.abc import Sequence
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from aigen.animegen_commands import add_animegen_command, run_animegen_command
+from aigen.batch_postprocess_commands import (
+    add_image_batch_postprocess_command,
+    run_image_batch_postprocess_command,
+)
 from aigen.brief_commands import add_brief_commands, run_brief_command
 from aigen.character_commands import add_character_commands, run_character_command
 from aigen.flux2_commands import add_flux2_klein_command, run_flux2_klein_command
@@ -35,6 +39,7 @@ from aigen.wu_pixelization_commands import (
     add_wu_pixelization_command,
     run_wu_pixelization_command,
 )
+from aigen.workflow_commands import add_workflow_commands, run_workflow_command
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_animegen_command(subparsers)
+    add_image_batch_postprocess_command(subparsers)
     add_brief_commands(subparsers)
     add_character_commands(subparsers)
     add_flux2_klein_command(subparsers)
@@ -57,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_pixel_art_fixer_command(subparsers)
     add_sam_command(subparsers)
     add_video_postprocess_commands(subparsers)
+    add_workflow_commands(subparsers)
     add_wu_pixelization_command(subparsers)
     return parser
 
@@ -78,6 +85,13 @@ def _run_command(args: argparse.Namespace) -> int:
 def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporter) -> int:
     if args.command == "animegen-i2v":
         return run_animegen_command(args, sys.stdout, sys.stderr, progress=progress)
+    if args.command == "image-postprocess-batch":
+        return run_image_batch_postprocess_command(
+            args,
+            sys.stdout,
+            sys.stderr,
+            progress=progress,
+        )
     if args.command == "briefs":
         return run_brief_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "characters":
@@ -121,6 +135,13 @@ def _run_command_with_progress(args: argparse.Namespace, progress: StatusReporte
         return run_sam_command(args, sys.stdout, sys.stderr, progress=progress)
     if args.command == "video-postprocess":
         return run_video_postprocess_command(
+            args,
+            sys.stdout,
+            sys.stderr,
+            progress=progress,
+        )
+    if args.command == "workflow":
+        return run_workflow_command(
             args,
             sys.stdout,
             sys.stderr,

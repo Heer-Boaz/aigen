@@ -4,7 +4,9 @@ import json
 import os
 import signal
 import subprocess
+import sys
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +51,16 @@ from aigen.sam_prompt_selection import SAMPromptSelection
 from aigen.sam_tui_model import SamEditForm
 from aigen.tui_file_browser import FileBrowser
 from aigen.video_tui_model import VideoForm
+from aigen.workflow_editor import WorkflowEditor
+from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
+from aigen.workflow_execution import WORKFLOW_EVENT_PREFIX
+from aigen.workflow_graph import (
+    ImageSourceNode,
+    LoraSourceNode,
+    ReferencePackNode,
+    WorkflowGraph,
+    keyframed_video_workflow_template,
+)
 
 
 FormModel = ImageEditForm | PostprocessForm | VideoForm | SamEditForm
@@ -70,6 +82,14 @@ IMAGE_EXTENSIONS = frozenset({".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", 
 VIDEO_EXTENSIONS = frozenset({".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"})
 CONFIG_EXTENSIONS = frozenset({".json"})
 SAM_SELECTION_EXTENSIONS = frozenset({".json"})
+LORA_EXTENSIONS = frozenset({".safetensors"})
+WORKFLOW_EXTENSIONS = frozenset({".json"})
+TAB_ACTION_BUTTON_IDS = (
+    "generation-action",
+    "video-action",
+    "sam-action",
+    "postprocess-action",
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +104,27 @@ class GenerationProgress:
     gpu_percent: int | None
     vram_used_mb: int | None
     vram_total_mb: int | None
+
+
+def _generation_progress_from_payload(
+    payload: Mapping[str, object],
+) -> GenerationProgress:
+    remaining = payload["remaining_seconds"]
+    gpu = payload["gpu_percent"]
+    vram_used = payload["vram_used_mb"]
+    vram_total = payload["vram_total_mb"]
+    return GenerationProgress(
+        phase=str(payload["phase"]),
+        completed=int(payload["completed"]),
+        total=int(payload["total"]),
+        elapsed_seconds=float(payload["elapsed_seconds"]),
+        remaining_seconds=None if remaining is None else float(remaining),
+        final=bool(payload["final"]),
+        cpu_percent=float(payload["cpu_percent"]),
+        gpu_percent=None if gpu is None else int(gpu),
+        vram_used_mb=None if vram_used is None else int(vram_used),
+        vram_total_mb=None if vram_total is None else int(vram_total),
+    )
 
 
 class PathInput(Input):
@@ -250,11 +291,21 @@ class GenerationFailed(Message):
         self.error = error
 
 
+class GenerationCancelled(Message):
+    pass
+
+
 class ContactSheetFailed(Message):
     def __init__(self, output_dir: str, error: str) -> None:
         super().__init__()
         self.output_dir = output_dir
         self.error = error
+
+
+class WorkflowNodeUpdated(Message):
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__()
+        self.payload = payload
 
 
 class ImageGenerationApp(App[None]):
@@ -407,6 +458,12 @@ class ImageGenerationApp(App[None]):
         color: #17131f;
     }
 
+    #workflow-summary {
+        height: 1;
+        padding: 0 1;
+        color: #d8c5eb;
+    }
+
     ModalScreen {
         align: center middle;
         background: #000000 55%;
@@ -446,11 +503,16 @@ class ImageGenerationApp(App[None]):
         self.video_form = VideoForm()
         self.sam_form = SamEditForm()
         self.postprocess_form = PostprocessForm()
+        self.workflow_document = keyframed_video_workflow_template()
+        self.workflow_path: Path | None = None
+        self.workflow_editor: WorkflowEditor | None = None
+        self.workflow_runtime_statuses: dict[str, str] = {}
         self.configuration_path: Path | None = None
         self.sam_selection_path: Path | None = None
         self.sam_prompt_dialog: SAMPromptDialog | None = None
         self.selected_field: FieldSelection | None = None
         self.process: subprocess.Popen[str] | None = None
+        self.cancel_requested = False
         self.active_action_button_id: str | None = None
         self.active_action_idle_label = ""
         self.generation_progress: GenerationProgress | None = None
@@ -472,6 +534,11 @@ class ImageGenerationApp(App[None]):
                 yield FormFields(self.sam_form, id="sam-fields")
             with TabPane("Post-processing", id="postprocessing"):
                 yield FormFields(self.postprocess_form, id="postprocess-fields")
+            with TabPane("Workflows", id="workflows"):
+                yield Static(
+                    self._workflow_summary_text(),
+                    id="workflow-summary",
+                )
         yield ImageTUIFooter(id="action-footer")
         yield ProgressBar(id="generation-progress")
         yield Static("Ready.", id="status")
@@ -859,6 +926,12 @@ class ImageGenerationApp(App[None]):
             form.set_value(form.field("positive_points"), "")
             form.set_value(form.field("negative_points"), "")
             self._update_sam_prompt_canvas()
+        elif action == "workflow-open":
+            self._open_workflow_editor()
+        elif action == "workflow-new":
+            self._new_workflow()
+        elif action == "workflow-load":
+            self._load_workflow()
         elif action == "quit":
             self.action_quit()
 
@@ -1105,6 +1178,302 @@ class ImageGenerationApp(App[None]):
         self._set_status(f"Loaded configuration: {display_project_path(path)}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
+    def _workflow_summary_text(self) -> str:
+        path = (
+            display_project_path(self.workflow_path)
+            if self.workflow_path is not None
+            else "Unsaved"
+        )
+        return f"{self.workflow_document.name} | {path}"
+
+    def _update_workflow_summary(self) -> None:
+        for summary in self.query("#workflow-summary"):
+            assert isinstance(summary, Static)
+            summary.update(self._workflow_summary_text())
+
+    def _open_workflow_editor(self) -> None:
+        if self.workflow_editor is not None:
+            return
+        editor = WorkflowEditor(
+            self.workflow_document,
+            document_path=self.workflow_path,
+        )
+        self.workflow_editor = editor
+        self.push_screen(editor, self._close_workflow_editor)
+        self.call_after_refresh(
+            editor.set_runtime_statuses,
+            self.workflow_runtime_statuses,
+        )
+        self.call_after_refresh(
+            editor.set_running,
+            self.active_action_button_id == "workflow-run",
+        )
+
+    def _close_workflow_editor(
+        self,
+        document: WorkflowGraph | None,
+    ) -> None:
+        editor = self.workflow_editor
+        if document is not None:
+            self.workflow_document = document
+            if editor is not None:
+                self.workflow_path = editor.document_path
+        self.workflow_editor = None
+        self._update_workflow_summary()
+
+    def _new_workflow(self) -> None:
+        if self.process is not None:
+            self._set_status("Stop the active operation before creating a workflow.")
+            return
+        self.workflow_document = keyframed_video_workflow_template()
+        self.workflow_path = None
+        self.workflow_runtime_statuses.clear()
+        self._update_workflow_summary()
+        self._open_workflow_editor()
+
+    def _load_workflow(self) -> None:
+        if self.process is not None:
+            self._set_status("Stop the active operation before loading a workflow.")
+            return
+        start = self.workflow_path or PROJECT_ROOT
+        self.push_screen(
+            FileBrowser(
+                self._browser_start(start.as_posix()),
+                title="Load workflow",
+                directories_only=False,
+                extensions=WORKFLOW_EXTENSIONS,
+                select_label="Load",
+            ),
+            self._apply_workflow,
+        )
+
+    def _apply_workflow(self, path: Path | None) -> None:
+        if path is None:
+            return
+        try:
+            document = WorkflowGraph.load(path)
+        except (OSError, ValueError) as error:
+            self._show_error("Cannot load workflow", str(error))
+            return
+        self.workflow_document = document
+        self.workflow_path = path
+        self.workflow_runtime_statuses.clear()
+        self._update_workflow_summary()
+        if self.workflow_editor is None:
+            self._open_workflow_editor()
+            return
+        self.run_worker(
+            self.workflow_editor.apply_loaded_document(document, path),
+            group="workflow-document",
+            exclusive=True,
+        )
+
+    @on(WorkflowEditor.SaveRequested)
+    def workflow_save_requested(
+        self,
+        event: WorkflowEditor.SaveRequested,
+    ) -> None:
+        editor = self.workflow_editor
+        if editor is None:
+            return
+        if editor.document_path is not None:
+            try:
+                editor.save_to(editor.document_path)
+            except OSError as error:
+                self._show_error("Cannot save workflow", str(error))
+                return
+            self.workflow_document = event.document
+            self.workflow_path = editor.document_path
+            self._update_workflow_summary()
+            return
+        self._choose_workflow_directory(event.document)
+
+    def _choose_workflow_directory(self, document: WorkflowGraph) -> None:
+        start = self.workflow_path.parent if self.workflow_path else PROJECT_ROOT
+        self.push_screen(
+            FileBrowser(
+                start,
+                title="Save workflow",
+                directories_only=True,
+                extensions=WORKFLOW_EXTENSIONS,
+                select_label="Select folder",
+            ),
+            lambda directory: self._choose_workflow_name(directory, document),
+        )
+
+    def _choose_workflow_name(
+        self,
+        directory: Path | None,
+        document: WorkflowGraph,
+    ) -> None:
+        if directory is None:
+            return
+        name = self.workflow_path.name if self.workflow_path else "workflow.json"
+        self.push_screen(
+            PromptDialog("Save workflow", "Workflow filename", name),
+            lambda filename: self._save_workflow(directory, filename, document),
+        )
+
+    def _save_workflow(
+        self,
+        directory: Path,
+        filename: str | None,
+        document: WorkflowGraph,
+    ) -> None:
+        if filename is None:
+            return
+        filename = filename.strip()
+        if not filename or Path(filename).name != filename:
+            self._show_error(
+                "Cannot save workflow",
+                "Workflow filename must be a non-empty filename without a path.",
+            )
+            return
+        output = directory / filename
+        if output.suffix == "":
+            output = output.with_suffix(".json")
+        elif output.suffix.casefold() != ".json":
+            self._show_error(
+                "Cannot save workflow",
+                "Workflow filename must use the .json extension.",
+            )
+            return
+        if output.exists() and output != self.workflow_path:
+            self._show_error(
+                "Cannot save workflow",
+                f"Workflow already exists: {output}",
+            )
+            return
+        try:
+            if self.workflow_editor is not None:
+                self.workflow_editor.save_to(output)
+            else:
+                document.save(output)
+        except OSError as error:
+            self._show_error("Cannot save workflow", str(error))
+            return
+        self.workflow_document = document
+        self.workflow_path = output
+        self._update_workflow_summary()
+
+    @on(WorkflowEditor.LoadRequested)
+    def workflow_load_requested(self) -> None:
+        self._load_workflow()
+
+    @on(WorkflowEditor.BrowseRequested)
+    def workflow_browse_requested(
+        self,
+        event: WorkflowEditor.BrowseRequested,
+    ) -> None:
+        editor = self.workflow_editor
+        if editor is None:
+            return
+        node = editor.document.node(event.node_id)
+        if isinstance(node, ImageSourceNode):
+            title = "Select image"
+            extensions = IMAGE_EXTENSIONS
+        elif isinstance(node, ReferencePackNode):
+            title = "Select reference pack"
+            extensions = CONFIG_EXTENSIONS
+        elif isinstance(node, LoraSourceNode):
+            title = "Select LoRA"
+            extensions = LORA_EXTENSIONS
+        else:
+            raise RuntimeError(f"node {node.id!r} has no browsable path")
+        self.push_screen(
+            FileBrowser(
+                self._browser_start(event.current_value),
+                title=title,
+                directories_only=False,
+                extensions=extensions,
+                select_label="Select",
+            ),
+            lambda path: self._apply_workflow_browsed_path(
+                event.node_id,
+                event.field_name,
+                path,
+            ),
+        )
+
+    def _apply_workflow_browsed_path(
+        self,
+        node_id: str,
+        field_name: str,
+        path: Path | None,
+    ) -> None:
+        if path is None or self.workflow_editor is None:
+            return
+        self.run_worker(
+            self.workflow_editor.apply_browsed_path(
+                node_id,
+                field_name,
+                Path(display_project_path(path)),
+            ),
+            group="workflow-property",
+            exclusive=True,
+        )
+
+    @on(WorkflowEditor.RunRequested)
+    def workflow_run_requested(
+        self,
+        event: WorkflowEditor.RunRequested,
+    ) -> None:
+        if self.process is not None:
+            self._set_status("An operation is already running.")
+            return
+        request_path = (
+            DEFAULT_WORKFLOW_RUNS_ROOT
+            / "requests"
+            / f"{event.document.execution_digest()}.json"
+        )
+        try:
+            event.document.save(request_path)
+        except OSError as error:
+            self._show_error("Cannot start workflow", str(error))
+            return
+        self.workflow_document = event.document
+        self.workflow_runtime_statuses = {
+            node.id: "queued"
+            for node in event.document.nodes
+        }
+        if self.workflow_editor is not None:
+            self.workflow_editor.set_runtime_statuses(
+                self.workflow_runtime_statuses
+            )
+        run_dir = (
+            DEFAULT_WORKFLOW_RUNS_ROOT
+            / "runs"
+            / event.document.execution_digest()
+        )
+        self._start_command(
+            [
+                sys.executable,
+                "-m",
+                "aigen.cli",
+                "workflow",
+                "run",
+                "--input",
+                request_path.as_posix(),
+                "--runs-root",
+                DEFAULT_WORKFLOW_RUNS_ROOT.as_posix(),
+            ],
+            display_project_path(run_dir),
+            action_button_id="workflow-run",
+            idle_label="Run",
+            error_title="Cannot start workflow",
+            running_label=None,
+        )
+        if self.process is not None and self.workflow_editor is not None:
+            self.workflow_editor.set_running(True)
+
+    @on(WorkflowEditor.StopRequested)
+    def workflow_stop_requested(self) -> None:
+        self._cancel_generation()
+
+    @on(WorkflowEditor.QuitRequested)
+    def workflow_quit_requested(self) -> None:
+        self.action_quit()
+
     def _start_generation(self) -> None:
         if self.process is not None:
             self._set_status("Generation is already running.")
@@ -1183,6 +1552,7 @@ class ImageGenerationApp(App[None]):
         idle_label: str,
         error_title: str,
         contact_sheet_videos: tuple[Path, ...] = (),
+        running_label: str | None = "Stop",
     ) -> None:
         environment = os.environ.copy()
         environment["AIGEN_PROGRESS"] = "json"
@@ -1203,18 +1573,15 @@ class ImageGenerationApp(App[None]):
             self._show_error(error_title, str(error))
             return
         self.process = process
+        self.cancel_requested = False
         self.active_action_button_id = action_button_id
         self.active_action_idle_label = idle_label
         self.generation_progress = None
         self._set_status("Starting...")
-        self.query_one(f"#{action_button_id}", Button).label = "Stop"
-        for button_id in (
-            "generation-action",
-            "video-action",
-            "sam-action",
-            "postprocess-action",
-        ):
-            self.query_one(f"#{button_id}", Button).disabled = button_id != action_button_id
+        for button in self._action_buttons():
+            if button.id == action_button_id and running_label is not None:
+                button.label = running_label
+            button.disabled = button.id != action_button_id
         self.run_worker(
             lambda: self._watch_generation(
                 process,
@@ -1238,24 +1605,20 @@ class ImageGenerationApp(App[None]):
             line = raw_line.strip()
             if not line:
                 continue
+            if line.startswith(WORKFLOW_EVENT_PREFIX):
+                self.post_message(
+                    WorkflowNodeUpdated(
+                        json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
+                    )
+                )
+                continue
             if not line.startswith(JSON_PROGRESS_PREFIX):
                 output_lines.append(line)
                 continue
             payload = json.loads(line[len(JSON_PROGRESS_PREFIX) :])
             self.post_message(
                 GenerationUpdated(
-                    GenerationProgress(
-                        phase=payload["phase"],
-                        completed=payload["completed"],
-                        total=payload["total"],
-                        elapsed_seconds=payload["elapsed_seconds"],
-                        remaining_seconds=payload["remaining_seconds"],
-                        final=payload["final"],
-                        cpu_percent=payload["cpu_percent"],
-                        gpu_percent=payload["gpu_percent"],
-                        vram_used_mb=payload["vram_used_mb"],
-                        vram_total_mb=payload["vram_total_mb"],
-                    )
+                    _generation_progress_from_payload(payload)
                 )
             )
         returncode = process.wait()
@@ -1270,9 +1633,14 @@ class ImageGenerationApp(App[None]):
                 return
             self.post_message(GenerationFinished(output_dir, contact_sheets))
         else:
-            self.post_message(
-                GenerationFailed(self._error_message("\n".join(output_lines), returncode))
-            )
+            if self.cancel_requested:
+                self.post_message(GenerationCancelled())
+            else:
+                self.post_message(
+                    GenerationFailed(
+                        self._error_message("\n".join(output_lines), returncode)
+                    )
+                )
 
     @on(GenerationUpdated)
     def generation_updated(self, event: GenerationUpdated) -> None:
@@ -1285,6 +1653,24 @@ class ImageGenerationApp(App[None]):
                 progress=event.progress.completed,
             )
         self._set_status(self._progress_text(event.progress))
+
+    @on(WorkflowNodeUpdated)
+    def workflow_node_updated(self, event: WorkflowNodeUpdated) -> None:
+        node_id = str(event.payload["node_id"])
+        status = str(event.payload["status"])
+        self.workflow_runtime_statuses[node_id] = status
+        if self.workflow_editor is not None:
+            self.workflow_editor.set_runtime_statuses(
+                self.workflow_runtime_statuses
+            )
+            node_progress = event.payload.get("progress")
+            if isinstance(node_progress, dict):
+                detail = self._progress_text(
+                    _generation_progress_from_payload(node_progress)
+                )
+            else:
+                detail = str(event.payload.get("message") or status)
+            self.workflow_editor.set_status(f"{node_id}: {detail}")
 
     @on(GenerationFinished)
     def generation_finished(self, event: GenerationFinished) -> None:
@@ -1311,28 +1697,40 @@ class ImageGenerationApp(App[None]):
         self._generation_stopped()
         self._show_error("Generation failed", event.error)
 
+    @on(GenerationCancelled)
+    def generation_cancelled(self) -> None:
+        self._generation_stopped()
+        self._set_status("Stopped.")
+
     def _generation_stopped(self) -> None:
         self.process = None
+        self.cancel_requested = False
         self.generation_progress = None
         self.query_one("#generation-progress", ProgressBar).display = False
         if self.active_action_button_id is not None:
-            self.query_one(f"#{self.active_action_button_id}", Button).label = (
-                self.active_action_idle_label
-            )
-        for button_id in (
-            "generation-action",
-            "video-action",
-            "sam-action",
-            "postprocess-action",
-        ):
-            self.query_one(f"#{button_id}", Button).disabled = False
+            for button in self.query(f"#{self.active_action_button_id}"):
+                assert isinstance(button, Button)
+                button.label = self.active_action_idle_label
+        for button in self._action_buttons():
+            button.disabled = False
+        if self.workflow_editor is not None:
+            self.workflow_editor.set_running(False)
         self.active_action_button_id = None
         self.active_action_idle_label = ""
+
+    def _action_buttons(self) -> tuple[Button, ...]:
+        return tuple(
+            button
+            for button_id in TAB_ACTION_BUTTON_IDS
+            for button in self.query(f"#{button_id}")
+            if isinstance(button, Button)
+        )
 
     def _cancel_generation(self) -> None:
         if self.process is None:
             self._set_status("No generation is running.")
             return
+        self.cancel_requested = True
         try:
             os.killpg(self.process.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -1370,6 +1768,8 @@ class ImageGenerationApp(App[None]):
 
     def _set_status(self, status: str) -> None:
         self.query_one("#status", Static).update(status)
+        if self.workflow_editor is not None:
+            self.workflow_editor.set_status(status)
 
     @staticmethod
     def _browser_start(value: str) -> Path:

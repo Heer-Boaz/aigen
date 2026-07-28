@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 import gc
 from pathlib import Path
@@ -83,6 +84,23 @@ class UpscaledImage:
     target_height: int
 
 
+@dataclass(frozen=True)
+class UpscaledFile:
+    input_path: Path
+    output_path: Path
+    elapsed_ms: float
+    model_name: str
+    model_path: Path
+    scale: float
+    device: str
+    source_width: int
+    source_height: int
+    natural_width: int
+    natural_height: int
+    target_width: int
+    target_height: int
+
+
 class IllustrationUpscaler:
     def __init__(
         self,
@@ -104,17 +122,134 @@ class IllustrationUpscaler:
         target_size: tuple[int, int],
         progress: StatusReporter,
     ) -> UpscaledImage:
+        return self.upscale_many(
+            ((image, target_size),),
+            progress=progress,
+        )[0]
+
+    def upscale_many(
+        self,
+        images: Sequence[tuple[Image.Image, tuple[int, int]]],
+        *,
+        progress: StatusReporter,
+    ) -> tuple[UpscaledImage, ...]:
+        total_tiles = sum(
+            len(
+                _tile_windows(
+                    width=image.width,
+                    height=image.height,
+                    tile_size=self.tile_size,
+                    overlap=self.tile_overlap,
+                )
+            )
+            for image, _target_size in images
+        )
+        progress.begin(total_tiles, "upscale image batch")
+        device = "cuda" if self.torch.cuda.is_available() else "cpu"
+        progress.phase("move anime upscaler to device")
+        self.model.to(device)
+        try:
+            return tuple(
+                self._upscale_on_device(
+                    image,
+                    target_size=target_size,
+                    device=device,
+                    progress=progress,
+                )
+                for image, target_size in images
+            )
+        finally:
+            self.model.to("cpu")
+            if self.torch.cuda.is_available():
+                self.torch.cuda.empty_cache()
+            gc.collect()
+
+    def upscale_files(
+        self,
+        files: Sequence[tuple[Path, Path]],
+        *,
+        long_side: int | None,
+        progress: StatusReporter,
+    ) -> tuple[UpscaledFile, ...]:
+        total_tiles = 0
+        prepared_files = []
+        for input_path, output_path in files:
+            with Image.open(input_path) as image:
+                target_size = (
+                    size_for_long_side(*image.size, long_side=long_side)
+                    if long_side is not None
+                    else (
+                        round(image.width * self.scale),
+                        round(image.height * self.scale),
+                    )
+                )
+                total_tiles += len(
+                    _tile_windows(
+                        width=image.width,
+                        height=image.height,
+                        tile_size=self.tile_size,
+                        overlap=self.tile_overlap,
+                    )
+                )
+                prepared_files.append((input_path, output_path, target_size))
+        progress.begin(total_tiles, "upscale image batch")
+        device = "cuda" if self.torch.cuda.is_available() else "cpu"
+        progress.phase("move anime upscaler to device")
+        self.model.to(device)
+        outputs = []
+        try:
+            for input_path, output_path, target_size in prepared_files:
+                with Image.open(input_path) as image:
+                    result = self._upscale_on_device(
+                        image,
+                        target_size=target_size,
+                        device=device,
+                        progress=progress,
+                    )
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    result.image.save(output_path)
+                finally:
+                    result.image.close()
+                outputs.append(
+                    UpscaledFile(
+                        input_path=input_path,
+                        output_path=output_path,
+                        elapsed_ms=result.elapsed_ms,
+                        model_name=result.model_name,
+                        model_path=result.model_path,
+                        scale=result.scale,
+                        device=result.device,
+                        source_width=result.source_width,
+                        source_height=result.source_height,
+                        natural_width=result.natural_width,
+                        natural_height=result.natural_height,
+                        target_width=result.target_width,
+                        target_height=result.target_height,
+                    )
+                )
+        finally:
+            self.model.to("cpu")
+            if self.torch.cuda.is_available():
+                self.torch.cuda.empty_cache()
+            gc.collect()
+        return tuple(outputs)
+
+    def _upscale_on_device(
+        self,
+        image: Image.Image,
+        *,
+        target_size: tuple[int, int],
+        device: str,
+        progress: StatusReporter,
+    ) -> UpscaledImage:
         target_width, target_height = target_size
         if target_width < 1 or target_height < 1:
             raise ImageUpscaleError("target_size must contain positive dimensions")
-        device = "cuda" if self.torch.cuda.is_available() else "cpu"
         source_width, source_height = image.size
         start = perf_counter()
-        progress.phase("move anime upscaler to device")
-        self.model.to(device)
         tensor = _image_to_tensor(image, torch=self.torch, device=device)
         try:
-            progress.phase("upscale qwen raw image")
             natural = _upscale_tensor_tiled(
                 self.model,
                 tensor,
@@ -123,21 +258,16 @@ class IllustrationUpscaler:
                 tile_size=self.tile_size,
                 tile_overlap=self.tile_overlap,
                 progress=progress,
+                begin_progress=False,
             )
         finally:
             del tensor
-            self.model.to("cpu")
-            if self.torch.cuda.is_available():
-                self.torch.cuda.empty_cache()
         natural_width = int(natural.shape[-1])
         natural_height = int(natural.shape[-2])
         output = _tensor_to_image(natural, torch=self.torch)
         del natural
         if output.size != target_size:
             output = output.resize(target_size, Image.Resampling.LANCZOS)
-        if self.torch.cuda.is_available():
-            self.torch.cuda.empty_cache()
-        gc.collect()
         return UpscaledImage(
             image=output,
             elapsed_ms=(perf_counter() - start) * 1000.0,
@@ -239,13 +369,15 @@ def _upscale_tensor_tiled(
     tile_size: int,
     tile_overlap: int,
     progress: StatusReporter,
+    begin_progress: bool = True,
 ) -> Any:
     if tile_size <= tile_overlap:
         raise ImageUpscaleError("tile_size must be greater than tile_overlap")
     height = int(tensor.shape[-2])
     width = int(tensor.shape[-1])
     tiles = _tile_windows(width=width, height=height, tile_size=tile_size, overlap=tile_overlap)
-    progress.begin(len(tiles), "upscale qwen raw image tiles")
+    if begin_progress:
+        progress.begin(len(tiles), "upscale image tiles")
     output_height = round(height * scale)
     output_width = round(width * scale)
     output = torch.zeros((1, 3, output_height, output_width), dtype=tensor.dtype, device=tensor.device)

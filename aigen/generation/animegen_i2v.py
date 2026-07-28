@@ -31,6 +31,16 @@ class AnimeGenSamplingProfile:
     lightning: bool
 
 
+@dataclass(frozen=True)
+class ResolvedAnimeGenSettings:
+    frames: int
+    fps: int
+    sampling: str
+    steps: int
+    precision: str
+    profile: AnimeGenSamplingProfile
+
+
 ANIMEGEN_SAMPLING_PROFILES = {
     "lightning-4": AnimeGenSamplingProfile(
         steps=4,
@@ -63,6 +73,47 @@ ANIMEGEN_DEFAULT_SAMPLING = "lightning-8"
 
 class AnimeGenI2VError(RuntimeError):
     pass
+
+
+def animegen_sampling_profile(sampling: str) -> AnimeGenSamplingProfile:
+    try:
+        return ANIMEGEN_SAMPLING_PROFILES[sampling]
+    except KeyError as error:
+        raise AnimeGenI2VError(
+            f"unsupported AnimeGen-I2V sampling profile: {sampling}"
+        ) from error
+
+
+def resolve_animegen_settings(
+    *,
+    frames: int,
+    fps: int,
+    sampling: str,
+    steps: int | None,
+    precision: str,
+) -> ResolvedAnimeGenSettings:
+    if frames < 5 or (frames - 1) % 4 != 0:
+        raise AnimeGenI2VError(
+            "AnimeGen-I2V frames must be 5 or more in increments of 4"
+        )
+    if fps <= 0:
+        raise AnimeGenI2VError("frames per second must be positive")
+    profile = animegen_sampling_profile(sampling)
+    resolved_steps = profile.steps if steps is None else steps
+    if resolved_steps <= 0:
+        raise AnimeGenI2VError("AnimeGen-I2V steps must be positive")
+    if precision not in ANIMEGEN_PRECISIONS:
+        raise AnimeGenI2VError(
+            f"unsupported AnimeGen-I2V precision: {precision}"
+        )
+    return ResolvedAnimeGenSettings(
+        frames=frames,
+        fps=fps,
+        sampling=sampling,
+        steps=resolved_steps,
+        precision=precision,
+        profile=profile,
+    )
 
 
 @dataclass(frozen=True)
@@ -153,20 +204,22 @@ def generate_animegen_i2v_seed_sweep(
     seeds: Sequence[int],
     progress: StatusReporter,
 ) -> tuple[AnimeGenI2VResult, ...]:
-    image, last_image, output, normalized_seeds = _validate_request(
-        prompt=prompt,
-        image=image,
-        last_image=last_image,
-        output=output,
+    resolved = resolve_animegen_settings(
         frames=frames,
         fps=fps,
         sampling=sampling,
         steps=steps,
         precision=precision,
+    )
+    image, last_image, output, normalized_seeds = _validate_request(
+        prompt=prompt,
+        image=image,
+        last_image=last_image,
+        output=output,
         seeds=seeds,
     )
-    sampling_profile = ANIMEGEN_SAMPLING_PROFILES[sampling]
-    effective_steps = sampling_profile.steps if steps is None else steps
+    sampling_profile = resolved.profile
+    effective_steps = resolved.steps
     outputs = tuple(
         output
         if len(normalized_seeds) == 1
@@ -477,11 +530,6 @@ def _validate_request(
     image: Path,
     last_image: Path | None,
     output: Path,
-    frames: int,
-    fps: int,
-    sampling: str,
-    steps: int | None,
-    precision: str,
     seeds: Sequence[int],
 ) -> tuple[Path, Path | None, Path, tuple[int, ...]]:
     if not prompt.strip():
@@ -495,16 +543,6 @@ def _validate_request(
         raise AnimeGenI2VError(f"end image does not exist: {last_image}")
     if output.suffix.lower() != ".mp4":
         raise AnimeGenI2VError("AnimeGen-I2V output must use the .mp4 extension")
-    if frames < 5 or (frames - 1) % 4 != 0:
-        raise AnimeGenI2VError("AnimeGen-I2V frames must be 5 or more in increments of 4")
-    if fps <= 0:
-        raise AnimeGenI2VError("frames per second must be positive")
-    if sampling not in ANIMEGEN_SAMPLING_PROFILES:
-        raise AnimeGenI2VError(f"unsupported AnimeGen-I2V sampling profile: {sampling}")
-    if steps is not None and steps <= 0:
-        raise AnimeGenI2VError("AnimeGen-I2V steps must be positive")
-    if precision not in ANIMEGEN_PRECISIONS:
-        raise AnimeGenI2VError(f"unsupported AnimeGen-I2V precision: {precision}")
     normalized_seeds = tuple(seeds)
     if not normalized_seeds:
         raise AnimeGenI2VError("AnimeGen-I2V requires at least one seed")

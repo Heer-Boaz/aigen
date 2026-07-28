@@ -50,6 +50,7 @@ class ImageTUIFooter(Widget):
         "videos": "video-actions",
         "sam-edit": "sam-actions",
         "postprocessing": "postprocess-actions",
+        "workflows": "workflow-actions",
     }
 
     def compose(self) -> ComposeResult:
@@ -146,6 +147,20 @@ class ImageTUIFooter(Widget):
                     min_column_width=12,
                     stretch_height=False,
                     id="postprocess-actions",
+                    classes="tab-actions",
+                )
+                yield ItemGrid(
+                    Button(
+                        "Open Editor",
+                        name="workflow-open",
+                        variant="primary",
+                        compact=True,
+                    ),
+                    Button("New", name="workflow-new", compact=True),
+                    Button("Load", name="workflow-load", compact=True),
+                    min_column_width=12,
+                    stretch_height=False,
+                    id="workflow-actions",
                     classes="tab-actions",
                 )
             yield ItemGrid(

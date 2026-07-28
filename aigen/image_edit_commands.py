@@ -105,6 +105,18 @@ class ImageEditBackendSettings:
     image_slot_labels: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ResolvedImageEditSettings:
+    width: int | None
+    height: int | None
+    aspect_ratio: tuple[int, int] | None
+    steps: int
+    guidance: float | None
+    strength: float | None
+    sampler: str
+    scheduler: str
+
+
 IMAGE_EDIT_BACKEND_SETTINGS = {
     FLUX2_KLEIN_BACKEND: ImageEditBackendSettings(
         FLUX2_KLEIN_STEPS,
@@ -170,6 +182,102 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
 
 class ImageEditCommandError(RuntimeError):
     pass
+
+
+def image_edit_backend_settings(backend: str) -> ImageEditBackendSettings:
+    try:
+        return IMAGE_EDIT_BACKEND_SETTINGS[backend]
+    except KeyError as error:
+        raise ImageEditCommandError(
+            f"unsupported image-edit backend: {backend}"
+        ) from error
+
+
+def resolve_image_edit_settings(
+    *,
+    backend: str,
+    width: int | None,
+    height: int | None,
+    aspect_ratio: tuple[int, int] | None,
+    steps: int | None,
+    guidance: float | None,
+    strength: float | None,
+    sampler: str | None,
+    scheduler: str | None,
+) -> ResolvedImageEditSettings:
+    settings = image_edit_backend_settings(backend)
+    if (width is None) != (height is None):
+        raise ImageEditCommandError("--width and --height must be provided together")
+    if width is not None and aspect_ratio is not None:
+        raise ImageEditCommandError(
+            "--aspect-ratio cannot be combined with --width/--height"
+        )
+    if width is not None and (width < 1 or height is None or height < 1):
+        raise ImageEditCommandError("--width and --height must be positive")
+
+    resolved_steps = settings.steps if steps is None else steps
+    if resolved_steps < 1:
+        raise ImageEditCommandError("--steps must be positive")
+    if backend == FLUX2_KLEIN_BACKEND:
+        if resolved_steps != FLUX2_KLEIN_STEPS:
+            raise ImageEditCommandError(
+                f"{FLUX2_KLEIN_BACKEND} uses its official "
+                f"{FLUX2_KLEIN_STEPS}-step schedule"
+            )
+        if guidance is not None:
+            raise ImageEditCommandError(
+                f"{FLUX2_KLEIN_BACKEND} does not expose CFG guidance"
+            )
+
+    resolved_strength = settings.strength if strength is None else strength
+    if resolved_strength is not None:
+        if not settings.supports_strength:
+            raise ImageEditCommandError(
+                f"{backend} does not expose image-to-image strength"
+            )
+        if not 0.0 < resolved_strength <= 1.0:
+            raise ImageEditCommandError("--strength must be in (0, 1]")
+
+    resolved_sampler = settings.sampler if sampler is None else sampler
+    if resolved_sampler not in settings.samplers:
+        raise ImageEditCommandError(
+            f"{backend} does not support sampler {resolved_sampler!r}; choose from: "
+            f"{', '.join(settings.samplers)}"
+        )
+    resolved_scheduler = settings.scheduler if scheduler is None else scheduler
+    if resolved_scheduler not in settings.schedulers:
+        raise ImageEditCommandError(
+            f"{backend} does not support scheduler {resolved_scheduler!r}; choose from: "
+            f"{', '.join(settings.schedulers)}"
+        )
+    return ResolvedImageEditSettings(
+        width=width,
+        height=height,
+        aspect_ratio=aspect_ratio,
+        steps=resolved_steps,
+        guidance=settings.guidance if guidance is None else guidance,
+        strength=resolved_strength,
+        sampler=resolved_sampler,
+        scheduler=resolved_scheduler,
+    )
+
+
+def resolve_image_edit_canvas_size(
+    *,
+    backend: str,
+    first_reference: Path,
+    settings: ResolvedImageEditSettings,
+) -> tuple[int, int]:
+    if settings.width is not None:
+        assert settings.height is not None
+        return settings.width, settings.height
+    inferred_aspect = settings.aspect_ratio is None
+    target_aspect = settings.aspect_ratio or _image_aspect_ratio(first_reference)
+    return _recommended_canvas_size(
+        backend,
+        target_aspect,
+        closest=inferred_aspect,
+    )
 
 
 def add_image_edit_command(subparsers: Any) -> None:
@@ -250,25 +358,29 @@ def run_image_edit_command(
     progress: StatusReporter,
 ) -> int:
     try:
-        settings = IMAGE_EDIT_BACKEND_SETTINGS[args.backend]
+        settings = image_edit_backend_settings(args.backend)
         prompt = args.prompt.strip()
         if not prompt and not settings.supports_empty_prompt:
             raise ImageEditCommandError("--prompt must not be empty")
         images = _resolve_images(args.image, args.reference_pack)
         seeds = tuple(args.seed or (0,))
-        sampler = _resolve_sampler(args.backend, args.sampler)
-        scheduler = _resolve_scheduler(args.backend, args.scheduler)
-        strength = _resolve_edit_strength(args.backend, args.strength)
-        width, height = _resolve_dimensions(args.width, args.height, args.aspect_ratio)
+        resolved = resolve_image_edit_settings(
+            backend=args.backend,
+            width=args.width,
+            height=args.height,
+            aspect_ratio=args.aspect_ratio,
+            steps=args.steps,
+            guidance=args.guidance,
+            strength=args.strength,
+            sampler=args.sampler,
+            scheduler=args.scheduler,
+        )
         loras = _resolve_loras(args.lora, args.lora_weight, args.backend)
-        if width is None:
-            inferred_aspect = args.aspect_ratio is None
-            aspect_ratio = args.aspect_ratio or _image_aspect_ratio(images[0])
-            width, height = _recommended_canvas_size(
-                args.backend,
-                aspect_ratio,
-                closest=inferred_aspect,
-            )
+        width, height = resolve_image_edit_canvas_size(
+            backend=args.backend,
+            first_reference=images[0],
+            settings=resolved,
+        )
         output_dir = _prepare_output_directory(args.output_dir, overwrite=args.overwrite)
 
         if args.backend == FLUX2_KLEIN_BACKEND:
@@ -279,11 +391,11 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
-                sampler=sampler,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
+                sampler=resolved.sampler,
                 loras=loras,
-                strength=strength,
+                strength=resolved.strength,
                 progress=progress,
             )
         elif args.backend == FLUX2_DEV_BACKEND:
@@ -294,8 +406,8 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
                 loras=loras,
                 progress=progress,
             )
@@ -308,10 +420,10 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
-                sampler=sampler,
-                scheduler=scheduler,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
+                sampler=resolved.sampler,
+                scheduler=resolved.scheduler,
                 loras=loras,
                 progress=progress,
             )
@@ -323,10 +435,10 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
-                sampler=sampler,
-                scheduler=scheduler,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
+                sampler=resolved.sampler,
+                scheduler=resolved.scheduler,
                 progress=progress,
             )
         elif args.backend == BOOGU_IMAGE_EDIT_BACKEND:
@@ -337,8 +449,8 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
                 progress=progress,
             )
         elif args.backend == USO_FLUX1_BACKEND:
@@ -349,16 +461,16 @@ def run_image_edit_command(
                 seeds=seeds,
                 width=width,
                 height=height,
-                steps=args.steps,
-                guidance=args.guidance,
+                steps=resolved.steps,
+                guidance=resolved.guidance,
                 progress=progress,
             )
         else:
             raise ImageEditCommandError(f"unsupported image-edit backend: {args.backend}")
-        payload["sampler"] = sampler
-        payload["scheduler"] = scheduler
-        if strength is not None:
-            payload["strength"] = strength
+        payload["sampler"] = resolved.sampler
+        payload["scheduler"] = resolved.scheduler
+        if resolved.strength is not None:
+            payload["strength"] = resolved.strength
     except (CharacterReferenceError, ImageEditCommandError, OSError, ValueError) as error:
         dump_json(stderr, command_error_payload(error), pretty=True)
         return 1
@@ -387,12 +499,6 @@ def _run_flux2_klein(
         generate_flux2_klein_seed_sweep,
     )
 
-    if steps is not None and steps != FLUX2_KLEIN_STEPS:
-        raise ImageEditCommandError(
-            f"{FLUX2_KLEIN_BACKEND} uses its official {FLUX2_KLEIN_STEPS}-step schedule"
-        )
-    if guidance is not None:
-        raise ImageEditCommandError(f"{FLUX2_KLEIN_BACKEND} does not expose CFG guidance")
     try:
         result = generate_flux2_klein_seed_sweep(
             prompt=prompt,
@@ -416,17 +522,6 @@ def _run_flux2_klein(
         "seeds": list(seeds),
         **result.to_json(),
     }
-
-
-def _resolve_sampler(backend: str, sampler: str | None) -> str:
-    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
-    resolved = settings.sampler if sampler is None else sampler
-    if resolved not in settings.samplers:
-        raise ImageEditCommandError(
-            f"{backend} does not support sampler {resolved!r}; choose from: "
-            f"{', '.join(settings.samplers)}"
-        )
-    return resolved
 
 
 def _run_flux2_dev(
@@ -468,27 +563,6 @@ def _run_flux2_dev(
         seeds=seeds,
         outputs=[result.to_json() for result in results],
     )
-
-
-def _resolve_scheduler(backend: str, scheduler: str | None) -> str:
-    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
-    resolved = settings.scheduler if scheduler is None else scheduler
-    if resolved not in settings.schedulers:
-        raise ImageEditCommandError(
-            f"{backend} does not support scheduler {resolved!r}; choose from: "
-            f"{', '.join(settings.schedulers)}"
-        )
-    return resolved
-
-
-def _resolve_edit_strength(
-    backend: str,
-    strength: float | None,
-) -> float | None:
-    settings = IMAGE_EDIT_BACKEND_SETTINGS[backend]
-    if strength is not None and not settings.supports_strength:
-        raise ImageEditCommandError(f"{backend} does not expose image-to-image strength")
-    return settings.strength if strength is None else strength
 
 
 def _run_qwen_2511(
@@ -727,20 +801,6 @@ def _resolve_images(
     if missing is not None:
         raise ImageEditCommandError(f"input image does not exist: {missing}")
     return images
-
-
-def _resolve_dimensions(
-    width: int | None,
-    height: int | None,
-    aspect_ratio: tuple[int, int] | None,
-) -> tuple[int | None, int | None]:
-    if (width is None) != (height is None):
-        raise ImageEditCommandError("--width and --height must be provided together")
-    if width is not None and aspect_ratio is not None:
-        raise ImageEditCommandError("--aspect-ratio cannot be combined with --width/--height")
-    if width is not None and (width < 1 or height is None or height < 1):
-        raise ImageEditCommandError("--width and --height must be positive")
-    return width, height
 
 
 def _resolve_loras(
