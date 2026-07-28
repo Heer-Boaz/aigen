@@ -23,6 +23,11 @@ from pydantic import (
 )
 
 from aigen.manifest_io import atomic_write_json, sha256_bytes, sha256_file
+from aigen.workflow_artifacts import (
+    ImageArtifact,
+    ImageSequenceArtifact,
+    VideoArtifact,
+)
 from aigen.workflow_graph import ArtifactType, NodeKind
 
 
@@ -45,16 +50,16 @@ class WorkflowCacheCorruptionError(WorkflowCacheError):
     pass
 
 
-class CacheModel(BaseModel):
+class _CacheModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class RevisionedComponent(CacheModel):
+class RevisionedComponent(_CacheModel):
     name: str = Field(min_length=1, max_length=160)
     revision: str = Field(min_length=1, max_length=256)
 
 
-class NodeExecutionProvenance(CacheModel):
+class NodeExecutionProvenance(_CacheModel):
     """Revision identity for every implementation component that can change bytes."""
 
     executor: RevisionedComponent
@@ -74,24 +79,24 @@ class NodeExecutionProvenance(CacheModel):
         return ordered
 
 
-class NodeInputIdentity(CacheModel):
+class NodeInputIdentity(_CacheModel):
     artifact_type: ArtifactType
     identity: str = Field(min_length=1)
 
 
-class CachedFile(CacheModel):
+class _CachedFile(_CacheModel):
     path: str = Field(min_length=1)
     size: int = Field(ge=0)
     sha256: str = Field(pattern=_SHA256_PATTERN)
 
 
-class CachedArtifact(CacheModel):
+class _CachedArtifact(_CacheModel):
     artifact_type: ArtifactType
-    files: tuple[CachedFile, ...] = Field(min_length=1)
+    files: tuple[_CachedFile, ...] = Field(min_length=1)
     identity: str = Field(pattern=_SHA256_PATTERN)
 
     @model_validator(mode="after")
-    def validate_file_count(self) -> CachedArtifact:
+    def validate_file_count(self) -> _CachedArtifact:
         if self.artifact_type not in _CACHEABLE_ARTIFACT_TYPES:
             raise ValueError(
                 f"artifact type {self.artifact_type!r} is not a generated-file artifact"
@@ -104,12 +109,12 @@ class CachedArtifact(CacheModel):
         return self
 
 
-class NodeCacheManifest(CacheModel):
+class _NodeCacheManifest(_CacheModel):
     version: Literal[WORKFLOW_CACHE_VERSION] = WORKFLOW_CACHE_VERSION
     signature: str = Field(pattern=_SHA256_PATTERN)
     node_kind: NodeKind
     provenance: NodeExecutionProvenance
-    outputs: dict[str, CachedArtifact] = Field(min_length=1)
+    outputs: dict[str, _CachedArtifact] = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -134,18 +139,14 @@ class GeneratedNodeOutput:
 
 
 @dataclass(frozen=True)
-class CachedNodeOutput:
-    artifact_type: ArtifactType
-    paths: tuple[Path, ...]
-    identity: str
-
-
-@dataclass(frozen=True)
 class NodeCacheHit:
     signature: str
     node_kind: NodeKind
     manifest_path: Path
-    outputs: Mapping[str, CachedNodeOutput]
+    outputs: Mapping[
+        str,
+        ImageArtifact | VideoArtifact | ImageSequenceArtifact,
+    ]
 
 
 def build_node_signature(
@@ -218,7 +219,7 @@ class WorkflowNodeCache:
                 f"workflow cache entry has no result manifest: {entry_dir}"
             )
         try:
-            manifest = NodeCacheManifest.model_validate_json(
+            manifest = _NodeCacheManifest.model_validate_json(
                 manifest_path.read_text(encoding="utf-8")
             )
         except (OSError, ValidationError) as error:
@@ -308,7 +309,7 @@ class NodeCacheWrite:
             port: _capture_artifact(self.staging_dir, output)
             for port, output in outputs.items()
         }
-        manifest = NodeCacheManifest(
+        manifest = _NodeCacheManifest(
             signature=self.signature,
             node_kind=self.node_kind,
             provenance=self.provenance,
@@ -346,20 +347,20 @@ class NodeCacheWrite:
 def _capture_artifact(
     staging_dir: Path,
     output: GeneratedNodeOutput,
-) -> CachedArtifact:
+) -> _CachedArtifact:
     resolved_staging = staging_dir.resolve()
     files = tuple(
         _capture_file(resolved_staging, path)
         for path in output.paths
     )
-    return CachedArtifact(
+    return _CachedArtifact(
         artifact_type=output.artifact_type,
         files=files,
         identity=_artifact_identity(output.artifact_type, files),
     )
 
 
-def _capture_file(resolved_staging: Path, path: Path) -> CachedFile:
+def _capture_file(resolved_staging: Path, path: Path) -> _CachedFile:
     try:
         resolved = path.resolve(strict=True)
         relative = resolved.relative_to(resolved_staging)
@@ -370,7 +371,7 @@ def _capture_file(resolved_staging: Path, path: Path) -> CachedFile:
     file_stat = resolved.stat()
     if not stat.S_ISREG(file_stat.st_mode):
         raise WorkflowCacheError(f"workflow cache output is not a file: {resolved}")
-    return CachedFile(
+    return _CachedFile(
         path=relative.as_posix(),
         size=file_stat.st_size,
         sha256=sha256_file(resolved),
@@ -379,11 +380,11 @@ def _capture_file(resolved_staging: Path, path: Path) -> CachedFile:
 
 def _cache_hit(
     entry_dir: Path,
-    manifest: NodeCacheManifest,
+    manifest: _NodeCacheManifest,
     *,
     verify_bytes: bool,
 ) -> NodeCacheHit:
-    outputs: dict[str, CachedNodeOutput] = {}
+    outputs: dict[str, ImageArtifact | VideoArtifact | ImageSequenceArtifact] = {}
     resolved_entry_dir = entry_dir.resolve(strict=True)
     for port, artifact in manifest.outputs.items():
         paths = tuple(
@@ -398,9 +399,9 @@ def _cache_hit(
             raise WorkflowCacheCorruptionError(
                 f"workflow cache artifact identity mismatch: {entry_dir} port {port!r}"
             )
-        outputs[port] = CachedNodeOutput(
-            artifact_type=artifact.artifact_type,
-            paths=paths,
+        outputs[port] = _file_artifact(
+            artifact.artifact_type,
+            paths,
             identity=artifact.identity,
         )
     return NodeCacheHit(
@@ -413,7 +414,7 @@ def _cache_hit(
 
 def _resolve_cached_file(
     resolved_entry_dir: Path,
-    cached_file: CachedFile,
+    cached_file: _CachedFile,
     *,
     verify_bytes: bool,
 ) -> Path:
@@ -448,7 +449,7 @@ def _resolve_cached_file(
 
 def _artifact_identity(
     artifact_type: ArtifactType,
-    files: Sequence[CachedFile],
+    files: Sequence[_CachedFile],
 ) -> str:
     encoded = json.dumps(
         {
@@ -466,6 +467,26 @@ def _artifact_identity(
         sort_keys=True,
     ).encode("utf-8")
     return sha256_bytes(encoded)
+
+
+def _file_artifact(
+    artifact_type: ArtifactType,
+    paths: tuple[Path, ...],
+    *,
+    identity: str,
+) -> ImageArtifact | VideoArtifact | ImageSequenceArtifact:
+    if artifact_type == ArtifactType.IMAGE:
+        return ImageArtifact(path=paths[0].as_posix(), identity=identity)
+    if artifact_type == ArtifactType.VIDEO:
+        return VideoArtifact(path=paths[0].as_posix(), identity=identity)
+    if artifact_type == ArtifactType.IMAGE_SEQUENCE:
+        return ImageSequenceArtifact(
+            paths=tuple(path.as_posix() for path in paths),
+            identity=identity,
+        )
+    raise WorkflowCacheCorruptionError(
+        f"workflow cache contains unsupported artifact type: {artifact_type}"
+    )
 
 
 def _validate_signature(signature: str) -> None:

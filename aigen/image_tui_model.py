@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aigen.character_reference_pack import build_character_reference_pack
-from aigen.image_edit_commands import (
+from aigen.generation.image_edit import (
     IMAGE_EDIT_ASPECT_RATIOS,
     IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES,
     IMAGE_EDIT_BACKEND_SETTINGS,

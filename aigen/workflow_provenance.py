@@ -5,7 +5,7 @@ from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 
-from aigen.image_edit_commands import (
+from aigen.generation.image_edit import (
     BOOGU_IMAGE_EDIT_BACKEND,
     FLUX2_DEV_BACKEND,
     FLUX2_KLEIN_BACKEND,
@@ -26,7 +26,7 @@ from aigen.workflow_graph import (
 
 
 WORKFLOW_EXECUTOR_REVISION = "2"
-IMAGE_EDIT_CLI_REVISION = "2"
+IMAGE_EDIT_API_REVISION = "1"
 IMAGE_POSTPROCESS_BATCH_REVISION = "1"
 VIDEO_POSTPROCESS_REVISION = "1"
 
@@ -80,11 +80,11 @@ def _image_edit_provenance(
         QWEN_2511_BASE_BACKEND,
     }
     implementation = _component(
-        "image-edit-batch" if batch_backend else "image-edit-cli",
+        "image-edit-batch" if batch_backend else "image-edit-api",
         (
             str(IMAGE_EDIT_BATCH_VERSION)
             if batch_backend
-            else IMAGE_EDIT_CLI_REVISION
+            else IMAGE_EDIT_API_REVISION
         ),
     )
     if backend == FLUX2_KLEIN_BACKEND:

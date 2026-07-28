@@ -11,7 +11,7 @@ from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
     ImageGenerationOutputRequest,
 )
-from aigen.image_edit_commands import (
+from aigen.generation.image_edit import (
     FLUX2_KLEIN_BACKEND,
     QWEN_2511_BASE_BACKEND,
     QWEN_2511_LIGHTNING_BACKEND,

@@ -53,14 +53,18 @@ from aigen.tui_file_browser import FileBrowser
 from aigen.video_tui_model import VideoForm
 from aigen.workflow_editor import WorkflowEditor
 from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
+from aigen.workflow_document_io import (
+    load_workflow_document,
+    save_workflow_document,
+)
 from aigen.workflow_execution import WORKFLOW_EVENT_PREFIX
 from aigen.workflow_graph import (
     ImageSourceNode,
     LoraSourceNode,
     ReferencePackNode,
     WorkflowGraph,
-    keyframed_video_workflow_template,
 )
+from aigen.workflow_templates import keyframed_video_workflow_template
 
 
 FormModel = ImageEditForm | PostprocessForm | VideoForm | SamEditForm
@@ -1251,7 +1255,7 @@ class ImageGenerationApp(App[None]):
         if path is None:
             return
         try:
-            document = WorkflowGraph.load(path)
+            document = load_workflow_document(path)
         except (OSError, ValueError) as error:
             self._show_error("Cannot load workflow", str(error))
             return
@@ -1348,7 +1352,7 @@ class ImageGenerationApp(App[None]):
             if self.workflow_editor is not None:
                 self.workflow_editor.save_to(output)
             else:
-                document.save(output)
+                save_workflow_document(document, output)
         except OSError as error:
             self._show_error("Cannot save workflow", str(error))
             return
@@ -1421,20 +1425,22 @@ class ImageGenerationApp(App[None]):
         if self.process is not None:
             self._set_status("An operation is already running.")
             return
+        workflow = event.workflow
+        document = workflow.document
         request_path = (
             DEFAULT_WORKFLOW_RUNS_ROOT
             / "requests"
-            / f"{event.document.execution_digest()}.json"
+            / f"{workflow.digest}.json"
         )
         try:
-            event.document.save(request_path)
+            save_workflow_document(document, request_path)
         except OSError as error:
             self._show_error("Cannot start workflow", str(error))
             return
-        self.workflow_document = event.document
+        self.workflow_document = document
         self.workflow_runtime_statuses = {
             node.id: "queued"
-            for node in event.document.nodes
+            for node in document.nodes
         }
         if self.workflow_editor is not None:
             self.workflow_editor.set_runtime_statuses(
@@ -1443,7 +1449,7 @@ class ImageGenerationApp(App[None]):
         run_dir = (
             DEFAULT_WORKFLOW_RUNS_ROOT
             / "runs"
-            / event.document.execution_digest()
+            / workflow.digest
         )
         self._start_command(
             [

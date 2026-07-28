@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Event, Lock, Thread
 from typing import Protocol, TextIO
@@ -99,6 +100,20 @@ class RuntimeStatus:
         return cls(
             interval_seconds=interval_seconds,
             renderer=ProgressLineRenderer(stream=stream, close_stream=close_stream),
+            telemetry=telemetry,
+        )
+
+    @classmethod
+    def callback(
+        cls,
+        *,
+        interval_seconds: float,
+        callback: Callable[[dict[str, object]], None],
+        telemetry: SystemTelemetrySampler,
+    ) -> RuntimeStatus:
+        return cls(
+            interval_seconds=interval_seconds,
+            renderer=CallbackStatusRenderer(callback),
             telemetry=telemetry,
         )
 
@@ -228,25 +243,27 @@ class JsonLineRenderer:
         self._close_stream = close_stream
 
     def render(self, snapshot: RuntimeStatusSnapshot) -> None:
-        gpu = snapshot.telemetry.gpu
-        payload = {
-            "phase": snapshot.phase,
-            "completed": snapshot.completed,
-            "total": snapshot.total,
-            "elapsed_seconds": snapshot.elapsed_seconds,
-            "remaining_seconds": snapshot.remaining_seconds,
-            "final": snapshot.final,
-            "cpu_percent": snapshot.telemetry.cpu_percent,
-            "gpu_percent": None if gpu is None else gpu.gpu_percent,
-            "vram_used_mb": None if gpu is None else gpu.vram_used_mb,
-            "vram_total_mb": None if gpu is None else gpu.vram_total_mb,
-        }
+        payload = _progress_payload(snapshot)
         self._stream.write(f"{JSON_PROGRESS_PREFIX}{json.dumps(payload, separators=(',', ':'))}\n")
         self._stream.flush()
 
     def close(self) -> None:
         if self._close_stream:
             self._stream.close()
+
+
+class CallbackStatusRenderer:
+    def __init__(
+        self,
+        callback: Callable[[dict[str, object]], None],
+    ) -> None:
+        self._callback = callback
+
+    def render(self, snapshot: RuntimeStatusSnapshot) -> None:
+        self._callback(_progress_payload(snapshot))
+
+    def close(self) -> None:
+        pass
 
 
 class SilentRuntimeStatus:
@@ -336,6 +353,22 @@ def _progress_interval_seconds() -> float:
     if raw is None:
         return DEFAULT_PROGRESS_INTERVAL_SECONDS
     return max(0.25, float(raw))
+
+
+def _progress_payload(snapshot: RuntimeStatusSnapshot) -> dict[str, object]:
+    gpu = snapshot.telemetry.gpu
+    return {
+        "phase": snapshot.phase,
+        "completed": snapshot.completed,
+        "total": snapshot.total,
+        "elapsed_seconds": snapshot.elapsed_seconds,
+        "remaining_seconds": snapshot.remaining_seconds,
+        "final": snapshot.final,
+        "cpu_percent": snapshot.telemetry.cpu_percent,
+        "gpu_percent": None if gpu is None else gpu.gpu_percent,
+        "vram_used_mb": None if gpu is None else gpu.vram_used_mb,
+        "vram_total_mb": None if gpu is None else gpu.vram_total_mb,
+    }
 
 
 def _format_line(snapshot: RuntimeStatusSnapshot) -> str:

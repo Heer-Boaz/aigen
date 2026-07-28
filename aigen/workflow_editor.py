@@ -21,17 +21,15 @@ from aigen.generation.animegen_i2v import (
     animegen_sampling_profile,
 )
 from aigen.generation.image_batch_postprocess import (
-    PIXEL_ART_FIXER_MODEL,
-    WU_PIXELIZATION_MODEL,
     image_batch_postprocess_model_names,
 )
-from aigen.generation.image_upscale import upscale_model_names
-from aigen.generation.vosr_backend import VOSR_POSTPROCESS_NAME
-from aigen.image_edit_commands import (
+from aigen.generation.image_edit import (
     IMAGE_EDIT_BACKENDS,
     image_edit_backend_settings,
 )
 from aigen.workflow_canvas import NODE_WIDTH, WorkflowCanvas
+from aigen.workflow_compilation import CompiledWorkflow, compile_workflow
+from aigen.workflow_document_io import save_workflow_document
 from aigen.workflow_graph import (
     AnimeGenI2VNode,
     FramePostprocessNode,
@@ -43,8 +41,12 @@ from aigen.workflow_graph import (
     WorkflowConnection,
     WorkflowGraph,
     WorkflowNode,
-    create_node,
+    VosrPostprocessConfig,
     node_definition,
+)
+from aigen.workflow_templates import (
+    create_workflow_node,
+    postprocess_config_for_model,
 )
 
 _PRESERVE_SELECTION = object()
@@ -536,9 +538,9 @@ class WorkflowEditor(ModalScreen[WorkflowGraph | None]):
         pass
 
     class RunRequested(Message):
-        def __init__(self, document: WorkflowGraph) -> None:
+        def __init__(self, workflow: CompiledWorkflow) -> None:
             super().__init__()
-            self.document = document
+            self.workflow = workflow
 
     class StopRequested(Message):
         pass
@@ -746,7 +748,7 @@ class WorkflowEditor(ModalScreen[WorkflowGraph | None]):
         )
 
     def save_to(self, path: Path) -> None:
-        self.document.save(path)
+        save_workflow_document(self.document, path)
         self.document_path = path
         self.query_one("#workflow-editor-title", Label).update(
             self._title_text()
@@ -998,7 +1000,7 @@ class WorkflowEditor(ModalScreen[WorkflowGraph | None]):
         ):
             x += 4
             y += 2
-        node = create_node(NodeKind(value), x=x, y=y)
+        node = create_workflow_node(NodeKind(value), x=x, y=y)
         document = _rebuild_graph(
             self.document,
             nodes=[*self.document.nodes, node],
@@ -1146,11 +1148,11 @@ class WorkflowEditor(ModalScreen[WorkflowGraph | None]):
 
     def _run(self) -> None:
         try:
-            self.document.validate_executable()
+            workflow = compile_workflow(self.document)
         except ValueError as error:
             self.notify(str(error), severity="error")
             return
-        self.post_message(self.RunRequested(self.document))
+        self.post_message(self.RunRequested(workflow))
 
     async def _update_config_field(
         self,
@@ -1161,6 +1163,16 @@ class WorkflowEditor(ModalScreen[WorkflowGraph | None]):
         model_field = type(node.config).model_fields[field_name]
         try:
             value = _parse_property(raw_value, model_field.annotation)
+            if (
+                isinstance(node, (ImagePostprocessNode, FramePostprocessNode))
+                and field_name == "model"
+            ):
+                changed = _replace_node(
+                    node,
+                    config=postprocess_config_for_model(str(value)),
+                )
+                await self._replace_node(changed)
+                return
             config_payload = node.config.model_dump(mode="python")
             config_payload[field_name] = value
             _apply_owner_defaults(node, field_name, value, config_payload)
@@ -1396,32 +1408,18 @@ def _node_property_options(
 
 
 def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
-    if not isinstance(node, (ImagePostprocessNode, FramePostprocessNode)):
-        return tuple(type(node.config).model_fields)
-    model = node.config.model
-    if model == VOSR_POSTPROCESS_NAME:
-        return (
-            "model",
-            "sizing",
-            (
-                "long_side"
-                if node.config.sizing == "long-side"
-                else "scale"
-            ),
-            "infer_steps",
-            "cfg_scale",
-            "weak_cond_strength_aelq",
-            "align_method",
-            "tile_size",
-            "seed",
+    fields = tuple(type(node.config).model_fields)
+    if (
+        isinstance(node, (ImagePostprocessNode, FramePostprocessNode))
+        and isinstance(node.config, VosrPostprocessConfig)
+    ):
+        hidden = (
+            "scale"
+            if node.config.sizing == "long-side"
+            else "long_side"
         )
-    if model in upscale_model_names():
-        return ("model", "long_side")
-    if model == WU_PIXELIZATION_MODEL:
-        return ("model", "cell_size")
-    if model == PIXEL_ART_FIXER_MODEL:
-        return ("model", "mode", "low_memory", "force_step")
-    return ("model",)
+        return tuple(field for field in fields if field != hidden)
+    return fields
 
 
 def _apply_owner_defaults(

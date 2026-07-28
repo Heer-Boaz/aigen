@@ -9,16 +9,18 @@ from typing import Any, TextIO
 from aigen.command_io import command_error_payload, dump_json
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
+from aigen.workflow_compilation import compile_workflow
+from aigen.workflow_document_io import (
+    load_workflow_document,
+    save_workflow_document,
+)
 from aigen.workflow_execution import (
     WorkflowExecutionError,
     WorkflowInterrupted,
     execute_workflow,
     format_workflow_event,
 )
-from aigen.workflow_graph import (
-    WorkflowGraph,
-    keyframed_video_workflow_template,
-)
+from aigen.workflow_templates import keyframed_video_workflow_template
 
 
 DEFAULT_WORKFLOW_RUNS_ROOT = PROJECT_ROOT / "runs" / "workflows"
@@ -73,7 +75,7 @@ def run_workflow_command(
                     f"workflow document already exists: {output}"
                 )
             graph = keyframed_video_workflow_template()
-            graph.save(output)
+            save_workflow_document(graph, output)
             payload = {
                 "status": "completed",
                 "kind": "workflow-document",
@@ -81,17 +83,18 @@ def run_workflow_command(
             }
         elif args.workflow_operation == "validate":
             path = args.input.expanduser().resolve()
-            graph = WorkflowGraph.load(path)
-            execution_order, _incoming = graph.validated_execution_plan()
+            workflow = compile_workflow(load_workflow_document(path))
             payload = {
                 "status": "completed",
                 "kind": "workflow-validation",
                 "path": path.as_posix(),
-                "workflow_digest": graph.execution_digest(),
-                "execution_order": list(execution_order),
+                "workflow_digest": workflow.digest,
+                "execution_order": list(workflow.execution_order),
             }
         elif args.workflow_operation == "run":
-            graph = WorkflowGraph.load(args.input.expanduser().resolve())
+            workflow = compile_workflow(
+                load_workflow_document(args.input.expanduser().resolve())
+            )
             forward_progress = os.environ.get("AIGEN_PROGRESS") == "json"
 
             def emit_event(event: dict[str, object]) -> None:
@@ -109,7 +112,7 @@ def run_workflow_command(
                 emit_event(
                     {
                         "node_id": node_id,
-                        "node_kind": graph.node(node_id).kind,
+                        "node_kind": workflow.node(node_id).node.kind,
                         "status": "running",
                         "progress": node_progress,
                     }
@@ -126,7 +129,7 @@ def run_workflow_command(
             signal.signal(signal.SIGTERM, interrupt_workflow)
             try:
                 payload = execute_workflow(
-                    graph,
+                    workflow,
                     runs_root=args.runs_root,
                     progress=progress,
                     event_sink=emit_event,

@@ -11,21 +11,44 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Annotated, Literal, TypeAlias, TypeVar, cast
+from typing import Literal, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from aigen.character_reference_pack import load_character_reference_pack
 from aigen.manifest_io import atomic_write_json, sha256_file
 from aigen.progress import JSON_PROGRESS_PREFIX, StatusReporter
-from aigen.runtime_profiles import PROJECT_ROOT, resolve_project_path
+from aigen.runtime_profiles import PROJECT_ROOT
 from aigen.generation.video_postprocess import probe_video
+from aigen.workflow_compilation import (
+    CompiledAnimeGenConfig,
+    CompiledImageEditConfig,
+    CompiledImageSourceConfig,
+    CompiledIllustrationUpscaleConfig,
+    CompiledLoraSourceConfig,
+    CompiledNode,
+    CompiledPixelArtFixerConfig,
+    CompiledPostprocessConfig,
+    CompiledReferencePackConfig,
+    CompiledVosrLongSideConfig,
+    CompiledVosrScaleConfig,
+    CompiledWorkflow,
+    CompiledWuPixelizationConfig,
+    execution_config_payload,
+)
+from aigen.workflow_artifacts import (
+    ImageArtifact,
+    ImageSequenceArtifact,
+    LoraArtifact,
+    ReferencePackArtifact,
+    VideoArtifact,
+    WorkflowArtifact,
+)
+from aigen.workflow_document_io import save_workflow_document
 from aigen.workflow_graph import (
     AnimeGenI2VNode,
     ArtifactType,
     ExtractVideoFramesNode,
     FramePostprocessNode,
-    ImagePostprocessConfig,
     ImageEditNode,
     ImagePostprocessNode,
     ImageSourceNode,
@@ -33,15 +56,12 @@ from aigen.workflow_graph import (
     NodeKind,
     ReferencePackNode,
     VideoContactSheetNode,
-    WorkflowConnection,
     WorkflowGraph,
     WorkflowNode,
-    image_postprocess_execution_config,
-    node_execution_config,
+    WorkflowConnection,
     node_definition,
 )
 from aigen.workflow_cache import (
-    CachedNodeOutput,
     GeneratedNodeOutput,
     NodeCacheHit,
     NodeCacheWrite,
@@ -51,25 +71,17 @@ from aigen.workflow_cache import (
     build_node_signature,
 )
 from aigen.workflow_provenance import workflow_node_provenance
-from aigen.generation.image_batch_postprocess import (
-    PIXEL_ART_FIXER_MODEL,
-    WU_PIXELIZATION_MODEL,
-)
 from aigen.generation.image_edit_batch import (
     ImageEditBatchCase,
     ImageEditBatchLora,
     ImageEditBatchRequest,
     ImageEditBatchResult,
 )
-from aigen.generation.image_upscale import upscale_model_names
-from aigen.generation.vosr_backend import VOSR_POSTPROCESS_NAME
-from aigen.image_dimensions import parse_aspect_ratio
-from aigen.image_edit_commands import (
+from aigen.generation.image_edit import (
     FLUX2_KLEIN_BACKEND,
     QWEN_2511_BASE_BACKEND,
     QWEN_2511_LIGHTNING_BACKEND,
     resolve_image_edit_canvas_size,
-    resolve_image_edit_settings,
 )
 
 
@@ -87,48 +99,6 @@ class WorkflowInterrupted(WorkflowExecutionError):
 
 class RuntimeModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class ImageArtifact(RuntimeModel):
-    type: Literal[ArtifactType.IMAGE] = ArtifactType.IMAGE
-    path: str
-    identity: str
-
-
-class ReferencePackArtifact(RuntimeModel):
-    type: Literal[ArtifactType.REFERENCE_PACK] = ArtifactType.REFERENCE_PACK
-    path: str
-    references: tuple[str, ...]
-    identity: str
-
-
-class LoraArtifact(RuntimeModel):
-    type: Literal[ArtifactType.LORA] = ArtifactType.LORA
-    path: str
-    weight: float
-    identity: str
-
-
-class VideoArtifact(RuntimeModel):
-    type: Literal[ArtifactType.VIDEO] = ArtifactType.VIDEO
-    path: str
-    identity: str
-
-
-class ImageSequenceArtifact(RuntimeModel):
-    type: Literal[ArtifactType.IMAGE_SEQUENCE] = ArtifactType.IMAGE_SEQUENCE
-    paths: tuple[str, ...] = Field(min_length=1)
-    identity: str
-
-
-WorkflowArtifact: TypeAlias = Annotated[
-    ImageArtifact
-    | ReferencePackArtifact
-    | LoraArtifact
-    | VideoArtifact
-    | ImageSequenceArtifact,
-    Field(discriminator="type"),
-]
 
 
 class NodeResultManifest(RuntimeModel):
@@ -190,6 +160,7 @@ class _ResolvedImageEditPlan:
 
 @dataclass(frozen=True)
 class _PendingNodeExecution:
+    compiled_node: CompiledNode
     node: WorkflowNode
     inputs: Mapping[str, Sequence[WorkflowArtifact]]
     source_outputs: Mapping[str, WorkflowArtifact] | None
@@ -209,15 +180,16 @@ class _NodeStaging:
 
 
 def execute_workflow(
-    graph: WorkflowGraph,
+    workflow: CompiledWorkflow,
     *,
     runs_root: Path,
     progress: StatusReporter,
     event_sink: WorkflowEventSink | None = None,
     node_progress_sink: NodeProgressSink | None = None,
 ) -> WorkflowRunResult:
-    execution_order, incoming = graph.validated_execution_plan()
-    workflow_digest = graph.execution_digest()
+    graph = workflow.document
+    execution_order = workflow.execution_order
+    workflow_digest = workflow.digest
     workflow_root = runs_root.expanduser().resolve()
     run_dir = workflow_root / "runs" / workflow_digest
     node_cache = WorkflowNodeCache(workflow_root / "cache")
@@ -237,15 +209,20 @@ def execute_workflow(
 
     active_node_ids: tuple[str, ...] = ()
     try:
-        for layer in _execution_layers(execution_order, incoming):
+        for layer in workflow.execution_layers:
             pending: list[_PendingNodeExecution] = []
             for node_id in layer:
-                node = graph.node(node_id)
-                inputs = _resolve_inputs(node_id, incoming[node_id], outputs_by_node)
-                source_outputs = _source_outputs(node)
+                compiled_node = workflow.node(node_id)
+                node = compiled_node.node
+                inputs = _resolve_inputs(
+                    node_id,
+                    compiled_node.incoming,
+                    outputs_by_node,
+                )
+                source_outputs = _source_outputs(compiled_node)
                 provenance = workflow_node_provenance(node)
                 signature = _node_signature(
-                    node,
+                    compiled_node,
                     inputs,
                     source_outputs,
                     provenance,
@@ -284,6 +261,7 @@ def execute_workflow(
                     continue
                 pending.append(
                     _PendingNodeExecution(
+                        compiled_node=compiled_node,
                         node=node,
                         inputs=inputs,
                         source_outputs=source_outputs,
@@ -291,7 +269,7 @@ def execute_workflow(
                         manifest_path=manifest_path,
                         provenance=provenance,
                         image_edit_plan=(
-                            _resolve_image_edit_plan(node, inputs)
+                            _resolve_image_edit_plan(compiled_node, inputs)
                             if isinstance(node, ImageEditNode)
                             else None
                         ),
@@ -334,7 +312,7 @@ def execute_workflow(
                 active_node_ids = ()
     except WorkflowInterrupted as error:
         for node_id in active_node_ids:
-            node = graph.node(node_id)
+            node = workflow.node(node_id).node
             _emit(
                 event_sink,
                 node_id=node_id,
@@ -365,7 +343,7 @@ def execute_workflow(
         raise
     except Exception as error:
         for node_id in active_node_ids:
-            node = graph.node(node_id)
+            node = workflow.node(node_id).node
             _emit(
                 event_sink,
                 node_id=node_id,
@@ -397,13 +375,9 @@ def execute_workflow(
             raise
         raise WorkflowExecutionError(str(error)) from error
 
-    connected_sources = {
-        connection.source.node_id for connection in graph.connections
-    }
     terminal_outputs = {
         node_id: outputs_by_node[node_id]
-        for node_id in execution_order
-        if node_id not in connected_sources
+        for node_id in workflow.terminal_node_ids
     }
     result_path = run_dir / "result.json"
     result = WorkflowRunResult(
@@ -426,33 +400,6 @@ def execute_workflow(
     return result
 
 
-def _execution_layers(
-    execution_order: Sequence[str],
-    incoming: Mapping[
-        str,
-        Mapping[str, Sequence[WorkflowConnection]],
-    ],
-) -> tuple[tuple[str, ...], ...]:
-    depth_by_node: dict[str, int] = {}
-    layers: list[list[str]] = []
-    for node_id in execution_order:
-        predecessors = {
-            connection.source.node_id
-            for connections in incoming[node_id].values()
-            for connection in connections
-        }
-        depth = (
-            max(depth_by_node[predecessor] for predecessor in predecessors) + 1
-            if predecessors
-            else 0
-        )
-        depth_by_node[node_id] = depth
-        while len(layers) <= depth:
-            layers.append([])
-        layers[depth].append(node_id)
-    return tuple(tuple(layer) for layer in layers)
-
-
 def _execution_groups(
     pending: Sequence[_PendingNodeExecution],
 ) -> tuple[tuple[_PendingNodeExecution, ...], ...]:
@@ -467,7 +414,9 @@ def _execution_groups(
         elif isinstance(item.node, ImagePostprocessNode):
             key = (
                 "image-postprocess",
-                _digest(image_postprocess_execution_config(item.node.config)),
+                _digest(
+                    execution_config_payload(item.compiled_node.config)
+                ),
             )
         else:
             key = ("node", item.node.id)
@@ -489,26 +438,13 @@ def _is_batchable_image_edit(
 
 
 def _resolve_image_edit_plan(
-    node: ImageEditNode,
+    compiled_node: CompiledNode,
     inputs: Mapping[str, Sequence[WorkflowArtifact]],
 ) -> _ResolvedImageEditPlan:
-    config = node.config
+    node = cast(ImageEditNode, compiled_node.node)
+    config = cast(CompiledImageEditConfig, compiled_node.config)
     references = _image_edit_reference_paths(node, inputs)
-    settings = resolve_image_edit_settings(
-        backend=config.backend,
-        width=config.width,
-        height=config.height,
-        aspect_ratio=(
-            parse_aspect_ratio(config.aspect_ratio)
-            if config.aspect_ratio
-            else None
-        ),
-        steps=config.steps,
-        guidance=config.guidance,
-        strength=config.strength,
-        sampler=config.sampler,
-        scheduler=config.scheduler,
-    )
+    settings = config.settings
     width, height = resolve_image_edit_canvas_size(
         backend=config.backend,
         first_reference=references[0],
@@ -516,7 +452,7 @@ def _resolve_image_edit_plan(
     )
     return _ResolvedImageEditPlan(
         backend=config.backend,
-        prompt=config.prompt.strip(),
+        prompt=config.prompt,
         seed=config.seed,
         references=references,
         loras=tuple(
@@ -686,14 +622,14 @@ def _execute_image_edit_group(
                 )
             staged_outputs.append(
                 {
-                    "image": ImageArtifact(
-                        path=_require_file(expected, item.node).as_posix(),
-                        identity="",
+                    "image": GeneratedNodeOutput(
+                        artifact_type=ArtifactType.IMAGE,
+                        paths=(_require_file(expected, item.node),),
                     )
                 }
             )
         return tuple(
-            _publish_node_staging(context, outputs)
+            _publish_generated_node_staging(context, outputs)
             for context, outputs in zip(contexts, staged_outputs, strict=True)
         )
     except WorkflowInterrupted:
@@ -720,7 +656,7 @@ def _save_snapshot(graph: WorkflowGraph, run_dir: Path) -> Path:
     document_digest = sha256(encoded).hexdigest()
     snapshot_path = run_dir / "snapshots" / f"{document_digest}.json"
     if not snapshot_path.exists():
-        graph.save(snapshot_path)
+        save_workflow_document(graph, snapshot_path)
     return snapshot_path
 
 
@@ -775,9 +711,12 @@ def _resolve_inputs(
     return resolved
 
 
-def _source_outputs(node: WorkflowNode) -> dict[str, WorkflowArtifact] | None:
+def _source_outputs(
+    compiled_node: CompiledNode,
+) -> dict[str, WorkflowArtifact] | None:
+    node = compiled_node.node
     if isinstance(node, ImageSourceNode):
-        path = resolve_project_path(node.config.path)
+        path = cast(CompiledImageSourceConfig, compiled_node.config).path
         identity = sha256_file(path)
         return {
             "image": ImageArtifact(
@@ -786,8 +725,10 @@ def _source_outputs(node: WorkflowNode) -> dict[str, WorkflowArtifact] | None:
             )
         }
     if isinstance(node, ReferencePackNode):
-        path = resolve_project_path(node.config.path)
-        pack = load_character_reference_pack(path)
+        pack = cast(
+            CompiledReferencePackConfig,
+            compiled_node.config,
+        ).pack
         references = tuple(pack.references.values())
         identity_payload = {
             "pack": sha256_file(pack.path),
@@ -809,17 +750,18 @@ def _source_outputs(node: WorkflowNode) -> dict[str, WorkflowArtifact] | None:
             )
         }
     if isinstance(node, LoraSourceNode):
-        path = resolve_project_path(node.config.path)
+        config = cast(CompiledLoraSourceConfig, compiled_node.config)
+        path = config.path
         identity = _digest(
             {
                 "sha256": sha256_file(path),
-                "weight": node.config.weight,
+                "weight": config.weight,
             }
         )
         return {
             "lora": LoraArtifact(
                 path=path.as_posix(),
-                weight=node.config.weight,
+                weight=config.weight,
                 identity=identity,
             )
         }
@@ -827,14 +769,15 @@ def _source_outputs(node: WorkflowNode) -> dict[str, WorkflowArtifact] | None:
 
 
 def _node_signature(
-    node: WorkflowNode,
+    compiled_node: CompiledNode,
     inputs: Mapping[str, Sequence[WorkflowArtifact]],
     source_outputs: Mapping[str, WorkflowArtifact] | None,
     provenance: NodeExecutionProvenance,
 ) -> str:
+    node = compiled_node.node
     return build_node_signature(
         node_kind=node.kind,
-        execution_config=node_execution_config(node),
+        execution_config=execution_config_payload(compiled_node.config),
         inputs={
             port: tuple(
                 NodeInputIdentity(
@@ -911,39 +854,13 @@ def _manifest_from_cache_hit(
     node: WorkflowNode,
     hit: NodeCacheHit,
 ) -> NodeResultManifest:
-    outputs = {
-        port: _artifact_from_cached_output(output)
-        for port, output in hit.outputs.items()
-    }
+    outputs = dict(hit.outputs)
     _validate_output_contract(node, outputs)
     return NodeResultManifest(
         node_id=node.id,
         node_kind=node.kind,
         signature=hit.signature,
         outputs=outputs,
-    )
-
-
-def _artifact_from_cached_output(
-    output: CachedNodeOutput,
-) -> WorkflowArtifact:
-    if output.artifact_type == ArtifactType.IMAGE:
-        return ImageArtifact(
-            path=output.paths[0].as_posix(),
-            identity=output.identity,
-        )
-    if output.artifact_type == ArtifactType.VIDEO:
-        return VideoArtifact(
-            path=output.paths[0].as_posix(),
-            identity=output.identity,
-        )
-    if output.artifact_type == ArtifactType.IMAGE_SEQUENCE:
-        return ImageSequenceArtifact(
-            paths=tuple(path.as_posix() for path in output.paths),
-            identity=output.identity,
-        )
-    raise WorkflowExecutionError(
-        f"unsupported cached workflow artifact: {output.artifact_type}"
     )
 
 
@@ -963,18 +880,20 @@ def _execute_node(
         ),
     )
     try:
-        staged_outputs = (
-            dict(pending.source_outputs)
-            if pending.source_outputs is not None
-            else _run_generated_node(
-                pending.node,
-                pending.inputs,
+        if pending.source_outputs is not None:
+            return _publish_source_node_staging(
+                context,
+                pending.source_outputs,
+            )
+        return _publish_generated_node_staging(
+            context,
+            _run_generated_node(
+                pending,
                 context.staging,
                 context.log_path,
                 node_progress_sink=node_progress_sink,
-            )
+            ),
         )
-        return _publish_node_staging(context, staged_outputs)
     except WorkflowInterrupted:
         _preserve_failed_staging(context, label="interrupted")
         raise
@@ -1022,26 +941,23 @@ def _start_node_staging(
     )
 
 
-def _publish_node_staging(
+def _publish_generated_node_staging(
     context: _NodeStaging,
-    staged_outputs: Mapping[str, WorkflowArtifact],
+    staged_outputs: Mapping[str, GeneratedNodeOutput],
 ) -> NodeResultManifest:
     pending = context.pending
-    if context.cache_write is not None:
-        _validate_output_contract(pending.node, staged_outputs)
-        cache_hit = context.cache_write.publish(
-            {
-                port: GeneratedNodeOutput(
-                    artifact_type=artifact.type,
-                    paths=_artifact_paths(artifact),
-                )
-                for port, artifact in staged_outputs.items()
-            }
-        )
-        context.cache_write.__exit__(None, None, None)
-        return _manifest_from_cache_hit(pending.node, cache_hit)
+    cache_write = cast(NodeCacheWrite, context.cache_write)
+    cache_hit = cache_write.publish(staged_outputs)
+    cache_write.__exit__(None, None, None)
+    return _manifest_from_cache_hit(pending.node, cache_hit)
 
-    final_outputs = dict(staged_outputs)
+
+def _publish_source_node_staging(
+    context: _NodeStaging,
+    outputs: Mapping[str, WorkflowArtifact],
+) -> NodeResultManifest:
+    pending = context.pending
+    final_outputs = dict(outputs)
     _validate_output_contract(pending.node, final_outputs)
     manifest = NodeResultManifest(
         node_id=pending.node.id,
@@ -1095,7 +1011,10 @@ def _execute_image_postprocess_group(
             _preserve_failed_staging(context)
         raise
     contexts = tuple(created_contexts)
-    first_node = cast(ImagePostprocessNode, group[0].node)
+    first_config = cast(
+        CompiledPostprocessConfig,
+        group[0].compiled_node.config,
+    )
     batch_output = contexts[0].staging / "batch"
     output_names = tuple(f"{item.node.id}.png" for item in group)
     sources = tuple(
@@ -1103,7 +1022,7 @@ def _execute_image_postprocess_group(
         for item in group
     )
     command = _batch_postprocess_command(
-        first_node.config,
+        first_config,
         tuple(Path(source.path) for source in sources),
         batch_output,
         output_names=output_names,
@@ -1125,7 +1044,7 @@ def _execute_image_postprocess_group(
             group[0].node.id,
             fan_out_progress,
         )
-        staged_outputs: list[dict[str, WorkflowArtifact]] = []
+        staged_outputs: list[dict[str, GeneratedNodeOutput]] = []
         for context, output_name in zip(contexts, output_names, strict=True):
             generated = _require_file(batch_output / output_name, context.pending.node)
             output = context.staging / "image" / "image.png"
@@ -1133,14 +1052,14 @@ def _execute_image_postprocess_group(
             generated.replace(output)
             staged_outputs.append(
                 {
-                    "image": ImageArtifact(
-                        path=output.as_posix(),
-                        identity="",
+                    "image": GeneratedNodeOutput(
+                        artifact_type=ArtifactType.IMAGE,
+                        paths=(output,),
                     )
                 }
             )
         return tuple(
-            _publish_node_staging(context, outputs)
+            _publish_generated_node_staging(context, outputs)
             for context, outputs in zip(contexts, staged_outputs, strict=True)
         )
     except WorkflowInterrupted:
@@ -1154,31 +1073,47 @@ def _execute_image_postprocess_group(
 
 
 def _run_generated_node(
-    node: WorkflowNode,
-    inputs: Mapping[str, Sequence[WorkflowArtifact]],
+    pending: _PendingNodeExecution,
     staging: Path,
     log_path: Path,
     *,
     node_progress_sink: NodeProgressSink | None,
-) -> dict[str, WorkflowArtifact]:
+) -> dict[str, GeneratedNodeOutput]:
+    node = pending.node
+    inputs = pending.inputs
     if isinstance(node, ImageEditNode):
         output_dir = staging / "image"
-        command = _image_edit_command(node, inputs, output_dir)
+        command = _image_edit_command(
+            cast(CompiledImageEditConfig, pending.compiled_node.config),
+            node,
+            inputs,
+            output_dir,
+        )
         _run_subcommand(command, log_path, node.id, node_progress_sink)
         output = _require_file(output_dir / "image.png", node)
-        return {"image": ImageArtifact(path=output.as_posix(), identity="")}
+        return {
+            "image": GeneratedNodeOutput(
+                artifact_type=ArtifactType.IMAGE,
+                paths=(output,),
+            )
+        }
 
     if isinstance(node, ImagePostprocessNode):
         source = _one_artifact(inputs, "image", ImageArtifact)
         output_dir = staging / "image"
         command = _batch_postprocess_command(
-            node.config,
+            cast(CompiledPostprocessConfig, pending.compiled_node.config),
             (Path(source.path),),
             output_dir,
         )
         _run_subcommand(command, log_path, node.id, node_progress_sink)
         output = _require_file(output_dir / Path(source.path).name, node)
-        return {"image": ImageArtifact(path=output.as_posix(), identity="")}
+        return {
+            "image": GeneratedNodeOutput(
+                artifact_type=ArtifactType.IMAGE,
+                paths=(output,),
+            )
+        }
 
     if isinstance(node, AnimeGenI2VNode):
         start = _one_artifact(inputs, "start", ImageArtifact)
@@ -1189,12 +1124,17 @@ def _run_generated_node(
             else None
         )
         output = staging / "video.mp4"
-        command = _animegen_command(node, start, end, output)
+        command = _animegen_command(
+            cast(CompiledAnimeGenConfig, pending.compiled_node.config),
+            start,
+            end,
+            output,
+        )
         _run_subcommand(command, log_path, node.id, node_progress_sink)
         return {
-            "video": VideoArtifact(
-                path=_require_file(output, node).as_posix(),
-                identity="",
+            "video": GeneratedNodeOutput(
+                artifact_type=ArtifactType.VIDEO,
+                paths=(_require_file(output, node),),
             )
         }
 
@@ -1214,9 +1154,9 @@ def _run_generated_node(
         ]
         _run_subcommand(command, log_path, node.id, node_progress_sink)
         return {
-            "image": ImageArtifact(
-                path=_require_file(output, node).as_posix(),
-                identity="",
+            "image": GeneratedNodeOutput(
+                artifact_type=ArtifactType.IMAGE,
+                paths=(_require_file(output, node),),
             )
         }
 
@@ -1246,9 +1186,9 @@ def _run_generated_node(
                 f"node {node.id!r} did not extract frame: {missing}"
             )
         return {
-            "images": ImageSequenceArtifact(
-                paths=tuple(path.as_posix() for path in paths),
-                identity="",
+            "images": GeneratedNodeOutput(
+                artifact_type=ArtifactType.IMAGE_SEQUENCE,
+                paths=paths,
             )
         }
 
@@ -1256,7 +1196,7 @@ def _run_generated_node(
         source = _one_artifact(inputs, "images", ImageSequenceArtifact)
         output_dir = staging / "frames"
         command = _batch_postprocess_command(
-            node.config,
+            cast(CompiledPostprocessConfig, pending.compiled_node.config),
             tuple(Path(path) for path in source.paths),
             output_dir,
         )
@@ -1268,9 +1208,9 @@ def _run_generated_node(
                 f"node {node.id!r} did not produce frame: {missing}"
             )
         return {
-            "images": ImageSequenceArtifact(
-                paths=tuple(path.as_posix() for path in paths),
-                identity="",
+            "images": GeneratedNodeOutput(
+                artifact_type=ArtifactType.IMAGE_SEQUENCE,
+                paths=paths,
             )
         }
 
@@ -1278,11 +1218,12 @@ def _run_generated_node(
 
 
 def _image_edit_command(
+    config: CompiledImageEditConfig,
     node: ImageEditNode,
     inputs: Mapping[str, Sequence[WorkflowArtifact]],
     output_dir: Path,
 ) -> list[str]:
-    config = node.config
+    settings = config.settings
     command = [
         sys.executable,
         "-m",
@@ -1308,18 +1249,23 @@ def _image_edit_command(
                 str(artifact.weight),
             )
         )
-    if config.aspect_ratio:
-        command.extend(("--aspect-ratio", config.aspect_ratio))
-    if config.width is not None:
-        command.extend(("--width", str(config.width)))
-    if config.height is not None:
-        command.extend(("--height", str(config.height)))
+    if settings.aspect_ratio is not None:
+        command.extend(
+            (
+                "--aspect-ratio",
+                f"{settings.aspect_ratio[0]}:{settings.aspect_ratio[1]}",
+            )
+        )
+    if settings.width is not None:
+        command.extend(("--width", str(settings.width)))
+    if settings.height is not None:
+        command.extend(("--height", str(settings.height)))
     for flag, value in (
-        ("--steps", config.steps),
-        ("--guidance", config.guidance),
-        ("--strength", config.strength),
-        ("--sampler", config.sampler),
-        ("--scheduler", config.scheduler),
+        ("--steps", settings.steps),
+        ("--guidance", settings.guidance),
+        ("--strength", settings.strength),
+        ("--sampler", settings.sampler),
+        ("--scheduler", settings.scheduler),
     ):
         if value is not None and value != "":
             command.extend((flag, str(value)))
@@ -1364,12 +1310,12 @@ def _image_edit_loras(
 
 
 def _animegen_command(
-    node: AnimeGenI2VNode,
+    config: CompiledAnimeGenConfig,
     start: ImageArtifact,
     end: ImageArtifact | None,
     output: Path,
 ) -> list[str]:
-    config = node.config
+    settings = config.settings
     command = [
         sys.executable,
         "-m",
@@ -1382,15 +1328,15 @@ def _animegen_command(
         "--output",
         output.as_posix(),
         "--frames",
-        str(config.frames),
+        str(settings.frames),
         "--fps",
-        str(config.fps),
+        str(settings.fps),
         "--sampling",
-        config.sampling,
+        settings.sampling,
         "--steps",
-        str(config.steps),
+        str(settings.steps),
         "--precision",
-        config.precision,
+        settings.precision,
         "--seed",
         str(config.seed),
     ]
@@ -1400,7 +1346,7 @@ def _animegen_command(
 
 
 def _batch_postprocess_command(
-    config: ImagePostprocessConfig,
+    config: CompiledPostprocessConfig,
     inputs: Sequence[Path],
     output_dir: Path,
     *,
@@ -1420,36 +1366,34 @@ def _batch_postprocess_command(
         command.extend(("--input", input_path.as_posix()))
     for output_name in output_names or ():
         command.extend(("--output-name", output_name))
-    effective = image_postprocess_execution_config(config)
-    if config.model == VOSR_POSTPROCESS_NAME:
-        for name in (
-            "long_side",
-            "scale",
-            "infer_steps",
-            "cfg_scale",
-            "weak_cond_strength_aelq",
-            "align_method",
-            "tile_size",
-            "seed",
+    if isinstance(
+        config,
+        (CompiledVosrLongSideConfig, CompiledVosrScaleConfig),
+    ):
+        if isinstance(config, CompiledVosrLongSideConfig):
+            command.extend(("--long-side", str(config.long_side)))
+        else:
+            command.extend(("--scale", str(config.scale)))
+        for name, value in (
+            ("infer-steps", config.infer_steps),
+            ("cfg-scale", config.cfg_scale),
+            ("weak-cond-strength-aelq", config.weak_cond_strength_aelq),
+            ("align-method", config.align_method),
+            ("tile-size", config.tile_size),
+            ("seed", config.seed),
         ):
-            value = effective.get(name)
-            if value is not None:
-                command.extend((f"--{name.replace('_', '-')}", str(value)))
-    elif config.model in upscale_model_names():
+            command.extend((f"--{name}", str(value)))
+    elif isinstance(config, CompiledIllustrationUpscaleConfig):
         if config.long_side is not None:
             command.extend(("--long-side", str(config.long_side)))
-    elif config.model == WU_PIXELIZATION_MODEL:
+    elif isinstance(config, CompiledWuPixelizationConfig):
         command.extend(("--cell-size", str(config.cell_size)))
-    elif config.model == PIXEL_ART_FIXER_MODEL:
+    elif isinstance(config, CompiledPixelArtFixerConfig):
         command.extend(("--mode", config.mode))
         if config.low_memory:
             command.append("--low-memory")
         if config.force_step is not None:
             command.extend(("--force-step", str(config.force_step)))
-    else:
-        raise WorkflowExecutionError(
-            f"unsupported postprocessing model: {config.model}"
-        )
     return command
 
 
