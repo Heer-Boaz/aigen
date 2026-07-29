@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,9 @@ from torch import Tensor
 
 from aigen.manifest_io import atomic_write_json, read_json, write_json_line
 from aigen.pix2pix.artifacts import (
+    AdversarialCheckpointState,
+    CheckpointState,
+    L1CheckpointState,
     ResumePosition,
     export_generator_bundle,
     load_training_checkpoint,
@@ -27,9 +32,11 @@ from aigen.pix2pix.model import (
     ConditionalPatchDiscriminator,
     Pix2PixGenerator,
     discriminator_loss,
+    generator_parameter_report,
     generator_loss,
     initialize_pix2pix_weights,
     model_parameter_report,
+    reconstruction_loss,
 )
 from aigen.pix2pix.training_data import create_training_loader
 from aigen.progress import StatusReporter
@@ -61,6 +68,8 @@ def train_pix2pix(
         raise Pix2PixError("dataset image size does not match the model config")
     device = resolve_device(device_name)
     validate_precision(device, config.precision)
+    validate_precision(device, config.parameter_precision)
+    optimizer_type = _optimizer_type(config.optimizer, device=device)
     output_dir = output_dir.resolve()
     config_fingerprint = _config_fingerprint(config)
     train_pairs = dataset.split("train")
@@ -73,20 +82,71 @@ def train_pix2pix(
         torch.cuda.manual_seed(config.seed)
         torch.cuda.reset_peak_memory_stats(device)
 
-    generator = Pix2PixGenerator(config.model).to(device)
-    discriminator = ConditionalPatchDiscriminator(config.model).to(device)
+    parameter_dtype = _parameter_dtype(config.parameter_precision)
+    generator = Pix2PixGenerator(
+        config.model,
+        device=device,
+        dtype=parameter_dtype,
+    )
     generator.apply(initialize_pix2pix_weights)
-    discriminator.apply(initialize_pix2pix_weights)
-    generator_optimizer = torch.optim.Adam(
+    generator_optimizer = optimizer_type(
         generator.parameters(),
         lr=config.learning_rate,
         betas=(config.beta1, config.beta2),
     )
-    discriminator_optimizer = torch.optim.Adam(
-        discriminator.parameters(),
-        lr=config.learning_rate,
-        betas=(config.beta1, config.beta2),
-    )
+    batch_trainer: Callable[
+        [dict[str, Tensor | list[str]]],
+        tuple[dict[str, Tensor], int],
+    ]
+    checkpoint_state: CheckpointState
+    optimizers: tuple[torch.optim.Optimizer, ...]
+    if config.objective == "adversarial_l1":
+        rng_devices = (
+            [torch.cuda.current_device()]
+            if device.type == "cuda"
+            else []
+        )
+        with torch.random.fork_rng(devices=rng_devices):
+            discriminator = ConditionalPatchDiscriminator(
+                config.model,
+                device=device,
+                dtype=parameter_dtype,
+            )
+            discriminator.apply(initialize_pix2pix_weights)
+        discriminator_optimizer = optimizer_type(
+            discriminator.parameters(),
+            lr=config.learning_rate,
+            betas=(config.beta1, config.beta2),
+        )
+        batch_trainer = partial(
+            _train_adversarial_batch,
+            generator=generator,
+            discriminator=discriminator,
+            generator_optimizer=generator_optimizer,
+            discriminator_optimizer=discriminator_optimizer,
+            device=device,
+            config=config,
+        )
+        checkpoint_state = AdversarialCheckpointState(
+            discriminator=discriminator,
+            generator_optimizer=generator_optimizer,
+            discriminator_optimizer=discriminator_optimizer,
+        )
+        optimizers = (generator_optimizer, discriminator_optimizer)
+        parameter_report = model_parameter_report(generator, discriminator)
+    else:
+        batch_trainer = partial(
+            _train_l1_batch,
+            generator=generator,
+            generator_optimizer=generator_optimizer,
+            device=device,
+            config=config,
+        )
+        checkpoint_state = L1CheckpointState(
+            generator_optimizer=generator_optimizer,
+        )
+        optimizers = (generator_optimizer,)
+        parameter_report = generator_parameter_report(generator)
     if resume_checkpoint is None:
         position = ResumePosition(step=0, epoch=0, sample_offset=0)
         run = _new_run_manifest(
@@ -96,8 +156,7 @@ def train_pix2pix(
             output_dir,
             config_fingerprint,
             device,
-            generator,
-            discriminator,
+            parameter_report,
         )
         atomic_write_json(output_dir / "run.json", run)
     else:
@@ -108,9 +167,7 @@ def train_pix2pix(
             config=config,
             config_fingerprint=config_fingerprint,
             generator=generator,
-            discriminator=discriminator,
-            generator_optimizer=generator_optimizer,
-            discriminator_optimizer=discriminator_optimizer,
+            checkpoint_state=checkpoint_state,
             device=device,
         )
     if position.step > config.max_steps:
@@ -170,19 +227,17 @@ def train_pix2pix(
     last_checkpoint_step = position.step if resume_checkpoint is not None else 0
     last_evaluation_step = 0
     last_evaluation: EvaluationResult | None = None
+    extra_checkpoint_steps = frozenset(config.extra_checkpoint_steps)
     with metrics_path.open("a", encoding="utf-8", buffering=1) as metrics:
         while step < config.max_steps:
             sampler.set_position(epoch=epoch, start_offset=sample_offset)
             for batch in loader:
-                losses, batch_count = _train_batch(
-                    batch,
-                    generator=generator,
-                    discriminator=discriminator,
-                    generator_optimizer=generator_optimizer,
-                    discriminator_optimizer=discriminator_optimizer,
-                    device=device,
-                    config=config,
+                learning_rate = _learning_rate_for_update(
+                    config,
+                    completed_steps=step,
                 )
+                _set_learning_rate(optimizers, learning_rate)
+                losses, batch_count = batch_trainer(batch)
                 step += 1
                 sample_offset += batch_count
                 if sample_offset == len(train_pairs):
@@ -200,10 +255,14 @@ def train_pix2pix(
                             "kind": "train",
                             "step": step,
                             "epoch": epoch,
+                            "learning_rate": learning_rate,
                             **logged_losses,
                         },
                     )
-                if step % config.checkpoint_every == 0:
+                if (
+                    step % config.checkpoint_every == 0
+                    or step in extra_checkpoint_steps
+                ):
                     progress.phase(f"checkpoint pix2pix step {step}")
                     checkpoint_dir = save_training_checkpoint(
                         output_dir / "checkpoints",
@@ -214,9 +273,10 @@ def train_pix2pix(
                         config_fingerprint=config_fingerprint,
                         model_config=config.model,
                         generator=generator,
-                        discriminator=discriminator,
-                        generator_optimizer=generator_optimizer,
-                        discriminator_optimizer=discriminator_optimizer,
+                        objective=config.objective,
+                        state=checkpoint_state,
+                        optimizer_name=config.optimizer,
+                        parameter_precision=config.parameter_precision,
                         device=device,
                     )
                     last_checkpoint_step = step
@@ -259,9 +319,10 @@ def train_pix2pix(
                 config_fingerprint=config_fingerprint,
                 model_config=config.model,
                 generator=generator,
-                discriminator=discriminator,
-                generator_optimizer=generator_optimizer,
-                discriminator_optimizer=discriminator_optimizer,
+                objective=config.objective,
+                state=checkpoint_state,
+                optimizer_name=config.optimizer,
+                parameter_precision=config.parameter_precision,
                 device=device,
             )
             run["latest_checkpoint"] = checkpoint_dir.as_posix()
@@ -398,7 +459,7 @@ def _record_validation_once(
         ) from error
 
 
-def _train_batch(
+def _train_adversarial_batch(
     batch: dict[str, Tensor | list[str]],
     *,
     generator: Pix2PixGenerator,
@@ -444,6 +505,35 @@ def _train_batch(
     )
 
 
+def _train_l1_batch(
+    batch: dict[str, Tensor | list[str]],
+    *,
+    generator: Pix2PixGenerator,
+    generator_optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    config: TrainConfig,
+) -> tuple[dict[str, Tensor], int]:
+    source = _batch_tensor(batch, "source").to(device, non_blocking=True)
+    target = _batch_tensor(batch, "target").to(device, non_blocking=True)
+    generator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        generated = generator(source)
+        total, reconstruction = reconstruction_loss(
+            generated,
+            target,
+            lambda_l1=config.lambda_l1,
+        )
+    total.backward()
+    generator_optimizer.step()
+    return (
+        {
+            "generator_total": total.detach(),
+            "generator_l1": reconstruction.detach(),
+        },
+        source.shape[0],
+    )
+
+
 def _validate(
     generator: Pix2PixGenerator,
     validation_pairs: tuple[PairedImage, ...],
@@ -471,8 +561,7 @@ def _new_run_manifest(
     output_dir: Path,
     config_fingerprint: str,
     device: torch.device,
-    generator: Pix2PixGenerator,
-    discriminator: ConditionalPatchDiscriminator,
+    parameter_report: dict[str, int],
 ) -> dict[str, Any]:
     runtime: dict[str, object] = {
         "torch": torch.__version__,
@@ -493,7 +582,7 @@ def _new_run_manifest(
         "config_path": config_path.resolve().as_posix(),
         "config_fingerprint": config_fingerprint,
         "config": config.to_json(),
-        "parameters": model_parameter_report(generator, discriminator),
+        "parameters": parameter_report,
         "runtime": runtime,
         "references": {
             "tensorflow_tutorial": {
@@ -516,9 +605,7 @@ def _resume_run(
     config: TrainConfig,
     config_fingerprint: str,
     generator: Pix2PixGenerator,
-    discriminator: ConditionalPatchDiscriminator,
-    generator_optimizer: torch.optim.Optimizer,
-    discriminator_optimizer: torch.optim.Optimizer,
+    checkpoint_state: CheckpointState,
     device: torch.device,
 ) -> tuple[ResumePosition, dict[str, Any]]:
     run = read_json(output_dir / "run.json", label="pix2pix run metadata")
@@ -544,9 +631,10 @@ def _resume_run(
         expected_config_fingerprint=config_fingerprint,
         model_config=config.model,
         generator=generator,
-        discriminator=discriminator,
-        generator_optimizer=generator_optimizer,
-        discriminator_optimizer=discriminator_optimizer,
+        expected_objective=config.objective,
+        state=checkpoint_state,
+        expected_optimizer_name=config.optimizer,
+        expected_parameter_precision=config.parameter_precision,
         device=device,
     )
     return position, run
@@ -568,6 +656,59 @@ def _configure_runtime(device: torch.device) -> None:
         torch.backends.cudnn.benchmark = True
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
+
+
+def _optimizer_type(
+    name: str,
+    *,
+    device: torch.device,
+) -> type[torch.optim.Optimizer]:
+    if name == "adam":
+        return torch.optim.Adam
+    if device.type != "cuda":
+        raise Pix2PixError("paged_adam8bit requires a CUDA device")
+    try:
+        from bitsandbytes.optim import PagedAdam8bit
+    except ImportError as error:
+        raise Pix2PixError(
+            "paged_adam8bit requires the bitsandbytes package"
+        ) from error
+    return PagedAdam8bit
+
+
+def _parameter_dtype(precision: str) -> torch.dtype:
+    if precision == "fp32":
+        return torch.float32
+    if precision == "bf16":
+        return torch.bfloat16
+    raise AssertionError(f"unsupported parameter precision: {precision}")
+
+
+def _learning_rate_for_update(
+    config: TrainConfig,
+    *,
+    completed_steps: int,
+) -> float:
+    assert 0 <= completed_steps < config.max_steps
+    schedule = config.learning_rate_schedule
+    if schedule.type == "constant":
+        return config.learning_rate
+    assert schedule.type == "linear_decay"
+    assert schedule.decay_start_step is not None
+    if completed_steps <= schedule.decay_start_step:
+        return config.learning_rate
+    remaining = config.max_steps - completed_steps
+    decay_steps = config.max_steps - schedule.decay_start_step
+    return config.learning_rate * remaining / decay_steps
+
+
+def _set_learning_rate(
+    optimizers: tuple[torch.optim.Optimizer, ...],
+    learning_rate: float,
+) -> None:
+    for optimizer in optimizers:
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] = learning_rate
 
 
 def _batch_tensor(batch: dict[str, Tensor | list[str]], key: str) -> Tensor:

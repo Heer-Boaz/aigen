@@ -25,6 +25,21 @@ def validate_precision(device: torch.device, precision: str) -> None:
         raise Pix2PixError("bf16 requires a CUDA device")
 
 
+def validate_model_precision(
+    parameter_dtype: torch.dtype,
+    compute_precision: str,
+) -> None:
+    if parameter_dtype == torch.float32:
+        return
+    if parameter_dtype == torch.bfloat16 and compute_precision == "bf16":
+        return
+    if parameter_dtype == torch.bfloat16:
+        raise Pix2PixError("a bf16 pix2pix model requires bf16 compute precision")
+    raise Pix2PixError(
+        f"unsupported pix2pix parameter dtype: {parameter_dtype}"
+    )
+
+
 def autocast_context(
     device: torch.device,
     precision: str,

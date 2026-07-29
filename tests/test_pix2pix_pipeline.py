@@ -4,6 +4,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +13,10 @@ from PIL import Image
 
 from aigen.pix2pix import training as pix2pix_training
 from aigen.pix2pix.artifacts import (
+    AdversarialCheckpointState,
+    L1CheckpointState,
     export_generator_bundle,
+    load_generator_bundle,
     load_training_checkpoint,
 )
 from aigen.pix2pix.config import ModelConfig, TrainConfig
@@ -79,14 +83,429 @@ class Pix2PixPipelineTests(unittest.TestCase):
                 ],
                 model_config=training_config.model,
                 generator=generator,
-                discriminator=discriminator,
-                generator_optimizer=generator_optimizer,
-                discriminator_optimizer=discriminator_optimizer,
+                expected_objective=training_config.objective,
+                state=AdversarialCheckpointState(
+                    discriminator=discriminator,
+                    generator_optimizer=generator_optimizer,
+                    discriminator_optimizer=discriminator_optimizer,
+                ),
+                expected_optimizer_name=training_config.optimizer,
+                expected_parameter_precision=training_config.parameter_precision,
                 device=torch.device("cpu"),
             )
             self.assertEqual(position.step, 1)
             self.assertEqual(position.epoch, 1)
             self.assertEqual(position.sample_offset, 0)
+
+
+class Pix2PixL1ObjectiveTests(unittest.TestCase):
+    def test_l1_training_never_constructs_or_executes_a_discriminator(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "dataset"
+            config = root / "train.json"
+            output = root / "run"
+            _write_dataset(dataset, image_size=128)
+            _write_config(
+                config,
+                image_size=128,
+                channels=1,
+                objective="l1_only",
+            )
+
+            with patch(
+                "aigen.pix2pix.training.ConditionalPatchDiscriminator",
+                side_effect=AssertionError("L1 constructed a discriminator"),
+            ), patch(
+                "aigen.pix2pix.training.discriminator_loss",
+                side_effect=AssertionError("L1 executed discriminator loss"),
+            ):
+                result = train_pix2pix(
+                    dataset,
+                    config,
+                    output,
+                    resume_checkpoint=None,
+                    device_name="cpu",
+                    progress=SILENT_STATUS,
+                )
+
+            self.assertEqual(result["status"], "completed")
+            checkpoint = output / "checkpoints" / "step-00000001"
+            self.assertEqual(
+                {path.name for path in checkpoint.iterdir()},
+                {
+                    "checkpoint.json",
+                    "generator.safetensors",
+                    "training-state.pt",
+                },
+            )
+            metadata = _read_json(checkpoint / "checkpoint.json")
+            self.assertEqual(metadata["objective"], "l1_only")
+            self.assertEqual(
+                set(metadata["files"]),
+                {"generator", "training_state"},
+            )
+            training_state = torch.load(
+                checkpoint / "training-state.pt",
+                map_location="cpu",
+                weights_only=True,
+            )
+            self.assertEqual(
+                set(training_state),
+                {"generator_optimizer", "cpu_rng_state"},
+            )
+            train_record = _metric_records(
+                output / "metrics.jsonl",
+                kind="train",
+                step=1,
+            )[0]
+            self.assertEqual(
+                set(train_record),
+                {
+                    "kind",
+                    "step",
+                    "epoch",
+                    "learning_rate",
+                    "generator_total",
+                    "generator_l1",
+                },
+            )
+            self.assertEqual(
+                set(_read_json(output / "run.json")["parameters"]),
+                {"generator", "total"},
+            )
+
+    def test_l1_terminal_resume_restores_without_a_discriminator(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "dataset"
+            config = root / "train.json"
+            output = root / "run"
+            _write_dataset(dataset, image_size=128)
+            _write_config(
+                config,
+                image_size=128,
+                channels=1,
+                objective="l1_only",
+            )
+            train_pix2pix(
+                dataset,
+                config,
+                output,
+                resume_checkpoint=None,
+                device_name="cpu",
+                progress=SILENT_STATUS,
+            )
+            checkpoint = output / "checkpoints" / "step-00000001"
+            _mark_run_running(output)
+            shutil.rmtree(output / "final")
+            _remove_validation_metric(output / "metrics.jsonl", step=1)
+
+            with patch(
+                "aigen.pix2pix.training.ConditionalPatchDiscriminator",
+                side_effect=AssertionError("L1 resume constructed a discriminator"),
+            ):
+                result = train_pix2pix(
+                    dataset,
+                    config,
+                    output,
+                    resume_checkpoint=checkpoint,
+                    device_name="cpu",
+                    progress=SILENT_STATUS,
+                )
+
+            self.assertEqual(result["status"], "completed")
+            self.assertTrue((output / "final" / "generator.safetensors").is_file())
+
+    def test_l1_loader_rejects_an_adversarial_checkpoint_by_objective(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, config, _, checkpoint = _completed_training_fixture(root)
+            training_config = TrainConfig.load(config)
+            generator = Pix2PixGenerator(training_config.model)
+            generator_optimizer = torch.optim.Adam(generator.parameters())
+
+            with self.assertRaisesRegex(Pix2PixError, "checkpoint objective"):
+                load_training_checkpoint(
+                    checkpoint,
+                    expected_dataset_fingerprint="not inspected",
+                    expected_config_fingerprint="not inspected",
+                    model_config=training_config.model,
+                    generator=generator,
+                    expected_objective="l1_only",
+                    state=L1CheckpointState(generator_optimizer),
+                    expected_optimizer_name=training_config.optimizer,
+                    expected_parameter_precision=training_config.parameter_precision,
+                    device=torch.device("cpu"),
+                )
+
+    def test_v3_config_requires_an_objective(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / "train.json"
+            _write_config(config, objective="l1_only")
+            payload = _read_json(config)
+            del payload["objective"]
+            config.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(Pix2PixError, "missing objective"):
+                TrainConfig.load(config)
+
+    def test_objectives_share_generator_initialization_and_dropout_rng(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "dataset"
+            _write_dataset(dataset, image_size=128)
+            captures: dict[str, tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]] = {}
+
+            def capture_batch(
+                label: str,
+                batch: dict[str, torch.Tensor | list[str]],
+                *,
+                generator: Pix2PixGenerator,
+                **_: object,
+            ) -> tuple[dict[str, torch.Tensor], int]:
+                state = {
+                    name: tensor.detach().clone()
+                    for name, tensor in generator.state_dict().items()
+                }
+                rng = torch.get_rng_state().clone()
+                source = batch["source"]
+                assert isinstance(source, torch.Tensor)
+                with torch.no_grad():
+                    generated = generator(source)
+                captures[label] = (state, rng, generated)
+                zero = generated.new_zeros(())
+                losses = {
+                    "generator_total": zero,
+                    "generator_l1": zero,
+                }
+                if label == "adversarial_l1":
+                    losses["generator_adversarial"] = zero
+                    losses["discriminator"] = zero
+                return losses, source.shape[0]
+
+            for objective, batch_function in (
+                ("adversarial_l1", "_train_adversarial_batch"),
+                ("l1_only", "_train_l1_batch"),
+            ):
+                config = root / f"{objective}.json"
+                _write_config(
+                    config,
+                    image_size=128,
+                    channels=1,
+                    objective=objective,
+                )
+                with patch(
+                    f"aigen.pix2pix.training.{batch_function}",
+                    side_effect=partial(capture_batch, objective),
+                ):
+                    train_pix2pix(
+                        dataset,
+                        config,
+                        root / objective,
+                        resume_checkpoint=None,
+                        device_name="cpu",
+                        progress=SILENT_STATUS,
+                    )
+
+            adversarial_state, adversarial_rng, adversarial_output = captures[
+                "adversarial_l1"
+            ]
+            l1_state, l1_rng, l1_output = captures["l1_only"]
+            self.assertEqual(set(adversarial_state), set(l1_state))
+            for name in adversarial_state:
+                self.assertTrue(
+                    torch.equal(adversarial_state[name], l1_state[name]),
+                    name,
+                )
+            self.assertTrue(torch.equal(adversarial_rng, l1_rng))
+            self.assertTrue(torch.equal(adversarial_output, l1_output))
+
+
+class Pix2PixLearningRateScheduleTests(unittest.TestCase):
+    def test_linear_decay_is_step_derived_and_applied_to_both_optimizers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "dataset"
+            config = root / "train.json"
+            output = root / "run"
+            _write_dataset(dataset, image_size=128)
+            _write_config(
+                config,
+                image_size=128,
+                channels=1,
+                objective="adversarial_l1",
+                max_steps=4,
+                checkpoint_every=4,
+                extra_checkpoint_steps=(2,),
+                learning_rate_schedule={
+                    "type": "linear_decay",
+                    "decay_start_step": 2,
+                },
+            )
+            observed_learning_rates: list[float] = []
+
+            def capture_batch(
+                batch: dict[str, torch.Tensor | list[str]],
+                *,
+                generator_optimizer: torch.optim.Optimizer,
+                discriminator_optimizer: torch.optim.Optimizer,
+                **_: object,
+            ) -> tuple[dict[str, torch.Tensor], int]:
+                generator_lr = generator_optimizer.param_groups[0]["lr"]
+                discriminator_lr = discriminator_optimizer.param_groups[0]["lr"]
+                self.assertEqual(generator_lr, discriminator_lr)
+                observed_learning_rates.append(generator_lr)
+                source = batch["source"]
+                assert isinstance(source, torch.Tensor)
+                zero = source.new_zeros(())
+                return (
+                    {
+                        "generator_total": zero,
+                        "generator_adversarial": zero,
+                        "generator_l1": zero,
+                        "discriminator": zero,
+                    },
+                    source.shape[0],
+                )
+
+            with patch(
+                "aigen.pix2pix.training._train_adversarial_batch",
+                side_effect=capture_batch,
+            ):
+                train_pix2pix(
+                    dataset,
+                    config,
+                    output,
+                    resume_checkpoint=None,
+                    device_name="cpu",
+                    progress=SILENT_STATUS,
+                )
+
+            self.assertEqual(
+                observed_learning_rates,
+                [0.0002, 0.0002, 0.0002, 0.0001],
+            )
+            self.assertTrue(
+                (output / "checkpoints" / "step-00000002").is_dir()
+            )
+            self.assertTrue(
+                (output / "checkpoints" / "step-00000004").is_dir()
+            )
+            train_records = [
+                json.loads(line)
+                for line in (output / "metrics.jsonl").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if json.loads(line)["kind"] == "train"
+            ]
+            self.assertEqual(
+                [record["learning_rate"] for record in train_records],
+                observed_learning_rates,
+            )
+
+    def test_resume_derives_the_next_learning_rate_from_checkpoint_step(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "dataset"
+            config = root / "train.json"
+            output = root / "run"
+            _write_dataset(dataset, image_size=128)
+            _write_config(
+                config,
+                image_size=128,
+                channels=1,
+                objective="adversarial_l1",
+                max_steps=4,
+                checkpoint_every=3,
+                learning_rate_schedule={
+                    "type": "linear_decay",
+                    "decay_start_step": 2,
+                },
+            )
+            calls = 0
+
+            def interrupt_after_checkpoint(
+                batch: dict[str, torch.Tensor | list[str]],
+                **_: object,
+            ) -> tuple[dict[str, torch.Tensor], int]:
+                nonlocal calls
+                calls += 1
+                if calls == 4:
+                    raise RuntimeError("injected stop")
+                source = batch["source"]
+                assert isinstance(source, torch.Tensor)
+                zero = source.new_zeros(())
+                return (
+                    {
+                        "generator_total": zero,
+                        "generator_adversarial": zero,
+                        "generator_l1": zero,
+                        "discriminator": zero,
+                    },
+                    source.shape[0],
+                )
+
+            with patch(
+                "aigen.pix2pix.training._train_adversarial_batch",
+                side_effect=interrupt_after_checkpoint,
+            ), self.assertRaisesRegex(RuntimeError, "injected stop"):
+                train_pix2pix(
+                    dataset,
+                    config,
+                    output,
+                    resume_checkpoint=None,
+                    device_name="cpu",
+                    progress=SILENT_STATUS,
+                )
+
+            checkpoint = output / "checkpoints" / "step-00000003"
+            resumed_learning_rates: list[float] = []
+
+            def capture_resumed_batch(
+                batch: dict[str, torch.Tensor | list[str]],
+                *,
+                generator_optimizer: torch.optim.Optimizer,
+                discriminator_optimizer: torch.optim.Optimizer,
+                **_: object,
+            ) -> tuple[dict[str, torch.Tensor], int]:
+                generator_lr = generator_optimizer.param_groups[0]["lr"]
+                self.assertEqual(
+                    generator_lr,
+                    discriminator_optimizer.param_groups[0]["lr"],
+                )
+                resumed_learning_rates.append(generator_lr)
+                source = batch["source"]
+                assert isinstance(source, torch.Tensor)
+                zero = source.new_zeros(())
+                return (
+                    {
+                        "generator_total": zero,
+                        "generator_adversarial": zero,
+                        "generator_l1": zero,
+                        "discriminator": zero,
+                    },
+                    source.shape[0],
+                )
+
+            with patch(
+                "aigen.pix2pix.training._train_adversarial_batch",
+                side_effect=capture_resumed_batch,
+            ):
+                train_pix2pix(
+                    dataset,
+                    config,
+                    output,
+                    resume_checkpoint=checkpoint,
+                    device_name="cpu",
+                    progress=SILENT_STATUS,
+                )
+
+            self.assertEqual(resumed_learning_rates, [0.0001])
 
 
 class Pix2PixTerminalResumeTests(unittest.TestCase):
@@ -105,7 +524,7 @@ class Pix2PixTerminalResumeTests(unittest.TestCase):
                 "aigen.pix2pix.training.create_training_loader",
                 side_effect=AssertionError("terminal resume created a training loader"),
             ) as create_loader, patch(
-                "aigen.pix2pix.training._train_batch",
+                "aigen.pix2pix.training._train_adversarial_batch",
                 side_effect=AssertionError("terminal resume trained a batch"),
             ) as train_batch, patch(
                 "aigen.pix2pix.training.save_training_checkpoint",
@@ -281,6 +700,34 @@ class Pix2PixTerminalResumeTests(unittest.TestCase):
 
 
 class Pix2PixArtifactPublicationTests(unittest.TestCase):
+    def test_generator_bundle_preserves_bf16_parameter_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "final"
+            model_config = ModelConfig(
+                image_size=128,
+                generator_channels=1,
+                discriminator_channels=1,
+            )
+            generator = Pix2PixGenerator(
+                model_config,
+                dtype=torch.bfloat16,
+            )
+            export_generator_bundle(
+                output,
+                generator=generator,
+                model_config=model_config,
+                step=1,
+                dataset_fingerprint="dataset",
+                config_fingerprint="config",
+            )
+
+            loaded, _ = load_generator_bundle(
+                output,
+                device=torch.device("cpu"),
+            )
+
+            self.assertEqual(next(loaded.parameters()).dtype, torch.bfloat16)
+
     def test_generator_bundle_is_not_visible_when_publication_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -366,36 +813,51 @@ def _write_config(
     *,
     image_size: int = 256,
     channels: int = 2,
+    objective: str | None = None,
+    max_steps: int = 1,
+    checkpoint_every: int = 1,
+    extra_checkpoint_steps: tuple[int, ...] = (),
+    learning_rate_schedule: dict[str, object] | None = None,
 ) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "format": "aigen.pix2pix.training.v1",
-                "model": {
-                    "image_size": image_size,
-                    "input_channels": 3,
-                    "output_channels": 3,
-                    "generator_channels": channels,
-                    "discriminator_channels": channels,
-                    "discriminator_layers": 3,
-                    "generator_dropout": True,
-                },
-                "batch_size": 1,
-                "max_steps": 1,
-                "learning_rate": 0.0002,
-                "beta1": 0.5,
-                "beta2": 0.999,
-                "lambda_l1": 100.0,
-                "horizontal_flip": False,
-                "precision": "fp32",
-                "checkpoint_every": 1,
-                "log_every": 1,
-                "seed": 7,
-                "num_workers": 0,
-            }
-        ),
-        encoding="utf-8",
-    )
+    if learning_rate_schedule is not None:
+        config_format = "aigen.pix2pix.training.v4"
+        objective = objective or "adversarial_l1"
+    elif objective is not None:
+        config_format = "aigen.pix2pix.training.v3"
+    else:
+        config_format = "aigen.pix2pix.training.v2"
+    payload = {
+        "format": config_format,
+        "model": {
+            "image_size": image_size,
+            "input_channels": 3,
+            "output_channels": 3,
+            "generator_channels": channels,
+            "discriminator_channels": channels,
+            "discriminator_layers": 3,
+            "generator_dropout": True,
+        },
+        "batch_size": 1,
+        "max_steps": max_steps,
+        "learning_rate": 0.0002,
+        "beta1": 0.5,
+        "beta2": 0.999,
+        "lambda_l1": 100.0,
+        "horizontal_flip": False,
+        "optimizer": "adam",
+        "parameter_precision": "fp32",
+        "precision": "fp32",
+        "checkpoint_every": checkpoint_every,
+        "log_every": 1,
+        "seed": 7,
+        "num_workers": 0,
+    }
+    if objective is not None:
+        payload["objective"] = objective
+    if learning_rate_schedule is not None:
+        payload["learning_rate_schedule"] = learning_rate_schedule
+        payload["extra_checkpoint_steps"] = list(extra_checkpoint_steps)
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _completed_training_fixture(

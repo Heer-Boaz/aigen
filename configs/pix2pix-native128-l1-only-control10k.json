@@ -1,16 +1,17 @@
 {
-  "format": "aigen.pix2pix.training.v2",
+  "format": "aigen.pix2pix.training.v3",
+  "objective": "l1_only",
   "model": {
     "image_size": 128,
     "input_channels": 3,
     "output_channels": 3,
     "generator_channels": 64,
     "discriminator_channels": 64,
-    "discriminator_layers": 1,
+    "discriminator_layers": 3,
     "generator_dropout": true
   },
   "batch_size": 1,
-  "max_steps": 5000,
+  "max_steps": 10000,
   "learning_rate": 0.0002,
   "beta1": 0.5,
   "beta2": 0.999,
@@ -19,7 +20,7 @@
   "optimizer": "adam",
   "parameter_precision": "fp32",
   "precision": "fp32",
-  "checkpoint_every": 5000,
+  "checkpoint_every": 2500,
   "log_every": 100,
   "seed": 42,
   "num_workers": 4

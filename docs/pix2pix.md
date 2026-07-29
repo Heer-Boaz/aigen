@@ -233,6 +233,72 @@ canvas. The pixel-art target is never resized, cropped, or recentered:
 Training reads only the resulting audited local dataset. It never calls the
 live renderer or FLUX.
 
+### Reviewed per-image FLUX source sets
+
+The exploratory corpus above has one shared prompt and is retained as an
+immutable control. Production paired-data experiments use a separately named
+source set with one short, image-specific instruction and one chosen seed per
+target. A source set contains:
+
+```text
+reviewed-v1/
+  source-set.json
+  records.jsonl
+  prompt-reviews.jsonl
+```
+
+`records.jsonl` is in the exact frozen selection order. Every record binds the
+selected target checksum to its prompt, author, and seed.
+`prompt-reviews.jsonl` binds that prompt and target checksum to a passing
+review. Generation rejects a record whose author and reviewer are the same.
+The manifest checksums both files, records the target-selection fingerprint,
+and records the SHA-256 of
+[`docs/image-edit-prompting.md`](image-edit-prompting.md). Generation refuses a
+missing review, stale prompt hash, changed target, reordered record, or changed
+seed.
+
+Generate a new immutable source corpus:
+
+```bash
+.venv/bin/aigen pix2pix iro-generate-flux-source-set \
+  runs/pix2pix/iro-gate512-v1 \
+  --source-set runs/pix2pix/iro-gate512-v1/prompt-sets/reviewed-v1/source-set.json
+```
+
+The source plan freezes the complete normalized source set, source-set
+manifest hash, model and runtime artifacts, 4-step scheduler/sampler contract,
+canvas, reference raster, and shard size. All missing prompts are encoded in
+one conditioner session; all missing shards share one FLUX model session.
+Each shard is generated and validated in a sibling temporary directory before
+an atomic rename. Completed shards and completed corpora are immutable.
+
+Generated images are still candidate supervision, not accepted supervision.
+Before assembly, the reviewer writes
+`flux-source-set-reviewed-v1/output-audit.json` plus its checksummed JSONL
+records. There is exactly one audit record for every frozen target. It binds
+the generated image checksum, target checksum, prompt checksum, chosen seed,
+all seeds actually tested, verdict, reviewer, and review notes. Pose, body
+direction, silhouette, dominant design and color blocking, held objects, and
+subject count are assessed visually; a plausible illustration with the wrong
+front/back view or a materially different outfit is rejected.
+
+Only records with a `pass` verdict enter the paired dataset:
+
+```bash
+.venv/bin/aigen pix2pix iro-prepare-flux-source-set \
+  runs/pix2pix/iro-gate512-v1 \
+  --name reviewed-v1
+
+.venv/bin/aigen pix2pix audit \
+  runs/pix2pix/iro-gate512-v1/dataset-flux-source-set-reviewed-v1
+```
+
+Assembly performs the same single Lanczos mapping defined by the corpus raster
+contract. The native 128×128 sprite reference is not pre-upscaled before
+FLUX, and the target half is never resized. Rejected candidates remain in the
+immutable source corpus for provenance but cannot silently enter training.
+Corrections require a new named source set.
+
 ### Qwen reverse-source control
 
 [`configs/pix2pix-iro-qwen2511-lightning-source.json`](../configs/pix2pix-iro-qwen2511-lightning-source.json)
@@ -277,6 +343,42 @@ for the 40,000-step starting profiles:
 - [`configs/pix2pix-native128-patch16-control5k.json`](../configs/pix2pix-native128-patch16-control5k.json)
 - [`configs/pix2pix-native128-lambda1000-control5k.json`](../configs/pix2pix-native128-lambda1000-control5k.json)
 - [`configs/pix2pix-native128-l1-control5k.json`](../configs/pix2pix-native128-l1-control5k.json)
+
+Despite its historical filename, `pix2pix-native128-l1-control5k.json` still
+constructs and trains PatchGAN; it is an adversarial run with an extreme
+`lambda_l1=10000`. The matched 10,000-step objective controls are:
+
+- [`configs/pix2pix-native128-adversarial-l1-control10k.json`](../configs/pix2pix-native128-adversarial-l1-control10k.json)
+- [`configs/pix2pix-native128-l1-only-control10k.json`](../configs/pix2pix-native128-l1-only-control10k.json)
+
+Both initialize and update the complete 41,828,995-parameter generator from
+scratch with the same data, initialization, sampler, augmentation, optimizer,
+dropout RNG, and `100 × L1` term. `adversarial_l1` additionally constructs and
+trains PatchGAN. `l1_only` never constructs a discriminator and its checkpoint
+contains neither discriminator weights nor discriminator optimizer state.
+
+The explicit full-parameter scale controls are the 250-step VRAM/checkpoint
+smoke
+[`configs/pix2pix-native128-2b-patch70-control250.json`](../configs/pix2pix-native128-2b-patch70-control250.json)
+and the bounded 2,000-step capacity run
+[`configs/pix2pix-native128-2b-patch70-control2k.json`](../configs/pix2pix-native128-2b-patch70-control2k.json).
+It widens only the U-Net generator to 448 base channels: 2,048,905,603
+generator parameters plus the unchanged 2,768,705-parameter PatchGAN. Every
+generator parameter is initialized from scratch and updated. This is not LoRA,
+transfer learning, or a quantized checkpoint. BF16 parameter storage and the
+paged Adam optimizer are explicit memory formats that make full-parameter
+training possible on the 16 GB target. Adam's large state tensors use
+block-wise 8-bit storage; tensors smaller than 4,096 elements remain FP32.
+Gradients still update the complete network.
+
+The full 200-epoch reviewed-data experiment is
+[`configs/pix2pix-native128-2b-patch70-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-2b-patch70-reviewed-v3-unanimous-200e.json).
+Its audited training split contains 190 pairs, so 38,000 updates are exactly
+200 epochs. The initial learning rate is used while `completed_steps <= 19000`;
+later updates linearly decay against the remaining 19,000-step span.
+Recoverable checkpoints are requested after epochs 2, 5, and 10, followed by a
+regular 20-epoch interval. Those dataset-sized values are an explicit
+experiment contract, not a generic default for another corpus.
 
 The baseline and two 40,000-step profiles retain the canonical pix2pix
 optimizer and loss settings:
@@ -330,7 +432,7 @@ metrics.jsonl
 checkpoints/step-N/
   checkpoint.json
   generator.safetensors
-  discriminator.safetensors
+  discriminator.safetensors  # adversarial_l1 only
   training-state.pt
 previews/step-N.png
 final/
@@ -343,10 +445,24 @@ MSE, and PSNR over the complete held-out split. Those metrics measure paired
 pixel reconstruction; the preview remains the evidence for pose, accessory,
 silhouette, and pixel-design quality.
 
-The baseline keeps FP32 tensors and uses the GPU's recorded TF32 acceleration
-for FP32 convolution and matrix multiplication. `bf16` autocast is supported as
-an explicit configuration change for CUDA training, but it is not silently
-enabled.
+The baseline keeps FP32 parameters and computation and uses the GPU's recorded
+TF32 acceleration for FP32 convolution and matrix multiplication.
+Training v3 records `adversarial_l1` or `l1_only` as an explicit objective.
+Training v4 additionally records an exact constant or linear-decay
+learning-rate schedule and any extra checkpoint steps. The learning rate for
+each update is derived from its completed-step position and applied to every
+optimizer, so resume does not depend on the learning rate serialized inside an
+optimizer state. V2 and v3 configurations retain their historical constant
+learning rate.
+Checkpoint v3 has an objective-specific exact file/state contract; v2
+checkpoints are explicitly interpreted as the historical adversarial-L1
+contract and remain resumable only by an adversarial-L1 configuration.
+`parameter_precision`, compute `precision`, and `optimizer` are independent,
+explicit training contracts. BF16 parameter storage requires BF16 compute.
+`paged_adam8bit` requires CUDA and quantizes only Adam's large optimizer-state
+tensors; it does not freeze or quantize the model parameters. Checkpoint
+restore recreates paged buffers before copying optimizer state, so resumed
+training preserves the same memory contract.
 
 ## Inference and evaluation
 

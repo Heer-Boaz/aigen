@@ -74,3 +74,22 @@ class Pix2PixModelTests(unittest.TestCase):
                 self.assertEqual(report["discriminator"], parameter_count)
                 self.assertEqual(tuple(generated.shape), (1, 3, 128, 128))
                 self.assertEqual(tuple(logits.shape), output_shape)
+
+    def test_native_128_two_billion_parameter_configuration(self) -> None:
+        config = ModelConfig(
+            image_size=128,
+            generator_channels=448,
+            discriminator_channels=64,
+            discriminator_layers=3,
+        )
+        generator = Pix2PixGenerator(config, device="meta")
+        discriminator = ConditionalPatchDiscriminator(config, device="meta")
+
+        self.assertEqual(
+            model_parameter_report(generator, discriminator),
+            {
+                "generator": 2_048_905_603,
+                "discriminator": 2_768_705,
+                "total": 2_051_674_308,
+            },
+        )

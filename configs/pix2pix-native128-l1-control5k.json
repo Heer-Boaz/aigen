@@ -1,5 +1,5 @@
 {
-  "format": "aigen.pix2pix.training.v1",
+  "format": "aigen.pix2pix.training.v2",
   "model": {
     "image_size": 128,
     "input_channels": 3,
@@ -16,6 +16,8 @@
   "beta2": 0.999,
   "lambda_l1": 10000.0,
   "horizontal_flip": true,
+  "optimizer": "adam",
+  "parameter_precision": "fp32",
   "precision": "fp32",
   "checkpoint_every": 5000,
   "log_every": 100,

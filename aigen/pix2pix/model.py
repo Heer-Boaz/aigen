@@ -15,16 +15,28 @@ NormalizationFactory = Callable[[int], nn.Module]
 class Pix2PixGenerator(nn.Module):
     """Reference pix2pix U-Net generator for a power-of-two square canvas."""
 
-    def __init__(self, config: ModelConfig) -> None:
+    def __init__(
+        self,
+        config: ModelConfig,
+        *,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
         super().__init__()
         config.validate()
-        norm = _batch_norm
+        norm = lambda channels: _batch_norm(
+            channels,
+            device=device,
+            dtype=dtype,
+        )
         channels = config.generator_channels
         block = _UnetBlock(
             channels * 8,
             channels * 8,
             innermost=True,
             norm=norm,
+            device=device,
+            dtype=dtype,
         )
         num_downs = config.image_size.bit_length() - 1
         for _ in range(num_downs - 5):
@@ -34,10 +46,33 @@ class Pix2PixGenerator(nn.Module):
                 child=block,
                 norm=norm,
                 dropout=config.generator_dropout,
+                device=device,
+                dtype=dtype,
             )
-        block = _UnetBlock(channels * 4, channels * 8, child=block, norm=norm)
-        block = _UnetBlock(channels * 2, channels * 4, child=block, norm=norm)
-        block = _UnetBlock(channels, channels * 2, child=block, norm=norm)
+        block = _UnetBlock(
+            channels * 4,
+            channels * 8,
+            child=block,
+            norm=norm,
+            device=device,
+            dtype=dtype,
+        )
+        block = _UnetBlock(
+            channels * 2,
+            channels * 4,
+            child=block,
+            norm=norm,
+            device=device,
+            dtype=dtype,
+        )
+        block = _UnetBlock(
+            channels,
+            channels * 2,
+            child=block,
+            norm=norm,
+            device=device,
+            dtype=dtype,
+        )
         self.network = _UnetBlock(
             config.output_channels,
             channels,
@@ -45,6 +80,8 @@ class Pix2PixGenerator(nn.Module):
             child=block,
             outermost=True,
             norm=norm,
+            device=device,
+            dtype=dtype,
         )
 
     def forward(self, source: Tensor) -> Tensor:
@@ -54,13 +91,27 @@ class Pix2PixGenerator(nn.Module):
 class ConditionalPatchDiscriminator(nn.Module):
     """Reference conditional N-layer PatchGAN discriminator."""
 
-    def __init__(self, config: ModelConfig) -> None:
+    def __init__(
+        self,
+        config: ModelConfig,
+        *,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
         super().__init__()
         config.validate()
         input_channels = config.input_channels + config.output_channels
         channels = config.discriminator_channels
         layers: list[nn.Module] = [
-            nn.Conv2d(input_channels, channels, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(
+                input_channels,
+                channels,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                device=device,
+                dtype=dtype,
+            ),
             nn.LeakyReLU(0.2, inplace=True),
         ]
         multiplier = 1
@@ -76,8 +127,14 @@ class ConditionalPatchDiscriminator(nn.Module):
                         stride=2,
                         padding=1,
                         bias=False,
+                        device=device,
+                        dtype=dtype,
                     ),
-                    nn.BatchNorm2d(channels * multiplier),
+                    nn.BatchNorm2d(
+                        channels * multiplier,
+                        device=device,
+                        dtype=dtype,
+                    ),
                     nn.LeakyReLU(0.2, inplace=True),
                 ]
             )
@@ -92,8 +149,14 @@ class ConditionalPatchDiscriminator(nn.Module):
                     stride=1,
                     padding=1,
                     bias=False,
+                    device=device,
+                    dtype=dtype,
                 ),
-                nn.BatchNorm2d(channels * multiplier),
+                nn.BatchNorm2d(
+                    channels * multiplier,
+                    device=device,
+                    dtype=dtype,
+                ),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(
                     channels * multiplier,
@@ -101,6 +164,8 @@ class ConditionalPatchDiscriminator(nn.Module):
                     kernel_size=4,
                     stride=1,
                     padding=1,
+                    device=device,
+                    dtype=dtype,
                 ),
             ]
         )
@@ -122,6 +187,8 @@ class _UnetBlock(nn.Module):
         innermost: bool = False,
         norm: NormalizationFactory,
         dropout: bool = False,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         self.outermost = outermost
@@ -133,6 +200,8 @@ class _UnetBlock(nn.Module):
             stride=2,
             padding=1,
             bias=False,
+            device=device,
+            dtype=dtype,
         )
         if outermost:
             assert child is not None
@@ -146,6 +215,8 @@ class _UnetBlock(nn.Module):
                     kernel_size=4,
                     stride=2,
                     padding=1,
+                    device=device,
+                    dtype=dtype,
                 ),
                 nn.Tanh(),
             )
@@ -162,6 +233,8 @@ class _UnetBlock(nn.Module):
                     stride=2,
                     padding=1,
                     bias=False,
+                    device=device,
+                    dtype=dtype,
                 ),
                 norm(outer_channels),
             )
@@ -180,6 +253,8 @@ class _UnetBlock(nn.Module):
                 stride=2,
                 padding=1,
                 bias=False,
+                device=device,
+                dtype=dtype,
             ),
             norm(outer_channels),
         ]
@@ -217,6 +292,16 @@ def generator_loss(
     return total, adversarial, reconstruction
 
 
+def reconstruction_loss(
+    generated: Tensor,
+    target: Tensor,
+    *,
+    lambda_l1: float,
+) -> tuple[Tensor, Tensor]:
+    reconstruction = functional.l1_loss(generated.float(), target.float())
+    return reconstruction * lambda_l1, reconstruction
+
+
 def discriminator_loss(real_logits: Tensor, fake_logits: Tensor) -> Tensor:
     real = functional.softplus(-real_logits.float()).mean()
     fake = functional.softplus(fake_logits.float()).mean()
@@ -238,5 +323,24 @@ def model_parameter_report(
     }
 
 
-def _batch_norm(channels: int) -> nn.Module:
-    return nn.BatchNorm2d(channels, affine=True, track_running_stats=True)
+def generator_parameter_report(generator: nn.Module) -> dict[str, int]:
+    generator_parameters = sum(parameter.numel() for parameter in generator.parameters())
+    return {
+        "generator": generator_parameters,
+        "total": generator_parameters,
+    }
+
+
+def _batch_norm(
+    channels: int,
+    *,
+    device: torch.device | str | None,
+    dtype: torch.dtype | None,
+) -> nn.Module:
+    return nn.BatchNorm2d(
+        channels,
+        affine=True,
+        track_running_stats=True,
+        device=device,
+        dtype=dtype,
+    )

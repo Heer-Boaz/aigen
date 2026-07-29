@@ -90,6 +90,13 @@ def add_pix2pix_commands(subparsers: Any) -> None:
     iro_qwen_sources.add_argument("corpus", type=Path)
     iro_qwen_sources.add_argument("--config", type=Path, required=True)
 
+    iro_flux_source_set = actions.add_parser(
+        "iro-generate-flux-source-set",
+        help="resume reviewed per-image FLUX reverse-source generation",
+    )
+    iro_flux_source_set.add_argument("corpus", type=Path)
+    iro_flux_source_set.add_argument("--source-set", type=Path, required=True)
+
     iro_prepare = actions.add_parser(
         "iro-prepare",
         help="assemble and audit the final native-128 paired dataset",
@@ -101,6 +108,13 @@ def add_pix2pix_commands(subparsers: Any) -> None:
         help="assemble and audit the Qwen native-128 paired dataset",
     )
     iro_qwen_prepare.add_argument("corpus", type=Path)
+
+    iro_flux_source_set_prepare = actions.add_parser(
+        "iro-prepare-flux-source-set",
+        help="assemble an output-audited per-image FLUX paired dataset",
+    )
+    iro_flux_source_set_prepare.add_argument("corpus", type=Path)
+    iro_flux_source_set_prepare.add_argument("--name", required=True)
 
 
 def run_pix2pix_command(
@@ -195,6 +209,16 @@ def _run_pix2pix_action(
             args.config,
             progress=progress,
         )
+    if args.pix2pix_action == "iro-generate-flux-source-set":
+        from aigen.pix2pix.flux_source_set_corpus import (
+            generate_flux_source_set_sources,
+        )
+
+        return generate_flux_source_set_sources(
+            args.corpus,
+            args.source_set,
+            progress=progress,
+        )
     if args.pix2pix_action == "iro-prepare":
         from aigen.pix2pix.corpus_dataset import prepare_iro_dataset
 
@@ -205,4 +229,14 @@ def _run_pix2pix_action(
 
         progress.phase("assemble audited Qwen pix2pix dataset")
         return prepare_iro_qwen_dataset(args.corpus)
+    if args.pix2pix_action == "iro-prepare-flux-source-set":
+        from aigen.pix2pix.corpus_dataset import (
+            prepare_iro_flux_source_set_dataset,
+        )
+
+        progress.phase("assemble output-audited FLUX pix2pix dataset")
+        return prepare_iro_flux_source_set_dataset(
+            args.corpus,
+            args.name,
+        )
     raise RuntimeError("unsupported pix2pix action")

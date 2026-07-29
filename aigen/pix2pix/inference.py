@@ -7,7 +7,12 @@ import torch
 
 from aigen.pix2pix.artifacts import load_generator_bundle
 from aigen.pix2pix.config import ModelConfig
-from aigen.pix2pix.device import autocast_context, resolve_device, validate_precision
+from aigen.pix2pix.device import (
+    autocast_context,
+    resolve_device,
+    validate_model_precision,
+    validate_precision,
+)
 from aigen.pix2pix.errors import Pix2PixError
 from aigen.pix2pix.image_io import load_rgb_tensor, save_tensor_png
 
@@ -32,6 +37,7 @@ def run_inference(
         raise Pix2PixError("output_size must be positive")
     started = time.monotonic()
     generator, metadata = load_generator_bundle(model_dir, device=device)
+    validate_model_precision(next(generator.parameters()).dtype, precision)
     config = ModelConfig.from_json(metadata["model"])
     source = load_rgb_tensor(input_path.resolve(), image_size=config.image_size)
     source = source.unsqueeze(0).to(device, non_blocking=True)

@@ -3,21 +3,26 @@ from __future__ import annotations
 import io
 import hashlib
 import json
+import sys
 import tempfile
+import types
 import unittest
 from collections import Counter
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
 from pydantic import ValidationError
 
-from aigen.manifest_io import read_json, sha256_file, write_json
+from aigen.manifest_io import ManifestIOError, read_json, sha256_file, write_json
 from aigen.pix2pix.corpus_config import FluxSourceConfig
 from aigen.pix2pix.corpus_dataset import (
+    FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX,
     QWEN_CORPUS_DATASET_DIRECTORY,
     _prepare_source,
+    prepare_iro_flux_source_set_dataset,
     prepare_iro_dataset,
     prepare_iro_qwen_dataset,
 )
@@ -29,6 +34,13 @@ from aigen.pix2pix.flux_source_corpus import (
     _load_or_create_source_plan,
     generate_flux_sources,
     load_flux_source_inventory,
+)
+from aigen.pix2pix.flux_source_set import load_flux_source_set
+from aigen.pix2pix.flux_source_set_corpus import (
+    flux_source_set_layout,
+    flux_source_set_result_path,
+    generate_flux_source_set_sources,
+    load_flux_source_set_inventory,
 )
 from aigen.pix2pix.iro_corpus import (
     IRO_SELECTION_FORMAT,
@@ -175,6 +187,9 @@ class Pix2PixCorpusTests(unittest.TestCase):
                 {"aigen.generation.flux2_klein": None},
             ):
                 first = generate_flux_sources(root, progress=SILENT_STATUS)
+                completed_checksums = _tree_checksums(
+                    root / FLUX_SOURCE_DIRECTORY
+                )
                 second = generate_flux_sources(root, progress=SILENT_STATUS)
                 inventory = load_flux_source_inventory(root)
 
@@ -183,6 +198,10 @@ class Pix2PixCorpusTests(unittest.TestCase):
             self.assertEqual(second["generated_shards"], 0)
             self.assertEqual(len(inventory), 24)
             self.assertTrue((root / FLUX_SOURCE_DIRECTORY / "result.json").is_file())
+            self.assertEqual(
+                _tree_checksums(root / FLUX_SOURCE_DIRECTORY),
+                completed_checksums,
+            )
 
     def test_corrupt_source_fails_before_importing_the_gpu_backend(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -338,6 +357,265 @@ class Pix2PixCorpusTests(unittest.TestCase):
                 loras=(),
                 sampler="flowmatch-euler-ancestral",
                 progress=SILENT_STATUS,
+            )
+
+    def test_reviewed_flux_source_set_resumes_with_one_model_session(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            legacy_checksums = _tree_checksums(
+                root / FLUX_SOURCE_DIRECTORY
+            )
+            state: dict[str, object] = {}
+
+            with _fake_flux_source_set_execution(state):
+                first = generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+                second = generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+                inventory, source_set, _, _ = (
+                    load_flux_source_set_inventory(root, "reviewed-test")
+                )
+
+            self.assertEqual(first["generated_shards"], 6)
+            self.assertEqual(first["reused_shards"], 0)
+            self.assertEqual(second["generated_shards"], 0)
+            self.assertEqual(second["reused_shards"], 6)
+            self.assertEqual(len(inventory), 24)
+            self.assertEqual(len(source_set.records), 24)
+            self.assertEqual(state["session_count"], 1)
+            self.assertEqual(state["generate_count"], 6)
+            self.assertEqual(
+                len(state["encoded_prompts"]),
+                24,
+            )
+            self.assertEqual(
+                _tree_checksums(root / FLUX_SOURCE_DIRECTORY),
+                legacy_checksums,
+            )
+
+    def test_reviewed_flux_source_set_failure_publishes_no_partial_shard(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            state: dict[str, object] = {}
+
+            with _fake_flux_source_set_execution(state, fail=True):
+                with self.assertRaisesRegex(Pix2PixError, "injected FLUX"):
+                    generate_flux_source_set_sources(
+                        root,
+                        source_set_path,
+                        progress=SILENT_STATUS,
+                    )
+
+            shards_dir = (
+                root / flux_source_set_layout("reviewed-test").directory / "shards"
+            )
+            self.assertFalse((shards_dir / "shard-00000").exists())
+            self.assertFalse(
+                any(
+                    path.name.endswith(".incomplete")
+                    for path in shards_dir.iterdir()
+                )
+            )
+
+    def test_reviewed_flux_source_plan_rejects_changed_case_seed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            state: dict[str, object] = {}
+            with _fake_flux_source_set_execution(state):
+                generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+
+            manifest = read_json(
+                source_set_path,
+                label="test FLUX source-set manifest",
+            )
+            records_path = source_set_path.parent / manifest["records"]
+            records = [
+                json.loads(line)
+                for line in records_path.read_text(encoding="utf-8").splitlines()
+            ]
+            records[0]["seed"] += 1
+            write_json_records(records_path, records)
+            manifest["records_sha256"] = sha256_file(records_path)
+            write_json(source_set_path, manifest)
+
+            with _fake_flux_source_set_execution({}):
+                with self.assertRaisesRegex(Pix2PixError, "plan differs"):
+                    generate_flux_source_set_sources(
+                        root,
+                        source_set_path,
+                        progress=SILENT_STATUS,
+                    )
+
+    def test_reviewed_flux_source_set_rejects_stale_prompt_review(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            manifest = read_json(
+                source_set_path,
+                label="test FLUX source-set manifest",
+            )
+            records_path = source_set_path.parent / manifest["records"]
+            records = [
+                json.loads(line)
+                for line in records_path.read_text(encoding="utf-8").splitlines()
+            ]
+            records[0]["prompt"] += " Preserve the rear view."
+            write_json_records(records_path, records)
+            manifest["records_sha256"] = sha256_file(records_path)
+            write_json(source_set_path, manifest)
+
+            with self.assertRaisesRegex(
+                Pix2PixError,
+                "prompt-review prompt checksum mismatch",
+            ):
+                generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+
+    def test_reviewed_flux_source_set_requires_current_prompt_guide(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            manifest = read_json(
+                source_set_path,
+                label="test FLUX source-set manifest",
+            )
+            manifest["prompt_guide_sha256"] = "1" * 64
+            write_json(source_set_path, manifest)
+
+            with self.assertRaisesRegex(
+                Pix2PixError,
+                "different image-edit prompt guide",
+            ):
+                generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+
+    def test_reviewed_flux_source_set_requires_independent_reviewer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            manifest = read_json(
+                source_set_path,
+                label="test FLUX source-set manifest",
+            )
+            reviews_path = source_set_path.parent / manifest["prompt_reviews"]
+            reviews = [
+                json.loads(line)
+                for line in reviews_path.read_text(encoding="utf-8").splitlines()
+            ]
+            reviews[0]["reviewer"] = "test-author"
+            write_json_records(reviews_path, reviews)
+            manifest["prompt_reviews_sha256"] = sha256_file(reviews_path)
+            write_json(source_set_path, manifest)
+
+            with self.assertRaisesRegex(
+                Pix2PixError,
+                "author reviewed their own prompt",
+            ):
+                generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+
+    def test_reviewed_flux_dataset_requires_and_applies_output_audit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = _materialize_fake_source_corpus(temporary_path)
+            source_set_path = _write_fake_flux_source_set(
+                temporary_path,
+                root,
+            )
+            state: dict[str, object] = {}
+            with _fake_flux_source_set_execution(state):
+                generate_flux_source_set_sources(
+                    root,
+                    source_set_path,
+                    progress=SILENT_STATUS,
+                )
+
+            with self.assertRaises(ManifestIOError):
+                prepare_iro_flux_source_set_dataset(root, "reviewed-test")
+
+            _, selected, _ = load_iro_selection(root)
+            _write_fake_flux_output_audit(
+                root,
+                "reviewed-test",
+                rejected_ids={str(selected[0]["id"])},
+            )
+            first = prepare_iro_flux_source_set_dataset(
+                root,
+                "reviewed-test",
+            )
+            second = prepare_iro_flux_source_set_dataset(
+                root,
+                "reviewed-test",
+            )
+
+            self.assertFalse(first["reused"])
+            self.assertTrue(second["reused"])
+            self.assertEqual(first["pair_count"], 23)
+            self.assertTrue(
+                (
+                    root
+                    / f"{FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX}reviewed-test"
+                ).is_dir()
             )
 
     def test_qwen_source_config_freezes_native_input_and_lightning_schedule(
@@ -603,6 +881,197 @@ def _fake_qwen_execution_provenance(
         )
     )
     return stack
+
+
+def _write_fake_flux_source_set(
+    temporary: Path,
+    root: Path,
+) -> Path:
+    _, selected, selection = load_iro_selection(root)
+    source_set_dir = temporary / "reviewed-source-set"
+    source_set_dir.mkdir()
+    records = [
+        {
+            "id": str(record["id"]),
+            "prompt": f"Redraw sprite {record['id']} as a smooth anime illustration.",
+            "author": "test-author",
+            "seed": int(record["flux_seed"]) + 1000,
+            "target_sha256": str(record["target_sha256"]),
+        }
+        for record in selected
+    ]
+    records_path = source_set_dir / "records.jsonl"
+    write_json_records(records_path, records)
+    reviews = [
+        {
+            "id": str(record["id"]),
+            "prompt_sha256": hashlib.sha256(
+                source_record["prompt"].encode("utf-8")
+            ).hexdigest(),
+            "target_sha256": str(record["target_sha256"]),
+            "verdict": "pass",
+            "reviewer": "test-reviewer",
+        }
+        for record, source_record in zip(selected, records, strict=True)
+    ]
+    reviews_path = source_set_dir / "prompt-reviews.jsonl"
+    write_json_records(reviews_path, reviews)
+    manifest_path = source_set_dir / "source-set.json"
+    write_json(
+        manifest_path,
+        {
+            "format": "aigen.pix2pix.flux-source-set.v1",
+            "name": "reviewed-test",
+            "selection_sha256": selection["selected_sha256"],
+            "prompt_guide_sha256": sha256_file(
+                PROJECT_ROOT / "docs" / "image-edit-prompting.md"
+            ),
+            "records": records_path.name,
+            "records_sha256": sha256_file(records_path),
+            "record_count": len(records),
+            "prompt_reviews": reviews_path.name,
+            "prompt_reviews_sha256": sha256_file(reviews_path),
+        },
+    )
+    loaded = load_flux_source_set(
+        manifest_path,
+        selected=selected,
+        selection=selection,
+    )
+    if len(loaded.records) != len(selected):
+        raise AssertionError("fake FLUX source set did not round-trip")
+    return manifest_path
+
+
+def _fake_flux_source_set_execution(
+    state: dict[str, object],
+    *,
+    fail: bool = False,
+) -> ExitStack:
+    module = types.ModuleType("aigen.generation.flux2_klein")
+
+    class FakeFlux2KleinError(RuntimeError):
+        pass
+
+    def encode_prompts(*, prompts: object, progress: object) -> tuple[object, float]:
+        del progress
+        ordered = tuple(dict.fromkeys(prompts))
+        state["encoded_prompts"] = ordered
+        return {prompt: prompt for prompt in ordered}, 0.0
+
+    class FakeFlux2KleinSession:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+            state["session_count"] = int(state.get("session_count", 0)) + 1
+
+        def generate(
+            self,
+            *,
+            cases: object,
+            prompt_embeddings: object,
+            progress: object,
+        ) -> object:
+            del prompt_embeddings, progress
+            state["generate_count"] = int(state.get("generate_count", 0)) + 1
+            outputs = []
+            for index, case in enumerate(cases):
+                request = case.outputs[0]
+                Image.new(
+                    "RGB",
+                    (case.width, case.height),
+                    (index, request.seed % 256, 96),
+                ).save(request.path)
+                if fail:
+                    raise FakeFlux2KleinError("injected FLUX source failure")
+                outputs.append(
+                    SimpleNamespace(
+                        case=case.name,
+                        seed=request.seed,
+                    )
+                )
+            return SimpleNamespace(
+                outputs=tuple(outputs),
+                generation_ms=0.0,
+                model_load_ms=0.0,
+                peak_vram_mb=0,
+            )
+
+        def close(self) -> None:
+            return None
+
+    module.Flux2KleinError = FakeFlux2KleinError
+    module.Flux2KleinSession = FakeFlux2KleinSession
+    module.encode_flux2_klein_prompts = encode_prompts
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "aigen.pix2pix.flux_source_set_corpus.flux2_klein_model_provenance",
+            return_value=FAKE_MODEL_PROVENANCE,
+        )
+    )
+    stack.enter_context(
+        patch(
+            "aigen.pix2pix.flux_source_set_corpus.flux2_klein_runtime_provenance",
+            return_value=FAKE_RUNTIME_PROVENANCE,
+        )
+    )
+    stack.enter_context(
+        patch.dict(
+            sys.modules,
+            {"aigen.generation.flux2_klein": module},
+        )
+    )
+    return stack
+
+
+def _write_fake_flux_output_audit(
+    root: Path,
+    name: str,
+    *,
+    rejected_ids: set[str],
+) -> None:
+    _, selected, _ = load_iro_selection(root)
+    inventory, source_set, _, source_plan_sha256 = (
+        load_flux_source_set_inventory(root, name)
+    )
+    result_sha256 = sha256_file(flux_source_set_result_path(root, name))
+    source_root = root / flux_source_set_layout(name).directory
+    records = []
+    for selected_record, source_record in zip(
+        selected,
+        source_set.records,
+        strict=True,
+    ):
+        pair_id = str(selected_record["id"])
+        rejected = pair_id in rejected_ids
+        records.append(
+            {
+                "id": pair_id,
+                "source_sha256": sha256_file(inventory[pair_id]),
+                "target_sha256": str(selected_record["target_sha256"]),
+                "prompt_sha256": hashlib.sha256(
+                    source_record.prompt.encode("utf-8")
+                ).hexdigest(),
+                "chosen_seed": source_record.seed,
+                "tested_seeds": [source_record.seed],
+                "verdict": "reject" if rejected else "pass",
+                "reviewer": "test-output-reviewer",
+                "notes": "pose mismatch" if rejected else "pose and view aligned",
+            }
+        )
+    records_path = source_root / "output-audit-records.jsonl"
+    write_json_records(records_path, records)
+    write_json(
+        source_root / "output-audit.json",
+        {
+            "format": "aigen.pix2pix.flux-output-audit.v1",
+            "source_plan_sha256": source_plan_sha256,
+            "source_result_sha256": result_sha256,
+            "records": records_path.name,
+            "records_sha256": sha256_file(records_path),
+            "record_count": len(records),
+        },
+    )
 
 
 def _write_fake_qwen_source_config(temporary: Path) -> Path:

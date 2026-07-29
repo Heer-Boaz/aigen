@@ -10,7 +10,11 @@ from aigen.manifest_io import atomic_write_json
 from aigen.pix2pix.artifacts import load_generator_bundle, prepare_empty_output_dir
 from aigen.pix2pix.config import ModelConfig
 from aigen.pix2pix.dataset import PAIR_SPLITS, audit_dataset
-from aigen.pix2pix.device import resolve_device, validate_precision
+from aigen.pix2pix.device import (
+    resolve_device,
+    validate_model_precision,
+    validate_precision,
+)
 from aigen.pix2pix.errors import Pix2PixError
 from aigen.pix2pix.evaluation import evaluate_generator
 from aigen.progress import StatusReporter
@@ -43,6 +47,7 @@ def evaluate_model(
     validate_precision(device, precision)
     output_dir = output_dir.resolve()
     generator, metadata = load_generator_bundle(model_dir, device=device)
+    validate_model_precision(next(generator.parameters()).dtype, precision)
     model_config = ModelConfig.from_json(metadata["model"])
     if model_config.image_size != dataset.image_size:
         raise Pix2PixError("model image size does not match the evaluation dataset")
