@@ -3,15 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from pydantic import ValidationError
-from textual import on
+from textual import events, on
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, ItemGrid
+from textual.containers import Container, ItemGrid
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select
 
 from aigen.workflow_canvas import WorkflowCanvas
-from aigen.workflow_connection_dialog import WorkflowConnectionDialog
 from aigen.workflow_edit_buffer import (
     WorkflowEditBuffer,
     WorkflowPropertyEditError,
@@ -28,6 +27,25 @@ from aigen.workflow_inspector import (
     PropertySelect,
     WorkflowInspector,
 )
+from aigen.workflow_layout import NODE_WIDTH
+
+
+class WorkflowEditorBody(Container):
+    """Owns the responsive canvas and inspector split."""
+
+    def on_resize(self, event: events.Resize) -> None:
+        canvas = self.query_one(WorkflowCanvas)
+        inspector = self.query_one(WorkflowInspector)
+        horizontal_minimum = (
+            self.styles.gutter.width
+            + NODE_WIDTH
+            + canvas.styles.gutter.width
+            + inspector.horizontal_minimum_width
+        )
+        self.set_class(
+            event.size.width < horizontal_minimum,
+            "stacked",
+        )
 
 
 class WorkflowEditor(ModalScreen[None]):
@@ -76,10 +94,26 @@ class WorkflowEditor(ModalScreen[None]):
         padding: 0 1;
     }
 
-    WorkflowEditor #workflow-editor-body {
+    WorkflowEditor WorkflowEditorBody {
+        layout: horizontal;
         width: 100%;
         height: 1fr;
         padding: 0 1;
+    }
+
+    WorkflowEditor WorkflowEditorBody.stacked {
+        layout: vertical;
+    }
+
+    WorkflowEditor WorkflowEditorBody.stacked > WorkflowCanvas {
+        width: 100%;
+        height: 3fr;
+    }
+
+    WorkflowEditor WorkflowEditorBody.stacked > WorkflowInspector {
+        width: 100%;
+        min-width: 0;
+        height: 2fr;
     }
 
     WorkflowEditor #workflow-editor-status {
@@ -156,12 +190,6 @@ class WorkflowEditor(ModalScreen[None]):
                     compact=True,
                 ),
                 Button(
-                    "Connect",
-                    id="workflow-connect-nodes",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
                     "Earlier",
                     id="workflow-connection-earlier",
                     classes="workflow-edit-control",
@@ -196,7 +224,7 @@ class WorkflowEditor(ModalScreen[None]):
                 regular=False,
                 id="workflow-node-toolbar",
             )
-            with Horizontal(id="workflow-editor-body"):
+            with WorkflowEditorBody(id="workflow-editor-body"):
                 yield WorkflowCanvas(
                     self._edit_buffer.document,
                     id="workflow-canvas",
@@ -346,21 +374,43 @@ class WorkflowEditor(ModalScreen[None]):
     ) -> None:
         if not await self.commit_pending_property():
             return
-        await self._connect_ports(event.source, event.target)
+        await self._connect_ports(
+            event.source,
+            event.target,
+            event.connection_id,
+        )
 
     async def _connect_ports(
         self,
         source: NodePortRef,
         target: NodePortRef,
+        connection_id: str | None = None,
     ) -> None:
         revision = self._edit_buffer.revision
         try:
-            self._edit_buffer.connect_ports(source, target)
+            connection = (
+                self._edit_buffer.connect_ports(source, target)
+                if connection_id is None
+                else self._edit_buffer.reconnect_connection(
+                    connection_id,
+                    source,
+                    target,
+                )
+            )
         except (ValidationError, ValueError) as error:
             self.notify(str(error), severity="error")
             return
+        canvas = self.query_one(WorkflowCanvas)
+        canvas.set_selection(None, connection.id)
         if self._edit_buffer.revision != revision:
             await self._show_document()
+        else:
+            await self.query_one(WorkflowInspector).show(
+                self._edit_buffer.document,
+                None,
+                connection.id,
+            )
+            self._update_history_actions()
 
     @on(Input.Submitted)
     async def property_submitted(self, event: Input.Submitted) -> None:
@@ -409,7 +459,7 @@ class WorkflowEditor(ModalScreen[None]):
             event.button.name is not None
             and event.button.has_class("workflow-property-browse")
         ):
-            row = event.button.parent
+            row = event.button.query_ancestor(PropertyRow)
             assert isinstance(row, PropertyRow)
             assert row.node_id is not None
             browse_request = (
@@ -434,8 +484,6 @@ class WorkflowEditor(ModalScreen[None]):
                 await self._add_node()
             case "workflow-delete-node":
                 await self._delete_selection()
-            case "workflow-connect-nodes":
-                self._open_connection_dialog()
             case "workflow-connection-earlier":
                 await self._move_connection(-1)
             case "workflow-connection-later":
@@ -468,33 +516,6 @@ class WorkflowEditor(ModalScreen[None]):
                             current_value,
                         )
                     )
-
-    def _open_connection_dialog(self) -> None:
-        canvas = self.query_one(WorkflowCanvas)
-        dialog = WorkflowConnectionDialog(
-            self._edit_buffer.document,
-            canvas.selected_node_id,
-        )
-        if not dialog.can_connect:
-            self.notify(
-                "This workflow has no compatible node ports.",
-                severity="warning",
-            )
-            return
-        self.app.push_screen(dialog, self._connection_chosen)
-
-    def _connection_chosen(
-        self,
-        connection: tuple[NodePortRef, NodePortRef] | None,
-    ) -> None:
-        if connection is None:
-            return
-        source, target = connection
-        self.run_worker(
-            self._connect_ports(source, target),
-            group="workflow-connect",
-            exclusive=True,
-        )
 
     async def _add_node(self) -> None:
         value = self.query_one("#workflow-node-kind", Select).value

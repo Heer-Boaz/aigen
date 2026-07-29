@@ -3,9 +3,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, get_args, get_origin
 
-from textual import on
+from textual import events, on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Container, VerticalScroll
 from textual.widgets import Button, Input, Label, Select, Static
 
 from aigen.generation.animegen_i2v import (
@@ -29,6 +29,26 @@ from aigen.workflow_graph import (
     WorkflowGraph,
     WorkflowNode,
     node_definition,
+)
+
+
+PROPERTY_LABEL_MIN_WIDTH = 8
+PROPERTY_EDITOR_MIN_WIDTH = 8
+PROPERTY_BROWSE_MIN_WIDTH = 8
+PROPERTY_BROWSE_HORIZONTAL_PADDING = 1
+PROPERTY_BROWSE_OUTER_MIN_WIDTH = (
+    PROPERTY_BROWSE_MIN_WIDTH
+    + 2 * PROPERTY_BROWSE_HORIZONTAL_PADDING
+)
+INSPECTOR_HORIZONTAL_GUTTER_WIDTH = 4
+INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH = (
+    PROPERTY_LABEL_MIN_WIDTH
+    + PROPERTY_EDITOR_MIN_WIDTH
+    + PROPERTY_BROWSE_OUTER_MIN_WIDTH
+)
+INSPECTOR_HORIZONTAL_MIN_WIDTH = (
+    INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH
+    + INSPECTOR_HORIZONTAL_GUTTER_WIDTH
 )
 
 
@@ -72,7 +92,7 @@ class PropertySelect(Select[object]):
         self.original_value = value
 
 
-class PropertyRow(Horizontal):
+class PropertyRow(Container):
     def __init__(
         self,
         *,
@@ -102,39 +122,55 @@ class PropertyRow(Horizontal):
             if self.options is not None
             else _property_options(self.annotation)
         )
-        if options is None:
-            original_value = "" if self.value is None else str(self.value)
-            yield PropertyInput(
-                (
-                    original_value
-                    if self.draft is None
-                    else self.draft
-                ),
-                original_value=original_value,
-                node_id=self.node_id,
-                field_name=self.field_name,
+        with Container(classes="workflow-property-controls"):
+            if options is None:
+                original_value = "" if self.value is None else str(self.value)
+                yield PropertyInput(
+                    (
+                        original_value
+                        if self.draft is None
+                        else self.draft
+                    ),
+                    original_value=original_value,
+                    node_id=self.node_id,
+                    field_name=self.field_name,
+                )
+            else:
+                yield PropertySelect(
+                    options,
+                    self.value,
+                    node_id=self.node_id or "",
+                    field_name=self.field_name,
+                )
+            if self.browse:
+                yield Button(
+                    "Browse",
+                    name=self.field_name,
+                    compact=True,
+                    classes="workflow-property-browse",
+                )
+
+    def on_resize(self, event: events.Resize) -> None:
+        horizontal_minimum = (
+            PROPERTY_LABEL_MIN_WIDTH
+            + PROPERTY_EDITOR_MIN_WIDTH
+            + (
+                PROPERTY_BROWSE_OUTER_MIN_WIDTH
+                if self.browse
+                else 0
             )
-        else:
-            yield PropertySelect(
-                options,
-                self.value,
-                node_id=self.node_id or "",
-                field_name=self.field_name,
-            )
-        if self.browse:
-            yield Button(
-                "Browse",
-                name=self.field_name,
-                compact=True,
-                classes="workflow-property-browse",
-            )
+        )
+        self.set_class(
+            event.size.width < horizontal_minimum,
+            "stacked",
+        )
 
 
 class WorkflowInspector(VerticalScroll):
     DEFAULT_CSS = """
     WorkflowInspector {
-        width: 1fr;
-        min-width: 24;
+        width: 2fr;
+        min-width: %(inspector_min_width)d;
         height: 1fr;
         border: solid #5b496d;
         background: #1c1724;
@@ -155,39 +191,67 @@ class WorkflowInspector(VerticalScroll):
     }
 
     WorkflowInspector .workflow-property-row {
-        width: 100%;
+        layout: grid;
+        grid-size: 2 1;
+        grid-columns: 1fr 2fr;
+        grid-rows: 1;
+        width: 100%%;
         height: 1;
     }
 
+    WorkflowInspector .workflow-property-row.stacked {
+        grid-size: 1 2;
+        grid-columns: 1fr;
+        grid-rows: 1 1;
+        height: 2;
+    }
+
     WorkflowInspector .workflow-property-label {
-        width: 12;
-        min-width: 8;
+        width: 100%%;
+        min-width: %(label_min_width)d;
         height: 1;
         content-align-vertical: middle;
         text-overflow: ellipsis;
     }
 
+    WorkflowInspector .workflow-property-controls {
+        layout: grid;
+        grid-size: 2 1;
+        grid-columns: 1fr auto;
+        grid-rows: 1;
+        width: 100%%;
+        min-width: 0;
+        height: 1;
+    }
+
     WorkflowInspector .workflow-property-editor {
-        width: 1fr;
+        width: 100%%;
+        min-width: %(editor_min_width)d;
         height: 1;
         border: none;
         padding: 0;
     }
 
     WorkflowInspector .workflow-property-browse {
-        width: 8;
-        min-width: 8;
+        width: auto;
+        min-width: %(browse_min_width)d;
         height: 1;
         min-height: 1;
         border: none;
-        padding: 0 1;
+        padding: 0 %(browse_padding)d;
     }
 
     WorkflowInspector .workflow-inspector-empty {
         color: #9e8cad;
         height: auto;
     }
-    """
+    """ % {
+        "inspector_min_width": INSPECTOR_HORIZONTAL_MIN_WIDTH,
+        "label_min_width": PROPERTY_LABEL_MIN_WIDTH,
+        "editor_min_width": PROPERTY_EDITOR_MIN_WIDTH,
+        "browse_min_width": PROPERTY_BROWSE_MIN_WIDTH,
+        "browse_padding": PROPERTY_BROWSE_HORIZONTAL_PADDING,
+    }
 
     def __init__(
         self,
@@ -205,6 +269,13 @@ class WorkflowInspector(VerticalScroll):
             tuple[str | None, str],
             WorkflowPropertyEdit,
         ] = {}
+
+    @property
+    def horizontal_minimum_width(self) -> int:
+        return (
+            INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH
+            + self.styles.gutter.width
+        )
 
     def compose(self) -> ComposeResult:
         yield Label("Workflow", classes="workflow-inspector-heading")
@@ -396,17 +467,22 @@ def _node_property_options(
 
 def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
     fields = tuple(type(node.config).model_fields)
+    hidden: set[str] = set()
+    if (
+        "seed_mode" in type(node.config).model_fields
+        and getattr(node.config, "seed_mode") == "random"
+    ):
+        hidden.add("seed")
     if (
         isinstance(node, (ImagePostprocessNode, FramePostprocessNode))
         and isinstance(node.config, VosrPostprocessConfig)
     ):
-        hidden = (
+        hidden.add(
             "scale"
             if node.config.sizing == "long-side"
             else "long_side"
         )
-        return tuple(field for field in fields if field != hidden)
-    return fields
+    return tuple(field for field in fields if field not in hidden)
 
 
 def _property_options(

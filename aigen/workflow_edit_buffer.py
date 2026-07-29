@@ -310,6 +310,87 @@ class WorkflowEditBuffer:
         )
         return connection
 
+    def reconnect_connection(
+        self,
+        connection_id: str,
+        source: NodePortRef,
+        target: NodePortRef,
+    ) -> WorkflowConnection:
+        existing = _connection_by_id(self._document, connection_id)
+        if existing.source == source and existing.target == target:
+            return existing
+
+        target_node = self._document.node(target.node_id)
+        target_port = node_definition(target_node.kind).input(target.port)
+        if target_port is None:
+            raise ValueError(
+                f"unknown input {target.node_id}.{target.port}"
+            )
+
+        retained = [
+            connection
+            for connection in self._document.connections
+            if connection.id != connection_id
+            and (
+                target_port.multiple
+                or connection.target != target
+            )
+        ]
+        order = (
+            existing.order
+            if target_port.multiple and target == existing.target
+            else (
+                max(
+                    (
+                        connection.order
+                        for connection in retained
+                        if connection.target == target
+                    ),
+                    default=-1,
+                )
+                + 1
+                if target_port.multiple
+                else 0
+            )
+        )
+        changed = WorkflowConnection(
+            id=existing.id,
+            source=source,
+            target=target,
+            order=order,
+        )
+        retained_ids = {
+            connection.id
+            for connection in retained
+        }
+        connections: list[WorkflowConnection] = []
+        for connection in self._document.connections:
+            if connection.id == connection_id:
+                connections.append(changed)
+            elif connection.id in retained_ids:
+                connections.append(connection)
+        document = _rebuild_graph(
+            self._document,
+            connections=_normalized_connection_orders(
+                connections,
+                {
+                    (
+                        existing.target.node_id,
+                        existing.target.port,
+                    ),
+                    (target.node_id, target.port),
+                },
+            ),
+        )
+        self._commit(
+            document,
+            (
+                f"Reconnect {existing.source.node_id}."
+                f"{existing.source.port}"
+            ),
+        )
+        return _connection_by_id(self._document, connection_id)
+
     def connection_move_capabilities(
         self,
         connection_id: str,

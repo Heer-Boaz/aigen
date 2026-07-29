@@ -11,6 +11,8 @@ def load_workflow_document(path: Path) -> WorkflowGraph:
     payload = read_json(path, label="workflow document")
     if payload.get("version") == 1:
         payload = _upgrade_version_one(payload)
+    if payload.get("version") == 2:
+        payload = _upgrade_version_two(payload)
     return WorkflowGraph.model_validate(payload)
 
 
@@ -24,11 +26,33 @@ def save_workflow_document(document: WorkflowGraph, path: Path) -> None:
 
 def _upgrade_version_one(payload: dict[str, Any]) -> dict[str, Any]:
     upgraded = dict(payload)
-    upgraded["version"] = WORKFLOW_DOCUMENT_VERSION
+    upgraded["version"] = 2
     upgraded["nodes"] = [
         _upgrade_version_one_node(node)
         for node in payload.get("nodes", ())
     ]
+    return upgraded
+
+
+def _upgrade_version_two(payload: dict[str, Any]) -> dict[str, Any]:
+    upgraded = dict(payload)
+    upgraded["version"] = WORKFLOW_DOCUMENT_VERSION
+    upgraded["nodes"] = [
+        _upgrade_version_two_node(node)
+        for node in payload.get("nodes", ())
+    ]
+    return upgraded
+
+
+def _upgrade_version_two_node(node: dict[str, Any]) -> dict[str, Any]:
+    config = node.get("config")
+    if not isinstance(config, dict) or "seed" not in config:
+        return node
+    upgraded = dict(node)
+    upgraded["config"] = {
+        **config,
+        "seed_mode": "fixed",
+    }
     return upgraded
 
 

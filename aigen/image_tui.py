@@ -57,6 +57,7 @@ from aigen.tui_dialogs import (
 )
 from aigen.video_tui_model import VideoForm
 from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
+from aigen.workflow_document_list import WorkflowDocumentList
 from aigen.workflow_document_io import (
     load_workflow_document,
     save_workflow_document,
@@ -422,12 +423,6 @@ class ImageGenerationApp(App[None]):
         color: #17131f;
     }
 
-    #workflow-summary {
-        height: 1;
-        padding: 0 1;
-        color: #d8c5eb;
-    }
-
     ModalScreen {
         align: center middle;
         background: #000000 55%;
@@ -470,6 +465,7 @@ class ImageGenerationApp(App[None]):
         self.workflow_buffer = WorkflowEditBuffer(
             keyframed_video_workflow_template()
         )
+        self.workflow_document_paths: list[Path] = []
         self.workflow_editor: WorkflowEditor | None = None
         self.workflow_runtime_statuses: dict[str, str] = {}
         self.workflow_request_path: Path | None = None
@@ -501,9 +497,12 @@ class ImageGenerationApp(App[None]):
             with TabPane("Post-processing", id="postprocessing"):
                 yield FormFields(self.postprocess_form, id="postprocess-fields")
             with TabPane("Workflows", id="workflows"):
-                yield Static(
-                    self._workflow_summary_text(),
-                    id="workflow-summary",
+                yield WorkflowDocumentList(
+                    self.workflow_document_paths,
+                    current_path=self.workflow_buffer.document_path,
+                    current_name=self.workflow_buffer.document.name,
+                    dirty=self.workflow_buffer.dirty,
+                    id="workflow-documents",
                 )
         yield ImageTUIFooter(id="action-footer")
         yield ProgressBar(id="generation-progress")
@@ -1144,19 +1143,17 @@ class ImageGenerationApp(App[None]):
         self._set_status(f"Loaded configuration: {display_project_path(path)}")
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
-    def _workflow_summary_text(self) -> str:
-        path = (
-            display_project_path(self.workflow_buffer.document_path)
-            if self.workflow_buffer.document_path is not None
-            else "Unsaved"
+    def _update_workflow_documents(self) -> None:
+        self.query_one(WorkflowDocumentList).show_documents(
+            self.workflow_document_paths,
+            current_path=self.workflow_buffer.document_path,
+            current_name=self.workflow_buffer.document.name,
+            dirty=self.workflow_buffer.dirty,
         )
-        dirty = " *" if self.workflow_buffer.dirty else ""
-        return f"{self.workflow_buffer.document.name} | {path}{dirty}"
 
-    def _update_workflow_summary(self) -> None:
-        for summary in self.query("#workflow-summary"):
-            assert isinstance(summary, Static)
-            summary.update(self._workflow_summary_text())
+    def _remember_workflow_document(self, path: Path) -> None:
+        if path not in self.workflow_document_paths:
+            self.workflow_document_paths.append(path)
 
     def _open_workflow_editor(self) -> None:
         if self.workflow_editor is not None:
@@ -1178,7 +1175,7 @@ class ImageGenerationApp(App[None]):
         _result: None,
     ) -> None:
         self.workflow_editor = None
-        self._update_workflow_summary()
+        self._update_workflow_documents()
 
     async def _new_workflow(self) -> None:
         if self.process is not None:
@@ -1212,10 +1209,7 @@ class ImageGenerationApp(App[None]):
         )
 
     async def _load_workflow(self) -> None:
-        if self.process is not None:
-            self._set_status("Stop the active operation before loading a workflow.")
-            return
-        if not await self._commit_workflow_draft():
+        if not await self._prepare_workflow_load():
             return
         start = self.workflow_buffer.document_path or PROJECT_ROOT
         self.push_screen(
@@ -1229,13 +1223,28 @@ class ImageGenerationApp(App[None]):
             self._apply_workflow,
         )
 
+    async def _prepare_workflow_load(self) -> bool:
+        if self.process is not None:
+            self._set_status("Stop the active operation before loading a workflow.")
+            return False
+        if not await self._commit_workflow_draft():
+            return False
+        return True
+
+    @on(WorkflowDocumentList.DocumentActivated)
+    async def workflow_document_activated(
+        self,
+        event: WorkflowDocumentList.DocumentActivated,
+    ) -> None:
+        if event.path == self.workflow_buffer.document_path:
+            self._open_workflow_editor()
+            return
+        assert event.path is not None
+        if await self._prepare_workflow_load():
+            self._apply_workflow(event.path)
+
     def _apply_workflow(self, path: Path | None) -> None:
         if path is None:
-            return
-        try:
-            document = load_workflow_document(path)
-        except (OSError, ValueError) as error:
-            self._show_error("Cannot load workflow", str(error))
             return
         if self.workflow_buffer.dirty:
             self.push_screen(
@@ -1246,10 +1255,17 @@ class ImageGenerationApp(App[None]):
                 ),
                 lambda discard: self._workflow_load_confirmed(
                     discard,
-                    document,
                     path,
                 ),
             )
+            return
+        self._load_workflow_document(path)
+
+    def _load_workflow_document(self, path: Path) -> None:
+        try:
+            document = load_workflow_document(path)
+        except (OSError, ValueError) as error:
+            self._show_error("Cannot load workflow", str(error))
             return
         self._replace_workflow_document(
             document,
@@ -1260,16 +1276,11 @@ class ImageGenerationApp(App[None]):
     def _workflow_load_confirmed(
         self,
         discard: bool,
-        document: WorkflowGraph,
         path: Path,
     ) -> None:
         if not discard:
             return
-        self._replace_workflow_document(
-            document,
-            document_path=path,
-            status=f"Loaded {path}",
-        )
+        self._load_workflow_document(path)
 
     def _replace_workflow_document(
         self,
@@ -1281,9 +1292,10 @@ class ImageGenerationApp(App[None]):
         if document_path is None:
             self.workflow_buffer.replace_document(document)
         else:
+            self._remember_workflow_document(document_path)
             self.workflow_buffer.load_document(document, document_path)
         self.workflow_runtime_statuses.clear()
-        self._update_workflow_summary()
+        self._update_workflow_documents()
         if self.workflow_editor is None:
             self._open_workflow_editor()
             return
@@ -1381,9 +1393,10 @@ class ImageGenerationApp(App[None]):
             self._show_error("Cannot save workflow", str(error))
             return
         self.workflow_buffer.mark_saved(output)
+        self._remember_workflow_document(output)
         if self.workflow_editor is not None:
             self.workflow_editor.document_saved()
-        self._update_workflow_summary()
+        self._update_workflow_documents()
 
     @on(WorkflowEditor.LoadRequested)
     async def workflow_load_requested(self) -> None:

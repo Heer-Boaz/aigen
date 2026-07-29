@@ -10,7 +10,7 @@ from typing import Annotated, Literal, TypeAlias, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-WORKFLOW_DOCUMENT_VERSION = 2
+WORKFLOW_DOCUMENT_VERSION = 3
 _STABLE_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]*$"
 StableId: TypeAlias = Annotated[
     str,
@@ -63,6 +63,7 @@ class LoraSourceConfig(WorkflowModel):
 class ImageEditConfig(WorkflowModel):
     backend: str
     prompt: str = ""
+    seed_mode: Literal["fixed", "random"] = "fixed"
     seed: int = 0
     aspect_ratio: str = ""
     width: int | None = Field(default=None, gt=0)
@@ -84,6 +85,7 @@ class VosrPostprocessConfig(WorkflowModel):
     weak_cond_strength_aelq: float
     align_method: Literal["wavelet", "adain", "nofix"]
     tile_size: int = Field(gt=0)
+    seed_mode: Literal["fixed", "random"] = "fixed"
     seed: int
 
 
@@ -119,6 +121,7 @@ ImagePostprocessConfig: TypeAlias = Annotated[
 
 class AnimeGenI2VConfig(WorkflowModel):
     prompt: str = ""
+    seed_mode: Literal["fixed", "random"] = "fixed"
     seed: int = 0
     frames: int = Field(gt=0)
     fps: int = Field(gt=0)

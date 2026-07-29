@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import secrets
 from dataclasses import asdict, dataclass
 from graphlib import TopologicalSorter
 from hashlib import sha256
 from pathlib import Path
 from types import MappingProxyType
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import (
@@ -32,10 +33,12 @@ from aigen.manifest_io import ManifestIOError
 from aigen.runtime_profiles import resolve_project_path
 from aigen.workflow_graph import (
     AnimeGenI2VNode,
+    AnimeGenI2VConfig,
     ExtractVideoFramesConfig,
     ExtractVideoFramesNode,
     FramePostprocessNode,
     IllustrationUpscaleConfig,
+    ImageEditConfig,
     ImageEditNode,
     ImagePostprocessNode,
     ImageSourceNode,
@@ -73,6 +76,7 @@ class CompiledLoraSourceConfig:
 class CompiledImageEditConfig:
     backend: str
     prompt: str
+    seed_mode: Literal["fixed", "random"]
     seed: int
     settings: ResolvedImageEditSettings
 
@@ -80,6 +84,7 @@ class CompiledImageEditConfig:
 @dataclass(frozen=True)
 class CompiledAnimeGenConfig:
     prompt: str
+    seed_mode: Literal["fixed", "random"]
     seed: int
     settings: ResolvedAnimeGenSettings
 
@@ -93,6 +98,7 @@ class CompiledVosrLongSideConfig:
     weak_cond_strength_aelq: float
     align_method: str
     tile_size: int
+    seed_mode: Literal["fixed", "random"]
     seed: int
 
 
@@ -105,6 +111,7 @@ class CompiledVosrScaleConfig:
     weak_cond_strength_aelq: float
     align_method: str
     tile_size: int
+    seed_mode: Literal["fixed", "random"]
     seed: int
 
 
@@ -223,6 +230,10 @@ def compile_workflow(document: WorkflowGraph) -> CompiledWorkflow:
     )
 
 
+def compile_workflow_run(document: WorkflowGraph) -> CompiledWorkflow:
+    return compile_workflow(_resolve_random_seeds(document))
+
+
 def execution_config_payload(config: CompiledNodeConfig) -> dict[str, object]:
     if isinstance(config, CompiledImageSourceConfig):
         return {"path": config.path.as_posix()}
@@ -238,7 +249,8 @@ def execution_config_payload(config: CompiledNodeConfig) -> dict[str, object]:
         return {
             "backend": config.backend,
             "prompt": config.prompt,
-            "seed": config.seed,
+            "seed_mode": config.seed_mode,
+            "seed": _execution_seed(config.seed_mode, config.seed),
             **settings,
         }
     if isinstance(
@@ -251,11 +263,21 @@ def execution_config_payload(config: CompiledNodeConfig) -> dict[str, object]:
             CompiledPixelArtFixerConfig,
         ),
     ):
-        return asdict(config)
+        payload = asdict(config)
+        if isinstance(
+            config,
+            (CompiledVosrLongSideConfig, CompiledVosrScaleConfig),
+        ):
+            payload["seed"] = _execution_seed(
+                config.seed_mode,
+                config.seed,
+            )
+        return payload
     if isinstance(config, CompiledAnimeGenConfig):
         return {
             "prompt": config.prompt,
-            "seed": config.seed,
+            "seed_mode": config.seed_mode,
+            "seed": _execution_seed(config.seed_mode, config.seed),
             "frames": config.settings.frames,
             "fps": config.settings.fps,
             "sampling": config.settings.sampling,
@@ -263,6 +285,13 @@ def execution_config_payload(config: CompiledNodeConfig) -> dict[str, object]:
             "precision": config.settings.precision,
         }
     return {}
+
+
+def _execution_seed(
+    mode: Literal["fixed", "random"],
+    seed: int,
+) -> int | None:
+    return seed if mode == "fixed" else None
 
 
 def _compile_node_config(node: WorkflowNode) -> CompiledNodeConfig:
@@ -314,6 +343,7 @@ def _compile_node_config(node: WorkflowNode) -> CompiledNodeConfig:
         return CompiledImageEditConfig(
             backend=node.config.backend,
             prompt=prompt,
+            seed_mode=node.config.seed_mode,
             seed=node.config.seed,
             settings=settings,
         )
@@ -334,6 +364,7 @@ def _compile_node_config(node: WorkflowNode) -> CompiledNodeConfig:
                 ),
                 "align_method": config.align_method,
                 "tile_size": config.tile_size,
+                "seed_mode": config.seed_mode,
                 "seed": config.seed,
             }
             if config.sizing == "long-side":
@@ -386,6 +417,7 @@ def _compile_node_config(node: WorkflowNode) -> CompiledNodeConfig:
             ) from error
         return CompiledAnimeGenConfig(
             prompt=prompt,
+            seed_mode=node.config.seed_mode,
             seed=node.config.seed,
             settings=settings,
         )
@@ -405,6 +437,38 @@ def _source_path(node_id: str, raw_path: str) -> Path:
             f"source file does not exist for node {node_id}: {path}"
         )
     return path
+
+
+def _resolve_random_seeds(document: WorkflowGraph) -> WorkflowGraph:
+    changed_nodes: list[WorkflowNode] | None = None
+    for index, node in enumerate(document.nodes):
+        config = node.config
+        if (
+            not isinstance(
+                config,
+                (
+                    ImageEditConfig,
+                    VosrPostprocessConfig,
+                    AnimeGenI2VConfig,
+                ),
+            )
+            or config.seed_mode != "random"
+        ):
+            continue
+        if changed_nodes is None:
+            changed_nodes = list(document.nodes)
+        changed_config = config.model_copy(
+            update={
+                "seed_mode": "fixed",
+                "seed": secrets.randbits(63),
+            }
+        )
+        changed_nodes[index] = node.model_copy(
+            update={"config": changed_config}
+        )
+    if changed_nodes is None:
+        return document
+    return document.model_copy(update={"nodes": tuple(changed_nodes)})
 
 
 def _incoming_connections(

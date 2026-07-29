@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Mapping
 
 from textual import events
@@ -24,6 +25,13 @@ SCROLL_COLUMNS = 6
 SCROLL_ROWS = 3
 
 
+@dataclass(frozen=True, slots=True)
+class _ConnectionGesture:
+    fixed_port: PortHit
+    moving_source: bool
+    connection_id: str | None
+
+
 class WorkflowCanvas(ScrollView, can_focus=True):
     """Retained, scrollable ASCII projection of a workflow document."""
 
@@ -36,6 +44,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
         Binding("shift+right", "move_right", show=False),
         Binding("shift+up", "move_up", show=False),
         Binding("shift+down", "move_down", show=False),
+        Binding("escape", "cancel_gesture", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -74,10 +83,16 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             self.y = y
 
     class ConnectionRequested(Message):
-        def __init__(self, source: NodePortRef, target: NodePortRef) -> None:
+        def __init__(
+            self,
+            source: NodePortRef,
+            target: NodePortRef,
+            connection_id: str | None,
+        ) -> None:
             super().__init__()
             self.source = source
             self.target = target
+            self.connection_id = connection_id
 
     def __init__(
         self,
@@ -94,8 +109,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
         self._pan_pointer_origin = Offset(0, 0)
         self._pan_scroll_origin = Offset(0, 0)
         self._panning = False
-        self._connection_source: PortHit | None = None
-        self._connection_pointer: Offset | None = None
+        self._connection_gesture: _ConnectionGesture | None = None
         self._editable = True
         self.virtual_size = self._scene.content_size
 
@@ -210,6 +224,18 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     def action_move_down(self) -> None:
         self._move_selected_node(0, 1)
 
+    def action_cancel_gesture(self) -> None:
+        self._cancel_gesture()
+
+    def check_action(
+        self,
+        action: str,
+        parameters: tuple[object, ...],
+    ) -> bool | None:
+        if action == "cancel_gesture":
+            return self._gesture_active()
+        return True
+
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset
         return self._scene.render_line(
@@ -225,15 +251,53 @@ class WorkflowCanvas(ScrollView, can_focus=True):
         if event.button not in {1, 2}:
             return
         self.focus()
+        if event.button == 2 and self._gesture_active():
+            self._cancel_gesture()
+            event.stop()
+            return
         point = self._virtual_pointer(event)
         if event.button == 1:
-            if self._editable and (output := self._scene.output_at(point)):
-                self._select(output.node_id, None)
-                self._connection_source = output
-                self._connection_pointer = point
-                self._scene.set_preview_connection(output, point)
-                self.capture_mouse()
-                self.refresh()
+            if self._editable and (input_port := self._scene.input_near(point)):
+                connection_id = self._scene.reconnectable_input_connection(
+                    input_port,
+                    self.selected_connection_id,
+                )
+                if connection_id is None:
+                    self._begin_connection_gesture(
+                        _ConnectionGesture(
+                            fixed_port=input_port,
+                            moving_source=True,
+                            connection_id=None,
+                        ),
+                        point,
+                    )
+                else:
+                    self._begin_connection_gesture(
+                        _ConnectionGesture(
+                            fixed_port=self._scene.connection_source_port(
+                                connection_id
+                            ),
+                            moving_source=False,
+                            connection_id=connection_id,
+                        ),
+                        point,
+                    )
+                event.stop()
+                return
+
+            if self._editable and (output := self._scene.output_near(point)):
+                connection_id = self._scene.reconnectable_output_connection(
+                    output,
+                    self.selected_connection_id,
+                )
+                self._begin_connection_gesture(
+                    _ConnectionGesture(
+                        fixed_port=output,
+                        moving_source=False,
+                        connection_id=connection_id,
+                    ),
+                    point,
+                )
                 event.stop()
                 return
 
@@ -251,9 +315,8 @@ class WorkflowCanvas(ScrollView, can_focus=True):
                 event.stop()
                 return
 
-            if wire := self._scene.wire_at(point):
-                assert wire.connection is not None
-                self._select(None, wire.connection.id)
+            if connection_id := self._scene.wire_at(point):
+                self._select(None, connection_id)
                 event.stop()
                 return
 
@@ -275,23 +338,21 @@ class WorkflowCanvas(ScrollView, can_focus=True):
                 max(0, self._drag_node_origin.x + delta.x),
                 max(0, self._drag_node_origin.y + delta.y),
             )
-            self._scene.move_node(
+            span = self._scene.move_node(
                 self._drag_node_id,
                 self._drag_layout.x,
                 self._drag_layout.y,
             )
             self._sync_virtual_size()
-            self.refresh()
+            self._refresh_row_span(span)
             event.stop()
             return
 
-        if self._connection_source is not None:
-            self._connection_pointer = self._virtual_pointer(event)
-            self._scene.set_preview_connection(
-                self._connection_source,
-                self._connection_pointer,
+        if self._connection_gesture is not None:
+            _, span = self._scene.update_connection_preview(
+                self._virtual_pointer(event)
             )
-            self.refresh()
+            self._refresh_row_span(span)
             event.stop()
             return
 
@@ -309,12 +370,15 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     def on_mouse_up(self, event: events.MouseUp) -> None:
         if event.button not in {1, 2}:
             return
-        if self._drag_node_id is not None:
+        if event.button == 1 and self._drag_node_id is not None:
             assert self._drag_layout is not None
             node_id = self._drag_node_id
             layout = self._drag_layout
+            settled_span = self._scene.finish_node_move()
             self._clear_gesture()
             self.release_mouse()
+            self._sync_virtual_size()
+            self._refresh_row_span(settled_span)
             self.post_message(
                 self.NodeMoved(
                     node_id,
@@ -325,17 +389,32 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             event.stop()
             return
 
-        if self._connection_source is not None:
-            source = self._connection_source
-            target = self._scene.input_at(self._virtual_pointer(event))
-            self._clear_gesture()
+        if event.button == 1 and self._connection_gesture is not None:
+            gesture = self._connection_gesture
+            target_port, updated_span = self._scene.update_connection_preview(
+                self._virtual_pointer(event)
+            )
+            cleared_span = self._clear_gesture()
             self.release_mouse()
-            self.refresh()
-            if target is not None and self._scene.ports_compatible(source, target):
+            self._refresh_row_span(
+                _merge_row_spans(updated_span, cleared_span)
+            )
+            if target_port is not None:
+                source = (
+                    target_port
+                    if gesture.moving_source
+                    else gesture.fixed_port
+                )
+                target = (
+                    gesture.fixed_port
+                    if gesture.moving_source
+                    else target_port
+                )
                 self.post_message(
                     self.ConnectionRequested(
                         NodePortRef(node_id=source.node_id, port=source.port),
                         NodePortRef(node_id=target.node_id, port=target.port),
+                        gesture.connection_id,
                     )
                 )
             event.stop()
@@ -474,36 +553,71 @@ class WorkflowCanvas(ScrollView, can_focus=True):
 
     def _sync_virtual_size(self) -> None:
         content_size = self._scene.content_size
-        self.virtual_size = Size(
+        virtual_size = Size(
             max(self.size.width, content_size.width),
             max(self.size.height, content_size.height),
         )
+        if virtual_size != self.virtual_size:
+            self.virtual_size = virtual_size
+
+    def _begin_connection_gesture(
+        self,
+        gesture: _ConnectionGesture,
+        pointer: Offset,
+    ) -> None:
+        self._connection_gesture = gesture
+        span = self._scene.begin_connection_preview(
+            gesture.fixed_port,
+            pointer,
+            moving_source=gesture.moving_source,
+            suppressed_connection_id=gesture.connection_id,
+        )
+        self.capture_mouse()
+        self._refresh_row_span(span)
 
     def _cancel_gesture(self) -> None:
-        if (
-            self._drag_node_id is None
-            and self._connection_source is None
-            and not self._panning
-        ):
+        if not self._gesture_active():
             return
+        node_span: tuple[int, int] | None = None
         if self._drag_node_id is not None:
-            self._scene.move_node(
+            node_span = self._scene.move_node(
                 self._drag_node_id,
                 self._drag_node_origin.x,
                 self._drag_node_origin.y,
             )
-        self._clear_gesture()
+            node_span = _merge_row_spans(
+                node_span,
+                self._scene.finish_node_move(),
+            )
+        connection_span = self._clear_gesture()
         self.release_mouse()
         self._sync_virtual_size()
-        self.refresh()
+        self._refresh_row_span(
+            _merge_row_spans(node_span, connection_span)
+        )
 
-    def _clear_gesture(self) -> None:
+    def _clear_gesture(self) -> tuple[int, int] | None:
         self._drag_node_id = None
         self._drag_layout = None
-        self._connection_source = None
-        self._connection_pointer = None
+        self._connection_gesture = None
         self._panning = False
-        self._scene.clear_preview_connection()
+        return self._scene.clear_connection_preview()
+
+    def _gesture_active(self) -> bool:
+        return (
+            self._drag_node_id is not None
+            or self._connection_gesture is not None
+            or self._panning
+        )
+
+    def _refresh_row_span(
+        self,
+        span: tuple[int, int] | None,
+    ) -> None:
+        if span is None:
+            return
+        top, bottom = span
+        self.refresh_lines(top, bottom - top + 1)
 
     def _virtual_pointer(self, event: events.MouseEvent) -> Offset:
         offset = event.get_content_offset_capture(self)
@@ -511,3 +625,14 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             offset.x + self.scroll_offset.x,
             offset.y + self.scroll_offset.y,
         )
+
+
+def _merge_row_spans(
+    first: tuple[int, int] | None,
+    second: tuple[int, int] | None,
+) -> tuple[int, int] | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    return min(first[0], second[0]), max(first[1], second[1])

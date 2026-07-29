@@ -237,11 +237,14 @@ the complete form, including seeds, images, packs, LoRAs and their weights.
 Stop and Quit terminate the complete generation process group, including native
 backend workers, so a cancelled run cannot leave a worker holding GPU memory.
 
-The Workflows tab opens a fullscreen ASCII node editor. Nodes and typed ports
-can be connected with the mouse, moved on a scrollable canvas, reordered where
-an input accepts multiple values, and edited through the inspector. Workflow
-nodes can also be selected with the arrow keys and moved with Shift+arrow; the
-visible Connect action provides keyboard access to typed port connections.
+The Workflows tab lists the current and session-opened workflow documents with
+mouse and keyboard selection, and opens a fullscreen ASCII node editor. Drag
+from an output to an input to connect them; dragging again from a selected
+connection's output relinks it atomically. Nodes can be moved on a scrollable
+canvas, reordered where an input accepts multiple values, and edited through
+the responsive inspector. Workflow nodes can also be selected with the arrow
+keys and moved with Shift+arrow. Seeded nodes expose fixed and per-run random
+seed modes.
 Workflow documents are ordinary JSON files. The built-in template generates
 first and last keyframes, post-processes both, feeds them to AnimeGen-I2V,
 creates a contact sheet, extracts every frame, and post-processes that frame

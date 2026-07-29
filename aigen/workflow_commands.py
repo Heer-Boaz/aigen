@@ -9,7 +9,10 @@ from typing import Any, TextIO
 from aigen.command_io import command_error_payload, dump_json
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
-from aigen.workflow_compilation import compile_workflow
+from aigen.workflow_compilation import (
+    compile_workflow,
+    compile_workflow_run,
+)
 from aigen.workflow_document_io import (
     load_workflow_document,
     save_workflow_document,
@@ -92,7 +95,7 @@ def run_workflow_command(
                 "execution_order": list(workflow.execution_order),
             }
         elif args.workflow_operation == "run":
-            workflow = compile_workflow(
+            workflow = compile_workflow_run(
                 load_workflow_document(args.input.expanduser().resolve())
             )
             forward_progress = os.environ.get("AIGEN_PROGRESS") == "json"
