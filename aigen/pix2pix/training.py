@@ -13,6 +13,10 @@ import torch
 from torch import Tensor
 
 from aigen.manifest_io import atomic_write_json, read_json, write_json_line
+from aigen.pix2pix.augmentation import (
+    PairedIntegerTranslation,
+    maximum_translation,
+)
 from aigen.pix2pix.artifacts import (
     AdversarialCheckpointState,
     CheckpointState,
@@ -23,22 +27,40 @@ from aigen.pix2pix.artifacts import (
     prepare_empty_output_dir,
     save_training_checkpoint,
 )
-from aigen.pix2pix.config import TrainConfig
+from aigen.pix2pix.config import (
+    TRAIN_CONFIG_FORMAT,
+    TRAIN_CONFIG_FORMAT_V5,
+    TRAIN_CONFIG_FORMAT_V6,
+    TRAIN_CONFIG_FORMAT_V7,
+    TrainConfig,
+)
 from aigen.pix2pix.dataset import AuditedDataset, PairedImage, audit_dataset
 from aigen.pix2pix.device import autocast_context, resolve_device, validate_precision
 from aigen.pix2pix.errors import Pix2PixError
 from aigen.pix2pix.evaluation import EvaluationResult, evaluate_generator
 from aigen.pix2pix.model import (
+    ConditionalMultiscaleDiscriminator,
     ConditionalPatchDiscriminator,
     Pix2PixGenerator,
+    a_contrario_multiscale_discriminator_loss,
+    balanced_multiscale_discriminator_loss,
+    balanced_multiscale_generator_loss,
     discriminator_loss,
     generator_parameter_report,
     generator_loss,
     initialize_pix2pix_weights,
     model_parameter_report,
+    multiscale_discriminator_loss,
+    multiscale_generator_loss,
     reconstruction_loss,
+    target_palette_proximity_loss,
+    white_canvas_equal_regions_loss,
+    white_canvas_foreground_mask,
 )
-from aigen.pix2pix.training_data import create_training_loader
+from aigen.pix2pix.training_data import (
+    create_training_loader,
+    validate_white_canvas_region_balance,
+)
 from aigen.progress import StatusReporter
 
 
@@ -49,6 +71,24 @@ TENSORFLOW_REFERENCE_REVISION = "cf2a57e77485c371f04cc486d9d1e632ef552739"
 TENSORFLOW_REFERENCE_URL = (
     "https://github.com/tensorflow/docs/blob/"
     f"{TENSORFLOW_REFERENCE_REVISION}/site/en/tutorials/generative/pix2pix.ipynb"
+)
+PIX2PIXHD_REFERENCE_REVISION = "14b3b3c7fff413086e3b58df52096f16b6891172"
+PIX2PIXHD_REFERENCE_URL = "https://github.com/NVIDIA/pix2pixHD"
+SPADE_REFERENCE_REVISION = "fecacc920c1367a038995c45a39c15f6521ca64f"
+SPADE_REFERENCE_URL = "https://github.com/NVlabs/SPADE"
+DIFFAUGMENT_REFERENCE_REVISION = "0b6339510be1e3859d360cbf464d0a425514a6b4"
+DIFFAUGMENT_REFERENCE_URL = "https://github.com/mit-han-lab/data-efficient-gans"
+AOT_GAN_REFERENCE_REVISION = "2cd1afd8fdfabb101c678f6062d14bc7d302509e"
+AOT_GAN_REFERENCE_URL = "https://github.com/researchmm/AOT-GAN-for-Inpainting"
+STACKGAN_REFERENCE_REVISION = "e72ef88446e7bcd84a7b88060053edad72fecf6a"
+STACKGAN_REFERENCE_URL = "https://github.com/hanzhanggit/StackGAN-Pytorch"
+A_CONTRARIO_REFERENCE_REVISION = "2106.15011v3"
+A_CONTRARIO_REFERENCE_URL = "https://arxiv.org/abs/2106.15011"
+PALETTE_QUANTIZATION_REFERENCE_REVISION = (
+    "01639a2795467b65b7f77d98e441fd54fe58880d"
+)
+PALETTE_QUANTIZATION_REFERENCE_URL = (
+    "https://github.com/fegemo/multi-domain"
 )
 
 
@@ -74,6 +114,23 @@ def train_pix2pix(
     config_fingerprint = _config_fingerprint(config)
     train_pairs = dataset.split("train")
     validation_pairs = dataset.split("validation")
+    if "white_canvas_equal_regions" in {
+        config.reconstruction_balance,
+        config.adversarial_balance,
+    }:
+        validate_white_canvas_region_balance(
+            train_pairs,
+            image_size=config.model.image_size,
+            translation_margin=(
+                maximum_translation(config.model.image_size)
+                if (
+                    config.format
+                    in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}
+                    and config.discriminator_augmentation == "translation"
+                )
+                else 0
+            ),
+        )
     if resume_checkpoint is None:
         prepare_empty_output_dir(output_dir)
     _configure_runtime(device)
@@ -106,11 +163,30 @@ def train_pix2pix(
             if device.type == "cuda"
             else []
         )
+        v5_discriminator = config.format == TRAIN_CONFIG_FORMAT_V5
+        v6_discriminator = config.format == TRAIN_CONFIG_FORMAT_V6
+        a_contrario_discriminator = config.format in {
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }
         with torch.random.fork_rng(devices=rng_devices):
-            discriminator = ConditionalPatchDiscriminator(
-                config.model,
-                device=device,
-                dtype=parameter_dtype,
+            discriminator = (
+                ConditionalMultiscaleDiscriminator(
+                    config.model,
+                    scales=config.discriminator_scales,
+                    device=device,
+                    dtype=parameter_dtype,
+                )
+                if (
+                    v5_discriminator
+                    or v6_discriminator
+                    or a_contrario_discriminator
+                )
+                else ConditionalPatchDiscriminator(
+                    config.model,
+                    device=device,
+                    dtype=parameter_dtype,
+                )
             )
             discriminator.apply(initialize_pix2pix_weights)
         discriminator_optimizer = optimizer_type(
@@ -119,13 +195,39 @@ def train_pix2pix(
             betas=(config.beta1, config.beta2),
         )
         batch_trainer = partial(
-            _train_adversarial_batch,
+            (
+                _train_a_contrario_adversarial_batch
+                if a_contrario_discriminator
+                else (
+                    _train_v6_adversarial_batch
+                    if v6_discriminator
+                    else (
+                        _train_v5_adversarial_batch
+                        if v5_discriminator
+                        else _train_adversarial_batch
+                    )
+                )
+            ),
             generator=generator,
             discriminator=discriminator,
             generator_optimizer=generator_optimizer,
             discriminator_optimizer=discriminator_optimizer,
             device=device,
             config=config,
+            **(
+                {
+                    "translation": (
+                        PairedIntegerTranslation(
+                            config.model.image_size,
+                            device=device,
+                        )
+                        if config.discriminator_augmentation == "translation"
+                        else None
+                    )
+                }
+                if v6_discriminator or a_contrario_discriminator
+                else {}
+            ),
         )
         checkpoint_state = AdversarialCheckpointState(
             discriminator=discriminator,
@@ -214,6 +316,8 @@ def train_pix2pix(
         num_workers=config.num_workers,
         seed=config.seed,
         horizontal_flip=config.horizontal_flip,
+        mismatched_source=config.conditional_negative == "a_contrario",
+        target_palette=config.lambda_palette_proximity > 0,
         pin_memory=device.type == "cuda",
     )
     remaining_steps = config.max_steps - position.step
@@ -505,6 +609,320 @@ def _train_adversarial_batch(
     )
 
 
+def _train_v5_adversarial_batch(
+    batch: dict[str, Tensor | list[str]],
+    *,
+    generator: Pix2PixGenerator,
+    discriminator: ConditionalMultiscaleDiscriminator,
+    generator_optimizer: torch.optim.Optimizer,
+    discriminator_optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    config: TrainConfig,
+) -> tuple[dict[str, Tensor], int]:
+    source = _batch_tensor(batch, "source").to(device, non_blocking=True)
+    target = _batch_tensor(batch, "target").to(device, non_blocking=True)
+    discriminator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        generated = generator(source)
+        real_logits = discriminator(source, target)
+        fake_logits = discriminator(source, generated.detach())
+        d_loss = multiscale_discriminator_loss(real_logits, fake_logits)
+    d_loss.backward()
+    discriminator_optimizer.step()
+    discriminator_optimizer.zero_grad(set_to_none=True)
+
+    discriminator.requires_grad_(False)
+    generator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        with torch.no_grad():
+            real_features = discriminator.forward_features(source, target)
+        fake_features = discriminator.forward_features(source, generated)
+        (
+            g_total,
+            g_adversarial,
+            g_l1,
+            g_reconstruction,
+            g_feature_matching,
+        ) = multiscale_generator_loss(
+            tuple(scale[-1] for scale in fake_features),
+            generated,
+            target,
+            lambda_l1=config.lambda_l1,
+            lambda_feature_matching=config.lambda_feature_matching,
+            reconstruction_balance=config.reconstruction_balance,
+            fake_features=fake_features,
+            real_features=real_features,
+        )
+    g_total.backward()
+    generator_optimizer.step()
+    discriminator.requires_grad_(True)
+    return (
+        {
+            "generator_total": g_total.detach(),
+            "generator_adversarial": g_adversarial.detach(),
+            "generator_l1": g_l1.detach(),
+            "generator_reconstruction": g_reconstruction.detach(),
+            "generator_feature_matching": g_feature_matching.detach(),
+            "discriminator": d_loss.detach(),
+        },
+        source.shape[0],
+    )
+
+
+def _train_v6_adversarial_batch(
+    batch: dict[str, Tensor | list[str]],
+    *,
+    generator: Pix2PixGenerator,
+    discriminator: ConditionalMultiscaleDiscriminator,
+    generator_optimizer: torch.optim.Optimizer,
+    discriminator_optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    config: TrainConfig,
+    translation: PairedIntegerTranslation | None,
+) -> tuple[dict[str, Tensor], int]:
+    source = _batch_tensor(batch, "source").to(device, non_blocking=True)
+    target = _batch_tensor(batch, "target").to(device, non_blocking=True)
+    discriminator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        generated = generator(source)
+        d_source, d_real, d_fake = _discriminator_inputs(
+            source,
+            target,
+            generated,
+            translation=translation,
+        )
+        fake_logits, real_logits = discriminator.forward_paired(
+            d_source.detach(),
+            d_fake.detach(),
+            d_real.detach(),
+        )
+        d_foreground = white_canvas_foreground_mask(d_real.detach())
+        d_losses = balanced_multiscale_discriminator_loss(
+            real_logits,
+            fake_logits,
+            foreground_mask=d_foreground,
+        )
+    d_losses.total.backward()
+    discriminator_optimizer.step()
+    discriminator_optimizer.zero_grad(set_to_none=True)
+
+    discriminator.requires_grad_(False)
+    generator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        fake_features, real_features = discriminator.forward_paired_features(
+            d_source,
+            d_fake,
+            d_real,
+        )
+        g_losses = balanced_multiscale_generator_loss(
+            fake_features,
+            real_features,
+            generated,
+            target,
+            foreground_mask=d_foreground,
+            lambda_l1=config.lambda_l1,
+            lambda_feature_matching=config.lambda_feature_matching,
+            reconstruction_balance=config.reconstruction_balance,
+        )
+    g_losses.total.backward()
+    generator_optimizer.step()
+    discriminator.requires_grad_(True)
+    return (
+        {
+            "generator_total": g_losses.total.detach(),
+            "generator_adversarial": g_losses.adversarial.detach(),
+            "generator_adversarial_foreground": (
+                g_losses.adversarial_foreground.detach()
+            ),
+            "generator_adversarial_background": (
+                g_losses.adversarial_background.detach()
+            ),
+            "generator_l1": g_losses.reconstruction.detach(),
+            "generator_reconstruction": (
+                g_losses.reconstruction_for_total.detach()
+            ),
+            "generator_feature_matching": g_losses.feature_matching.detach(),
+            "generator_feature_matching_foreground": (
+                g_losses.feature_matching_foreground.detach()
+            ),
+            "generator_feature_matching_background": (
+                g_losses.feature_matching_background.detach()
+            ),
+            "discriminator": d_losses.total.detach(),
+            "discriminator_real_foreground": (
+                d_losses.real_foreground.detach()
+            ),
+            "discriminator_real_background": (
+                d_losses.real_background.detach()
+            ),
+            "discriminator_fake_foreground": (
+                d_losses.fake_foreground.detach()
+            ),
+            "discriminator_fake_background": (
+                d_losses.fake_background.detach()
+            ),
+        },
+        source.shape[0],
+    )
+
+
+def _train_a_contrario_adversarial_batch(
+    batch: dict[str, Tensor | list[str]],
+    *,
+    generator: Pix2PixGenerator,
+    discriminator: ConditionalMultiscaleDiscriminator,
+    generator_optimizer: torch.optim.Optimizer,
+    discriminator_optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    config: TrainConfig,
+    translation: PairedIntegerTranslation,
+) -> tuple[dict[str, Tensor], int]:
+    source = _batch_tensor(batch, "source").to(device, non_blocking=True)
+    target = _batch_tensor(batch, "target").to(device, non_blocking=True)
+    mismatched_source = _batch_tensor(batch, "mismatched_source").to(
+        device,
+        non_blocking=True,
+    )
+    target_palette = (
+        _batch_tensor(batch, "target_palette").to(
+            device,
+            non_blocking=True,
+        )
+        if config.lambda_palette_proximity > 0
+        else None
+    )
+    discriminator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        generated = generator(source)
+        (
+            d_source,
+            d_mismatched_source,
+            d_real,
+            d_fake,
+        ) = translation(
+            source,
+            mismatched_source,
+            target,
+            generated,
+        )
+        (
+            fake_logits,
+            mismatched_real_logits,
+            mismatched_generated_logits,
+            real_logits,
+        ) = discriminator.forward_a_contrario(
+            d_source.detach(),
+            d_mismatched_source.detach(),
+            d_fake.detach(),
+            d_real.detach(),
+        )
+        d_foreground = white_canvas_foreground_mask(d_real.detach())
+        d_losses = a_contrario_multiscale_discriminator_loss(
+            real_logits,
+            fake_logits,
+            mismatched_real_logits,
+            mismatched_generated_logits,
+            foreground_mask=d_foreground,
+        )
+    d_losses.total.backward()
+    discriminator_optimizer.step()
+    discriminator_optimizer.zero_grad(set_to_none=True)
+
+    discriminator.requires_grad_(False)
+    generator_optimizer.zero_grad(set_to_none=True)
+    with autocast_context(device, config.precision):
+        fake_features, real_features = discriminator.forward_paired_features(
+            d_source,
+            d_fake,
+            d_real,
+        )
+        g_losses = balanced_multiscale_generator_loss(
+            fake_features,
+            real_features,
+            generated,
+            target,
+            foreground_mask=d_foreground,
+            lambda_l1=config.lambda_l1,
+            lambda_feature_matching=config.lambda_feature_matching,
+            reconstruction_balance=config.reconstruction_balance,
+        )
+        palette_proximity = None
+        generator_total = g_losses.total
+        if target_palette is not None:
+            palette_proximity = target_palette_proximity_loss(
+                generated,
+                target,
+                target_palette,
+            )
+            generator_total = (
+                generator_total
+                + palette_proximity.total * config.lambda_palette_proximity
+            )
+    generator_total.backward()
+    generator_optimizer.step()
+    discriminator.requires_grad_(True)
+    losses = {
+        "generator_total": generator_total.detach(),
+        "generator_adversarial": g_losses.adversarial.detach(),
+        "generator_adversarial_foreground": (
+            g_losses.adversarial_foreground.detach()
+        ),
+        "generator_adversarial_background": (
+            g_losses.adversarial_background.detach()
+        ),
+        "generator_l1": g_losses.reconstruction.detach(),
+        "generator_reconstruction": (
+            g_losses.reconstruction_for_total.detach()
+        ),
+        "generator_feature_matching": g_losses.feature_matching.detach(),
+        "generator_feature_matching_foreground": (
+            g_losses.feature_matching_foreground.detach()
+        ),
+        "generator_feature_matching_background": (
+            g_losses.feature_matching_background.detach()
+        ),
+        "discriminator": d_losses.total.detach(),
+        "discriminator_real_foreground": (
+            d_losses.real_foreground.detach()
+        ),
+        "discriminator_real_background": (
+            d_losses.real_background.detach()
+        ),
+        "discriminator_fake_foreground": (
+            d_losses.fake_foreground.detach()
+        ),
+        "discriminator_fake_background": (
+            d_losses.fake_background.detach()
+        ),
+        "discriminator_mismatched_real_foreground": (
+            d_losses.mismatched_real_foreground.detach()
+        ),
+        "discriminator_mismatched_real_background": (
+            d_losses.mismatched_real_background.detach()
+        ),
+        "discriminator_mismatched_generated_foreground": (
+            d_losses.mismatched_generated_foreground.detach()
+        ),
+        "discriminator_mismatched_generated_background": (
+            d_losses.mismatched_generated_background.detach()
+        ),
+    }
+    if palette_proximity is not None:
+        losses["generator_palette_proximity"] = (
+            palette_proximity.total.detach()
+        )
+        losses["generator_palette_proximity_foreground"] = (
+            palette_proximity.foreground.detach()
+        )
+        losses["generator_palette_proximity_background"] = (
+            palette_proximity.background.detach()
+        )
+    return (
+        losses,
+        source.shape[0],
+    )
+
+
 def _train_l1_batch(
     batch: dict[str, Tensor | list[str]],
     *,
@@ -523,15 +941,21 @@ def _train_l1_batch(
             target,
             lambda_l1=config.lambda_l1,
         )
+        reconstruction_for_total = (
+            reconstruction
+            if config.reconstruction_balance == "uniform"
+            else white_canvas_equal_regions_loss(generated, target)
+        )
+        total = reconstruction_for_total * config.lambda_l1
     total.backward()
     generator_optimizer.step()
-    return (
-        {
-            "generator_total": total.detach(),
-            "generator_l1": reconstruction.detach(),
-        },
-        source.shape[0],
-    )
+    losses = {
+        "generator_total": total.detach(),
+        "generator_l1": reconstruction.detach(),
+    }
+    if config.reconstruction_balance != "uniform":
+        losses["generator_reconstruction"] = reconstruction_for_total.detach()
+    return losses, source.shape[0]
 
 
 def _validate(
@@ -572,6 +996,55 @@ def _new_run_manifest(
     if device.type == "cuda":
         runtime["gpu"] = torch.cuda.get_device_name(device)
         runtime["tf32"] = True
+    references: dict[str, dict[str, str]] = {
+        "tensorflow_tutorial": {
+            "url": TENSORFLOW_REFERENCE_URL,
+            "revision": TENSORFLOW_REFERENCE_REVISION,
+        },
+        "pytorch_pix2pix": {
+            "url": PYTORCH_REFERENCE_URL,
+            "revision": PYTORCH_REFERENCE_REVISION,
+        },
+    }
+    if config.discriminator_scales > 1:
+        references["pix2pixhd"] = {
+            "url": PIX2PIXHD_REFERENCE_URL,
+            "revision": PIX2PIXHD_REFERENCE_REVISION,
+        }
+    if config.format in {
+        TRAIN_CONFIG_FORMAT_V5,
+        TRAIN_CONFIG_FORMAT_V6,
+        TRAIN_CONFIG_FORMAT_V7,
+        TRAIN_CONFIG_FORMAT,
+    }:
+        references["spade_paired_discriminator_forward"] = {
+            "url": SPADE_REFERENCE_URL,
+            "revision": SPADE_REFERENCE_REVISION,
+        }
+    if config.adversarial_balance == "white_canvas_equal_regions":
+        references["aot_gan_spatial_patch_loss"] = {
+            "url": AOT_GAN_REFERENCE_URL,
+            "revision": AOT_GAN_REFERENCE_REVISION,
+        }
+    if config.discriminator_augmentation == "translation":
+        references["diffaugment"] = {
+            "url": DIFFAUGMENT_REFERENCE_URL,
+            "revision": DIFFAUGMENT_REFERENCE_REVISION,
+        }
+    if config.conditional_negative == "a_contrario":
+        references["matching_aware_discriminator"] = {
+            "url": STACKGAN_REFERENCE_URL,
+            "revision": STACKGAN_REFERENCE_REVISION,
+        }
+        references["a_contrario_cgan"] = {
+            "url": A_CONTRARIO_REFERENCE_URL,
+            "revision": A_CONTRARIO_REFERENCE_REVISION,
+        }
+    if config.lambda_palette_proximity > 0:
+        references["target_palette_proximity"] = {
+            "url": PALETTE_QUANTIZATION_REFERENCE_URL,
+            "revision": PALETTE_QUANTIZATION_REFERENCE_REVISION,
+        }
     return {
         "format": RUN_FORMAT,
         "status": "running",
@@ -584,17 +1057,20 @@ def _new_run_manifest(
         "config": config.to_json(),
         "parameters": parameter_report,
         "runtime": runtime,
-        "references": {
-            "tensorflow_tutorial": {
-                "url": TENSORFLOW_REFERENCE_URL,
-                "revision": TENSORFLOW_REFERENCE_REVISION,
-            },
-            "pytorch_pix2pix": {
-                "url": PYTORCH_REFERENCE_URL,
-                "revision": PYTORCH_REFERENCE_REVISION,
-            },
-        },
+        "references": references,
     }
+
+
+def _discriminator_inputs(
+    source: Tensor,
+    real: Tensor,
+    fake: Tensor,
+    *,
+    translation: PairedIntegerTranslation | None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    if translation is None:
+        return source, real, fake
+    return translation(source, real, fake)
 
 
 def _resume_run(

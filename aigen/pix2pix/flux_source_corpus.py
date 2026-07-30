@@ -11,6 +11,7 @@ from aigen.generation.flux2_klein_artifacts import (
 )
 from aigen.manifest_io import atomic_write_json, read_json, sha256_file
 from aigen.model_artifacts import validate_model_artifact_provenance
+from aigen.pix2pix.corpus_config import IroCorpusConfigV2
 from aigen.pix2pix.corpus_io import require_exact_keys
 from aigen.pix2pix.errors import Pix2PixError
 from aigen.pix2pix.flux_source_engine import (
@@ -185,6 +186,7 @@ def generate_flux_sources(
 ) -> dict[str, object]:
     root = root.expanduser().resolve()
     config, selected, selection = load_iro_selection(root)
+    _reject_v2_generic_source_route(config)
     source_plan, source_plan_sha256 = _load_or_create_source_plan(
         root,
         config=config,
@@ -216,6 +218,7 @@ def generate_flux_sources(
 def load_flux_source_inventory(root: Path) -> dict[str, Path]:
     root = root.expanduser().resolve()
     config, selected, selection = load_iro_selection(root)
+    _reject_v2_generic_source_route(config)
     source_plan, source_plan_sha256 = _load_frozen_source_plan(
         root,
         config=config,
@@ -241,6 +244,14 @@ def load_flux_source_inventory(root: Path) -> dict[str, Path]:
     if source_plan["pair_count"] != len(inventory):
         raise Pix2PixError("FLUX source plan pair count differs from inventory")
     return inventory
+
+
+def _reject_v2_generic_source_route(config: Any) -> None:
+    if isinstance(config, IroCorpusConfigV2):
+        raise Pix2PixError(
+            "iRO v2 corpora require independently reviewed per-image FLUX "
+            "source sets; use iro-generate-flux-source-set"
+        )
 
 
 def flux_source_result_path(root: Path) -> Path:

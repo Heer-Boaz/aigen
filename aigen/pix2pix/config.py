@@ -11,16 +11,25 @@ from aigen.pix2pix.errors import Pix2PixError
 
 TRAIN_CONFIG_FORMAT_V2 = "aigen.pix2pix.training.v2"
 TRAIN_CONFIG_FORMAT_V3 = "aigen.pix2pix.training.v3"
-TRAIN_CONFIG_FORMAT = "aigen.pix2pix.training.v4"
+TRAIN_CONFIG_FORMAT_V4 = "aigen.pix2pix.training.v4"
+TRAIN_CONFIG_FORMAT_V5 = "aigen.pix2pix.training.v5"
+TRAIN_CONFIG_FORMAT_V6 = "aigen.pix2pix.training.v6"
+TRAIN_CONFIG_FORMAT_V7 = "aigen.pix2pix.training.v7"
+TRAIN_CONFIG_FORMAT = "aigen.pix2pix.training.v8"
 MODEL_FORMAT = "aigen.pix2pix.generator.v1"
 MODEL_IMAGE_SIZE = 256
 MODEL_IMAGE_SIZES = frozenset({128, MODEL_IMAGE_SIZE})
 MODEL_CHANNELS = 3
-DISCRIMINATOR_LAYER_COUNTS = frozenset({1, 3})
+DISCRIMINATOR_LAYER_COUNTS = frozenset({1, 3, 4})
+DISCRIMINATOR_SCALE_COUNTS = frozenset({1, 2})
 TRAIN_OPTIMIZERS = frozenset({"adam", "paged_adam8bit"})
 TRAIN_OBJECTIVES = frozenset({"adversarial_l1", "l1_only"})
 TRAIN_PRECISIONS = frozenset({"fp32", "bf16"})
 LEARNING_RATE_SCHEDULES = frozenset({"constant", "linear_decay"})
+RECONSTRUCTION_BALANCES = frozenset({"uniform", "white_canvas_equal_regions"})
+ADVERSARIAL_BALANCES = frozenset({"uniform", "white_canvas_equal_regions"})
+DISCRIMINATOR_AUGMENTATIONS = frozenset({"none", "translation"})
+CONDITIONAL_NEGATIVES = frozenset({"a_contrario", "none"})
 
 
 @dataclass(frozen=True)
@@ -145,6 +154,13 @@ class TrainConfig:
     beta1: float
     beta2: float
     lambda_l1: float
+    discriminator_scales: int
+    lambda_feature_matching: float
+    reconstruction_balance: str
+    adversarial_balance: str
+    discriminator_augmentation: str
+    conditional_negative: str
+    lambda_palette_proximity: float
     horizontal_flip: bool
     optimizer: str
     parameter_precision: str
@@ -174,13 +190,50 @@ class TrainConfig:
             "seed": self.seed,
             "num_workers": self.num_workers,
         }
-        if self.format in {TRAIN_CONFIG_FORMAT_V3, TRAIN_CONFIG_FORMAT}:
+        if self.format in {
+            TRAIN_CONFIG_FORMAT_V3,
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
             payload["objective"] = self.objective
-        if self.format == TRAIN_CONFIG_FORMAT:
+        if self.format in {
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
             payload["learning_rate_schedule"] = (
                 self.learning_rate_schedule.to_json()
             )
             payload["extra_checkpoint_steps"] = list(self.extra_checkpoint_steps)
+        if self.format in {
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
+            payload["discriminator_scales"] = self.discriminator_scales
+            payload["lambda_feature_matching"] = self.lambda_feature_matching
+            payload["reconstruction_balance"] = self.reconstruction_balance
+        if self.format in {
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
+            payload["adversarial_balance"] = self.adversarial_balance
+            payload["discriminator_augmentation"] = (
+                self.discriminator_augmentation
+            )
+        if self.format in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}:
+            payload["conditional_negative"] = self.conditional_negative
+        if self.format == TRAIN_CONFIG_FORMAT:
+            payload["lambda_palette_proximity"] = (
+                self.lambda_palette_proximity
+            )
         return payload
 
     @classmethod
@@ -210,37 +263,104 @@ class TrainConfig:
         supported_formats = {
             TRAIN_CONFIG_FORMAT_V2,
             TRAIN_CONFIG_FORMAT_V3,
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
             TRAIN_CONFIG_FORMAT,
         }
         if config_format not in supported_formats:
             raise Pix2PixError(
                 f"unsupported training config format: {config_format!r}"
             )
-        if config_format in {TRAIN_CONFIG_FORMAT_V3, TRAIN_CONFIG_FORMAT}:
+        if config_format in {
+            TRAIN_CONFIG_FORMAT_V3,
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
             expected.add("objective")
-        if config_format == TRAIN_CONFIG_FORMAT:
+        if config_format in {
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
             expected.update(
                 {
                     "learning_rate_schedule",
                     "extra_checkpoint_steps",
                 }
             )
+        if config_format in {
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
+            expected.update(
+                {
+                    "discriminator_scales",
+                    "lambda_feature_matching",
+                    "reconstruction_balance",
+                }
+            )
+        if config_format in {
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
+            TRAIN_CONFIG_FORMAT,
+        }:
+            expected.update(
+                {
+                    "adversarial_balance",
+                    "discriminator_augmentation",
+                }
+            )
+        if config_format in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}:
+            expected.add("conditional_negative")
+        if config_format == TRAIN_CONFIG_FORMAT:
+            expected.add("lambda_palette_proximity")
         values = _exact_object(payload, expected, "training config")
         objective = (
             _string(values, "objective")
-            if config_format in {TRAIN_CONFIG_FORMAT_V3, TRAIN_CONFIG_FORMAT}
+            if config_format
+            in {
+                TRAIN_CONFIG_FORMAT_V3,
+                TRAIN_CONFIG_FORMAT_V4,
+                TRAIN_CONFIG_FORMAT_V5,
+                TRAIN_CONFIG_FORMAT_V6,
+                TRAIN_CONFIG_FORMAT_V7,
+                TRAIN_CONFIG_FORMAT,
+            }
             else "adversarial_l1"
         )
         learning_rate_schedule = (
             LearningRateScheduleConfig.from_json(
                 values["learning_rate_schedule"]
             )
-            if config_format == TRAIN_CONFIG_FORMAT
+            if config_format
+            in {
+                TRAIN_CONFIG_FORMAT_V4,
+                TRAIN_CONFIG_FORMAT_V5,
+                TRAIN_CONFIG_FORMAT_V6,
+                TRAIN_CONFIG_FORMAT_V7,
+                TRAIN_CONFIG_FORMAT,
+            }
             else LearningRateScheduleConfig.constant()
         )
         extra_checkpoint_steps = (
             _integer_tuple(values, "extra_checkpoint_steps")
-            if config_format == TRAIN_CONFIG_FORMAT
+            if config_format
+            in {
+                TRAIN_CONFIG_FORMAT_V4,
+                TRAIN_CONFIG_FORMAT_V5,
+                TRAIN_CONFIG_FORMAT_V6,
+                TRAIN_CONFIG_FORMAT_V7,
+                TRAIN_CONFIG_FORMAT,
+            }
             else ()
         )
         config = cls(
@@ -254,6 +374,69 @@ class TrainConfig:
             beta1=_number(values, "beta1"),
             beta2=_number(values, "beta2"),
             lambda_l1=_number(values, "lambda_l1"),
+            discriminator_scales=(
+                _integer(values, "discriminator_scales")
+                if config_format
+                in {
+                    TRAIN_CONFIG_FORMAT_V5,
+                    TRAIN_CONFIG_FORMAT_V6,
+                    TRAIN_CONFIG_FORMAT_V7,
+                    TRAIN_CONFIG_FORMAT,
+                }
+                else 1
+            ),
+            lambda_feature_matching=(
+                _number(values, "lambda_feature_matching")
+                if config_format
+                in {
+                    TRAIN_CONFIG_FORMAT_V5,
+                    TRAIN_CONFIG_FORMAT_V6,
+                    TRAIN_CONFIG_FORMAT_V7,
+                    TRAIN_CONFIG_FORMAT,
+                }
+                else 0.0
+            ),
+            reconstruction_balance=(
+                _string(values, "reconstruction_balance")
+                if config_format
+                in {
+                    TRAIN_CONFIG_FORMAT_V5,
+                    TRAIN_CONFIG_FORMAT_V6,
+                    TRAIN_CONFIG_FORMAT_V7,
+                    TRAIN_CONFIG_FORMAT,
+                }
+                else "uniform"
+            ),
+            adversarial_balance=(
+                _string(values, "adversarial_balance")
+                if config_format
+                in {
+                    TRAIN_CONFIG_FORMAT_V6,
+                    TRAIN_CONFIG_FORMAT_V7,
+                    TRAIN_CONFIG_FORMAT,
+                }
+                else "uniform"
+            ),
+            discriminator_augmentation=(
+                _string(values, "discriminator_augmentation")
+                if config_format
+                in {
+                    TRAIN_CONFIG_FORMAT_V6,
+                    TRAIN_CONFIG_FORMAT_V7,
+                    TRAIN_CONFIG_FORMAT,
+                }
+                else "none"
+            ),
+            conditional_negative=(
+                _string(values, "conditional_negative")
+                if config_format in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}
+                else "none"
+            ),
+            lambda_palette_proximity=(
+                _number(values, "lambda_palette_proximity")
+                if config_format == TRAIN_CONFIG_FORMAT
+                else 0.0
+            ),
             horizontal_flip=_boolean(values, "horizontal_flip"),
             optimizer=_string(values, "optimizer"),
             parameter_precision=_string(values, "parameter_precision"),
@@ -271,6 +454,10 @@ class TrainConfig:
         if self.format not in {
             TRAIN_CONFIG_FORMAT_V2,
             TRAIN_CONFIG_FORMAT_V3,
+            TRAIN_CONFIG_FORMAT_V4,
+            TRAIN_CONFIG_FORMAT_V5,
+            TRAIN_CONFIG_FORMAT_V6,
+            TRAIN_CONFIG_FORMAT_V7,
             TRAIN_CONFIG_FORMAT,
         }:
             raise Pix2PixError(f"unsupported training config format: {self.format!r}")
@@ -301,6 +488,176 @@ class TrainConfig:
             raise Pix2PixError("Adam beta values must be in [0, 1)")
         if not math.isfinite(self.lambda_l1) or self.lambda_l1 <= 0:
             raise Pix2PixError("lambda_l1 must be positive")
+        if self.discriminator_scales not in DISCRIMINATOR_SCALE_COUNTS:
+            supported = ", ".join(
+                str(count) for count in sorted(DISCRIMINATOR_SCALE_COUNTS)
+            )
+            raise Pix2PixError(
+                f"discriminator_scales must be one of: {supported}"
+            )
+        if (
+            not math.isfinite(self.lambda_feature_matching)
+            or self.lambda_feature_matching < 0
+        ):
+            raise Pix2PixError("lambda_feature_matching must be non-negative")
+        if self.reconstruction_balance not in RECONSTRUCTION_BALANCES:
+            supported = ", ".join(sorted(RECONSTRUCTION_BALANCES))
+            raise Pix2PixError(
+                f"reconstruction_balance must be one of: {supported}"
+            )
+        if self.adversarial_balance not in ADVERSARIAL_BALANCES:
+            supported = ", ".join(sorted(ADVERSARIAL_BALANCES))
+            raise Pix2PixError(
+                f"adversarial_balance must be one of: {supported}"
+            )
+        if self.discriminator_augmentation not in DISCRIMINATOR_AUGMENTATIONS:
+            supported = ", ".join(sorted(DISCRIMINATOR_AUGMENTATIONS))
+            raise Pix2PixError(
+                f"discriminator_augmentation must be one of: {supported}"
+            )
+        if self.conditional_negative not in CONDITIONAL_NEGATIVES:
+            supported = ", ".join(sorted(CONDITIONAL_NEGATIVES))
+            raise Pix2PixError(
+                f"conditional_negative must be one of: {supported}"
+            )
+        if (
+            self.format not in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}
+            and self.conditional_negative != "none"
+        ):
+            raise Pix2PixError(
+                "conditional negatives require pix2pix training v7 or newer"
+            )
+        if (
+            not math.isfinite(self.lambda_palette_proximity)
+            or self.lambda_palette_proximity < 0
+        ):
+            raise Pix2PixError(
+                "lambda_palette_proximity must be non-negative"
+            )
+        if (
+            self.format != TRAIN_CONFIG_FORMAT
+            and self.lambda_palette_proximity != 0
+        ):
+            raise Pix2PixError(
+                "palette proximity requires pix2pix training v8"
+            )
+        if self.objective == "l1_only" and self.discriminator_scales != 1:
+            raise Pix2PixError("l1_only requires discriminator_scales 1")
+        if self.objective == "l1_only" and self.lambda_feature_matching != 0:
+            raise Pix2PixError("l1_only cannot use discriminator feature matching")
+        if self.objective == "l1_only" and self.adversarial_balance != "uniform":
+            raise Pix2PixError("l1_only cannot use adversarial region balancing")
+        if self.objective == "l1_only" and self.discriminator_augmentation != "none":
+            raise Pix2PixError("l1_only cannot use discriminator augmentation")
+        if self.objective == "l1_only" and self.conditional_negative != "none":
+            raise Pix2PixError("l1_only cannot use a conditional negative")
+        if self.objective == "l1_only" and self.lambda_palette_proximity != 0:
+            raise Pix2PixError("l1_only cannot use palette proximity")
+        if self.format == TRAIN_CONFIG_FORMAT_V5:
+            if self.objective != "adversarial_l1":
+                raise Pix2PixError(
+                    "pix2pix training v5 supports only adversarial_l1"
+                )
+            if self.discriminator_scales != 2:
+                raise Pix2PixError(
+                    "pix2pix training v5 requires two discriminator scales"
+                )
+            if self.lambda_feature_matching <= 0:
+                raise Pix2PixError(
+                    "pix2pix training v5 requires positive feature matching"
+                )
+        if self.format == TRAIN_CONFIG_FORMAT_V6:
+            if self.objective != "adversarial_l1":
+                raise Pix2PixError(
+                    "pix2pix training v6 supports only adversarial_l1"
+                )
+            if self.discriminator_scales != 2:
+                raise Pix2PixError(
+                    "pix2pix training v6 requires two discriminator scales"
+                )
+            if self.lambda_feature_matching <= 0:
+                raise Pix2PixError(
+                    "pix2pix training v6 requires positive feature matching"
+                )
+            if (
+                self.reconstruction_balance != "white_canvas_equal_regions"
+                or self.adversarial_balance != "white_canvas_equal_regions"
+            ):
+                raise Pix2PixError(
+                    "pix2pix training v6 requires white-canvas region balancing"
+                )
+            if self.discriminator_augmentation != "translation":
+                raise Pix2PixError(
+                    "pix2pix training v6 requires translation augmentation"
+                )
+        if self.format == TRAIN_CONFIG_FORMAT_V7:
+            if self.objective != "adversarial_l1":
+                raise Pix2PixError(
+                    "pix2pix training v7 supports only adversarial_l1"
+                )
+            if self.discriminator_scales != 2:
+                raise Pix2PixError(
+                    "pix2pix training v7 requires two discriminator scales"
+                )
+            if self.lambda_feature_matching <= 0:
+                raise Pix2PixError(
+                    "pix2pix training v7 requires positive feature matching"
+                )
+            if (
+                self.reconstruction_balance != "white_canvas_equal_regions"
+                or self.adversarial_balance != "white_canvas_equal_regions"
+            ):
+                raise Pix2PixError(
+                    "pix2pix training v7 requires white-canvas region balancing"
+                )
+            if self.discriminator_augmentation != "translation":
+                raise Pix2PixError(
+                    "pix2pix training v7 requires translation augmentation"
+                )
+            if self.conditional_negative != "a_contrario":
+                raise Pix2PixError(
+                    "pix2pix training v7 requires a-contrario conditional negatives"
+                )
+        if self.format == TRAIN_CONFIG_FORMAT:
+            if self.objective != "adversarial_l1":
+                raise Pix2PixError(
+                    "pix2pix training v8 supports only adversarial_l1"
+                )
+            if self.discriminator_scales != 2:
+                raise Pix2PixError(
+                    "pix2pix training v8 requires two discriminator scales"
+                )
+            if self.lambda_feature_matching <= 0:
+                raise Pix2PixError(
+                    "pix2pix training v8 requires positive feature matching"
+                )
+            if (
+                self.reconstruction_balance != "white_canvas_equal_regions"
+                or self.adversarial_balance != "white_canvas_equal_regions"
+            ):
+                raise Pix2PixError(
+                    "pix2pix training v8 requires white-canvas region balancing"
+                )
+            if self.discriminator_augmentation != "translation":
+                raise Pix2PixError(
+                    "pix2pix training v8 requires translation augmentation"
+                )
+            if self.conditional_negative != "a_contrario":
+                raise Pix2PixError(
+                    "pix2pix training v8 requires a-contrario conditional negatives"
+                )
+            if self.lambda_palette_proximity <= 0:
+                raise Pix2PixError(
+                    "pix2pix training v8 requires positive palette proximity"
+                )
+            if self.batch_size != 1:
+                raise Pix2PixError(
+                    "pix2pix training v8 requires batch_size 1"
+                )
+            if self.parameter_precision != "fp32" or self.precision != "fp32":
+                raise Pix2PixError(
+                    "pix2pix training v8 requires FP32 parameters and compute"
+                )
         if self.optimizer not in TRAIN_OPTIMIZERS:
             supported = ", ".join(sorted(TRAIN_OPTIMIZERS))
             raise Pix2PixError(f"optimizer must be one of: {supported}")

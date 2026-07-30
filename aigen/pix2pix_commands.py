@@ -64,6 +64,13 @@ def add_pix2pix_commands(subparsers: Any) -> None:
     )
     iro_plan.add_argument("--config", type=Path, required=True)
     iro_plan.add_argument("--output-dir", type=Path, required=True)
+    iro_plan.add_argument(
+        "--exclude-coverage-from",
+        type=Path,
+        action="append",
+        default=[],
+        help="exclude body/action/direction cells already present in another plan",
+    )
 
     iro_render = actions.add_parser(
         "iro-render",
@@ -187,7 +194,11 @@ def _run_pix2pix_action(
         from aigen.pix2pix.iro_corpus import plan_iro_corpus
 
         progress.phase("plan quota-balanced iRO corpus")
-        return plan_iro_corpus(args.config, args.output_dir)
+        return plan_iro_corpus(
+            args.config,
+            args.output_dir,
+            exclude_coverage_from=tuple(args.exclude_coverage_from),
+        )
     if args.pix2pix_action == "iro-render":
         from aigen.pix2pix.iro_corpus import render_iro_corpus
 

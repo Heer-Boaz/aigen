@@ -18,6 +18,9 @@ from aigen.pix2pix.training_data import create_evaluation_loader
 class EvaluationResult:
     pair_count: int
     l1: float
+    foreground_l1: float | None
+    background_l1: float | None
+    region_balanced_l1: float | None
     mse: float
     psnr_db: float | None
     exact_match: bool
@@ -26,6 +29,9 @@ class EvaluationResult:
         return {
             "pair_count": self.pair_count,
             "l1": self.l1,
+            "foreground_l1": self.foreground_l1,
+            "background_l1": self.background_l1,
+            "region_balanced_l1": self.region_balanced_l1,
             "mse": self.mse,
             "psnr_db": self.psnr_db,
             "exact_match": self.exact_match,
@@ -55,6 +61,12 @@ def evaluate_generator(
     was_training = generator.training
     generator.eval()
     absolute_error = 0.0
+    foreground_image_error = 0.0
+    background_image_error = 0.0
+    region_balanced_image_error = 0.0
+    foreground_image_count = 0
+    background_image_count = 0
+    region_balanced_image_count = 0
     squared_error = 0.0
     value_count = 0
     completed_pairs = 0
@@ -70,6 +82,45 @@ def evaluate_generator(
             absolute_error += difference.abs().sum().item()
             squared_error += difference.square().sum().item()
             value_count += difference.numel()
+            per_pixel_absolute_error = difference.abs().mean(dim=1)
+            foreground = target_unit.ne(1.0).any(dim=1)
+            foreground_pixels = foreground.sum(dim=(1, 2))
+            background = ~foreground
+            background_pixels = background.sum(dim=(1, 2))
+            has_foreground = foreground_pixels > 0
+            has_background = background_pixels > 0
+            foreground_error = (
+                per_pixel_absolute_error * foreground
+            ).sum(dim=(1, 2))
+            background_error = (
+                per_pixel_absolute_error * background
+            ).sum(dim=(1, 2))
+            foreground_means = (
+                foreground_error[has_foreground]
+                / foreground_pixels[has_foreground]
+            )
+            background_means = (
+                background_error[has_background]
+                / background_pixels[has_background]
+            )
+            foreground_image_error += foreground_means.sum().item()
+            background_image_error += background_means.sum().item()
+            foreground_image_count += foreground_means.numel()
+            background_image_count += background_means.numel()
+            has_both = has_foreground & has_background
+            if has_both.any():
+                paired_foreground = (
+                    foreground_error[has_both]
+                    / foreground_pixels[has_both]
+                )
+                paired_background = (
+                    background_error[has_both]
+                    / background_pixels[has_both]
+                )
+                region_balanced_image_error += (
+                    (paired_foreground + paired_background) * 0.5
+                ).sum().item()
+                region_balanced_image_count += paired_foreground.numel()
             ids = batch["id"]
             assert isinstance(ids, list)
             for item_index, pair_id in enumerate(ids):
@@ -93,11 +144,28 @@ def evaluate_generator(
         generator.train()
     l1 = absolute_error / value_count
     mse = squared_error / value_count
+    foreground_l1 = (
+        foreground_image_error / foreground_image_count
+        if foreground_image_count
+        else None
+    )
+    background_l1 = (
+        background_image_error / background_image_count
+        if background_image_count
+        else None
+    )
     if preview_path is not None:
         save_comparison_grid(preview_rows, preview_path)
     return EvaluationResult(
         pair_count=len(pairs),
         l1=l1,
+        foreground_l1=foreground_l1,
+        background_l1=background_l1,
+        region_balanced_l1=(
+            region_balanced_image_error / region_balanced_image_count
+            if region_balanced_image_count
+            else None
+        ),
         mse=mse,
         psnr_db=None if mse == 0.0 else 10.0 * math.log10(1.0 / mse),
         exact_match=mse == 0.0,

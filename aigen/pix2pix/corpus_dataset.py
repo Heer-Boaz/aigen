@@ -16,7 +16,10 @@ from aigen.pix2pix.corpus_io import (
 )
 from aigen.pix2pix.dataset import DATASET_FORMAT, audit_dataset
 from aigen.pix2pix.errors import Pix2PixError
-from aigen.pix2pix.flux_source_audit import load_flux_output_audit
+from aigen.pix2pix.flux_source_audit import (
+    derive_flux_output_coverage,
+    load_flux_output_audit,
+)
 from aigen.pix2pix.flux_source_corpus import (
     flux_source_result_path,
     load_flux_source_inventory,
@@ -26,7 +29,10 @@ from aigen.pix2pix.flux_source_set_corpus import (
     flux_source_set_result_path,
     load_flux_source_set_inventory,
 )
-from aigen.pix2pix.iro_corpus import load_iro_selection
+from aigen.pix2pix.iro_corpus import (
+    IRO_SELECTION_V2_FORMAT,
+    load_iro_selection,
+)
 from aigen.pix2pix.qwen_source_corpus import (
     QWEN_SOURCE_DIRECTORY,
     load_frozen_qwen_source_config,
@@ -42,6 +48,9 @@ QWEN_CORPUS_DATASET_PROVENANCE_FORMAT = (
 QWEN_CORPUS_DATASET_DIRECTORY = "dataset-qwen-2511-lightning-v1"
 FLUX_SOURCE_SET_DATASET_PROVENANCE_FORMAT = (
     "aigen.pix2pix.iro-dataset-provenance.v4"
+)
+FLUX_SOURCE_SET_DATASET_V2_PROVENANCE_FORMAT = (
+    "aigen.pix2pix.iro-dataset-provenance.v5"
 )
 FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX = "dataset-flux-source-set-"
 
@@ -140,6 +149,32 @@ def prepare_iro_flux_source_set_dataset(
     source_raster = config.source_raster.model_dump(mode="json")
     target_raster = _target_raster_contract(config.image_size)
     layout = flux_source_set_layout(name)
+    provenance: dict[str, Any] = {
+        "format": FLUX_SOURCE_SET_DATASET_PROVENANCE_FORMAT,
+        "config_fingerprint": selection["config_fingerprint"],
+        "selection_sha256": selection["selected_sha256"],
+        "source_backend": layout.directory,
+        "source_plan_sha256": source_plan_sha256,
+        "source_result_sha256": result_sha256,
+        "source_set_fingerprint": source_set.fingerprint,
+        "prompt_guide_sha256": source_set.prompt_guide_sha256,
+        "output_audit_sha256": audit.manifest_sha256,
+        "output_audit_records_sha256": audit.records_sha256,
+        "source_pair_count": len(selected),
+        "pair_count": len(accepted),
+        "rejected_pair_count": len(selected) - len(accepted),
+        "source_raster": source_raster,
+        "target_raster": target_raster,
+    }
+    if selection["format"] == IRO_SELECTION_V2_FORMAT:
+        coverage = derive_flux_output_coverage(selected, audit)
+        provenance.update(
+            {
+                "format": FLUX_SOURCE_SET_DATASET_V2_PROVENANCE_FORMAT,
+                "coverage_report": coverage.report,
+                "coverage_report_sha256": coverage.sha256,
+            }
+        )
     return _assemble_iro_dataset(
         root,
         selected=accepted,
@@ -149,23 +184,7 @@ def prepare_iro_flux_source_set_dataset(
         image_size=config.image_size,
         source_raster=source_raster,
         target_raster=target_raster,
-        provenance_base={
-            "format": FLUX_SOURCE_SET_DATASET_PROVENANCE_FORMAT,
-            "config_fingerprint": selection["config_fingerprint"],
-            "selection_sha256": selection["selected_sha256"],
-            "source_backend": layout.directory,
-            "source_plan_sha256": source_plan_sha256,
-            "source_result_sha256": result_sha256,
-            "source_set_fingerprint": source_set.fingerprint,
-            "prompt_guide_sha256": source_set.prompt_guide_sha256,
-            "output_audit_sha256": audit.manifest_sha256,
-            "output_audit_records_sha256": audit.records_sha256,
-            "source_pair_count": len(selected),
-            "pair_count": len(accepted),
-            "rejected_pair_count": len(selected) - len(accepted),
-            "source_raster": source_raster,
-            "target_raster": target_raster,
-        },
+        provenance_base=provenance,
         kind="iRO-reviewed-FLUX-pix2pix-dataset",
     )
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -25,6 +27,7 @@ from aigen.pix2pix.flux_source_set_corpus import flux_source_set_layout
 
 
 FLUX_OUTPUT_AUDIT_FORMAT = "aigen.pix2pix.flux-output-audit.v1"
+FLUX_OUTPUT_COVERAGE_FORMAT = "aigen.pix2pix.flux-output-coverage.v1"
 
 
 class _AuditModel(BaseModel):
@@ -76,6 +79,12 @@ class LoadedFluxOutputAudit:
     records_sha256: str
     records: tuple[FluxOutputAuditRecord, ...]
     accepted_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
+class DerivedFluxOutputCoverage:
+    report: dict[str, Any]
+    sha256: str
 
 
 def load_flux_output_audit(
@@ -166,3 +175,94 @@ def load_flux_output_audit(
         records=records,
         accepted_ids=accepted_ids,
     )
+
+
+def derive_flux_output_coverage(
+    selected: tuple[dict[str, Any], ...],
+    audit: LoadedFluxOutputAudit,
+) -> DerivedFluxOutputCoverage:
+    required = {
+        "coverage_id",
+        "split",
+        "group",
+        "body_variant_id",
+        "rig_family",
+        "requested_rig_pose_id",
+        "action_base",
+        "direction",
+    }
+    for index, record in enumerate(selected):
+        missing = required - set(record)
+        if missing:
+            raise Pix2PixError(
+                f"selected v2 target {index} lacks coverage fields: "
+                + ", ".join(sorted(missing))
+            )
+    accepted = tuple(
+        record
+        for record in selected
+        if str(record["id"]) in audit.accepted_ids
+    )
+    deficits = tuple(
+        record
+        for record in selected
+        if str(record["id"]) not in audit.accepted_ids
+    )
+    report = {
+        "format": FLUX_OUTPUT_COVERAGE_FORMAT,
+        "planned": _coverage_partition(selected),
+        "accepted": _coverage_partition(accepted),
+        "deficit": _coverage_partition(deficits),
+        "deficit_coverage_ids": sorted(
+            str(record["coverage_id"]) for record in deficits
+        ),
+    }
+    encoded = json.dumps(
+        report,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return DerivedFluxOutputCoverage(
+        report=report,
+        sha256=hashlib.sha256(encoded).hexdigest(),
+    )
+
+
+def _coverage_partition(
+    records: tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    dimensions = {
+        "split": Counter(str(record["split"]) for record in records),
+        "group": Counter(str(record["group"]) for record in records),
+        "body_variant": Counter(
+            str(record["body_variant_id"]) for record in records
+        ),
+        "rig_family": Counter(
+            str(record["rig_family"]) for record in records
+        ),
+        "requested_rig_pose": Counter(
+            str(record["requested_rig_pose_id"]) for record in records
+        ),
+        "action_base": Counter(
+            f"{int(record['action_base']):03d}" for record in records
+        ),
+        "direction": Counter(str(int(record["direction"])) for record in records),
+    }
+    return {
+        "pair_count": len(records),
+        "body_pose_cell_count": len(
+            {str(record["coverage_id"]) for record in records}
+        ),
+        "requested_rig_pose_count": len(
+            {str(record["requested_rig_pose_id"]) for record in records}
+        ),
+        "counts": {
+            dimension: {
+                key: counts[key]
+                for key in sorted(counts)
+            }
+            for dimension, counts in dimensions.items()
+        },
+    }

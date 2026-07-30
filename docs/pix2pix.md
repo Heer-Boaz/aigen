@@ -17,13 +17,27 @@ generated RGB target on the same canvas
              |
              +---- source + generated ----+
              |                             v
-             +---- source + real ------> PatchGAN-16 or PatchGAN-70
+             +---- source + real ------> PatchGAN-16, PatchGAN-70,
+                                         global PatchGAN-142, or
+                                         two-scale PatchGAN-70
 ```
 
 U-Net-128 has 41,828,995 trainable parameters; U-Net-256 has 54,413,955.
-PatchGAN-16 has 139,585 parameters and PatchGAN-70 has 2,768,705. Inference
-exports and loads only the generator, while its metadata retains the complete
-training model configuration.
+PatchGAN-16 has 139,585 parameters, PatchGAN-70 has 2,768,705, and the native
+128 global PatchGAN-142 has 6,964,033. The latter uses the same N-layer
+architecture with one additional stride-2 layer: its 6×6 logits each have a
+142×142 theoretical receptive field, larger than the complete 128×128 canvas.
+Inference exports and loads only the generator, while its metadata retains the
+complete training model configuration.
+
+The two-scale discriminator follows pix2pixHD: one PatchGAN evaluates the
+native 128×128 pair and a second evaluates a 64×64 average-pooled pair. The
+coarse discriminator's 70-pixel field is therefore 140 native pixels, while
+the native discriminator retains exact pixel-grid detail. Its generator loss
+also matches the intermediate discriminator features of real and generated
+pairs with weight 10. Real and generated candidates share one discriminator
+forward, matching SPADE's BatchNorm contract instead of comparing features
+normalized by separate batch statistics.
 
 ## What is known about PixelMe
 
@@ -233,6 +247,83 @@ canvas. The pixel-art target is never resized, cropped, or recentered:
 Training reads only the resulting audited local dataset. It never calls the
 live renderer or FLUX.
 
+### Coverage wave v2
+
+[`configs/pix2pix-iro-coverage-wave512-v2.json`](../configs/pix2pix-iro-coverage-wave512-v2.json)
+defines the next target-acquisition wave. It is aligned to the actual
+`reviewed-v3-unanimous-job-holdout-v1` training parent, not to the obsolete
+lineage splits in the original acquisition plan. All 77 shared job groups
+retain their parent train/validation owner; the eight newly supported groups
+are train-only. The plan contains 403 train and 109 validation requests across
+85 renderer jobs and 158 job/gender body variants. Every configured body
+receives three or four requests.
+
+The v2 planner solves one binary mixed-integer program per split. It enforces
+the body multiplicities, action quotas, direction quotas, at most one copy of
+an action and direction per body, and bounded joint action/direction counts in
+one optimization problem. All 80 positive action/direction cells occur in
+both train and validation; the simulator's unusable `dead` action has quota
+zero. The persisted loader independently checks the same constraints instead
+of trusting the solver output.
+
+The previous 512-request plan contributes 502 distinct body-pose cells to an
+exclusion manifest. Of those, 457 exist in the current job/action namespace,
+and none may recur in the v2 requests. Exclusion provenance records the source
+config fingerprint, renderer namespace, fixed renderer defaults, action
+catalog, and renderer-job name/species semantics. A colliding numeric job ID
+with different catalog semantics is an error rather than an exclusion.
+
+SciPy/HiGHS returns the same request manifest in repeated runs in the pinned
+local runtime. The plan also records the NumPy and SciPy versions and hashes
+the immutable requests. This is artifact-level reproducibility; it is not a
+promise that a future HiGHS version will choose the same optimum from the
+config alone.
+
+After rendering, v2 target selection constructs a sparse bipartite graph from
+requests to the pixel hashes of the final white-composited RGB targets. One
+global minimum-weight full matching chooses all frames together, so an early
+request cannot greedily consume the only valid target of a later request.
+The selection loader requires exact plan order and proves that all final RGB
+target pixels are unique. It also binds each target to the checksums of the
+concrete render result and chosen RGBA frame, and records the target matcher's
+NumPy/SciPy runtime.
+
+```bash
+.venv/bin/aigen pix2pix iro-plan \
+  --config configs/pix2pix-iro-coverage-wave512-v2.json \
+  --output-dir runs/pix2pix/iro-coverage-wave512-v2 \
+  --exclude-coverage-from runs/pix2pix/iro-gate512-v1
+
+.venv/bin/aigen pix2pix iro-render \
+  runs/pix2pix/iro-coverage-wave512-v2
+
+.venv/bin/aigen pix2pix iro-select \
+  runs/pix2pix/iro-coverage-wave512-v2
+```
+
+The materialized 2026-07-30 artifacts passed their own reload boundary. The
+request manifest is
+`8d34197b9e2319729faecce05093bc093ab2d02fb8d7077da0262f1a56c63a41`;
+the selected-record manifest is
+`6c45c974a53000482ffc92570f44810731fdbdb956e1d78aedfa5b09f80d670d`.
+Selection found a complete assignment with 512 unique final RGB targets and
+275 realized rig/frame poses. Neither a body-pose cell nor a final target PNG
+is shared with `iro-gate512-v1`.
+
+The exact quotas describe the planned and selected native-target corpus.
+Per-image FLUX review may reject reverse sources. The v2 source-set provenance
+therefore reports planned, accepted, and deficit counts for every split,
+group, body variant, rig family, requested rig pose, action, and direction.
+It does not pretend that a filtered training dataset still has exact quotas,
+and it does not silently replenish rejected pairs. Any replenishment is a new,
+separately planned coverage wave.
+
+The checked-in generic FLUX prompt remains provenance from the old exploratory
+route and is not authorized for this wave. Before generation, every source
+instruction must follow
+[`docs/image-edit-prompting.md`](image-edit-prompting.md) and pass an
+independent prompt review.
+
 ### Reviewed per-image FLUX source sets
 
 The exploratory corpus above has one shared prompt and is retained as an
@@ -392,7 +483,146 @@ optimizer and loss settings:
 
 PatchGAN-70 is the canonical three-layer discriminator. PatchGAN-16 is the
 explicit one-layer local discriminator ablation for a native 128 sprite grid;
-it is not selected automatically.
+it is not selected automatically. PatchGAN-142 is the four-layer
+global-structure discriminator for the native 128 canvas. It preserves the
+same conditional N-layer construction and gives interior logits a theoretical
+field wider than the canvas. Padding and shifted edge logits mean this is not a
+guarantee that every decision observes the complete subject.
+
+For a white-canvas corpus, training v5 can balance reconstruction by computing
+the foreground and exact-white background means separately and averaging the
+two. This preserves the penalty for false background ink while preventing a
+small subject from contributing only its raw pixel-area fraction to L1. The
+training boundary rejects a configured target that lacks either region.
+
+The reviewed-data multiscale experiment is
+[`configs/pix2pix-native128-89m-multiscale-balanced-fm10-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-89m-multiscale-balanced-fm10-reviewed-v3-unanimous-200e.json).
+It changes the discriminator/objective only: the generator, data, seed,
+optimizer, schedule, epoch count, and checkpoint cadence remain identical to
+the 89M PatchGAN-70 control. That v5 run is retained as an ablation: its
+feature-matching passes used separate BatchNorm statistics and its adversarial
+maps were still uniformly averaged.
+
+The corrected v6 experiment is
+[`configs/pix2pix-native128-89m-multiscale-balanced-all-fm10-translate-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-89m-multiscale-balanced-all-fm10-translate-reviewed-v3-unanimous-200e.json).
+It area-pools the exact-non-white target mask to every discriminator logit and
+intermediate feature map. Foreground and background means each contribute 50%
+to discriminator real/fake loss, generator adversarial loss, and feature
+matching. It also applies one shared integer translation in the range
+`[-16, 16]` to source, real target, and generated candidate before the
+discriminator. Translation uses exact pixels and white padding; it never
+touches generator input, reconstruction loss, validation, or inference.
+
+The completed v6 run still produced severe foreground speckling. A held-target
+conditionality audit then compared `D(source, target)` with
+`D(shuffled_source, target)` in one discriminator forward. Both training and
+validation data showed anti-conditioning: the native-scale balanced logit
+preferred the wrong source by about `1.5–1.7`, and the coarse scale preferred
+it by about `9.4–9.9`. Only `10–16%` of source swaps preferred the aligned
+pair. The discriminator had therefore learned that a mismatched real pair was
+more real, not merely failed to observe the source.
+
+The v7 [a-contrario cGAN](https://arxiv.org/abs/2106.15011) experiment is
+[`configs/pix2pix-native128-89m-multiscale-a-contrario-all-fm10-translate-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-89m-multiscale-a-contrario-all-fm10-translate-reviewed-v3-unanimous-200e.json).
+It leaves the generator and generator objective unchanged. The discriminator
+receives four equally weighted modalities in one BatchNorm context:
+
+- aligned source plus real target, labelled real;
+- aligned source plus generated target, labelled fake;
+- mismatched source plus real target, labelled fake;
+- mismatched source plus generated target, labelled fake.
+
+Foreground and background still contribute equally inside every modality.
+Each epoch constructs a group-disjoint derangement of the training split:
+every source is used exactly once as a mismatched condition, never for itself
+or another pair from the same sprite group. The derangement is derived from
+the epoch sampler seed, so checkpoint resume preserves the exact stream.
+
+The completed v7 run reached 38,000 steps in 845 seconds with 5,025 MB peak
+VRAM. Its final region-balanced validation L1 was `0.10836`, only slightly
+below v6's `0.10886`, and the foreground still contained severe speckling.
+The conditionality failure itself was fixed. On the held-out, single-group
+`taekwon` split, the native and coarse discriminators preferred the aligned
+source in `99.6%` and `94.5%` of within-group source swaps, with mean balanced
+logit margins of `+20.5` and `+38.5`. V6 had preferred the aligned source in
+only about `17%` and `11%` of the same audit. The remaining output failure is
+therefore downstream of source conditioning.
+
+The isolated v8 target-palette proximity experiment is
+[`configs/pix2pix-native128-89m-multiscale-a-contrario-palette100-all-fm10-translate-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-89m-multiscale-a-contrario-palette100-all-fm10-translate-reviewed-v3-unanimous-200e.json).
+It preserves the complete v7 generator, discriminator, data order, optimizer,
+schedule, and losses. For each paired target, the loader extracts and caches
+its exact RGB palette once. A generator pixel receives its mean squared RGB
+distance to the nearest color in that target palette; target foreground and
+background means each contribute 50%, and the result enters the generator
+objective at weight `100`. The implementation adapts the nearest-palette loss
+from the pinned
+[`multi-domain` reference](https://github.com/fegemo/multi-domain/blob/01639a2795467b65b7f77d98e441fd54fe58880d/utility/palette_utils.py#L108-L135).
+V8 requires FP32 parameters and compute. Distance evaluation uses a direct
+FP32 difference outside autocast and avoids matrix multiplication, so autocast
+and TF32 cannot erase small color differences inside the objective.
+
+V8 deliberately adds no palette coverage term, quantized forward pass,
+palette-index classifier, discriminator change, or inference-time palette.
+It tests only whether target-palette membership pressure reduces continuous
+RGB noise. It does not mathematically guarantee a discrete number of output
+colors.
+
+The completed v8 run rejected that isolated hypothesis. Across all 34
+validation pairs, foreground target-palette proximity improved by only `1.19%`
+relative to v7, while mean RGB8 colors per output increased from `2512.15` to
+`2514.44`. Exact foreground target-palette membership moved only from
+`5.1439%` to `5.2298%`; overall membership and foreground L1 became slightly
+worse. Perfect post-hoc snapping to each validation target's exact palette
+also left the spatial fragmentation visible. Palette drift is measurable, but
+it is not the cause of the misplaced local structure.
+
+The canonical 89M L1-only control is
+[`configs/pix2pix-native128-89m-l1-only-reviewed-v3-unanimous-200e.json`](../configs/pix2pix-native128-89m-l1-only-reviewed-v3-unanimous-200e.json).
+It differs from the completed 89M PatchGAN-70 config in exactly one field:
+`objective` changes from `adversarial_l1` to `l1_only`. The generator, initial
+weights, data order, optimizer, learning-rate schedule, horizontal flips,
+precision, and 38,000 updates are identical.
+
+That control isolated the dominant failure. The final generator reconstructs
+the 190 training pairs cleanly at global L1 `0.00718` and foreground L1
+`0.04938`, but reaches only `0.03828` and `0.21117` on the group-disjoint
+validation split. Validation output is fragmented even without a
+discriminator, feature matching, region balancing, palette loss, or
+discriminator augmentation. Running BatchNorm from per-image statistics or
+enabling decoder dropout at inference does not remove the artifact, and a
+full-validation Fourier audit found no dominant stride-2 or stride-4
+checkerboard signature.
+
+The checkpoint curve shows ordinary severe overfitting rather than an
+incapable decoder. Region-balanced validation L1 is best at step 3,800
+(`0.10380`, 20 epochs) and worsens to `0.11055` by step 38,000, while training
+error continues falling to `0.02481`. The current split holds out whole job
+families: seven families and 190 pairs train the model, all 34 validation
+pairs are `taekwon`, and the test split contains only `gunslinger`, `ninja`,
+and `summoner`. The clean training reconstructions prove that the U-Net has
+enough output capacity; this 256-pair corpus does not teach the complex
+foreground transformation well enough to generalize to unseen families.
+Simple, repeated structures such as the non-white ground shadow do generalize.
+
+The follow-up job-holdout diagnosis removes the single-lineage validation
+confound. Its split joins all 256 reviewed pairs to the frozen structured iRO
+requests, groups both genders and all variants by `(lineage, job_id)`, and
+uses a family-stratified SHA-256 rank to hold out complete jobs. It contains
+202 training pairs from 60 jobs and 54 validation pairs from 17 other jobs.
+All eleven lineages occur on both sides and no job crosses the split. The
+matched config is
+[`configs/pix2pix-native128-89m-l1-only-job-holdout-v1-200e.json`](../configs/pix2pix-native128-89m-l1-only-job-holdout-v1-200e.json).
+
+That run reproduces the same failure. At epoch 200, training reaches global L1
+`0.00705`, foreground L1 `0.04896`, and visually clean near-copies. Held-job
+validation remains fragmented at global L1 `0.03933` and foreground L1
+`0.21709`. Validation again peaks at epoch 20: global L1 `0.03577` and
+region-balanced L1 `0.10575`; epoch 200 is respectively `10.0%` and `6.6%`
+worse. Whole-lineage OOD evaluation made the original test stricter, but did
+not cause the failure. The gate needs substantially more independent
+body/outfit/object groups and clean aligned pairs; additional epochs or a
+wider generator would only increase memorization on the present corpus.
 
 The 40,000-step limit is this repository's reproducible starting profile, not a
 claim about PixelMe's private training duration. At FP32 width, the exported
@@ -440,9 +670,10 @@ final/
   generator.safetensors
 ```
 
-Each preview row is `source | target | generated`. Validation records mean L1,
-MSE, and PSNR over the complete held-out split. Those metrics measure paired
-pixel reconstruction; the preview remains the evidence for pose, accessory,
+Each preview row is `source | target | generated`. Validation records global
+L1, foreground L1, exact-white-background L1, their equal-region mean, MSE, and
+PSNR over the complete held-out split. Those metrics measure paired pixel
+reconstruction; the preview remains the evidence for pose, accessory,
 silhouette, and pixel-design quality.
 
 The baseline keeps FP32 parameters and computation and uses the GPU's recorded
@@ -453,7 +684,12 @@ learning-rate schedule and any extra checkpoint steps. The learning rate for
 each update is derived from its completed-step position and applied to every
 optimizer, so resume does not depend on the learning rate serialized inside an
 optimizer state. V2 and v3 configurations retain their historical constant
-learning rate.
+learning rate. Training v5 additionally records discriminator scale count,
+feature-matching weight, and the reconstruction-region balance. Training v6
+additionally records the adversarial-region balance and discriminator
+augmentation policy. Training v7 additionally records the conditional-negative
+policy and requires the complete a-contrario discriminator objective. Training
+v8 additionally records a positive target-palette proximity weight.
 Checkpoint v3 has an objective-specific exact file/state contract; v2
 checkpoints are explicitly interpreted as the historical adversarial-L1
 contract and remain resumable only by an adversarial-L1 configuration.
