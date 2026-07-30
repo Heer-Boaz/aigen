@@ -4,7 +4,7 @@ Read `docs/PLAN.md` before touching anything under `aigen/` related to the
 character pipeline. That document is the assignment. Do not simplify it, and do
 not extend it on your own initiative.
 
-Read `docs/image-edit-prompting.md` before writing, rewriting, reviewing, or
+Read `docs/prompting.md` before writing, rewriting, reviewing, or
 approving any prompt for an image-generation or image-editing model. A prompt
 review by an agent that has not read that document is invalid.
 

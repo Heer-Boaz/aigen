@@ -1,9 +1,8 @@
-# Image-edit prompting contract
+# Prompting contract
 
 This document is required reading before writing, rewriting, reviewing, or
-approving an image-generation or image-editing prompt in this repository. It
-applies to FLUX.2 Klein and Qwen-Image-Edit, including prompts used to create
-reverse-source images for a paired pix2pix corpus.
+approving an image-generation or image-editing prompt in this repository.
+It applies to all prompting, regardless of backend examples.
 
 The core rule is simple:
 
