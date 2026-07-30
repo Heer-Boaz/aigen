@@ -132,8 +132,10 @@ class ConditionalPatchDiscriminator(nn.Module):
                         device=device,
                         dtype=dtype,
                     ),
-                    nn.BatchNorm2d(
+                    nn.InstanceNorm2d(
                         channels * multiplier,
+                        affine=False,
+                        track_running_stats=False,
                         device=device,
                         dtype=dtype,
                     ),
@@ -155,11 +157,13 @@ class ConditionalPatchDiscriminator(nn.Module):
                     device=device,
                     dtype=dtype,
                 ),
-                nn.BatchNorm2d(
-                    channels * multiplier,
-                    device=device,
-                    dtype=dtype,
-                ),
+                nn.InstanceNorm2d(
+                        channels * multiplier,
+                        affine=False,
+                        track_running_stats=False,
+                        device=device,
+                        dtype=dtype,
+                    ),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(
                     channels * multiplier,
@@ -427,8 +431,15 @@ def initialize_pix2pix_weights(module: nn.Module) -> None:
         if module.bias is not None:
             nn.init.zeros_(module.bias)
     elif isinstance(module, nn.BatchNorm2d):
-        nn.init.normal_(module.weight, mean=1.0, std=0.02)
-        nn.init.zeros_(module.bias)
+        if module.weight is not None:
+            nn.init.normal_(module.weight, mean=1.0, std=0.02)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+    elif isinstance(module, nn.InstanceNorm2d):
+        if module.weight is not None:
+            nn.init.normal_(module.weight, mean=1.0, std=0.02)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
 
 
 def generator_loss(
@@ -904,10 +915,12 @@ def _batch_norm(
     device: torch.device | str | None,
     dtype: torch.dtype | None,
 ) -> nn.Module:
-    return nn.BatchNorm2d(
+    # Literature fix: Pix2Pix at batch_size=1 fails on validation if BatchNorm uses global running stats.
+    # Using InstanceNorm2d (or BatchNorm2d with track_running_stats=False) is required.
+    return nn.InstanceNorm2d(
         channels,
-        affine=True,
-        track_running_stats=True,
+        affine=False,
+        track_running_stats=False,
         device=device,
         dtype=dtype,
     )
