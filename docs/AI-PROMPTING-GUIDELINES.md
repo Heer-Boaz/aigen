@@ -32,8 +32,9 @@ When prompting Image-to-Video models using a Qwen-edited keyframe:
 ## 4. LoRA Prompting
 When utilizing a LoRA (Low-Rank Adaptation) on top of a base model:
 * **Trigger Words First:** Always place the exact LoRA trigger word(s) at the very beginning of the prompt.
-* **Let the LoRA work:** If the LoRA is trained on a specific character or art style, *do not* write a 40-word description of that character's hair, eyes, and outfit. This causes prompt interference and dilutes the LoRA's weights.
-* **Keep it minimal:** "1girl, [TRIGGER_WORD], sitting on a bench."
+* **Understand the LoRA's Captioning Strategy:** How you prompt a character LoRA depends entirely on how its training data was captioned:
+  * **Sparse Captions (Entangled):** If the LoRA was trained mostly on the trigger word alone, the trigger word contains the entire character (face, hair, default outfit). *Do not* over-describe the character, as it dilutes the weights. Keep it minimal: "[TRIGGER_WORD], sitting on a bench."
+  * **Dense Captions (Disentangled):** If the training images were heavily captioned (describing the exact clothes, hair, and eyes in every image), the LoRA learned to separate the character's core identity from her outfit. In this case, you *must* explicitly prompt for the outfit (e.g., "[TRIGGER_WORD] wearing her blue jacket and black boots") to reconstruct the canonical look.
 
 ## 🚫 STRICTLY FORBIDDEN (Do not use these in ANY prompt!)
 
