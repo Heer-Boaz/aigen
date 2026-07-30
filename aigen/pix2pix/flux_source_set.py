@@ -21,7 +21,7 @@ FLUX_SOURCE_SET_FORMAT = "aigen.pix2pix.flux-source-set.v1"
 FLUX_SOURCE_SET_FROZEN_FORMAT = "aigen.pix2pix.frozen-flux-source-set.v1"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 PROMPT_GUIDE_PATH = (
-    Path(__file__).resolve().parents[2] / "docs" / "image-edit-prompting.md"
+    Path(__file__).resolve().parents[2] / "docs" / "prompting.md"
 )
 
 

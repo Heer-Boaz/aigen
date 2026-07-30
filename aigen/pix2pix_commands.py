@@ -122,6 +122,12 @@ def add_pix2pix_commands(subparsers: Any) -> None:
     )
     iro_flux_source_set_prepare.add_argument("corpus", type=Path)
     iro_flux_source_set_prepare.add_argument("--name", required=True)
+    iro_flux_source_set_prepare.add_argument(
+        "--training-raster",
+        choices=("native128", "lossless1024"),
+        default="native128",
+    )
+    iro_flux_source_set_prepare.add_argument("--pair-filter", type=Path)
 
 
 def run_pix2pix_command(
@@ -249,5 +255,7 @@ def _run_pix2pix_action(
         return prepare_iro_flux_source_set_dataset(
             args.corpus,
             args.name,
+            training_raster=args.training_raster,
+            pair_filter=args.pair_filter,
         )
     raise RuntimeError("unsupported pix2pix action")

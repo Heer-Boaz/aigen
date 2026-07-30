@@ -7,7 +7,10 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as functional
 
-from aigen.pix2pix.config import ModelConfig
+from aigen.pix2pix.config import (
+    GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+    ModelConfig,
+)
 
 
 NormalizationFactory = Callable[[int], nn.Module]
@@ -30,6 +33,15 @@ class Pix2PixGenerator(nn.Module):
             device=device,
             dtype=dtype,
         )
+        raster_factor = _raster_factor(config)
+        network_image_size = config.image_size // raster_factor
+        network_input_channels = config.input_channels * raster_factor**2
+        self.input_transform = (
+            nn.PixelUnshuffle(raster_factor)
+            if raster_factor > 1
+            else nn.Identity()
+        )
+        self._output_scale = raster_factor
         channels = config.generator_channels
         block = _UnetBlock(
             channels * 8,
@@ -39,7 +51,7 @@ class Pix2PixGenerator(nn.Module):
             device=device,
             dtype=dtype,
         )
-        num_downs = config.image_size.bit_length() - 1
+        num_downs = network_image_size.bit_length() - 1
         for _ in range(num_downs - 5):
             block = _UnetBlock(
                 channels * 8,
@@ -77,7 +89,7 @@ class Pix2PixGenerator(nn.Module):
         self.network = _UnetBlock(
             config.output_channels,
             channels,
-            input_channels=config.input_channels,
+            input_channels=network_input_channels,
             child=block,
             outermost=True,
             norm=norm,
@@ -86,7 +98,14 @@ class Pix2PixGenerator(nn.Module):
         )
 
     def forward(self, source: Tensor) -> Tensor:
-        return self.network(source)
+        output = self.network(self.input_transform(source))
+        if self._output_scale > 1:
+            output = functional.interpolate(
+                output,
+                scale_factor=self._output_scale,
+                mode="nearest",
+            )
+        return output
 
 
 class ConditionalPatchDiscriminator(nn.Module):
@@ -101,7 +120,15 @@ class ConditionalPatchDiscriminator(nn.Module):
     ) -> None:
         super().__init__()
         config.validate()
-        input_channels = config.input_channels + config.output_channels
+        raster_factor = _raster_factor(config)
+        self.input_transform = (
+            nn.PixelUnshuffle(raster_factor)
+            if raster_factor > 1
+            else nn.Identity()
+        )
+        input_channels = (
+            config.input_channels + config.output_channels
+        ) * raster_factor**2
         channels = config.discriminator_channels
         layers: list[nn.Module] = [
             nn.Conv2d(
@@ -132,10 +159,8 @@ class ConditionalPatchDiscriminator(nn.Module):
                         device=device,
                         dtype=dtype,
                     ),
-                    nn.InstanceNorm2d(
+                    nn.BatchNorm2d(
                         channels * multiplier,
-                        affine=False,
-                        track_running_stats=False,
                         device=device,
                         dtype=dtype,
                     ),
@@ -157,13 +182,11 @@ class ConditionalPatchDiscriminator(nn.Module):
                     device=device,
                     dtype=dtype,
                 ),
-                nn.InstanceNorm2d(
-                        channels * multiplier,
-                        affine=False,
-                        track_running_stats=False,
-                        device=device,
-                        dtype=dtype,
-                    ),
+                nn.BatchNorm2d(
+                    channels * multiplier,
+                    device=device,
+                    dtype=dtype,
+                ),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(
                     channels * multiplier,
@@ -181,14 +204,15 @@ class ConditionalPatchDiscriminator(nn.Module):
         self._feature_indices = tuple(feature_indices)
 
     def forward(self, source: Tensor, candidate: Tensor) -> Tensor:
-        return self.network(torch.cat((source, candidate), dim=1))
+        paired = self.input_transform(torch.cat((source, candidate), dim=1))
+        return self.network(paired)
 
     def forward_features(
         self,
         source: Tensor,
         candidate: Tensor,
     ) -> tuple[Tensor, ...]:
-        output = torch.cat((source, candidate), dim=1)
+        output = self.input_transform(torch.cat((source, candidate), dim=1))
         features = []
         next_feature = 0
         for layer_index, layer in enumerate(self.network):
@@ -431,15 +455,28 @@ def initialize_pix2pix_weights(module: nn.Module) -> None:
         if module.bias is not None:
             nn.init.zeros_(module.bias)
     elif isinstance(module, nn.BatchNorm2d):
-        if module.weight is not None:
-            nn.init.normal_(module.weight, mean=1.0, std=0.02)
-        if module.bias is not None:
-            nn.init.zeros_(module.bias)
-    elif isinstance(module, nn.InstanceNorm2d):
-        if module.weight is not None:
-            nn.init.normal_(module.weight, mean=1.0, std=0.02)
-        if module.bias is not None:
-            nn.init.zeros_(module.bias)
+        nn.init.normal_(module.weight, mean=1.0, std=0.02)
+        nn.init.zeros_(module.bias)
+
+
+def generator_architecture_name(config: ModelConfig) -> str:
+    if (
+        config.generator_architecture
+        == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+    ):
+        return "pixel_unshuffle_8_unet_128_nearest_1024"
+    return f"unet_{config.image_size}"
+
+
+def _raster_factor(config: ModelConfig) -> int:
+    return (
+        8
+        if (
+            config.generator_architecture
+            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+        )
+        else 1
+    )
 
 
 def generator_loss(
@@ -915,12 +952,10 @@ def _batch_norm(
     device: torch.device | str | None,
     dtype: torch.dtype | None,
 ) -> nn.Module:
-    # Literature fix: Pix2Pix at batch_size=1 fails on validation if BatchNorm uses global running stats.
-    # Using InstanceNorm2d (or BatchNorm2d with track_running_stats=False) is required.
-    return nn.InstanceNorm2d(
+    return nn.BatchNorm2d(
         channels,
-        affine=False,
-        track_running_stats=False,
+        affine=True,
+        track_running_stats=True,
         device=device,
         dtype=dtype,
     )

@@ -14,6 +14,7 @@ from aigen.pix2pix.corpus_io import (
     require_exact_keys,
     write_json_records,
 )
+from aigen.pix2pix.corpus_config import IroCorpusConfigVersion
 from aigen.pix2pix.dataset import DATASET_FORMAT, audit_dataset
 from aigen.pix2pix.errors import Pix2PixError
 from aigen.pix2pix.flux_source_audit import (
@@ -52,7 +53,11 @@ FLUX_SOURCE_SET_DATASET_PROVENANCE_FORMAT = (
 FLUX_SOURCE_SET_DATASET_V2_PROVENANCE_FORMAT = (
     "aigen.pix2pix.iro-dataset-provenance.v5"
 )
+FLUX_SOURCE_SET_LOSSLESS_1024_PROVENANCE_FORMAT = (
+    "aigen.pix2pix.iro-dataset-provenance.v6"
+)
 FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX = "dataset-flux-source-set-"
+FLUX_SOURCE_SET_TRAINING_RASTERS = frozenset({"native128", "lossless1024"})
 
 
 def prepare_iro_dataset(root: Path) -> dict[str, object]:
@@ -119,6 +124,9 @@ def prepare_iro_qwen_dataset(root: Path) -> dict[str, object]:
 def prepare_iro_flux_source_set_dataset(
     root: Path,
     name: str,
+    *,
+    training_raster: str = "native128",
+    pair_filter: Path | None = None,
 ) -> dict[str, object]:
     root = root.expanduser().resolve()
     config, selected, selection = load_iro_selection(root)
@@ -141,13 +149,46 @@ def prepare_iro_flux_source_set_dataset(
         for record in selected
         if str(record["id"]) in audit.accepted_ids
     )
+    filter_dataset = None
+    if pair_filter is not None:
+        filter_dataset = audit_dataset(pair_filter.expanduser().resolve())
+        try:
+            filter_dataset.root.relative_to(root)
+        except ValueError as error:
+            raise Pix2PixError(
+                "FLUX source-set pair filter must belong to the same corpus"
+            ) from error
+        selected_by_id = {str(record["id"]): record for record in selected}
+        for pair in filter_dataset.pairs:
+            selected_record = selected_by_id.get(pair.id)
+            if (
+                selected_record is None
+                or pair.id not in audit.accepted_ids
+                or pair.group != selected_record["group"]
+                or pair.split != selected_record["split"]
+                or pair.target_sha256 != selected_record["target_sha256"]
+            ):
+                raise Pix2PixError(
+                    f"FLUX source-set pair filter is incompatible at {pair.id}"
+                )
+        filtered_ids = {pair.id for pair in filter_dataset.pairs}
+        accepted = tuple(
+            record
+            for record in accepted
+            if str(record["id"]) in filtered_ids
+        )
+    accepted_ids = {str(record["id"]) for record in accepted}
     accepted_inventory = {
         pair_id: path
         for pair_id, path in inventory.items()
-        if pair_id in audit.accepted_ids
+        if pair_id in accepted_ids
     }
-    source_raster = config.source_raster.model_dump(mode="json")
-    target_raster = _target_raster_contract(config.image_size)
+    (
+        image_size,
+        source_raster,
+        target_raster,
+        dataset_suffix,
+    ) = _flux_source_set_training_raster(config, training_raster)
     layout = flux_source_set_layout(name)
     provenance: dict[str, Any] = {
         "format": FLUX_SOURCE_SET_DATASET_PROVENANCE_FORMAT,
@@ -166,6 +207,13 @@ def prepare_iro_flux_source_set_dataset(
         "source_raster": source_raster,
         "target_raster": target_raster,
     }
+    if filter_dataset is not None:
+        provenance.update(
+            {
+                "pair_filter_dataset": filter_dataset.root.as_posix(),
+                "pair_filter_dataset_fingerprint": filter_dataset.fingerprint,
+            }
+        )
     if selection["format"] == IRO_SELECTION_V2_FORMAT:
         coverage = derive_flux_output_coverage(selected, audit)
         provenance.update(
@@ -175,13 +223,25 @@ def prepare_iro_flux_source_set_dataset(
                 "coverage_report_sha256": coverage.sha256,
             }
         )
+    if training_raster == "lossless1024":
+        provenance.update(
+            {
+                "format": FLUX_SOURCE_SET_LOSSLESS_1024_PROVENANCE_FORMAT,
+                "training_raster": training_raster,
+            }
+        )
+    dataset_directory_name = f"{FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX}{name}"
+    dataset_name = f"{config.name}-{source_set.name}"
+    if filter_dataset is not None:
+        dataset_directory_name = filter_dataset.root.name
+        dataset_name = filter_dataset.name
     return _assemble_iro_dataset(
         root,
         selected=accepted,
         inventory=accepted_inventory,
-        dataset_dir=root / f"{FLUX_SOURCE_SET_DATASET_DIRECTORY_PREFIX}{name}",
-        dataset_name=f"{config.name}-{source_set.name}",
-        image_size=config.image_size,
+        dataset_dir=root / f"{dataset_directory_name}{dataset_suffix}",
+        dataset_name=f"{dataset_name}{dataset_suffix}",
+        image_size=image_size,
         source_raster=source_raster,
         target_raster=target_raster,
         provenance_base=provenance,
@@ -244,6 +304,7 @@ def _assemble_iro_dataset(
                     int(source_raster["offset_x"]),
                     int(source_raster["offset_y"]),
                 ),
+                resample=str(source_raster["resample"]),
                 background=tuple(source_raster["background_rgb"]),
             )
             selected_target = corpus_member(
@@ -251,9 +312,13 @@ def _assemble_iro_dataset(
                 str(record["target"]),
                 label=f"selected target for {pair_id}",
             )
-            shutil.copyfile(selected_target, target_path)
-            if sha256_file(target_path) != record["target_sha256"]:
-                raise Pix2PixError(f"copied target checksum mismatch: {pair_id}")
+            if sha256_file(selected_target) != record["target_sha256"]:
+                raise Pix2PixError(f"selected target checksum mismatch: {pair_id}")
+            _prepare_target(
+                selected_target,
+                target_path,
+                raster=target_raster,
+            )
             pair_records.append(
                 {
                     "id": pair_id,
@@ -306,6 +371,7 @@ def _prepare_source(
     canvas_size: int,
     inner_size: tuple[int, int],
     offset: tuple[int, int],
+    resample: str,
     background: tuple[int, int, int],
 ) -> None:
     try:
@@ -314,15 +380,44 @@ def _prepare_source(
             rgba = image.convert("RGBA")
             matte = Image.new("RGBA", rgba.size, (*background, 255))
             matte.alpha_composite(rgba)
-            resized = matte.convert("RGB").resize(
-                inner_size,
-                Image.Resampling.LANCZOS,
-            )
+            prepared = matte.convert("RGB")
+            if resample == "none":
+                if prepared.size != inner_size:
+                    raise Pix2PixError(
+                        "lossless FLUX source raster does not match its input size: "
+                        f"{input_path}"
+                    )
+            else:
+                prepared = prepared.resize(
+                    inner_size,
+                    Image.Resampling.LANCZOS,
+                )
             canvas = Image.new("RGB", (canvas_size, canvas_size), background)
-            canvas.paste(resized, offset)
+            canvas.paste(prepared, offset)
             canvas.save(output_path, format="PNG", optimize=False)
     except OSError as error:
         raise Pix2PixError(f"cannot prepare FLUX source {input_path}: {error}") from error
+
+
+def _prepare_target(
+    input_path: Path,
+    output_path: Path,
+    *,
+    raster: dict[str, object],
+) -> None:
+    if not raster["resampled"]:
+        shutil.copyfile(input_path, output_path)
+        return
+    try:
+        with Image.open(input_path) as image:
+            image.load()
+            prepared = image.convert("RGB").resize(
+                (int(raster["width"]), int(raster["height"])),
+                Image.Resampling.NEAREST,
+            )
+            prepared.save(output_path, format="PNG", optimize=False)
+    except OSError as error:
+        raise Pix2PixError(f"cannot prepare pixel-art target {input_path}: {error}") from error
 
 
 def _verify_dataset_provenance(
@@ -352,3 +447,44 @@ def _target_raster_contract(image_size: int) -> dict[str, object]:
         "source": "native renderer frame composited on white",
         "resampled": False,
     }
+
+
+def _flux_source_set_training_raster(
+    config: IroCorpusConfigVersion,
+    training_raster: str,
+) -> tuple[int, dict[str, object], dict[str, object], str]:
+    if training_raster not in FLUX_SOURCE_SET_TRAINING_RASTERS:
+        supported = ", ".join(sorted(FLUX_SOURCE_SET_TRAINING_RASTERS))
+        raise Pix2PixError(f"training_raster must be one of: {supported}")
+    if training_raster == "native128":
+        return (
+            config.image_size,
+            config.source_raster.model_dump(mode="json"),
+            _target_raster_contract(config.image_size),
+            "",
+        )
+
+    image_size = 1024
+    source_width = config.flux.width
+    source_height = config.flux.height
+    source_raster = {
+        "canvas_size": image_size,
+        "inner_width": source_width,
+        "inner_height": source_height,
+        "offset_x": (image_size - source_width) // 2,
+        "offset_y": (image_size - source_height) // 2,
+        "resample": "none",
+        "background_rgb": list(config.source_raster.background_rgb),
+    }
+    target_raster = {
+        "mode": "RGB",
+        "width": image_size,
+        "height": image_size,
+        "source_width": config.image_size,
+        "source_height": config.image_size,
+        "source": "native renderer frame composited on white",
+        "resample": "nearest",
+        "scale": image_size // config.image_size,
+        "resampled": True,
+    }
+    return image_size, source_raster, target_raster, "-lossless1024-v1"

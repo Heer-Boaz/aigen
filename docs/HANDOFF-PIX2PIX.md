@@ -22,13 +22,13 @@ Read these files before changing anything:
 1. [`../AGENTS.md`](../AGENTS.md)
 2. [`PLAN.md`](PLAN.md)
 3. [`pix2pix.md`](pix2pix.md)
-4. [`image-edit-prompting.md`](image-edit-prompting.md)
+4. [`prompting.md`](prompting.md)
 
 `pix2pix.md` is the detailed implementation and experiment log. This handoff
 is the decision-oriented overview; it does not supersede that document.
 
 Any agent that writes or reviews a reverse-source prompt must first read
-`image-edit-prompting.md`. A prompt review performed without reading it is
+`prompting.md`. A prompt review performed without reading it is
 invalid.
 
 ## User objective
@@ -175,6 +175,16 @@ Nearest-neighbour pre-upscaling the native sprite to `512x512` or `768x768`
 caused the reverse model to invent detail and did not resolve ambiguous body
 direction. Do not add a generative upscaler to this contract.
 
+An SDEdit-like FLUX.2 Klein `strength` path was added experimentally. It
+encodes the first reference as the initial latent, adds scheduler noise at the
+selected strength, and denoises only the remaining schedule. Early proof
+images show materially stronger pose retention, so this route is worth a
+separate bounded experiment. It is not part of the normalization diagnosis
+above and is not yet the canonical source contract. In particular, do not
+confound `strength` with the simultaneously added generative reference
+upscaler: benchmark the init-latent mechanism independently before changing
+the frozen corpus recipe.
+
 Every dataset is audited for:
 
 - complete image decoding;
@@ -226,7 +236,7 @@ had accepted all four. Existing reviewers demonstrably missed pose and
 front/back disparities. Use those disputed records to calibrate the acceptance
 rule before reviewing v2; do not blindly trust a prior `pass` verdict.
 
-Prompting must follow `image-edit-prompting.md`:
+Prompting must follow `prompting.md`:
 
 - use one concise direct transformation instruction;
 - describe only visually grounded constraints needed for that image;
@@ -435,22 +445,26 @@ This is ordinary severe generalization failure on a tiny, insufficiently
 diverse corpus. It happens with no discriminator at all. The U-Net has enough
 capacity to render clean sprites because it does so on training examples.
 
-<!--
-  [AGENT NOTE 2026-07-30]
-  The diagnosis above regarding the L1-only fragmentation was incorrect.
-  The visual "colored-hagelslag fragmentation" on validation data was actually caused by a well-known
-  architecture trap: using nn.BatchNorm2d with track_running_stats=True on a batch size of 1.
-  
-  During training (with batch_size=1), BatchNorm acts effectively as an InstanceNorm using only the
-  current image's statistics. But during evaluation (`generator.eval()`), PyTorch switches to the
-  global running statistics. Forcing these global statistics onto a local image drastically skewed
-  feature activations, which the final Tanh layer then clamped to extreme edges (-1.0 and 1.0),
-  producing the fragmented, saturated noise.
+An additional controlled run replaced every generator and discriminator
+BatchNorm layer with non-affine InstanceNorm and repeated the same 89M
+L1-only training for all 38,000 steps. It did not remove the failure:
 
-  This has now been fixed in the codebase by replacing BatchNorm2d with InstanceNorm2d
-  (affine=False, track_running_stats=False), as prescribed by standard pix2pix/CycleGAN literature.
-  The L1 generalization artifact was a plumbing bug, not purely a dataset scale failure.
--->
+```text
+InstanceNorm epoch 20:
+  global L1:   0.03450
+  balanced L1: 0.10440
+
+InstanceNorm epoch 200:
+  global L1:   0.03862
+  balanced L1: 0.11218
+```
+
+The epoch-60, epoch-100, and epoch-200 previews contain the same held-out
+fragmentation. The canonical BatchNorm control ended at global L1 `0.03828`
+and balanced L1 `0.11055`, so InstanceNorm was slightly worse at the end.
+This rejects the claim that evaluation-time BatchNorm running statistics were
+the cause of the colored fragmentation. The repository therefore retains the
+official pix2pix BatchNorm baseline.
 
 Adding more epochs or more randomly initialized parameters to the same 256
 pairs primarily increases memorization.
@@ -474,16 +488,6 @@ The strongest evidence-supported diagnosis is:
 > supervision further. Discriminator defects existed, but they are not the
 > dominant remaining cause because L1-only training reproduces the held-out
 > fragmentation.
-
-<!--
-  [AGENT NOTE 2026-07-30]
-  The above diagnosis conclusion was heavily skewed by the BatchNorm bug.
-  L1-only training reproduced the held-out fragmentation specifically because the evaluation mode
-  applied mismatched global batch statistics. The assumption that the L1-only run proved the dataset
-  size is solely responsible for fragmentation was flawed. While more clean data is still required
-  for proper semantic generalization, the "colored-hagelslag" noise was definitively a BatchNorm
-  batch_size=1 artifact.
--->
 
 Consequences:
 

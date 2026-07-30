@@ -18,8 +18,16 @@ TRAIN_CONFIG_FORMAT_V7 = "aigen.pix2pix.training.v7"
 TRAIN_CONFIG_FORMAT = "aigen.pix2pix.training.v8"
 MODEL_FORMAT = "aigen.pix2pix.generator.v1"
 MODEL_IMAGE_SIZE = 256
-MODEL_IMAGE_SIZES = frozenset({128, MODEL_IMAGE_SIZE})
+MODEL_IMAGE_SIZES = frozenset({128, MODEL_IMAGE_SIZE, 1024})
 MODEL_CHANNELS = 3
+GENERATOR_ARCHITECTURE_UNET = "unet"
+GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8 = "pixel_unshuffle_8_unet_128"
+GENERATOR_ARCHITECTURES = frozenset(
+    {
+        GENERATOR_ARCHITECTURE_UNET,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+    }
+)
 DISCRIMINATOR_LAYER_COUNTS = frozenset({1, 3, 4})
 DISCRIMINATOR_SCALE_COUNTS = frozenset({1, 2})
 TRAIN_OPTIMIZERS = frozenset({"adam", "paged_adam8bit"})
@@ -41,13 +49,29 @@ class ModelConfig:
     discriminator_channels: int = 64
     discriminator_layers: int = 3
     generator_dropout: bool = True
+    generator_architecture: str = GENERATOR_ARCHITECTURE_UNET
 
     def to_json(self) -> dict[str, object]:
-        return asdict(self)
+        payload = asdict(self)
+        if self.generator_architecture == GENERATOR_ARCHITECTURE_UNET:
+            del payload["generator_architecture"]
+        return payload
 
     @classmethod
     def from_json(cls, payload: object) -> ModelConfig:
-        values = _exact_object(payload, set(cls.__dataclass_fields__), "model config")
+        required = set(cls.__dataclass_fields__) - {"generator_architecture"}
+        if not isinstance(payload, dict):
+            raise Pix2PixError("model config must be a JSON object")
+        unexpected = set(payload) - required - {"generator_architecture"}
+        missing = required - set(payload)
+        if missing or unexpected:
+            details = []
+            if missing:
+                details.append(f"missing {', '.join(sorted(missing))}")
+            if unexpected:
+                details.append(f"unexpected {', '.join(sorted(unexpected))}")
+            raise Pix2PixError(f"invalid model config: {'; '.join(details)}")
+        values = payload
         config = cls(
             image_size=_integer(values, "image_size"),
             input_channels=_integer(values, "input_channels"),
@@ -56,6 +80,11 @@ class ModelConfig:
             discriminator_channels=_integer(values, "discriminator_channels"),
             discriminator_layers=_integer(values, "discriminator_layers"),
             generator_dropout=_boolean(values, "generator_dropout"),
+            generator_architecture=(
+                _string(values, "generator_architecture")
+                if "generator_architecture" in values
+                else GENERATOR_ARCHITECTURE_UNET
+            ),
         )
         config.validate()
         return config
@@ -76,6 +105,19 @@ class ModelConfig:
             )
             raise Pix2PixError(
                 f"pix2pix v1 discriminator_layers must be one of: {supported}"
+            )
+        if self.generator_architecture not in GENERATOR_ARCHITECTURES:
+            supported = ", ".join(sorted(GENERATOR_ARCHITECTURES))
+            raise Pix2PixError(
+                f"generator_architecture must be one of: {supported}"
+            )
+        if (
+            self.generator_architecture
+            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+            and self.image_size != 1024
+        ):
+            raise Pix2PixError(
+                "pixel_unshuffle_8_unet_128 requires image_size 1024"
             )
 
 

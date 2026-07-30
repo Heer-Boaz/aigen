@@ -4,22 +4,24 @@ This is a separate local training route for a narrow, supervised image-to-image
 mapping. It does not replace or call the FLUX.2 Klein or Qwen Image Edit
 character routes.
 
-The implemented reference family is:
+The implemented reference family has two raster contracts:
 
 ```text
-aligned 128x128 or 256x256 RGB source
-             |
-             v
-       U-Net-128 or U-Net-256
-             |
-             v
-generated RGB target on the same canvas
-             |
-             +---- source + generated ----+
-             |                             v
-             +---- source + real ------> PatchGAN-16, PatchGAN-70,
-                                         global PatchGAN-142, or
-                                         two-scale PatchGAN-70
+native contract:
+  aligned 128x128 or 256x256 source -> same-size U-Net -> RGB target
+
+lossless high-resolution source contract:
+  1024x1024 RGB source
+    -> PixelUnshuffle(8), preserving every source sample as 192x128x128
+    -> U-Net-128
+    -> native 3x128x128 RGB prediction
+    -> deterministic nearest-neighbour 1024x1024 artifact
+
+conditional discriminator:
+  source + real/generated target
+    -> native pair, or the same lossless PixelUnshuffle(8)
+    -> PatchGAN-16, PatchGAN-70, global PatchGAN-142,
+       or two-scale PatchGAN-70
 ```
 
 U-Net-128 has 41,828,995 trainable parameters; U-Net-256 has 54,413,955.
@@ -29,6 +31,13 @@ architecture with one additional stride-2 layer: its 6×6 logits each have a
 142×142 theoretical receptive field, larger than the complete 128×128 canvas.
 Inference exports and loads only the generator, while its metadata retains the
 complete training model configuration.
+
+The width-92 lossless high-resolution generator has 86,703,195 parameters.
+Its adapted PatchGAN-70 has 3,155,777, for 89,858,972 trainable parameters
+together. `PixelUnshuffle(8)` is a reversible tensor rearrangement, not a
+resize: all 1024×1024 source values survive. The generator cannot emit
+independent subpixels inside one logical target pixel because it predicts the
+128×128 raster before deterministic nearest-neighbour expansion.
 
 The two-scale discriminator follows pix2pixHD: one PatchGAN evaluates the
 native 128×128 pair and a second evaluates a 64×64 average-pooled pair. The
@@ -108,7 +117,8 @@ Each `pairs.jsonl` line is one complete record:
 The contract is intentionally strict:
 
 - Every source and target is decoded completely during audit.
-- Every image is RGB and exactly the declared 128×128 or 256×256 canvas.
+- Every image is RGB and exactly the declared 128×128, 256×256, or 1024×1024
+  canvas.
 - Pair IDs are unique and safe to use as prediction filenames.
 - Every pair names its original identity/source-sequence group.
 - A group occurs in exactly one split; the audit rejects cross-split leakage.
@@ -122,13 +132,14 @@ There is no detector, cropper, alpha compositor, automatic alignment, or
 fallback resize hidden in training. Those operations would define the task and
 must therefore be decided while producing the paired data.
 
-Use the smallest supported training canvas that represents the intended
-logical sprite grid. A logical 128×128 target belongs on the native 128×128
-canvas; do not nearest-neighbour-scale it to 256×256 and ask the network to
-reproduce every logical pixel four times. A genuinely lower-resolution target
-such as 32×32 or 64×64 still needs one explicit, consistent nearest-neighbour
-mapping to the 128×128 training canvas. Display scaling happens after inference,
-not inside the learned task.
+Use the smallest learned output raster that represents the intended logical
+sprite grid. The ordinary U-Net contract therefore keeps a logical 128×128
+target native. The lossless high-resolution contract is different: it retains
+the smooth source at 1024×1024, rearranges it losslessly to 128×128 feature
+space, predicts exactly one RGB value per logical target pixel, and expands
+that prediction only at the model boundary. A genuinely lower-resolution
+target such as 32×32 or 64×64 still needs one explicit, consistent
+nearest-neighbour mapping to the 128×128 logical target raster.
 
 When constructing data:
 
@@ -207,7 +218,7 @@ The exact exploratory FLUX.2 Klein prompt and 768×1024 canvas are part of the
 immutable config fingerprint. That fingerprint preserves experimental
 provenance; it does not make the prompt a recommended template. Every new
 source-corpus prompt must follow
-[`docs/image-edit-prompting.md`](image-edit-prompting.md), receive a review from
+[`docs/prompting.md`](prompting.md), receive a review from
 an agent that read that guide, and use a new config and output root when its
 wording changes. The selected native 128×128 target is passed to FLUX unchanged.
 A same-seed proof on representative front and back poses compared native input
@@ -235,9 +246,9 @@ missing or changed shard fails instead of being regenerated:
   runs/pix2pix/iro-gate512-v1
 ```
 
-Assembly performs the only learned-input resampling: each smooth 768×1024 FLUX
-source is Lanczos-resized to 96×128 and placed at x=16 on a white native-128
-canvas. The pixel-art target is never resized, cropped, or recentered:
+The historical native-128 assembly resizes each smooth 768×1024 FLUX source
+with Lanczos to 96×128 and places it at x=16 on a white 128×128 canvas. The
+native pixel-art target is not changed:
 
 ```bash
 .venv/bin/aigen pix2pix iro-prepare runs/pix2pix/iro-gate512-v1
@@ -246,6 +257,13 @@ canvas. The pixel-art target is never resized, cropped, or recentered:
 
 Training reads only the resulting audited local dataset. It never calls the
 live renderer or FLUX.
+
+That native source mapping discards almost all smooth-source samples. The
+lossless high-resolution ablation instead places the original 768×1024 source
+at x=128 on a white 1024×1024 canvas without resampling. It expands the native
+128×128 target by exactly 8× with nearest-neighbour sampling for the audited
+artifact contract; the lossless model still predicts the logical 128×128
+target before that deterministic expansion.
 
 ### Coverage wave v2
 
@@ -321,7 +339,7 @@ separately planned coverage wave.
 The checked-in generic FLUX prompt remains provenance from the old exploratory
 route and is not authorized for this wave. Before generation, every source
 instruction must follow
-[`docs/image-edit-prompting.md`](image-edit-prompting.md) and pass an
+[`docs/prompting.md`](prompting.md) and pass an
 independent prompt review.
 
 ### Reviewed per-image FLUX source sets
@@ -344,7 +362,7 @@ selected target checksum to its prompt, author, and seed.
 review. Generation rejects a record whose author and reviewer are the same.
 The manifest checksums both files, records the target-selection fingerprint,
 and records the SHA-256 of
-[`docs/image-edit-prompting.md`](image-edit-prompting.md). Generation refuses a
+[`docs/prompting.md`](prompting.md). Generation refuses a
 missing review, stale prompt hash, changed target, reordered record, or changed
 seed.
 
@@ -384,11 +402,25 @@ Only records with a `pass` verdict enter the paired dataset:
   runs/pix2pix/iro-gate512-v1/dataset-flux-source-set-reviewed-v1
 ```
 
-Assembly performs the same single Lanczos mapping defined by the corpus raster
-contract. The native 128×128 sprite reference is not pre-upscaled before
-FLUX, and the target half is never resized. Rejected candidates remain in the
-immutable source corpus for provenance but cannot silently enter training.
-Corrections require a new named source set.
+The default assembly performs the historical Lanczos mapping. A curated
+audited subset can instead be derived into the lossless 1024 contract while
+binding both the source-set audit and the exact pair-filter fingerprint:
+
+```bash
+.venv/bin/aigen pix2pix iro-prepare-flux-source-set \
+  runs/pix2pix/iro-gate512-v1 \
+  --name reviewed-v1 \
+  --pair-filter \
+    runs/pix2pix/iro-gate512-v1/dataset-flux-source-set-reviewed-v3-unanimous \
+  --training-raster lossless1024
+```
+
+This produces
+`dataset-flux-source-set-reviewed-v3-unanimous-lossless1024-v1`. Its rebuild
+was byte-identical for every source PNG, target PNG, and pair record to the
+first diagnostic 1024 dataset. Rejected candidates remain in the immutable
+source corpus for provenance but cannot silently enter training. Corrections
+require a new named source set or pair filter.
 
 ### Qwen reverse-source control
 
@@ -401,7 +433,7 @@ fall back from the FLUX source route.
 As with the FLUX config, its checked-in prompt records an exploratory run and
 is not a reusable prompt template. Prompt revisions require a new config and
 source output root under the rules in
-[`docs/image-edit-prompting.md`](image-edit-prompting.md).
+[`docs/prompting.md`](prompting.md).
 
 ```bash
 .venv/bin/aigen pix2pix iro-generate-qwen-sources \

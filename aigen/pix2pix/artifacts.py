@@ -13,7 +13,10 @@ from torch import nn
 from aigen.manifest_io import atomic_write_json, read_json, sha256_file
 from aigen.pix2pix.config import MODEL_FORMAT, TRAIN_OBJECTIVES, ModelConfig
 from aigen.pix2pix.errors import Pix2PixError
-from aigen.pix2pix.model import Pix2PixGenerator
+from aigen.pix2pix.model import (
+    Pix2PixGenerator,
+    generator_architecture_name,
+)
 
 
 CHECKPOINT_FORMAT_V2 = "aigen.pix2pix.checkpoint.v2"
@@ -293,7 +296,7 @@ def _generator_metadata(
 ) -> dict[str, Any]:
     return {
         "format": MODEL_FORMAT,
-        "architecture": f"unet_{model_config.image_size}",
+        "architecture": generator_architecture_name(model_config),
         "step": step,
         "dataset_fingerprint": dataset_fingerprint,
         "config_fingerprint": config_fingerprint,
@@ -323,7 +326,7 @@ def _load_generator_metadata(
     if metadata["format"] != MODEL_FORMAT:
         raise Pix2PixError(f"unsupported generator format: {metadata['format']!r}")
     config = ModelConfig.from_json(metadata["model"])
-    expected_architecture = f"unet_{config.image_size}"
+    expected_architecture = generator_architecture_name(config)
     if metadata["architecture"] != expected_architecture:
         raise Pix2PixError(
             "generator architecture does not match its model config: "

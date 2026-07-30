@@ -514,7 +514,7 @@ def load_iro_corpus_config(path: Path) -> IroCorpusConfigVersion:
 
 def corpus_config_fingerprint(config: IroCorpusConfigVersion) -> str:
     payload = json.dumps(
-        config.model_dump(mode="json"),
+        config.model_dump(mode="json", exclude_none=True),
         ensure_ascii=False,
         allow_nan=False,
         separators=(",", ":"),
