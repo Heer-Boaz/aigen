@@ -150,6 +150,7 @@ class FluxSourceConfig(_CorpusModel):
     steps: Literal[4]
     sampler: str
     scheduler: Literal["flowmatch-dynamic-shift"]
+    strength: float | None = None
 
     @field_validator("prompt")
     @classmethod

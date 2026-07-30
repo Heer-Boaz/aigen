@@ -129,7 +129,7 @@ def generate_flux_source_corpus(
             session = Flux2KleinSession(
                 loras=(),
                 sampler=generation.sampler,
-                strength=None,
+                strength=generation.strength,
                 progress=progress,
             )
             progress.begin(

@@ -514,6 +514,9 @@ def _prepare_flux2_klein_cases(
                     ) = _prepare_condition_images(
                         pipeline,
                         reference_images,
+                        target_width=case.width,
+                        target_height=case.height,
+                        progress=progress,
                     )
                 finally:
                     for image in reference_images:
@@ -826,11 +829,27 @@ def _load_reference_images(paths: Sequence[Path]) -> list[Image.Image]:
 def _prepare_condition_images(
     pipeline: Any,
     images: Sequence[Image.Image],
+    target_width: int | None = None,
+    target_height: int | None = None,
+    progress: Any = None,
 ) -> tuple[list[Any], int, int]:
+    from aigen.generation.image_upscale import IllustrationUpscaler, upscale_model_path, DEFAULT_UPSCALE_MODEL
+
     condition_images = []
     width = None
     height = None
     for image in images:
+        if target_width is not None and target_height is not None:
+            if image.size != (target_width, target_height):
+                upscaler = IllustrationUpscaler(model_path=upscale_model_path(DEFAULT_UPSCALE_MODEL))
+                if progress:
+                    progress.phase("upscaling reference to match generation resolution")
+                image = upscaler.upscale(
+                    image,
+                    target_size=(target_width, target_height),
+                    progress=progress
+                ).image
+
         image_width, image_height = image.size
         if image_width * image_height > 1024**2:
             image = pipeline.image_processor._resize_to_target_area(image, 1024**2)

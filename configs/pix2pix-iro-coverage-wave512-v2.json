@@ -267,19 +267,20 @@
   "request_timeout_seconds": 60.0,
   "flux": {
     "prompt": "Redraw the supplied pixel-art sprite as a clean high-resolution anime illustration with smooth linework and shading. Preserve exactly the visible design, pose, proportions, colors, clothing, accessories, objects, framing, and white background. Add nothing; do not keep pixelated edges.",
-    "width": 768,
+    "width": 1024,
     "height": 1024,
     "seed_base": 600000,
     "shard_size": 16,
     "steps": 4,
     "sampler": "flowmatch-euler",
-    "scheduler": "flowmatch-dynamic-shift"
+    "scheduler": "flowmatch-dynamic-shift",
+    "strength": 0.85
   },
   "source_raster": {
     "canvas_size": 128,
-    "inner_width": 96,
+    "inner_width": 128,
     "inner_height": 128,
-    "offset_x": 16,
+    "offset_x": 0,
     "offset_y": 0,
     "resample": "lanczos",
     "background_rgb": [255, 255, 255]
