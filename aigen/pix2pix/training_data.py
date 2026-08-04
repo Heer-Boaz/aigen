@@ -17,11 +17,13 @@ class PairedImageDataset(Dataset[dict[str, Tensor | str]]):
         self,
         pairs: Sequence[PairedImage],
         *,
-        image_size: int,
+        source_image_size: int,
+        target_image_size: int,
         target_palettes: Sequence[Tensor] | None = None,
     ) -> None:
         self._pairs = pairs
-        self._image_size = image_size
+        self._source_image_size = source_image_size
+        self._target_image_size = target_image_size
         self._target_palettes = target_palettes
 
     def __len__(self) -> int:
@@ -43,8 +45,14 @@ class PairedImageDataset(Dataset[dict[str, Tensor | str]]):
         else:
             index, flip, mismatched_index, mismatched_flip = key
         pair = self._pairs[index]
-        source = load_rgb_tensor(pair.source_path, image_size=self._image_size)
-        target = load_rgb_tensor(pair.target_path, image_size=self._image_size)
+        source = load_rgb_tensor(
+            pair.source_path,
+            image_size=self._source_image_size,
+        )
+        target = load_rgb_tensor(
+            pair.target_path,
+            image_size=self._target_image_size,
+        )
         if flip:
             source = source.flip(-1)
             target = target.flip(-1)
@@ -57,7 +65,7 @@ class PairedImageDataset(Dataset[dict[str, Tensor | str]]):
             mismatched_pair = self._pairs[mismatched_index]
             mismatched_source = load_rgb_tensor(
                 mismatched_pair.source_path,
-                image_size=self._image_size,
+                image_size=self._source_image_size,
             )
             if mismatched_flip:
                 mismatched_source = mismatched_source.flip(-1)
@@ -151,7 +159,8 @@ class EpochPairSampler(Sampler[TrainingSampleKey]):
 def create_training_loader(
     pairs: Sequence[PairedImage],
     *,
-    image_size: int,
+    source_image_size: int,
+    target_image_size: int,
     batch_size: int,
     num_workers: int,
     seed: int,
@@ -165,7 +174,7 @@ def create_training_loader(
             torch.unique(
                 load_rgb_tensor(
                     pair.target_path,
-                    image_size=image_size,
+                    image_size=target_image_size,
                 )
                 .permute(1, 2, 0)
                 .reshape(-1, 3),
@@ -178,7 +187,8 @@ def create_training_loader(
     )
     dataset = PairedImageDataset(
         pairs,
-        image_size=image_size,
+        source_image_size=source_image_size,
+        target_image_size=target_image_size,
         target_palettes=target_palettes,
     )
     sampler = EpochPairSampler(
@@ -222,12 +232,17 @@ def _group_derangement(
 def create_evaluation_loader(
     pairs: Sequence[PairedImage],
     *,
-    image_size: int,
+    source_image_size: int,
+    target_image_size: int,
     batch_size: int,
     num_workers: int,
     pin_memory: bool,
 ) -> DataLoader[dict[str, Tensor | str]]:
-    dataset = PairedImageDataset(pairs, image_size=image_size)
+    dataset = PairedImageDataset(
+        pairs,
+        source_image_size=source_image_size,
+        target_image_size=target_image_size,
+    )
     worker_generator = torch.Generator()
     worker_generator.manual_seed(0)
     options: dict[str, object] = {
@@ -246,14 +261,20 @@ def create_evaluation_loader(
 def validate_white_canvas_region_balance(
     pairs: Sequence[PairedImage],
     *,
-    image_size: int,
+    target_image_size: int,
     translation_margin: int = 0,
 ) -> None:
     for pair in pairs:
-        target = load_rgb_tensor(pair.target_path, image_size=image_size)
+        target = load_rgb_tensor(
+            pair.target_path,
+            image_size=target_image_size,
+        )
         background = target.eq(1.0).all(dim=0)
         background_count = int(background.sum().item())
-        if background_count == 0 or background_count == image_size * image_size:
+        if (
+            background_count == 0
+            or background_count == target_image_size * target_image_size
+        ):
             raise Pix2PixError(
                 "white_canvas_equal_regions requires both exact-white background "
                 f"and non-white foreground in target: {pair.id}"

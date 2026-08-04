@@ -16,6 +16,7 @@ from aigen.pix2pix.errors import Pix2PixError
 
 
 DATASET_FORMAT = "aigen.pix2pix.paired.v2"
+ASYMMETRIC_DATASET_FORMAT = "aigen.pix2pix.paired.v3"
 DATASET_MANIFEST_NAME = "dataset.json"
 PAIR_SPLITS = frozenset({"train", "validation", "test"})
 PAIR_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -37,8 +38,10 @@ class PairedImage:
 @dataclass(frozen=True)
 class AuditedDataset:
     root: Path
+    format: str
     name: str
-    image_size: int
+    source_image_size: int
+    target_image_size: int
     pair_manifest: Path
     pairs: tuple[PairedImage, ...]
     split_counts: dict[str, int]
@@ -51,12 +54,11 @@ class AuditedDataset:
         return tuple(pair for pair in self.pairs if pair.split == name)
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "status": "ok",
-            "format": DATASET_FORMAT,
+            "format": self.format,
             "name": self.name,
             "root": self.root.as_posix(),
-            "image_size": self.image_size,
             "pair_manifest": self.pair_manifest.as_posix(),
             "pair_count": len(self.pairs),
             "split_counts": self.split_counts,
@@ -64,6 +66,12 @@ class AuditedDataset:
             "split_group_counts": self.split_group_counts,
             "fingerprint": self.fingerprint,
         }
+        if self.format == DATASET_FORMAT:
+            payload["image_size"] = self.source_image_size
+        else:
+            payload["source_image_size"] = self.source_image_size
+            payload["target_image_size"] = self.target_image_size
+        return payload
 
 
 @dataclass(frozen=True)
@@ -77,17 +85,28 @@ def audit_dataset(root: Path) -> AuditedDataset:
     manifest = read_json(manifest_path, label="pix2pix dataset manifest")
     if not isinstance(manifest, dict):
         raise Pix2PixError("dataset manifest must be a JSON object")
-    expected = {"format", "name", "image_size", "pairs"}
+    dataset_format = manifest.get("format")
+    if dataset_format == DATASET_FORMAT:
+        expected = {"format", "name", "image_size", "pairs"}
+    elif dataset_format == ASYMMETRIC_DATASET_FORMAT:
+        expected = {
+            "format",
+            "name",
+            "source_image_size",
+            "target_image_size",
+            "pairs",
+        }
+    else:
+        raise Pix2PixError(f"unsupported pix2pix dataset format: {dataset_format!r}")
     _require_exact_keys(manifest, expected, "dataset manifest")
-    if manifest["format"] != DATASET_FORMAT:
-        raise Pix2PixError(f"unsupported pix2pix dataset format: {manifest['format']!r}")
     name = _nonempty_string(manifest, "name")
-    image_size = _integer(manifest, "image_size")
-    if image_size not in MODEL_IMAGE_SIZES:
-        supported = ", ".join(str(size) for size in sorted(MODEL_IMAGE_SIZES))
-        raise Pix2PixError(
-            f"pix2pix v1 dataset image_size must be one of: {supported}"
-        )
+    if dataset_format == DATASET_FORMAT:
+        source_image_size = target_image_size = _integer(manifest, "image_size")
+    else:
+        source_image_size = _integer(manifest, "source_image_size")
+        target_image_size = _integer(manifest, "target_image_size")
+    _validate_image_size(source_image_size, "source_image_size")
+    _validate_image_size(target_image_size, "target_image_size")
     pair_manifest = _resolve_member(root, _nonempty_string(manifest, "pairs"), "pairs manifest")
     pairs_payload = _read_pair_records(pair_manifest)
     if not pairs_payload:
@@ -132,8 +151,8 @@ def audit_dataset(root: Path) -> AuditedDataset:
         target_relative = _nonempty_string(record, "target")
         source_path = _resolve_member(root, source_relative, f"source for pair {pair_id}")
         target_path = _resolve_member(root, target_relative, f"target for pair {pair_id}")
-        source = _inspect_once(image_cache, source_path, image_size)
-        target = _inspect_once(image_cache, target_path, image_size)
+        source = _inspect_once(image_cache, source_path, source_image_size)
+        target = _inspect_once(image_cache, target_path, target_image_size)
         pairs.append(
             PairedImage(
                 id=pair_id,
@@ -159,22 +178,37 @@ def audit_dataset(root: Path) -> AuditedDataset:
     }
     return AuditedDataset(
         root=root,
+        format=dataset_format,
         name=name,
-        image_size=image_size,
+        source_image_size=source_image_size,
+        target_image_size=target_image_size,
         pair_manifest=pair_manifest,
         pairs=tuple(pairs),
         split_counts=normalized_counts,
         split_group_counts=normalized_group_counts,
-        fingerprint=_dataset_fingerprint(name, image_size, pairs),
+        fingerprint=_dataset_fingerprint(
+            dataset_format,
+            name,
+            source_image_size,
+            target_image_size,
+            pairs,
+        ),
     )
 
 
 def dataset_contract() -> dict[str, object]:
     return {
-        "dataset_manifest": {
+        "same_size_dataset_manifest": {
             "format": DATASET_FORMAT,
             "name": "example-dataset",
             "image_size": MODEL_IMAGE_SIZE,
+            "pairs": "pairs.jsonl",
+        },
+        "asymmetric_dataset_manifest": {
+            "format": ASYMMETRIC_DATASET_FORMAT,
+            "name": "example-downscale-dataset",
+            "source_image_size": 1024,
+            "target_image_size": 128,
             "pairs": "pairs.jsonl",
         },
         "pair_record": {
@@ -245,16 +279,21 @@ def _inspect_once(
 
 
 def _dataset_fingerprint(
+    dataset_format: str,
     name: str,
-    image_size: int,
+    source_image_size: int,
+    target_image_size: int,
     pairs: list[PairedImage],
 ) -> str:
     digest = hashlib.sha256()
-    digest.update(DATASET_FORMAT.encode())
+    digest.update(dataset_format.encode())
     digest.update(b"\0")
     digest.update(name.encode())
     digest.update(b"\0")
-    digest.update(str(image_size).encode())
+    digest.update(str(source_image_size).encode())
+    if dataset_format == ASYMMETRIC_DATASET_FORMAT:
+        digest.update(b"\0")
+        digest.update(str(target_image_size).encode())
     for pair in pairs:
         for value in (
             pair.id,
@@ -268,6 +307,12 @@ def _dataset_fingerprint(
             digest.update(b"\0")
             digest.update(value.encode())
     return digest.hexdigest()
+
+
+def _validate_image_size(image_size: int, label: str) -> None:
+    if image_size not in MODEL_IMAGE_SIZES:
+        supported = ", ".join(str(size) for size in sorted(MODEL_IMAGE_SIZES))
+        raise Pix2PixError(f"{label} must be one of: {supported}")
 
 
 def _resolve_member(root: Path, value: str, label: str) -> Path:

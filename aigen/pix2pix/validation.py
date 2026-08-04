@@ -49,8 +49,13 @@ def evaluate_model(
     generator, metadata = load_generator_bundle(model_dir, device=device)
     validate_model_precision(next(generator.parameters()).dtype, precision)
     model_config = ModelConfig.from_json(metadata["model"])
-    if model_config.image_size != dataset.image_size:
-        raise Pix2PixError("model image size does not match the evaluation dataset")
+    if (
+        model_config.image_size != dataset.source_image_size
+        or model_config.output_image_size != dataset.target_image_size
+    ):
+        raise Pix2PixError(
+            "model input/output sizes do not match the evaluation dataset"
+        )
     prepare_empty_output_dir(output_dir)
     progress.begin(
         math.ceil(len(pairs) / batch_size),
@@ -62,7 +67,8 @@ def evaluate_model(
     result = evaluate_generator(
         generator,
         pairs,
-        image_size=model_config.image_size,
+        source_image_size=model_config.image_size,
+        target_image_size=model_config.output_image_size,
         batch_size=batch_size,
         num_workers=num_workers,
         device=device,

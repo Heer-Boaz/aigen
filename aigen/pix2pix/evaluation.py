@@ -42,7 +42,8 @@ def evaluate_generator(
     generator: nn.Module,
     pairs: tuple[PairedImage, ...],
     *,
-    image_size: int,
+    source_image_size: int,
+    target_image_size: int,
     batch_size: int,
     num_workers: int,
     device: torch.device,
@@ -53,7 +54,8 @@ def evaluate_generator(
 ) -> EvaluationResult:
     loader = create_evaluation_loader(
         pairs,
-        image_size=image_size,
+        source_image_size=source_image_size,
+        target_image_size=target_image_size,
         batch_size=batch_size,
         num_workers=num_workers,
         pin_memory=device.type == "cuda",

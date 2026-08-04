@@ -9,11 +9,30 @@ from torch.nn import functional as functional
 
 from aigen.pix2pix.config import (
     GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+    GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE,
+    GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_DCSPLIT,
+    GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_RESIDUAL,
+    NATIVE_DOWNSCALE_ARCHITECTURES,
     ModelConfig,
 )
 
 
 NormalizationFactory = Callable[[int], nn.Module]
+
+
+class _DcSplit(nn.Module):
+    """Separate each block's mean from its fluctuation around that mean.
+
+    Unshuffled channels are neighbouring source samples and therefore almost
+    perfectly correlated, which leaves gradient descent crawling along the
+    low-curvature directions of the least-squares problem. Splitting off the
+    dominant mean direction is a linear reparameterisation: it leaves what the
+    network can express untouched and only changes how easily it is found.
+    """
+
+    def forward(self, features: Tensor) -> Tensor:
+        mean = features.mean(dim=1, keepdim=True)
+        return torch.cat((mean, features - mean), dim=1)
 
 
 class Pix2PixGenerator(nn.Module):
@@ -36,12 +55,27 @@ class Pix2PixGenerator(nn.Module):
         raster_factor = _raster_factor(config)
         network_image_size = config.image_size // raster_factor
         network_input_channels = config.input_channels * raster_factor**2
+        dc_split = (
+            config.generator_architecture
+            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_DCSPLIT
+        )
+        if dc_split:
+            network_input_channels += 1
         self.input_transform = (
-            nn.PixelUnshuffle(raster_factor)
+            nn.Sequential(nn.PixelUnshuffle(raster_factor), _DcSplit())
+            if dc_split
+            else nn.PixelUnshuffle(raster_factor)
             if raster_factor > 1
             else nn.Identity()
         )
-        self._output_scale = raster_factor
+        self._output_scale = (
+            raster_factor
+            if (
+                config.generator_architecture
+                == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+            )
+            else 1
+        )
         channels = config.generator_channels
         block = _UnetBlock(
             channels * 8,
@@ -86,19 +120,42 @@ class Pix2PixGenerator(nn.Module):
             device=device,
             dtype=dtype,
         )
+        residual = (
+            config.generator_architecture
+            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_RESIDUAL
+        )
         self.network = _UnetBlock(
             config.output_channels,
             channels,
             input_channels=network_input_channels,
             child=block,
             outermost=True,
+            final_activation=not residual,
             norm=norm,
             device=device,
             dtype=dtype,
         )
+        # The outermost block halves the raster before any skip exists, so an
+        # exactly local mapping cannot survive it. This head restores a path at
+        # the output raster; the U-Net is left to supply non-local corrections.
+        self.residual_head = (
+            nn.Conv2d(
+                network_input_channels,
+                config.output_channels,
+                kernel_size=3,
+                padding=1,
+                device=device,
+                dtype=dtype,
+            )
+            if residual
+            else None
+        )
 
     def forward(self, source: Tensor) -> Tensor:
-        output = self.network(self.input_transform(source))
+        features = self.input_transform(source)
+        output = self.network(features)
+        if self.residual_head is not None:
+            output = torch.tanh(output + self.residual_head(features))
         if self._output_scale > 1:
             output = functional.interpolate(
                 output,
@@ -120,15 +177,29 @@ class ConditionalPatchDiscriminator(nn.Module):
     ) -> None:
         super().__init__()
         config.validate()
-        raster_factor = _raster_factor(config)
-        self.input_transform = (
-            nn.PixelUnshuffle(raster_factor)
-            if raster_factor > 1
+        source_raster_factor = _raster_factor(config)
+        candidate_raster_factor = (
+            source_raster_factor
+            if (
+                config.generator_architecture
+                == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+            )
+            else 1
+        )
+        self.source_transform = (
+            nn.PixelUnshuffle(source_raster_factor)
+            if source_raster_factor > 1
+            else nn.Identity()
+        )
+        self.candidate_transform = (
+            nn.PixelUnshuffle(candidate_raster_factor)
+            if candidate_raster_factor > 1
             else nn.Identity()
         )
         input_channels = (
-            config.input_channels + config.output_channels
-        ) * raster_factor**2
+            config.input_channels * source_raster_factor**2
+            + config.output_channels * candidate_raster_factor**2
+        )
         channels = config.discriminator_channels
         layers: list[nn.Module] = [
             nn.Conv2d(
@@ -204,15 +275,14 @@ class ConditionalPatchDiscriminator(nn.Module):
         self._feature_indices = tuple(feature_indices)
 
     def forward(self, source: Tensor, candidate: Tensor) -> Tensor:
-        paired = self.input_transform(torch.cat((source, candidate), dim=1))
-        return self.network(paired)
+        return self.network(self._pair(source, candidate))
 
     def forward_features(
         self,
         source: Tensor,
         candidate: Tensor,
     ) -> tuple[Tensor, ...]:
-        output = self.input_transform(torch.cat((source, candidate), dim=1))
+        output = self._pair(source, candidate)
         features = []
         next_feature = 0
         for layer_index, layer in enumerate(self.network):
@@ -225,6 +295,15 @@ class ConditionalPatchDiscriminator(nn.Module):
                 next_feature += 1
         features.append(output)
         return tuple(features)
+
+    def _pair(self, source: Tensor, candidate: Tensor) -> Tensor:
+        return torch.cat(
+            (
+                self.source_transform(source),
+                self.candidate_transform(candidate),
+            ),
+            dim=1,
+        )
 
 
 class ConditionalMultiscaleDiscriminator(nn.Module):
@@ -365,6 +444,7 @@ class _UnetBlock(nn.Module):
         child: nn.Module | None = None,
         outermost: bool = False,
         innermost: bool = False,
+        final_activation: bool = True,
         norm: NormalizationFactory,
         dropout: bool = False,
         device: torch.device | str | None = None,
@@ -398,7 +478,7 @@ class _UnetBlock(nn.Module):
                     device=device,
                     dtype=dtype,
                 ),
-                nn.Tanh(),
+                *((nn.Tanh(),) if final_activation else ()),
             )
             return
         if innermost:
@@ -465,6 +545,8 @@ def generator_architecture_name(config: ModelConfig) -> str:
         == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
     ):
         return "pixel_unshuffle_8_unet_128_nearest_1024"
+    if config.generator_architecture in NATIVE_DOWNSCALE_ARCHITECTURES:
+        return config.generator_architecture
     return f"unet_{config.image_size}"
 
 
@@ -473,7 +555,10 @@ def _raster_factor(config: ModelConfig) -> int:
         8
         if (
             config.generator_architecture
-            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+            in {
+                GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+                *NATIVE_DOWNSCALE_ARCHITECTURES,
+            }
         )
         else 1
     )

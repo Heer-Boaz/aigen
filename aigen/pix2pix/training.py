@@ -104,8 +104,13 @@ def train_pix2pix(
     progress.phase("audit paired dataset")
     dataset = audit_dataset(dataset_dir)
     config = TrainConfig.load(config_path)
-    if dataset.image_size != config.model.image_size:
-        raise Pix2PixError("dataset image size does not match the model config")
+    if (
+        dataset.source_image_size != config.model.image_size
+        or dataset.target_image_size != config.model.output_image_size
+    ):
+        raise Pix2PixError(
+            "dataset source/target sizes do not match the model config"
+        )
     device = resolve_device(device_name)
     validate_precision(device, config.precision)
     validate_precision(device, config.parameter_precision)
@@ -120,9 +125,9 @@ def train_pix2pix(
     }:
         validate_white_canvas_region_balance(
             train_pairs,
-            image_size=config.model.image_size,
+            target_image_size=config.model.output_image_size,
             translation_margin=(
-                maximum_translation(config.model.image_size)
+                maximum_translation(config.model.output_image_size)
                 if (
                     config.format
                     in {TRAIN_CONFIG_FORMAT_V7, TRAIN_CONFIG_FORMAT}
@@ -311,7 +316,8 @@ def train_pix2pix(
 
     loader, sampler = create_training_loader(
         train_pairs,
-        image_size=config.model.image_size,
+        source_image_size=config.model.image_size,
+        target_image_size=config.model.output_image_size,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         seed=config.seed,
@@ -969,7 +975,8 @@ def _validate(
     return evaluate_generator(
         generator,
         validation_pairs,
-        image_size=config.model.image_size,
+        source_image_size=config.model.image_size,
+        target_image_size=config.model.output_image_size,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         device=device,

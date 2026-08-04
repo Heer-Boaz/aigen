@@ -22,10 +22,29 @@ MODEL_IMAGE_SIZES = frozenset({128, MODEL_IMAGE_SIZE, 1024})
 MODEL_CHANNELS = 3
 GENERATOR_ARCHITECTURE_UNET = "unet"
 GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8 = "pixel_unshuffle_8_unet_128"
+GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE = (
+    "pixel_unshuffle_8_unet_128_native"
+)
+GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_RESIDUAL = (
+    "pixel_unshuffle_8_unet_128_native_residual"
+)
+GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_DCSPLIT = (
+    "pixel_unshuffle_8_unet_128_native_dcsplit"
+)
 GENERATOR_ARCHITECTURES = frozenset(
     {
         GENERATOR_ARCHITECTURE_UNET,
         GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_RESIDUAL,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_DCSPLIT,
+    }
+)
+NATIVE_DOWNSCALE_ARCHITECTURES = frozenset(
+    {
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_RESIDUAL,
+        GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8_NATIVE_DCSPLIT,
     }
 )
 DISCRIMINATOR_LAYER_COUNTS = frozenset({1, 3, 4})
@@ -50,6 +69,12 @@ class ModelConfig:
     discriminator_layers: int = 3
     generator_dropout: bool = True
     generator_architecture: str = GENERATOR_ARCHITECTURE_UNET
+
+    @property
+    def output_image_size(self) -> int:
+        if self.generator_architecture in NATIVE_DOWNSCALE_ARCHITECTURES:
+            return 128
+        return self.image_size
 
     def to_json(self) -> dict[str, object]:
         payload = asdict(self)
@@ -113,11 +138,14 @@ class ModelConfig:
             )
         if (
             self.generator_architecture
-            == GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8
+            in {
+                GENERATOR_ARCHITECTURE_PIXEL_UNSHUFFLE_8,
+                *NATIVE_DOWNSCALE_ARCHITECTURES,
+            }
             and self.image_size != 1024
         ):
             raise Pix2PixError(
-                "pixel_unshuffle_8_unet_128 requires image_size 1024"
+                "pixel-unshuffle U-Net architectures require image_size 1024"
             )
 
 
@@ -556,6 +584,14 @@ class TrainConfig:
             supported = ", ".join(sorted(DISCRIMINATOR_AUGMENTATIONS))
             raise Pix2PixError(
                 f"discriminator_augmentation must be one of: {supported}"
+            )
+        if (
+            self.model.generator_architecture in NATIVE_DOWNSCALE_ARCHITECTURES
+            and self.discriminator_augmentation != "none"
+        ):
+            raise Pix2PixError(
+                "native 1024-to-128 generation does not support same-size "
+                "discriminator augmentation"
             )
         if self.conditional_negative not in CONDITIONAL_NEGATIVES:
             supported = ", ".join(sorted(CONDITIONAL_NEGATIVES))

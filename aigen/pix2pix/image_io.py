@@ -73,12 +73,21 @@ def save_comparison_grid(
         raise Pix2PixError("cannot write an empty comparison grid")
     if path.exists():
         raise Pix2PixError(f"comparison image already exists: {path.as_posix()}")
-    image_size = rows[0][0].shape[-1]
-    grid = Image.new("RGB", (image_size * 3, image_size * len(rows)))
+    panel_size = max(
+        tensor.shape[-1]
+        for row in rows
+        for tensor in row
+    )
+    grid = Image.new("RGB", (panel_size * 3, panel_size * len(rows)))
     for row_index, (source, target, generated) in enumerate(rows):
-        y = row_index * image_size
-        grid.paste(tensor_to_rgb_image(source), (0, y))
-        grid.paste(tensor_to_rgb_image(target), (image_size, y))
-        grid.paste(tensor_to_rgb_image(generated), (image_size * 2, y))
+        y = row_index * panel_size
+        for column, tensor in enumerate((source, target, generated)):
+            image = tensor_to_rgb_image(tensor)
+            if image.size != (panel_size, panel_size):
+                image = image.resize(
+                    (panel_size, panel_size),
+                    Image.Resampling.NEAREST,
+                )
+            grid.paste(image, (panel_size * column, y))
     path.parent.mkdir(parents=True, exist_ok=True)
     grid.save(path, format="PNG", optimize=False)

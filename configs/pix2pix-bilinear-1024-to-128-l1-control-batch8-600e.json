@@ -1,0 +1,38 @@
+{
+  "format": "aigen.pix2pix.training.v4",
+  "objective": "l1_only",
+  "model": {
+    "image_size": 1024,
+    "input_channels": 3,
+    "output_channels": 3,
+    "generator_channels": 64,
+    "discriminator_channels": 64,
+    "discriminator_layers": 3,
+    "generator_dropout": false,
+    "generator_architecture": "pixel_unshuffle_8_unet_128_native"
+  },
+  "batch_size": 8,
+  "max_steps": 59400,
+  "learning_rate": 0.000566,
+  "learning_rate_schedule": {
+    "type": "linear_decay",
+    "decay_start_step": 29700
+  },
+  "beta1": 0.5,
+  "beta2": 0.999,
+  "lambda_l1": 100.0,
+  "horizontal_flip": true,
+  "optimizer": "adam",
+  "parameter_precision": "fp32",
+  "precision": "fp32",
+  "checkpoint_every": 14850,
+  "extra_checkpoint_steps": [
+    4950,
+    9900,
+    19800,
+    39600
+  ],
+  "log_every": 99,
+  "seed": 42,
+  "num_workers": 12
+}

@@ -26,6 +26,13 @@ def add_pix2pix_commands(subparsers: Any) -> None:
     audit = actions.add_parser("audit", help="fully validate and fingerprint a dataset")
     audit.add_argument("dataset", type=Path)
 
+    bilinear_control = actions.add_parser(
+        "prepare-bilinear-control",
+        help="derive exact 1024-to-128 bilinear targets from full-frame DIV2K crops",
+    )
+    bilinear_control.add_argument("div2k_root", type=Path)
+    bilinear_control.add_argument("--output-dir", type=Path, required=True)
+
     train = actions.add_parser("train", help="train the pix2pix baseline")
     train.add_argument("dataset", type=Path)
     train.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -159,6 +166,17 @@ def _run_pix2pix_action(
 
         progress.phase("audit paired dataset")
         return audit_dataset(args.dataset).to_json()
+    if args.pix2pix_action == "prepare-bilinear-control":
+        from aigen.pix2pix.bilinear_control import (
+            prepare_bilinear_control_dataset,
+        )
+
+        progress.phase("audit source dataset")
+        return prepare_bilinear_control_dataset(
+            args.div2k_root,
+            args.output_dir,
+            progress=progress,
+        )
     if args.pix2pix_action == "train":
         from aigen.pix2pix.training import train_pix2pix
 
