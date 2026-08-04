@@ -4,11 +4,14 @@ This is a separate local training route for a narrow, supervised image-to-image
 mapping. It does not replace or call the FLUX.2 Klein or Qwen Image Edit
 character routes.
 
-The implemented reference family has two raster contracts:
+The implemented reference family has four raster contracts:
 
 ```text
 native contract:
   aligned 128x128 or 256x256 source -> same-size U-Net -> RGB target
+
+full-resolution contract:
+  aligned 1024x1024 RGB source -> U-Net-1024 -> 1024x1024 RGB target
 
 lossless high-resolution source contract:
   1024x1024 RGB source
@@ -17,12 +20,189 @@ lossless high-resolution source contract:
     -> native 3x128x128 RGB prediction
     -> deterministic nearest-neighbour 1024x1024 artifact
 
+native downscale contract:
+  1024x1024 RGB source
+    -> PixelUnshuffle(8), preserving every source sample as 192x128x128
+    -> U-Net-128
+    -> native 3x128x128 RGB prediction
+
+  two measured variants of that contract, neither of which beat it:
+    ..._native_dcsplit  prepends each block's mean and subtracts it from the
+                        192 channels, a 193-channel reparameterisation that
+                        leaves the representation lossless and reversible
+    ..._native_residual adds tanh(unet + conv3x3(unshuffled)), moving the final
+                        tanh out of the outermost block so the two paths sum
+                        before the activation rather than after
+
 conditional discriminator:
   source + real/generated target
-    -> native pair, or the same lossless PixelUnshuffle(8)
+    -> native pair, or source/target raster adapters with equal feature grids
     -> PatchGAN-16, PatchGAN-70, global PatchGAN-142,
        or two-scale PatchGAN-70
 ```
+
+## Bilinear 1024-to-128 control
+
+The bilinear control deliberately replaces the difficult pixel-art target with
+a target whose complete ground-truth operation is known. Its source corpus is
+the official full-frame DIV2K train and validation data, not character renders,
+isolated objects, letterboxed images, or white-matted canvases. This follows the
+same DIV2K/DF2K crop ownership used by mature restoration pipelines such as
+BasicSR and Real-ESRGAN.
+
+The builder verifies the two official archives, all 900 expected filenames,
+every decoded RGB image, and every source hash. It retains the official split,
+then takes one deterministic 1024x1024 crop directly from every image large
+enough in both dimensions. Fifteen train images and one validation image are
+excluded because a lossless 1024 crop is impossible; they are not resized or
+padded. The resulting split contains 785 train and 99 validation pairs. Each
+crop fills the complete stored source raster. Its paired 128x128 target is
+derived with exactly `Pillow.Image.resize(Image.Resampling.BILINEAR)`.
+
+Acquire and extract the source corpus:
+
+```bash
+mkdir -p runs/pix2pix/bilinear-control-sources/div2k
+curl -fL -o runs/pix2pix/bilinear-control-sources/div2k/DIV2K_train_HR.zip \
+  https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip
+curl -fL -o runs/pix2pix/bilinear-control-sources/div2k/DIV2K_valid_HR.zip \
+  https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip
+.venv/bin/python -m zipfile -e \
+  runs/pix2pix/bilinear-control-sources/div2k/DIV2K_train_HR.zip \
+  runs/pix2pix/bilinear-control-sources/div2k
+.venv/bin/python -m zipfile -e \
+  runs/pix2pix/bilinear-control-sources/div2k/DIV2K_valid_HR.zip \
+  runs/pix2pix/bilinear-control-sources/div2k
+```
+
+Build or re-audit the immutable control dataset:
+
+```bash
+.venv/bin/aigen pix2pix prepare-bilinear-control \
+  runs/pix2pix/bilinear-control-sources/div2k \
+  --output-dir runs/pix2pix/dataset-div2k-bilinear-1024-to-128-v1
+```
+
+The command audits every input and output image, fingerprints the dataset, and
+pixel-compares every target with a fresh bilinear reduction of its paired
+stored source. It also records the full-image and boundary exact-white
+fractions, boundary RGB standard deviation, and dominant quantized boundary
+color. The manifest binds those measurements, the crop coordinates, the source
+hashes, Pillow version, and exact resize operation. A successful report
+therefore proves the 1024-to-128 raster contract, target oracle, and actual
+full-frame boundary distribution before training.
+
+[`configs/pix2pix-bilinear-1024-to-128-l1-control-200e.json`](../configs/pix2pix-bilinear-1024-to-128-l1-control-200e.json)
+is the first diagnostic config. It uses the native 128 output architecture,
+FP32, no dropout, and L1 only. Starting without a discriminator makes failure
+unambiguous: this first run asks only whether the data, generator, optimizer,
+checkpoint, evaluation, and inference path can learn a deterministic resize.
+The prepared command is:
+
+```bash
+.venv/bin/aigen pix2pix train \
+  runs/pix2pix/dataset-div2k-bilinear-1024-to-128-v1 \
+  --config configs/pix2pix-bilinear-1024-to-128-l1-control-200e.json \
+  --output-dir runs/pix2pix/training-div2k-bilinear-1024-to-128-l1-control-200e-v1
+```
+
+Model predictions and metrics remain native 128x128. Comparison sheets enlarge
+the 128x128 panels only for display next to the 1024x1024 source; that
+presentation resize never enters the model or loss.
+
+### Reference errors for the control
+
+Validation L1 is reported in `[0, 1]` units. Multiplying by 255 gives grey
+levels of 255, which is the only scale that compares across the `[-1, 1]`
+tensors the loss sees and the `[0, 1]` numbers the evaluator prints. Measured
+over the 99 validation pairs:
+
+| predictor | grey levels of 255 |
+| --- | --- |
+| constant grey (learns nothing) | 59.6 |
+| nearest subsample, no filtering | 11.75 |
+| fixed 8x8 box average | 2.65 |
+| exact optimal 3x3 linear operator, solved in closed form | 0.629 |
+| rounding floor: continuous bilinear against the uint8 target | 0.25 |
+
+The box average is the threshold that separates "learned something" from
+"reproduced a fixed linear filter". The 3x3 figure comes from the normal
+equations over the PixelUnshuffle(8) features; a 5x5 support only reaches
+0.608, which confirms that the operation genuinely is a 3x3 convolution over
+those features and that nothing wider is required.
+
+### What the control established
+
+| run | validation |
+| --- | --- |
+| batch 1, lr 2e-4, 200 epochs | 1.44 |
+| batch 8, lr 5.66e-4, 200 epochs | 1.296 |
+| batch 8 with `..._native_dcsplit` | 1.360 |
+| batch 8 with `..._native_residual` | 1.723 |
+| batch 8, 600 epochs | 0.984 |
+
+Length is the only lever that moved the result, and it moved it 24 per cent.
+The distance that looked like a defect was an unfinished run: at 600 epochs the
+curve was still falling steeply, from 2.427 at epoch 450 to 0.984 at the end.
+
+Spend the budget on the decay, not on the constant phase. At full learning rate
+the model plateaus outright — 4.215, 3.464 and 3.687 at epochs 100, 200 and 300
+is noise around a flat line — while every run's entire improvement arrives once
+the learning rate starts annealing.
+
+Two identical configs diverge measurably: the 200- and 600-epoch runs share
+seed, batch, learning rate and schedule up to step 9900 and still read 3.90
+against 4.215 there, an 8 per cent spread from `cudnn.benchmark`, TF32 and
+non-deterministic reductions. Validation is not monotone within a run either
+(2.137 at epoch 400, 2.427 at 450). Differences below roughly 10 per cent at a
+single checkpoint are therefore not evidence; the `..._native_dcsplit` result
+above sits inside that band and should be read as untested, not as refuted.
+
+Batch 8 with a sqrt-scaled learning rate beats batch 1 on the same data budget
+and halves wall-clock. The two architecture variants were attempts to close the
+remaining distance to 0.629 and neither helped, so the plain
+`pixel_unshuffle_8_unet_128_native` remains the reference. They are kept
+because checkpoint metadata names its architecture, so removing a name would
+make the runs that used it unloadable.
+
+Training is input-bound, not GPU-bound. A 1024x1024 PNG decodes in about 49 ms
+against 24 ms for a 128x128 one, so per-image overhead dominates the pixel
+count, and observed throughput tracks `num_workers` times the per-worker decode
+rate almost exactly. Raise `num_workers` before reaching for anything else; VRAM
+is not a constraint, since batch 16 peaks at 1143 MB.
+
+The distance from 1.296 to 0.629 is not architectural. Gradient descent on
+exactly the same 5,187-weight linear operator reaches only 1.265, far worse than
+the direct solver and worse than the U-Net, so network depth helps the
+optimisation rather than obstructing it. Splitting each block's mean from its
+fluctuation improves that linear fit to 0.785 without changing what it can
+express, which shows the gap is conditioning in the optimiser, not capacity.
+That reference point exists only because this control is exactly linear; the
+sprite task has no closed-form counterpart to measure against.
+
+After the L1 gate passes,
+[`configs/pix2pix-bilinear-1024-to-128-adversarial-l1-control-200e.json`](../configs/pix2pix-bilinear-1024-to-128-adversarial-l1-control-200e.json)
+runs the same architecture, data, seed, schedule, and checkpoint cadence with
+the ordinary conditional PatchGAN plus L1 objective. Keeping that as a second
+run prevents generator capacity and adversarial dynamics from being mixed into
+one diagnosis.
+
+The full-resolution baseline keeps every training and inference tensor at
+1024x1024. It performs no crop, resize, PixelUnshuffle, or deterministic
+post-upscale:
+
+```bash
+.venv/bin/aigen pix2pix train \
+  runs/pix2pix/iro-gate512-v1/dataset-flux-source-set-reviewed-v3-unanimous-native1024-v1 \
+  --config configs/pix2pix-native1024-baseline-200e.json \
+  --output-dir runs/pix2pix/iro-gate512-v1/training-native1024-baseline-200e-v1
+```
+
+This is the ordinary single-scale U-Net/PatchGAN pix2pix baseline: vanilla GAN
+loss plus L1 weight 100, batch size 1, Adam at 0.0002, 100 epochs at constant
+learning rate followed by 100 epochs of linear decay, and no regional losses,
+multiscale discriminators, feature matching, a-contrario negatives, palette
+losses, or raster adapters.
 
 U-Net-128 has 41,828,995 trainable parameters; U-Net-256 has 54,413,955.
 PatchGAN-16 has 139,585 parameters, PatchGAN-70 has 2,768,705, and the native
@@ -103,6 +283,18 @@ my-dataset/
   "format": "aigen.pix2pix.paired.v2",
   "name": "my-paired-pixel-art-data",
   "image_size": 128,
+  "pairs": "pairs.jsonl"
+}
+```
+
+An asymmetric source/target task uses the v3 manifest instead:
+
+```json
+{
+  "format": "aigen.pix2pix.paired.v3",
+  "name": "my-1024-to-128-data",
+  "source_image_size": 1024,
+  "target_image_size": 128,
   "pairs": "pairs.jsonl"
 }
 ```
