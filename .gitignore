@@ -20,6 +20,10 @@ aigen/models/
 catalogs/
 plans/
 runs/
+# runs/ is output, except the curated evidence sheets the docs cite.
+!/runs/
+/runs/*
+!/runs/evidence/
 loras/
 tools/diffusers/
 model_sources/Pixal3D/
