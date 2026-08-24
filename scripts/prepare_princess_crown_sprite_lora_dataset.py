@@ -29,6 +29,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("recipe", type=Path)
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument("--canvas", type=int, default=CANVAS_SIZE)
+    parser.add_argument(
+        "--global-scale",
+        type=int,
+        default=None,
+        help="Use one integer scale for every sprite instead of filling the canvas",
+    )
     args = parser.parse_args()
 
     recipe_path = args.recipe.resolve()
@@ -46,7 +53,12 @@ def main() -> None:
     contact_images = []
     for index, item in enumerate(recipe["items"], start=1):
         sprite = _load_sprite(item, recipe_path.parent)
-        canvas, scale = _compose_canvas(sprite, BACKGROUNDS[(index - 1) % len(BACKGROUNDS)])
+        canvas, scale = _compose_canvas(
+            sprite,
+            BACKGROUNDS[(index - 1) % len(BACKGROUNDS)],
+            args.canvas,
+            args.global_scale,
+        )
         stem = f"{index:03d}_{item['name']}"
         image_path = train_dir / f"{stem}.png"
         caption = f"{recipe['trigger_token']}. {item['caption']}"
@@ -75,8 +87,9 @@ def main() -> None:
         "source_recipe": recipe_path.as_posix(),
         "trigger_token": recipe["trigger_token"],
         "image_count": len(records),
-        "canvas_size": [CANVAS_SIZE, CANVAS_SIZE],
-        "sprite_extent": MAX_SPRITE_EXTENT,
+        "canvas_size": [args.canvas, args.canvas],
+        "sprite_extent": MAX_SPRITE_EXTENT if args.global_scale is None else None,
+        "global_scale": args.global_scale,
         "resize_filter": "nearest",
         "backgrounds": [list(color) for color in BACKGROUNDS],
         "records": records,
@@ -116,12 +129,27 @@ def _sheet_component(sheet: Image.Image, component: int, source: Path) -> Image.
     return Image.fromarray(rgba, "RGBA")
 
 
-def _compose_canvas(sprite: Image.Image, background: tuple[int, int, int]) -> tuple[Image.Image, int]:
-    scale = max(1, MAX_SPRITE_EXTENT // max(sprite.size))
+def _compose_canvas(
+    sprite: Image.Image,
+    background: tuple[int, int, int],
+    canvas_size: int,
+    global_scale: int | None,
+) -> tuple[Image.Image, int]:
+    # A per-sprite scale makes every figure fill the canvas, which erases the two
+    # things a sprite-style LoRA has to learn: relative body size and pixel grain.
+    # A global scale keeps both constant across the dataset.
+    if global_scale is not None:
+        scale = global_scale
+    else:
+        scale = max(1, MAX_SPRITE_EXTENT // max(sprite.size))
     scaled_size = (sprite.width * scale, sprite.height * scale)
+    if max(scaled_size) > canvas_size:
+        raise ValueError(
+            f"Sprite {sprite.size} at scale {scale} does not fit canvas {canvas_size}"
+        )
     scaled = sprite.resize(scaled_size, Image.Resampling.NEAREST)
-    canvas = Image.new("RGBA", (CANVAS_SIZE, CANVAS_SIZE), (*background, 255))
-    position = ((CANVAS_SIZE - scaled.width) // 2, (CANVAS_SIZE - scaled.height) // 2)
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), (*background, 255))
+    position = ((canvas_size - scaled.width) // 2, (canvas_size - scaled.height) // 2)
     canvas.alpha_composite(scaled, position)
     return canvas.convert("RGB"), scale
 
