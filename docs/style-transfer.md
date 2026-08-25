@@ -6,8 +6,12 @@ The goal is a character redrawn in a sprite art style. The criterion is
 grain, edge hardness and rasterization are explicitly *not* the criterion —
 that is why this is called sprite style and not pixel-art style.
 
-Jillian's own references measure ~4 heads. Her original character sheet
-measures ~6.5. Everything below is about closing that gap.
+Jillian's own references measure ~4 heads. Her original figure measures
+**6.2** — `assets/lora/JSEED/masters/front-full.png` and
+`assets/characters/jillian/views/front.png` are the same drawing on different
+canvases (identical 3718 px figure blob), so both carry that number, and the
+~6.5 used as a round figure elsewhere in this document is that same 6.2 read
+coarsely. Everything below is about closing the gap to ~4.
 
 ## The finding
 
@@ -54,9 +58,14 @@ recalled approximately as "zet om in kleine pixel-art sprite", but that was a
 paraphrase; the two literal variants derived from it ("Convert into a small
 pixel-art sprite." / "Convert into a pixel-art sprite.") both return ~6.5 heads
 locally. Finding the real wording — from the ChatGPT history — collapses this
-question faster than any sweep. Failing that, the open experiment is a prompt
-sweep over game/scale semantics ("Game Boy sprite", "RPG character sprite", an
-explicit small pixel dimension) measured on head-count.
+question faster than any sweep.
+
+**The prompt sweep is a declined direction, not an open one.** A sweep over
+game/scale semantics ("Game Boy sprite", "RPG character sprite", an explicit
+pixel dimension) was proposed and Boaz stopped it on 2026-08-13: the test
+cannot settle anything while the original instruction is unknown, so it spends
+GPU time to reproduce a result already obtained fifteen times. Do not re-propose
+it without the real wording in hand.
 
 Note also that the same ChatGPT transcript contains a long technical
 explanation of why local models supposedly cannot do this — checkpoints,
@@ -68,6 +77,14 @@ downscale it prescribes is already covered deterministically by
 the explanation.
 
 ## What that makes the training target
+
+> **Superseded as an objective (2026-08-18).** This section plans a
+> sprite-pair corpus and sizes a Gradriel run at 13–25 h. That was the plan
+> before Boaz reframed the problem: the goal is not sprite conversion but
+> conversion *in one consistent style*, and the active work is the ink-style
+> LoRA in `assets/lora/inkstyle/CORPUS_SPEC.md`. The measurements below stand;
+> the plan they support does not. See `HANDOFF-HOUSE-STYLE.md`.
+
 
 Not style. The surface transfer already works — locally and in the cloud, at
 the same fidelity. The missing piece is one geometric association: that the

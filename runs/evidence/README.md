@@ -56,7 +56,7 @@ anime style, not Jillian's.
 
 | file | what it shows |
 | --- | --- |
-| `16-headcount-ruler.png` | fine ruler (5.0 / 5.5 / 6.0 / 6.5 / 7.0 / 7.5) on the master and four PixAI-generated characters. **Master Jillian reads ~5.8**, not the ~6.5 recorded earlier from a coarser ruler on a different crop. Adults in the new batch sit at ~6.5, the child at ~5.5 — a stylised band roughly one head below realism (7.5–8 for adults), not the 7.5 estimated by eye without a ruler. |
+| `16-headcount-ruler.png` | fine ruler (5.0 / 5.5 / 6.0 / 6.5 / 7.0 / 7.5) on the master and four PixAI-generated characters. **The ~5.8 this sheet reports for the master is wrong — the measured value is 6.2** (chin at y≈600 of a 3718 px figure, 2026-08-25). The error is an eyeball against rules on a 620 px strip; every other number on this sheet was read the same way and is probably low by a similar amount, though only the master has been checked. Adults in the new batch sit at ~6.5, the child at ~5.5 — a stylised band roughly one head below realism (7.5–8 for adults), not the 7.5 estimated by eye without a ruler. |
 | `17-fabric-zoom.png` | garment patches at matched scale. The master's leather is **matte and mottled** with fine ink hatching. The scarf man's leather is the same material rendered **glossy**, with hard specular highlights and smooth gradients — technique, not subject. The pink satin dress is *within range*: its broad highlights are the material, and the fill still carries wash texture. |
 
 **Cull method: compare like material to like material.** Judging a satin dress

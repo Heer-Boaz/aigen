@@ -38,15 +38,26 @@ an explicit list instead, one line per character (see
    like material: a satin dress legitimately has broader highlights than
    leather. Reference: `runs/evidence/17-fabric-zoom.png`.
 2. **Proportions** — hold the offset from realism, roughly one head below life,
-   rather than a single head count. Ruler: `runs/evidence/16-headcount-ruler.png`.
+   rather than a single head count.
 
-   | subject | target heads |
-   | --- | --- |
-   | young child | 4.5–5 |
-   | older child | 5–5.5 |
-   | young woman (Jillian) | 5.8 |
-   | adult man | 6.3–6.5 |
-   | tall man | 6.8–7 |
+   **Only one figure here is measured.** `masters/front-full.png` reads
+   **6.2 heads**: chin at y≈600 of a 3718 px figure, read off a 10 px ruler.
+   Everything else in this table was eyeballed against
+   `runs/evidence/16-headcount-ruler.png`, and that sheet under-read the one
+   figure since checked by 0.4 (it said 5.8). Treat the corrected column as a
+   working estimate, not a measurement.
+
+   | subject | as read on sheet 16 | corrected (+0.4) |
+   | --- | --- | --- |
+   | young child | 4.5–5 | 4.9–5.4 |
+   | older child | 5–5.5 | 5.4–5.9 |
+   | young woman (Jillian) | 5.8 | **6.2, measured** |
+   | adult man | 6.3–6.5 | 6.7–6.9 |
+   | tall man | 6.8–7 | 7.2–7.4 |
+
+   The +0.4 assumes one constant reading bias across the sheet, which is
+   plausible but untested. Re-measure each character once the images are on
+   disk in `incoming/`; the batch they came from lives only in chat history.
 
 3. **No borrowed identity** — reject anything wearing Jillian's outfit (brown
    leather jacket + blue bow + brown skirt + blue socks) on another face.
