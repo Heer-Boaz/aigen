@@ -1,0 +1,1809 @@
+{
+  "assembly": {
+    "elapsed_seconds": 2.2090957109903684,
+    "returncode": 0,
+    "statuses": {
+      "assemble": "reused",
+      "extract": "reused",
+      "generate": "reused",
+      "keyframe0": "completed",
+      "keyframe1": "completed",
+      "keyframe2": "completed",
+      "process": "reused",
+      "selected": "completed"
+    },
+    "stdout_closed": true
+  },
+  "backend": "ltx",
+  "generation": {
+    "elapsed_seconds": 180.23712041000545,
+    "returncode": 0,
+    "statuses": {
+      "assemble": "completed",
+      "extract": "completed",
+      "generate": "completed",
+      "generate2": "completed",
+      "keyframe0": "completed",
+      "keyframe1": "completed",
+      "keyframe2": "completed",
+      "process": "completed",
+      "selected": "completed"
+    },
+    "stdout_closed": true
+  },
+  "outputs": {
+    "assemble": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/e8/e8860461a6c8643d35a09a50b8fd19246d85a4441a8d82f52746653c65149d98/result.json",
+      "details": {
+        "case_record": null,
+        "completed_at": "2026-09-06T05:24:19.235186+00:00",
+        "effective_config": {
+          "audio_policy": "preserve",
+          "background": "black"
+        },
+        "inputs": {
+          "images": [
+            {
+              "audio": null,
+              "frame_sha256s": [
+                "0585500d9b038abc2c3e47f179ad362e4575415829166e9cd255a8c5011e5500",
+                "52d9abb50a922e8b66659669570eec5845c09994f68b8469fc4c0a866065a17c",
+                "97ae9cc1f7b1972d960f413a437b4ad267cd895e45bb3c80f5449bbfaf51f075",
+                "9250313351b59677df078764ef852d45d3e9175f082e69fdf40132b3fb01de21",
+                "ea2d5334b4c28bc0b20275a5436810289f5091e62fcb10739a91df8b59e55460",
+                "b34c608c9a299230292ce8928ccf96fd1baa020b6f0cf52a34216cc3c4e789dd",
+                "29c4dd5890d340896f160bc8265d5eb8e0e6c3c0df4e1491d14d992d727a6602",
+                "3c1384a43fe544b813cb9f5c36047aa8bc2b767926ef4312f4dca975a1640eaa",
+                "affe20863ec3e4b44476e4db09bf9f32de609d9c1aa0c385662187149fa73e65",
+                "a1caff07ee20ae82f46d9dc54a1308b3e2ac73770481e57af2fe98a57735feed",
+                "d36f1d7e5437de2c6802a33e8580948c307f71522acc7645e16ef2f107487c6a",
+                "acacf3117e649e7559a742053c1955f8d14099b60b12fd055224bb2df7387c38",
+                "470a702048d62d0bb18d558f57f0edb3dfd28639cf035bc5499e327654cf59da",
+                "549e070908f8742613c08a56d8e0b482b13f12123bdae06b726b5d2a97cb2c20",
+                "7d19e9d42558f09f55890f593b42f3f66b0252fb3e267200d639154326f6c161",
+                "b01a8d55b4c0cdf05ab9d101851bfc154beb49e0e0f2a5a570bdfe262918905d",
+                "3a56650c9032f6c1a2153a6267ee1bf60d512e6c0905e9421aef0e6d44dcee12",
+                "cf642a36021a183fdaa081667d26c90bc8fb51d10775f07fa4383c3acac5f06d",
+                "ba949f3401b593d803d95fea4ac4515fe58019ac1559d3e050c9de02cb72b59a",
+                "89f873ba0e867be7be8d67ab33239981055a181694147a69c507622102a54a28",
+                "8f25a4e2828f514800c26614a357c8fe555cfcf2c64be9607e97ba52bd701ead",
+                "26fa2a9f367899065ed6f366a0395b2c3b671740d9c555e88e4a6bd134dd507f",
+                "b6bdcb192f89d4cfd8feb4c10dc4a58e4fda50554993bc82e519c620b704e251",
+                "3d0aee3782f3acd5a8a6a6e8b053ee32815a880463d76328d784ab7de387b1bf",
+                "f836523d3b53d33c79a29f1a3fb9f35b292caf06f73d6b186fd3f51e39440261",
+                "39f8c12c07ff14537bea16188470eabae3edd33bfb42f004500b3638ecfa3062",
+                "cfbfdbae578c6fe2e090297449e079bf41586e9a305197b884b143e7c0aea464",
+                "77921b98a10e9fa84d6f5de0fd8d80e127329e53b7a29285fc4e21345c56f3c4",
+                "8e7717e3295ec3cdf7d6e20084e27ed7e2ebf7da171b2ed90fb3fd124a21aaf1",
+                "6120022aaadc11c459855fd899f0ee00a3839e553794624bf94cc9f009a0e607",
+                "9f1debecf6b3eefde142dbda6beaedf63eb62acffe79c346903771f33ba1a508",
+                "6318276e2682d26e833b5e19bf971d9213ca520661e7249211876493709a88d3",
+                "c6ee9d1a380ea5482905789a98e3ef758920506aea6fbf042c11246947b87097"
+              ],
+              "identity": "691336b411a21719643b35926ea4eb05215b693472070a32686ab9871db6c382",
+              "paths": [
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000000-000000-frame-000000.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000001-000001-frame-000001.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000002-000002-frame-000002.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000003-000003-frame-000003.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000004-000004-frame-000004.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000005-000005-frame-000005.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000006-000006-frame-000006.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000007-000007-frame-000007.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000008-000008-frame-000008.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000009-000009-frame-000009.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000010-000010-frame-000010.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000011-000011-frame-000011.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000012-000012-frame-000012.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000013-000013-frame-000013.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000014-000014-frame-000014.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000015-000015-frame-000015.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000016-000016-frame-000016.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000017-000017-frame-000017.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000018-000018-frame-000018.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000019-000019-frame-000019.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000020-000020-frame-000020.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000021-000021-frame-000021.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000022-000022-frame-000022.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000023-000023-frame-000023.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000024-000024-frame-000024.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000025-000025-frame-000025.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000026-000026-frame-000026.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000027-000027-frame-000027.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000028-000028-frame-000028.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000029-000029-frame-000029.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000030-000030-frame-000030.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000031-000031-frame-000031.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000032-000032-frame-000032.png"
+              ],
+              "pixel_identity": "6773c13c5a3723f119867fbbffbce8e1ea087483ac370639afa12327296b16d3",
+              "timeline": {
+                "durations": [
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512
+                ],
+                "pts": [
+                  0,
+                  512,
+                  1024,
+                  1536,
+                  2048,
+                  2560,
+                  3072,
+                  3584,
+                  4096,
+                  4608,
+                  5120,
+                  5632,
+                  6144,
+                  6656,
+                  7168,
+                  7680,
+                  8192,
+                  8704,
+                  9216,
+                  9728,
+                  10240,
+                  10752,
+                  11264,
+                  11776,
+                  12288,
+                  12800,
+                  13312,
+                  13824,
+                  14336,
+                  14848,
+                  15360,
+                  15872,
+                  16384
+                ],
+                "time_base": "1/12288"
+              },
+              "type": "image-sequence"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "video": {
+            "audio": [],
+            "fps": "24",
+            "frames": 33,
+            "height": 352,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 288
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/000994c52020498cb05a20e6d08c5063"
+      },
+      "image_origins": {},
+      "node_id": "assemble",
+      "node_kind": "assemble-video",
+      "outputs": {
+        "video": {
+          "content_sha256": "64e0d14e74a81e919f164720ac43c4710eff34c479606b3aadab163864def27c",
+          "identity": "f76df44a5d59365537c6239c29af09f4738588f0681a4026d859f1c530784912",
+          "info": {
+            "audio": [],
+            "height": 352,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 288
+          },
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/e8/e8860461a6c8643d35a09a50b8fd19246d85a4441a8d82f52746653c65149d98/outputs/video/000000-video.mp4",
+          "type": "video"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "video-postprocess",
+          "revision": "2"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "FFmpeg and linked codec libraries",
+            "revision": "a85f002a2266c5bfd7a5d1e5c72d18a0f9e8e60fd941327fa9a093d931687c17"
+          },
+          {
+            "name": "FFmpeg executable",
+            "revision": "973674de8c28fa11440b713471dea2b1870d22472676001dfbbee32d4b25c8f8"
+          },
+          {
+            "name": "PyAV and decoded presentation timeline",
+            "revision": "a5b65e1ca8fe6b6c9f00ffc7170adbdbd185f931c154af7c635b650f32eded12"
+          }
+        ]
+      },
+      "signature": "e8860461a6c8643d35a09a50b8fd19246d85a4441a8d82f52746653c65149d98",
+      "status": "reused",
+      "title": "Finished video",
+      "version": 2
+    },
+    "extract": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/result.json",
+      "details": {
+        "case_record": null,
+        "completed_at": "2026-09-06T05:24:11.187083+00:00",
+        "effective_config": {},
+        "inputs": {
+          "video": [
+            {
+              "content_sha256": "02547f4188a97bf4368cb813bb56c932200312a75c48958b3cde1cf57f979d84",
+              "identity": "30710ce3e9f8bd0c958d590f9404f01f80b8fe1b0974ec07c1fc70d5a13d0287",
+              "info": {
+                "audio": [],
+                "height": 704,
+                "start_time": "0",
+                "timeline": {
+                  "durations": [
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512,
+                    512
+                  ],
+                  "pts": [
+                    0,
+                    512,
+                    1024,
+                    1536,
+                    2048,
+                    2560,
+                    3072,
+                    3584,
+                    4096,
+                    4608,
+                    5120,
+                    5632,
+                    6144,
+                    6656,
+                    7168,
+                    7680,
+                    8192,
+                    8704,
+                    9216,
+                    9728,
+                    10240,
+                    10752,
+                    11264,
+                    11776,
+                    12288,
+                    12800,
+                    13312,
+                    13824,
+                    14336,
+                    14848,
+                    15360,
+                    15872,
+                    16384
+                  ],
+                  "time_base": "1/12288"
+                },
+                "width": 576
+              },
+              "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/3d/3db19dc00ab50a6ad7dc43df4e4b6eaf1aa793ea3300a78ff63a4ee895875a2b/outputs/video/000000-video-seed83.mp4",
+              "type": "video"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "images": {
+            "height": 704,
+            "images": 33,
+            "width": 576
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/b18dc46bdf844cc082d7d0515b372f8e"
+      },
+      "image_origins": {},
+      "node_id": "extract",
+      "node_kind": "extract-video-frames",
+      "outputs": {
+        "images": {
+          "audio": null,
+          "frame_sha256s": [
+            "daa0abf0d16902e98dce005784b2f871b4ce6962c5fedc9710f448ee64fff72f",
+            "99028e9e6796e2877f8e58c6bbc94d0c8f37478814535722ff110cd4d3ebfecb",
+            "cfd7d06b4c47c4259aafe0da11f123fb594f03fc96a0ec00f62d48cfef4a4690",
+            "3c66b24e2a7359066ebb6fd94fe4ddfc0afb21f9fdb076d64a3eb393160feab8",
+            "3869fc03a4c10ffe5a5d97d75821c134a47d30020a0027789b38dd280e903914",
+            "a6c76551717bd09293a3e4adea6257f05532473cf283262775b18014215a9871",
+            "9b4bcc2d49741dfa7d4fe4b554dad4dcc0bd57702c0fa560964032120aef6368",
+            "5c67bb375d424dd411c4fc559320926cb49e0a2ff95ecbaaace31ffa6e4ac73c",
+            "5e26c7206b55a94e1e4f22321548efa66d0343d892eef9bbd29cf1b3fbd4ae49",
+            "ca92f5be16379b181f7c244d08a7da1a26529b794cceedd76c0ab7ae2cb0885f",
+            "73e5633c3f94e4b0e67a07d89f4a5582bb47027951cd36543c8a653d633013b4",
+            "1a425786f17e49b63a601cc6f03dc99ecd27eb4fac75afbcf40bcbcd9073365f",
+            "5ed719804db50bd3b026a12a8ad13e32be226c434f8f31d0dbcbb7fa412cbe18",
+            "2e71c05c4fb6269c5263de5c923e8b8ed12fede8c60b2087d6c564c98285ebd4",
+            "62d5e5f5655a798e8241cffee50662c0779af0a0a2cb03b61855ba00a2f34986",
+            "9ce940ae5ccce5b03f81dce615a4b3f009cc48eda2403449fd19d4d8e5a63117",
+            "8dceaa08cba29eff3be91f0f0966441c403f4603420c2083e9c8ae1ad4647225",
+            "cceeaead2c88478d3e6e9f03699e890e98f1e5474f086fbe08c4ecfc347ac0df",
+            "27f1d599435dd61b18c682087804581ca74a78744dbc8806d6fc95d2f78e7858",
+            "b7325376d46eef446817b34e2e1382f682abf5921c48aa626ed55acb982fe36f",
+            "58ee628ffb4546c65ac0829bbf263de1158fd7eee143df966b6fdef1f63cc3b1",
+            "deca7751da633e9b9e66665889a5ec08c935f9b6682f1c0361952092a91b8f52",
+            "3643f7448484bc05bcefa5748842db1056b4f0796f5ea26f273dde77bddad9d7",
+            "77791c586aa521fd5b03dc0f9f8618ead0c548344a979feb9ea276558a6a7ad6",
+            "5d7270e909f697c2af13bce267940df678eb28441e3cb666d43caa395b929d16",
+            "2c8a63f1590e9cc8ce0cfe87d1987f939decec043fab106a6002fbc2ece78886",
+            "3af6da9e889c83263bfc0afc76d08824844fe584b0e55a21fb460322d32d607e",
+            "b6abf13012370fb4f45c87ef153823757088054e1620308563efe8b5861bfe92",
+            "e247b0ef47999df92032a99deaa85e349c3322c41bc5fe1d4f2355593bc4f853",
+            "7af8c66e59629d4415efa772fed1656158ed81405d83637ccee42c461d5c7e51",
+            "9ab66ff6e5e5936884b4013a6d3a08855962e684a68820f9fa2ab27f8bcc5ccb",
+            "88d569abbdfdb158be12fef99acab35420cd87b553cc88c844c8b563cd300084",
+            "ddf19eb2abc12d77fd26d7a7fc2bd60753cfa4fceadca8ddec3efd281164bf27"
+          ],
+          "identity": "b43f525a647d65cea4beae54dbe5ce40672f479e101b56b0caad0cbcf1709b44",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000000-frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000001-frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000002-frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000003-frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000004-frame-000004.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000005-frame-000005.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000006-frame-000006.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000007-frame-000007.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000008-frame-000008.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000009-frame-000009.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000010-frame-000010.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000011-frame-000011.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000012-frame-000012.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000013-frame-000013.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000014-frame-000014.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000015-frame-000015.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000016-frame-000016.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000017-frame-000017.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000018-frame-000018.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000019-frame-000019.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000020-frame-000020.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000021-frame-000021.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000022-frame-000022.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000023-frame-000023.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000024-frame-000024.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000025-frame-000025.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000026-frame-000026.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000027-frame-000027.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000028-frame-000028.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000029-frame-000029.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000030-frame-000030.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000031-frame-000031.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000032-frame-000032.png"
+          ],
+          "pixel_identity": "a0529af65189cc25b1befa32c81e79105046ac3666f16b76c2fc8b04153499e7",
+          "timeline": {
+            "durations": [
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512
+            ],
+            "pts": [
+              0,
+              512,
+              1024,
+              1536,
+              2048,
+              2560,
+              3072,
+              3584,
+              4096,
+              4608,
+              5120,
+              5632,
+              6144,
+              6656,
+              7168,
+              7680,
+              8192,
+              8704,
+              9216,
+              9728,
+              10240,
+              10752,
+              11264,
+              11776,
+              12288,
+              12800,
+              13312,
+              13824,
+              14336,
+              14848,
+              15360,
+              15872,
+              16384
+            ],
+            "time_base": "1/12288"
+          },
+          "type": "image-sequence"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "video-postprocess",
+          "revision": "2"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "FFmpeg and linked codec libraries",
+            "revision": "a85f002a2266c5bfd7a5d1e5c72d18a0f9e8e60fd941327fa9a093d931687c17"
+          },
+          {
+            "name": "FFmpeg executable",
+            "revision": "973674de8c28fa11440b713471dea2b1870d22472676001dfbbee32d4b25c8f8"
+          },
+          {
+            "name": "PyAV and decoded presentation timeline",
+            "revision": "a5b65e1ca8fe6b6c9f00ffc7170adbdbd185f931c154af7c635b650f32eded12"
+          }
+        ]
+      },
+      "signature": "d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e",
+      "status": "reused",
+      "title": "Extract frames",
+      "version": 2
+    },
+    "generate": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/3d/3db19dc00ab50a6ad7dc43df4e4b6eaf1aa793ea3300a78ff63a4ee895875a2b/result.json",
+      "details": {
+        "case_record": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/eeebcdbbe8154a5bbd9f8f0f63caa19e/outputs/seed-83/backend-result.json",
+        "completed_at": "2026-09-06T05:23:26.412975+00:00",
+        "effective_config": {
+          "conditioning_strength": 1.0,
+          "fps": 24,
+          "frames": 33,
+          "height": 704,
+          "keyframe_fit": "pad",
+          "model": "nvfp4",
+          "negative_prompt": "Camera movement.",
+          "phases": 1,
+          "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+          "seed": 83,
+          "seed_mode": "fixed",
+          "solver": "distilled_8_steps",
+          "steps": 8,
+          "width": 576
+        },
+        "inputs": {
+          "keyframes": [
+            {
+              "frame": 0,
+              "identity": "41358ae4efebda776bec5e1dff1023cf2164407ae295bcf23264b97d11c435d5",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            },
+            {
+              "frame": 16,
+              "identity": "38ed7abed28d4e4c91afc11169de73fa30c20a74235b044c094a0f0bb16b34ad",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            },
+            {
+              "frame": 32,
+              "identity": "9fc45e33f780e9089fed2a1a9b5d553b72e5ca461b0ed42aafa074971783c93c",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "video": {
+            "audio": [],
+            "fps": "24",
+            "frames": 33,
+            "height": 704,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 576
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/eeebcdbbe8154a5bbd9f8f0f63caa19e"
+      },
+      "image_origins": {},
+      "node_id": "generate",
+      "node_kind": "ltx23-keyframes",
+      "outputs": {
+        "video": {
+          "content_sha256": "02547f4188a97bf4368cb813bb56c932200312a75c48958b3cde1cf57f979d84",
+          "identity": "30710ce3e9f8bd0c958d590f9404f01f80b8fe1b0974ec07c1fc70d5a13d0287",
+          "info": {
+            "audio": [],
+            "height": 704,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 576
+          },
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/3d/3db19dc00ab50a6ad7dc43df4e4b6eaf1aa793ea3300a78ff63a4ee895875a2b/outputs/video/000000-video-seed83.mp4",
+          "type": "video"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "LTX-2.3",
+          "revision": "2"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "LTX patch 0001-skip-unused-negative-text-conditioning.patch",
+            "revision": "9b5db28ce3c000b22de9f91616b9b105bfb2d1f317854c3b7330bc3d89843e67"
+          },
+          {
+            "name": "LTX patch 0002-use-guiding-latents-for-start-end-interpolation.patch",
+            "revision": "e03570bace09bd382e4baeea01fd866fcfac87b3543880d2ac70060b41ea0b5a"
+          },
+          {
+            "name": "WanGP",
+            "revision": "5582327dc25e45fec6cda0f27144d4dcf7ed104b"
+          },
+          {
+            "name": "WanGP Python runtime",
+            "revision": "1d39dae4e7d29a006513abceb013e1f31262faf35eeee6768d085753b1837c64"
+          },
+          {
+            "name": "WanGP execution config",
+            "revision": "a1ac18426267af4adad901f44a13167e412c8bd5a2eef64e1c75b3e8cd94610b"
+          },
+          {
+            "name": "added_tokens.json",
+            "revision": "66b2441a3395548d7a5525e86a24486a36995765cfe69e5d87d734e09a6e99fd"
+          },
+          {
+            "name": "chat_template.json",
+            "revision": "55d693d73dd5dc3d132ec6255d1735136030df18f5326080ccca9a3342909aa8"
+          },
+          {
+            "name": "config_light.json",
+            "revision": "649ca2830f07d80cec75f1d2ca3464af79f79c6c79917f035a4fd5d979007778"
+          },
+          {
+            "name": "decoded presentation timeline",
+            "revision": "a5b65e1ca8fe6b6c9f00ffc7170adbdbd185f931c154af7c635b650f32eded12"
+          },
+          {
+            "name": "defaults/ltx2_22B.json",
+            "revision": "c4339ca0c69e9d7dbad66c7e0398e5f257b6839ad3a5732384246a5c8a8dba71"
+          },
+          {
+            "name": "defaults/ltx2_22B_nvfp4.json",
+            "revision": "640c1a006278cab3947426e81c66f1fa735d74439123e9803a1ddf0a7b55bc3f"
+          },
+          {
+            "name": "ffmpeg",
+            "revision": "bdf6aabffdba7411edff8d36c389d695257fcdf823d196020176e117612862f6"
+          },
+          {
+            "name": "ffmpeg linked libraries",
+            "revision": "a85f002a2266c5bfd7a5d1e5c72d18a0f9e8e60fd941327fa9a093d931687c17"
+          },
+          {
+            "name": "ffprobe",
+            "revision": "a6dac1e9e8631e04075d06854cc4069308aec279bb04683b4a0bca5e4f54b2fe"
+          },
+          {
+            "name": "ffprobe linked libraries",
+            "revision": "6be9b7e8ce3baebec8831a9010e04a658c036ad3dc9dcbd59be3b0c60c3acf70"
+          },
+          {
+            "name": "gemma-3-12b-it-qat-q4_0-unquantized_quanto_bf16_int8.safetensors",
+            "revision": "d33264e42ed92df855ca2e7dd809892ab48353608aacc8ec8186eda61df56c4a"
+          },
+          {
+            "name": "generation_config.json",
+            "revision": "30f6b01de5c807d5079833aad70f7c6524cc29ec5223d7509cab31e0043c11d3"
+          },
+          {
+            "name": "ltx-2.3-22b-dev-nvfp4_diffusion_model.safetensors",
+            "revision": "3f8a38cdf211e0dc3cc5ab5ae81c5765ac380d87f76d65703f204dd908743cf1"
+          },
+          {
+            "name": "ltx-2.3-22b-distilled-lora-384.safetensors",
+            "revision": "bc4706eeb948a328fc61b6ff8ea0678132d9c68041cdef43b1c4b53255cb745c"
+          },
+          {
+            "name": "ltx-2.3-22b_audio_vae.safetensors",
+            "revision": "320c1c83f558d389aba82305eb1c1f1c377a59e4eec31b586299eb95fc9258b1"
+          },
+          {
+            "name": "ltx-2.3-22b_embeddings_connector.safetensors",
+            "revision": "c19a5ad6da50beaae36bc3f1f4bc1407fe94b2ef2a0b15deed7c87e4fa0ca291"
+          },
+          {
+            "name": "ltx-2.3-22b_text_embedding_projection.safetensors",
+            "revision": "4f6f292d7400f708360265233de2c2042f93d62bb5e236946e41866dcc47941c"
+          },
+          {
+            "name": "ltx-2.3-22b_vae.safetensors",
+            "revision": "59d49de41c8249de78cfd9ce59d63404451b5003c1ed6bc4620131e4d230604f"
+          },
+          {
+            "name": "ltx-2.3-22b_vocoder.safetensors",
+            "revision": "39d9ba94261f85db0a37bf240e221523c183a797d51ae0873798297309851151"
+          },
+          {
+            "name": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+            "revision": "eadf9d1b351ee93849fbf8190a1ea5144496a157d2891491432b29ebd13d6e94"
+          },
+          {
+            "name": "ltx2_22b_config.json",
+            "revision": "f8428703d0e3cd9d1b7bb97ce733abb315d859185dc69072f4db3aab16b15aea"
+          },
+          {
+            "name": "models/_settings.json",
+            "revision": "dcfa08412a5bf030d5ab610d0db1a5dc0686793243e007d1536a2bd0ac783539"
+          },
+          {
+            "name": "preprocessor_config.json",
+            "revision": "f6d360f604168e203c8adb3b8bcab534de3862326b8ef1a428dd6856496551bd"
+          },
+          {
+            "name": "processor_config.json",
+            "revision": "d658300e538e4aae853e27ff750b76d0c14b17b7f39d66d36df33116c1a0fb8f"
+          },
+          {
+            "name": "settings/ltx2_22B_nvfp4_settings.json",
+            "revision": "9b9c0e46fee2dc9e99e5248ee4f23b0e54ddd9ad481aabc39ae3c8d8a7020964"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "revision": "f537b7b761c1efad495bcde76067b3afd754c830e9f39c15d1f31cd6bc7b6693"
+          },
+          {
+            "name": "tokenizer.json",
+            "revision": "ed79b705ad1d6dcc961dddd017d99ea4593615eabd8d14b74791babbeaf2a8f5"
+          },
+          {
+            "name": "tokenizer.model",
+            "revision": "5210de4c26a23ca5ae6462e74318bcd8f3a40028bfd3d703a904ca80ba77a98d"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "revision": "a856e717fecedb064bdc6a38bd607dc48918abcea82379e7ca0af7e484fc01c9"
+          }
+        ]
+      },
+      "signature": "3db19dc00ab50a6ad7dc43df4e4b6eaf1aa793ea3300a78ff63a4ee895875a2b",
+      "status": "reused",
+      "title": "LTX",
+      "version": 2
+    },
+    "generate2": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/df/dfced49e4e7f1874f41d21e5b4096329e1366bd1feefde145bcae1c78d265ec3/result.json",
+      "details": {
+        "case_record": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/eeebcdbbe8154a5bbd9f8f0f63caa19e/outputs/seed-84/backend-result.json",
+        "completed_at": "2026-09-06T05:23:58.396559+00:00",
+        "effective_config": {
+          "conditioning_strength": 1.0,
+          "fps": 24,
+          "frames": 33,
+          "height": 704,
+          "keyframe_fit": "pad",
+          "model": "nvfp4",
+          "negative_prompt": "Camera movement.",
+          "phases": 1,
+          "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+          "seed": 84,
+          "seed_mode": "fixed",
+          "solver": "distilled_8_steps",
+          "steps": 8,
+          "width": 576
+        },
+        "inputs": {
+          "keyframes": [
+            {
+              "frame": 0,
+              "identity": "41358ae4efebda776bec5e1dff1023cf2164407ae295bcf23264b97d11c435d5",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            },
+            {
+              "frame": 16,
+              "identity": "38ed7abed28d4e4c91afc11169de73fa30c20a74235b044c094a0f0bb16b34ad",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            },
+            {
+              "frame": 32,
+              "identity": "9fc45e33f780e9089fed2a1a9b5d553b72e5ca461b0ed42aafa074971783c93c",
+              "image": {
+                "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+                "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+                "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+                "type": "image"
+              },
+              "type": "keyframe"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "video": {
+            "audio": [],
+            "fps": "24",
+            "frames": 33,
+            "height": 704,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 576
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/eeebcdbbe8154a5bbd9f8f0f63caa19e"
+      },
+      "image_origins": {},
+      "node_id": "generate2",
+      "node_kind": "ltx23-keyframes",
+      "outputs": {
+        "video": {
+          "content_sha256": "9fd576600d7becbf108929e1938a30cac8205acbbff4687bc81845adf6827c90",
+          "identity": "a4203a5209771f9d5da41401b89ef7a710728b74c53f9df0ef3bda84b8a40f63",
+          "info": {
+            "audio": [],
+            "height": 704,
+            "start_time": "0",
+            "timeline": {
+              "durations": [
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512,
+                512
+              ],
+              "pts": [
+                0,
+                512,
+                1024,
+                1536,
+                2048,
+                2560,
+                3072,
+                3584,
+                4096,
+                4608,
+                5120,
+                5632,
+                6144,
+                6656,
+                7168,
+                7680,
+                8192,
+                8704,
+                9216,
+                9728,
+                10240,
+                10752,
+                11264,
+                11776,
+                12288,
+                12800,
+                13312,
+                13824,
+                14336,
+                14848,
+                15360,
+                15872,
+                16384
+              ],
+              "time_base": "1/12288"
+            },
+            "width": 576
+          },
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/df/dfced49e4e7f1874f41d21e5b4096329e1366bd1feefde145bcae1c78d265ec3/outputs/video/000000-video-seed84.mp4",
+          "type": "video"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "LTX-2.3",
+          "revision": "2"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "LTX patch 0001-skip-unused-negative-text-conditioning.patch",
+            "revision": "9b5db28ce3c000b22de9f91616b9b105bfb2d1f317854c3b7330bc3d89843e67"
+          },
+          {
+            "name": "LTX patch 0002-use-guiding-latents-for-start-end-interpolation.patch",
+            "revision": "e03570bace09bd382e4baeea01fd866fcfac87b3543880d2ac70060b41ea0b5a"
+          },
+          {
+            "name": "WanGP",
+            "revision": "5582327dc25e45fec6cda0f27144d4dcf7ed104b"
+          },
+          {
+            "name": "WanGP Python runtime",
+            "revision": "1d39dae4e7d29a006513abceb013e1f31262faf35eeee6768d085753b1837c64"
+          },
+          {
+            "name": "WanGP execution config",
+            "revision": "a1ac18426267af4adad901f44a13167e412c8bd5a2eef64e1c75b3e8cd94610b"
+          },
+          {
+            "name": "added_tokens.json",
+            "revision": "66b2441a3395548d7a5525e86a24486a36995765cfe69e5d87d734e09a6e99fd"
+          },
+          {
+            "name": "chat_template.json",
+            "revision": "55d693d73dd5dc3d132ec6255d1735136030df18f5326080ccca9a3342909aa8"
+          },
+          {
+            "name": "config_light.json",
+            "revision": "649ca2830f07d80cec75f1d2ca3464af79f79c6c79917f035a4fd5d979007778"
+          },
+          {
+            "name": "decoded presentation timeline",
+            "revision": "a5b65e1ca8fe6b6c9f00ffc7170adbdbd185f931c154af7c635b650f32eded12"
+          },
+          {
+            "name": "defaults/ltx2_22B.json",
+            "revision": "c4339ca0c69e9d7dbad66c7e0398e5f257b6839ad3a5732384246a5c8a8dba71"
+          },
+          {
+            "name": "defaults/ltx2_22B_nvfp4.json",
+            "revision": "640c1a006278cab3947426e81c66f1fa735d74439123e9803a1ddf0a7b55bc3f"
+          },
+          {
+            "name": "ffmpeg",
+            "revision": "bdf6aabffdba7411edff8d36c389d695257fcdf823d196020176e117612862f6"
+          },
+          {
+            "name": "ffmpeg linked libraries",
+            "revision": "a85f002a2266c5bfd7a5d1e5c72d18a0f9e8e60fd941327fa9a093d931687c17"
+          },
+          {
+            "name": "ffprobe",
+            "revision": "a6dac1e9e8631e04075d06854cc4069308aec279bb04683b4a0bca5e4f54b2fe"
+          },
+          {
+            "name": "ffprobe linked libraries",
+            "revision": "6be9b7e8ce3baebec8831a9010e04a658c036ad3dc9dcbd59be3b0c60c3acf70"
+          },
+          {
+            "name": "gemma-3-12b-it-qat-q4_0-unquantized_quanto_bf16_int8.safetensors",
+            "revision": "d33264e42ed92df855ca2e7dd809892ab48353608aacc8ec8186eda61df56c4a"
+          },
+          {
+            "name": "generation_config.json",
+            "revision": "30f6b01de5c807d5079833aad70f7c6524cc29ec5223d7509cab31e0043c11d3"
+          },
+          {
+            "name": "ltx-2.3-22b-dev-nvfp4_diffusion_model.safetensors",
+            "revision": "3f8a38cdf211e0dc3cc5ab5ae81c5765ac380d87f76d65703f204dd908743cf1"
+          },
+          {
+            "name": "ltx-2.3-22b-distilled-lora-384.safetensors",
+            "revision": "bc4706eeb948a328fc61b6ff8ea0678132d9c68041cdef43b1c4b53255cb745c"
+          },
+          {
+            "name": "ltx-2.3-22b_audio_vae.safetensors",
+            "revision": "320c1c83f558d389aba82305eb1c1f1c377a59e4eec31b586299eb95fc9258b1"
+          },
+          {
+            "name": "ltx-2.3-22b_embeddings_connector.safetensors",
+            "revision": "c19a5ad6da50beaae36bc3f1f4bc1407fe94b2ef2a0b15deed7c87e4fa0ca291"
+          },
+          {
+            "name": "ltx-2.3-22b_text_embedding_projection.safetensors",
+            "revision": "4f6f292d7400f708360265233de2c2042f93d62bb5e236946e41866dcc47941c"
+          },
+          {
+            "name": "ltx-2.3-22b_vae.safetensors",
+            "revision": "59d49de41c8249de78cfd9ce59d63404451b5003c1ed6bc4620131e4d230604f"
+          },
+          {
+            "name": "ltx-2.3-22b_vocoder.safetensors",
+            "revision": "39d9ba94261f85db0a37bf240e221523c183a797d51ae0873798297309851151"
+          },
+          {
+            "name": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+            "revision": "eadf9d1b351ee93849fbf8190a1ea5144496a157d2891491432b29ebd13d6e94"
+          },
+          {
+            "name": "ltx2_22b_config.json",
+            "revision": "f8428703d0e3cd9d1b7bb97ce733abb315d859185dc69072f4db3aab16b15aea"
+          },
+          {
+            "name": "models/_settings.json",
+            "revision": "dcfa08412a5bf030d5ab610d0db1a5dc0686793243e007d1536a2bd0ac783539"
+          },
+          {
+            "name": "preprocessor_config.json",
+            "revision": "f6d360f604168e203c8adb3b8bcab534de3862326b8ef1a428dd6856496551bd"
+          },
+          {
+            "name": "processor_config.json",
+            "revision": "d658300e538e4aae853e27ff750b76d0c14b17b7f39d66d36df33116c1a0fb8f"
+          },
+          {
+            "name": "settings/ltx2_22B_nvfp4_settings.json",
+            "revision": "9b9c0e46fee2dc9e99e5248ee4f23b0e54ddd9ad481aabc39ae3c8d8a7020964"
+          },
+          {
+            "name": "special_tokens_map.json",
+            "revision": "f537b7b761c1efad495bcde76067b3afd754c830e9f39c15d1f31cd6bc7b6693"
+          },
+          {
+            "name": "tokenizer.json",
+            "revision": "ed79b705ad1d6dcc961dddd017d99ea4593615eabd8d14b74791babbeaf2a8f5"
+          },
+          {
+            "name": "tokenizer.model",
+            "revision": "5210de4c26a23ca5ae6462e74318bcd8f3a40028bfd3d703a904ca80ba77a98d"
+          },
+          {
+            "name": "tokenizer_config.json",
+            "revision": "a856e717fecedb064bdc6a38bd607dc48918abcea82379e7ca0af7e484fc01c9"
+          }
+        ]
+      },
+      "signature": "dfced49e4e7f1874f41d21e5b4096329e1366bd1feefde145bcae1c78d265ec3",
+      "status": "completed",
+      "title": "LTX second seed",
+      "version": 2
+    },
+    "process": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/result.json",
+      "details": {
+        "case_record": null,
+        "completed_at": "2026-09-06T05:24:18.983593+00:00",
+        "effective_config": {
+          "force_step": 2.0,
+          "low_memory": false,
+          "mode": "fast",
+          "model": "pixel-art-fixer"
+        },
+        "inputs": {
+          "images": [
+            {
+              "audio": null,
+              "frame_sha256s": [
+                "daa0abf0d16902e98dce005784b2f871b4ce6962c5fedc9710f448ee64fff72f",
+                "99028e9e6796e2877f8e58c6bbc94d0c8f37478814535722ff110cd4d3ebfecb",
+                "cfd7d06b4c47c4259aafe0da11f123fb594f03fc96a0ec00f62d48cfef4a4690",
+                "3c66b24e2a7359066ebb6fd94fe4ddfc0afb21f9fdb076d64a3eb393160feab8",
+                "3869fc03a4c10ffe5a5d97d75821c134a47d30020a0027789b38dd280e903914",
+                "a6c76551717bd09293a3e4adea6257f05532473cf283262775b18014215a9871",
+                "9b4bcc2d49741dfa7d4fe4b554dad4dcc0bd57702c0fa560964032120aef6368",
+                "5c67bb375d424dd411c4fc559320926cb49e0a2ff95ecbaaace31ffa6e4ac73c",
+                "5e26c7206b55a94e1e4f22321548efa66d0343d892eef9bbd29cf1b3fbd4ae49",
+                "ca92f5be16379b181f7c244d08a7da1a26529b794cceedd76c0ab7ae2cb0885f",
+                "73e5633c3f94e4b0e67a07d89f4a5582bb47027951cd36543c8a653d633013b4",
+                "1a425786f17e49b63a601cc6f03dc99ecd27eb4fac75afbcf40bcbcd9073365f",
+                "5ed719804db50bd3b026a12a8ad13e32be226c434f8f31d0dbcbb7fa412cbe18",
+                "2e71c05c4fb6269c5263de5c923e8b8ed12fede8c60b2087d6c564c98285ebd4",
+                "62d5e5f5655a798e8241cffee50662c0779af0a0a2cb03b61855ba00a2f34986",
+                "9ce940ae5ccce5b03f81dce615a4b3f009cc48eda2403449fd19d4d8e5a63117",
+                "8dceaa08cba29eff3be91f0f0966441c403f4603420c2083e9c8ae1ad4647225",
+                "cceeaead2c88478d3e6e9f03699e890e98f1e5474f086fbe08c4ecfc347ac0df",
+                "27f1d599435dd61b18c682087804581ca74a78744dbc8806d6fc95d2f78e7858",
+                "b7325376d46eef446817b34e2e1382f682abf5921c48aa626ed55acb982fe36f",
+                "58ee628ffb4546c65ac0829bbf263de1158fd7eee143df966b6fdef1f63cc3b1",
+                "deca7751da633e9b9e66665889a5ec08c935f9b6682f1c0361952092a91b8f52",
+                "3643f7448484bc05bcefa5748842db1056b4f0796f5ea26f273dde77bddad9d7",
+                "77791c586aa521fd5b03dc0f9f8618ead0c548344a979feb9ea276558a6a7ad6",
+                "5d7270e909f697c2af13bce267940df678eb28441e3cb666d43caa395b929d16",
+                "2c8a63f1590e9cc8ce0cfe87d1987f939decec043fab106a6002fbc2ece78886",
+                "3af6da9e889c83263bfc0afc76d08824844fe584b0e55a21fb460322d32d607e",
+                "b6abf13012370fb4f45c87ef153823757088054e1620308563efe8b5861bfe92",
+                "e247b0ef47999df92032a99deaa85e349c3322c41bc5fe1d4f2355593bc4f853",
+                "7af8c66e59629d4415efa772fed1656158ed81405d83637ccee42c461d5c7e51",
+                "9ab66ff6e5e5936884b4013a6d3a08855962e684a68820f9fa2ab27f8bcc5ccb",
+                "88d569abbdfdb158be12fef99acab35420cd87b553cc88c844c8b563cd300084",
+                "ddf19eb2abc12d77fd26d7a7fc2bd60753cfa4fceadca8ddec3efd281164bf27"
+              ],
+              "identity": "b43f525a647d65cea4beae54dbe5ce40672f479e101b56b0caad0cbcf1709b44",
+              "paths": [
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000000-frame-000000.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000001-frame-000001.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000002-frame-000002.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000003-frame-000003.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000004-frame-000004.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000005-frame-000005.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000006-frame-000006.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000007-frame-000007.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000008-frame-000008.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000009-frame-000009.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000010-frame-000010.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000011-frame-000011.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000012-frame-000012.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000013-frame-000013.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000014-frame-000014.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000015-frame-000015.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000016-frame-000016.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000017-frame-000017.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000018-frame-000018.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000019-frame-000019.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000020-frame-000020.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000021-frame-000021.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000022-frame-000022.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000023-frame-000023.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000024-frame-000024.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000025-frame-000025.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000026-frame-000026.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000027-frame-000027.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000028-frame-000028.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000029-frame-000029.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000030-frame-000030.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000031-frame-000031.png",
+                "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/d6/d67cda145e27f143e100fd5e197dedd39915ccfb01cd81f6a4cb9ff494f22a1e/outputs/images/000032-frame-000032.png"
+              ],
+              "pixel_identity": "a0529af65189cc25b1befa32c81e79105046ac3666f16b76c2fc8b04153499e7",
+              "timeline": {
+                "durations": [
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512,
+                  512
+                ],
+                "pts": [
+                  0,
+                  512,
+                  1024,
+                  1536,
+                  2048,
+                  2560,
+                  3072,
+                  3584,
+                  4096,
+                  4608,
+                  5120,
+                  5632,
+                  6144,
+                  6656,
+                  7168,
+                  7680,
+                  8192,
+                  8704,
+                  9216,
+                  9728,
+                  10240,
+                  10752,
+                  11264,
+                  11776,
+                  12288,
+                  12800,
+                  13312,
+                  13824,
+                  14336,
+                  14848,
+                  15360,
+                  15872,
+                  16384
+                ],
+                "time_base": "1/12288"
+              },
+              "type": "image-sequence"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "images": {
+            "height": 352,
+            "images": 33,
+            "width": 288
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/350a4c49c71c41ba8378afbbfc3b7fcc"
+      },
+      "image_origins": {},
+      "node_id": "process",
+      "node_kind": "frame-postprocess",
+      "outputs": {
+        "images": {
+          "audio": null,
+          "frame_sha256s": [
+            "0585500d9b038abc2c3e47f179ad362e4575415829166e9cd255a8c5011e5500",
+            "52d9abb50a922e8b66659669570eec5845c09994f68b8469fc4c0a866065a17c",
+            "97ae9cc1f7b1972d960f413a437b4ad267cd895e45bb3c80f5449bbfaf51f075",
+            "9250313351b59677df078764ef852d45d3e9175f082e69fdf40132b3fb01de21",
+            "ea2d5334b4c28bc0b20275a5436810289f5091e62fcb10739a91df8b59e55460",
+            "b34c608c9a299230292ce8928ccf96fd1baa020b6f0cf52a34216cc3c4e789dd",
+            "29c4dd5890d340896f160bc8265d5eb8e0e6c3c0df4e1491d14d992d727a6602",
+            "3c1384a43fe544b813cb9f5c36047aa8bc2b767926ef4312f4dca975a1640eaa",
+            "affe20863ec3e4b44476e4db09bf9f32de609d9c1aa0c385662187149fa73e65",
+            "a1caff07ee20ae82f46d9dc54a1308b3e2ac73770481e57af2fe98a57735feed",
+            "d36f1d7e5437de2c6802a33e8580948c307f71522acc7645e16ef2f107487c6a",
+            "acacf3117e649e7559a742053c1955f8d14099b60b12fd055224bb2df7387c38",
+            "470a702048d62d0bb18d558f57f0edb3dfd28639cf035bc5499e327654cf59da",
+            "549e070908f8742613c08a56d8e0b482b13f12123bdae06b726b5d2a97cb2c20",
+            "7d19e9d42558f09f55890f593b42f3f66b0252fb3e267200d639154326f6c161",
+            "b01a8d55b4c0cdf05ab9d101851bfc154beb49e0e0f2a5a570bdfe262918905d",
+            "3a56650c9032f6c1a2153a6267ee1bf60d512e6c0905e9421aef0e6d44dcee12",
+            "cf642a36021a183fdaa081667d26c90bc8fb51d10775f07fa4383c3acac5f06d",
+            "ba949f3401b593d803d95fea4ac4515fe58019ac1559d3e050c9de02cb72b59a",
+            "89f873ba0e867be7be8d67ab33239981055a181694147a69c507622102a54a28",
+            "8f25a4e2828f514800c26614a357c8fe555cfcf2c64be9607e97ba52bd701ead",
+            "26fa2a9f367899065ed6f366a0395b2c3b671740d9c555e88e4a6bd134dd507f",
+            "b6bdcb192f89d4cfd8feb4c10dc4a58e4fda50554993bc82e519c620b704e251",
+            "3d0aee3782f3acd5a8a6a6e8b053ee32815a880463d76328d784ab7de387b1bf",
+            "f836523d3b53d33c79a29f1a3fb9f35b292caf06f73d6b186fd3f51e39440261",
+            "39f8c12c07ff14537bea16188470eabae3edd33bfb42f004500b3638ecfa3062",
+            "cfbfdbae578c6fe2e090297449e079bf41586e9a305197b884b143e7c0aea464",
+            "77921b98a10e9fa84d6f5de0fd8d80e127329e53b7a29285fc4e21345c56f3c4",
+            "8e7717e3295ec3cdf7d6e20084e27ed7e2ebf7da171b2ed90fb3fd124a21aaf1",
+            "6120022aaadc11c459855fd899f0ee00a3839e553794624bf94cc9f009a0e607",
+            "9f1debecf6b3eefde142dbda6beaedf63eb62acffe79c346903771f33ba1a508",
+            "6318276e2682d26e833b5e19bf971d9213ca520661e7249211876493709a88d3",
+            "c6ee9d1a380ea5482905789a98e3ef758920506aea6fbf042c11246947b87097"
+          ],
+          "identity": "691336b411a21719643b35926ea4eb05215b693472070a32686ab9871db6c382",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000000-000000-frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000001-000001-frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000002-000002-frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000003-000003-frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000004-000004-frame-000004.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000005-000005-frame-000005.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000006-000006-frame-000006.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000007-000007-frame-000007.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000008-000008-frame-000008.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000009-000009-frame-000009.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000010-000010-frame-000010.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000011-000011-frame-000011.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000012-000012-frame-000012.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000013-000013-frame-000013.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000014-000014-frame-000014.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000015-000015-frame-000015.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000016-000016-frame-000016.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000017-000017-frame-000017.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000018-000018-frame-000018.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000019-000019-frame-000019.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000020-000020-frame-000020.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000021-000021-frame-000021.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000022-000022-frame-000022.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000023-000023-frame-000023.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000024-000024-frame-000024.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000025-000025-frame-000025.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000026-000026-frame-000026.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000027-000027-frame-000027.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000028-000028-frame-000028.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000029-000029-frame-000029.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000030-000030-frame-000030.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000031-000031-frame-000031.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/bb/bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6/outputs/images/000032-000032-frame-000032.png"
+          ],
+          "pixel_identity": "6773c13c5a3723f119867fbbffbce8e1ea087483ac370639afa12327296b16d3",
+          "timeline": {
+            "durations": [
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512
+            ],
+            "pts": [
+              0,
+              512,
+              1024,
+              1536,
+              2048,
+              2560,
+              3072,
+              3584,
+              4096,
+              4608,
+              5120,
+              5632,
+              6144,
+              6656,
+              7168,
+              7680,
+              8192,
+              8704,
+              9216,
+              9728,
+              10240,
+              10752,
+              11264,
+              11776,
+              12288,
+              12800,
+              13312,
+              13824,
+              14336,
+              14848,
+              15360,
+              15872,
+              16384
+            ],
+            "time_base": "1/12288"
+          },
+          "type": "image-sequence"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "image-postprocess-batch",
+          "revision": "1"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "Pixel Art Fixer",
+            "revision": "ef376e57e1c272633ca2dbf5f29ec3fcf6596465"
+          }
+        ]
+      },
+      "signature": "bb3b710707a5dc0e12f6fb8bbe2ca7c08ca41e3b8e72dba031939e883f1c5dd6",
+      "status": "reused",
+      "title": "CPU frame processing",
+      "version": 2
+    }
+  }
+}

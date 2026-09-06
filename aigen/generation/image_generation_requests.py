@@ -12,6 +12,13 @@ class ImageGenerationOutputRequest:
 
 
 @dataclass(frozen=True)
+class ImageGenerationMaskRequest:
+    source_image: Path
+    mask_image: Path
+    strength: float
+
+
+@dataclass(frozen=True)
 class ImageGenerationCaseRequest:
     name: str
     prompt: str
@@ -19,3 +26,4 @@ class ImageGenerationCaseRequest:
     width: int | None
     height: int | None
     outputs: tuple[ImageGenerationOutputRequest, ...]
+    mask: ImageGenerationMaskRequest | None = None

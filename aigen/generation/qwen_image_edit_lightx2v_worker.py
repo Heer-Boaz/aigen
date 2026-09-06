@@ -15,6 +15,12 @@ from typing import Any, TextIO
 # expanded host allocation, 13 GiB pins all remaining streamed denoiser blocks
 # while keeping a margin below that driver ceiling.
 PINNED_HOST_BUDGET_BYTES = 13 * 1024**3
+VAE_TILE_SIZE = 2048
+VAE_TILE_STRIDE = 1536
+# Includes the caching allocator's workspace, not just live tensor storage.
+# Calibrated with native multi-megapixel references and direct FP8 quantization.
+DENOISE_WORKSPACE_BYTES_PER_TOKEN = 192 * 1024
+DENOISE_HEADROOM_BYTES = 1024**3
 
 os.environ.setdefault("PROFILING_DEBUG_LEVEL", "0")
 os.environ.setdefault("DTYPE", "BF16")
@@ -38,6 +44,7 @@ def main() -> int:
                 "status": "error",
                 "error": error.__class__.__name__,
                 "message": str(error),
+                "traceback": traceback.format_exc(),
             }
             response_path.write_text(json.dumps(response, ensure_ascii=False), encoding="utf-8")
             return 1
@@ -56,35 +63,12 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
 
     from lightx2v import LightX2VPipeline
     from lightx2v.common.ops import utils as ops_utils
-    from lightx2v.models.schedulers.qwen_image.scheduler import QwenImageScheduler
     from lightx2v.utils.input_info import init_empty_input_info, update_input_info_from_dict
     from lightx2v.utils.utils import seed_all
 
-    from aigen.generation.flow_match_sampling import euler_ancestral_step
     from aigen.generation.qwen_image_edit_conditioner import QwenImageEditFp8Conditioner
-
-    class QwenImageEulerAncestralScheduler(QwenImageScheduler):
-        def prepare(self, input_info: Any) -> None:
-            super().prepare(input_info)
-            self.ancestral_generator = torch.Generator(
-                device=self.latents.device
-            ).manual_seed(input_info.seed)
-
-        def step_post(self) -> None:
-            timestep = self.timesteps[self.step_index]
-            if self.scheduler.step_index is None:
-                self.scheduler._init_step_index(timestep)
-            sigma_index = self.scheduler.step_index
-            self.latents = euler_ancestral_step(
-                self.latents,
-                self.noise_pred,
-                sigma=self.scheduler.sigmas[sigma_index],
-                sigma_next=self.scheduler.sigmas[sigma_index + 1],
-                final=self.step_index + 1 == len(self.timesteps),
-                generator=self.ancestral_generator,
-                torch=torch,
-            )
-            self.scheduler._step_index += 1
+    from aigen.generation.qwen_image_edit_sampling import QwenEditScheduler, pack_qwen_repaint_mask
+    from aigen.image_io import open_image
 
     profile = request["profile"]
     cases = request["cases"]
@@ -92,6 +76,12 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     host_before = _host_snapshot()
     phase_peaks: dict[str, float] = {}
     timings: dict[str, float] = {}
+    vae_tiling = {
+        "tile_sample_min_height": VAE_TILE_SIZE,
+        "tile_sample_min_width": VAE_TILE_SIZE,
+        "tile_sample_stride_height": VAE_TILE_STRIDE,
+        "tile_sample_stride_width": VAE_TILE_STRIDE,
+    }
 
     _send_progress(progress_stream, "phase", text="loading Qwen pipeline")
     pipe = LightX2VPipeline(
@@ -135,8 +125,7 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             # sigmas uniformly. LightX2V's sample_shift path implements the same
             # schedule directly, without resolution-dependent shifting.
             runner.config["sample_shift"] = 1.15
-    if profile["sampler"] == "euler-ancestral":
-        runner.scheduler = QwenImageEulerAncestralScheduler(runner.config)
+    runner.scheduler = QwenEditScheduler(runner.config, sampler=profile["sampler"])
 
     _reset_cuda_peak(torch)
     conditioner_load_start = time.perf_counter()
@@ -156,13 +145,18 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     _send_progress(progress_stream, "phase", text="encoding reference images")
     conditioned: dict[str, dict[str, Any]] = {}
     vae_source_groups: dict[tuple[str, ...], dict[str, Any]] = {}
+    reference_preprocessing: dict[str, Any] = {
+        "policy": "native-vae-upstream-semantic",
+        "semantic_target_pixels": runner.text_encoders[0].CONDITION_IMAGE_SIZE,
+        "cases": {},
+    }
     for case in cases:
         input_info = _input_info(pipe, case, case["outputs"][0]["seed"], init_empty_input_info, update_input_info_from_dict)
         runner.input_info = input_info
         images = []
         try:
             for image_path in case["image_paths"]:
-                with Image.open(image_path) as image:
+                with open_image(Path(image_path)) as image:
                     images.append(image.convert("RGB"))
             input_info.original_size = [image.size for image in images]
             text_output = runner.run_text_encoder(case["prompt"], images, neg_prompt="")
@@ -182,6 +176,11 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             if profile["true_cfg_scale"] != 1.0:
                 condition["negative_prompt_embeds"] = text_output["negative_prompt_embeds"].detach().to("cpu")
             conditioned[case["name"]] = condition
+            reference_preprocessing["cases"][case["name"]] = {
+                "input_sizes_wh": input_info.original_size,
+                "vae_sizes_hw": image_info["vae_image_info_list"],
+                "prompt_seq_lens": condition["txt_seq_lens"],
+            }
             del text_output
         finally:
             for image in images:
@@ -199,6 +198,7 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     vae_encode_start = time.perf_counter()
     _send_progress(progress_stream, "phase", text="encoding reference latents")
     runner.vae = runner.load_vae()
+    runner.vae.model.enable_tiling(**vae_tiling)
     encoded_groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for group_key, source_group in vae_source_groups.items():
         encoded_groups[group_key] = []
@@ -206,6 +206,30 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             image_latents = runner.vae.encode_vae_image(image.to(device="cuda", dtype=torch.bfloat16))
             encoded_groups[group_key].append({"image_latents": image_latents.detach().to("cpu")})
             del image_latents
+    masked_sources = {}
+    packed_masks = {}
+    for case in cases:
+        mask = case.get("mask")
+        if mask is None:
+            continue
+        source_path = mask["source_image"]
+        if source_path not in masked_sources:
+            group = conditioned[case["name"]]["vae_group"]
+            if source_path in group:
+                masked_sources[source_path] = encoded_groups[group][group.index(source_path)]["image_latents"]
+            else:
+                with open_image(Path(source_path)) as source:
+                    pixels = runner.vae.image_processor.preprocess(source.convert("RGB")).unsqueeze(2)
+                encoded = runner.vae.encode_vae_image(pixels.to(device="cuda", dtype=torch.bfloat16))
+                masked_sources[source_path] = encoded.detach().cpu()
+                del pixels, encoded
+        mask_key = (mask["mask_image"], case["width"], case["height"])
+        if mask_key not in packed_masks:
+            import numpy as np
+            with open_image(Path(mask["mask_image"])) as mask_image:
+                mask_values = torch.from_numpy(np.array(mask_image.convert("L"), dtype=np.float32)).div_(255)[None, None]
+            packed_masks[mask_key] = pack_qwen_repaint_mask(mask_values, height=case["height"], width=case["width"]).to(torch.bfloat16)
+            del mask_values
     torch.cuda.synchronize()
     timings["vae_encode_ms"] = _elapsed_ms(vae_encode_start)
     phase_peaks["vae_encode"] = _cuda_peak_mib(torch)
@@ -222,7 +246,9 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     timings["transformer_load_ms"] = _elapsed_ms(transformer_load_start)
     resident_upload_start = time.perf_counter()
     _send_progress(progress_stream, "phase", text="placing denoiser blocks on GPU")
-    resident_buffers = _enable_resident_blocks(torch, runner, cases)
+    max_denoise_tokens = _max_denoise_tokens(cases, conditioned, encoded_groups)
+    mask_state_bytes = max((value.numel() * value.element_size() * 4 for value in masked_sources.values()), default=0)
+    resident_buffers, residency_budget = _enable_resident_blocks(torch, runner, max_denoise_tokens, extra_state_bytes=mask_state_bytes)
     timings["resident_upload_ms"] = _elapsed_ms(resident_upload_start)
     host_pin_start = time.perf_counter()
     _send_progress(progress_stream, "phase", text="pinning streamed weights")
@@ -235,7 +261,8 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     _send_progress(
         progress_stream,
         "begin",
-        total=output_count * profile["steps"],
+        total=sum(len(case["outputs"]) * (round(profile["steps"] * case["mask"]["strength"])
+                  if "mask" in case else profile["steps"]) for case in cases),
         text=f"denoising 0/{profile['steps']}",
     )
     output_index = 0
@@ -265,15 +292,29 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             input_info.image_encoder_output = runner.inputs["image_encoder_output"]
             runner.set_target_shape()
             runner.set_img_shapes()
+            if "mask" in case:
+                mask = case["mask"]
+                input_info.i2i_denoise_strength = mask["strength"]
+                runner.scheduler.source_latents = masked_sources[mask["source_image"]].to("cuda")
+                runner.scheduler.repaint_mask = packed_masks[(mask["mask_image"], case["width"], case["height"])].to("cuda")
             seed_all(output["seed"])
             runner.model.scheduler.generator = torch.Generator(device="cuda").manual_seed(output["seed"])
             runner.model.scheduler.prepare(input_info)
+            effective_steps = len(runner.scheduler.timesteps)
+            sampling_record = {"steps": effective_steps}
+            if "mask" in case:
+                sampling_record.update({
+                    "strength": case["mask"]["strength"], "masked_denoising": True,
+                    "packed_mask_shape": list(runner.scheduler.repaint_mask.shape),
+                    "source_latent_shape": list(runner.scheduler.source_latents.shape),
+                    "sigmas": runner.scheduler.scheduler.sigmas[runner.scheduler.scheduler.begin_index:].tolist(),
+                })
             output_step = 0
 
             def report_denoise_step(_percent: float, _total: float) -> None:
                 nonlocal output_step
                 output_step += 1
-                text = f"denoising {output_step}/{profile['steps']}"
+                text = f"denoising {output_step}/{effective_steps}"
                 if output_count > 1:
                     text += f" (image {output_index}/{output_count})"
                 _send_progress(progress_stream, "step", text=text)
@@ -292,12 +333,14 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
                     "height": case["height"],
                     "latents": latents.detach().to("cpu"),
                     "denoise_ms": _elapsed_ms(denoise_start),
+                    "sampling": sampling_record,
                 }
             )
             del latents, generator, runner.inputs
             runner.model.scheduler.latents = None
             runner.model.scheduler.noise_pred = None
             runner.model.scheduler.input_info = None
+            runner.scheduler.clear_mask()
             runner.input_info = None
             del input_info
             _release_cuda(torch)
@@ -313,6 +356,7 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
     decode_start = time.perf_counter()
     _send_progress(progress_stream, "phase", text="decoding images")
     runner.vae = runner.load_vae()
+    runner.vae.model.enable_tiling(**vae_tiling)
     outputs = []
     for latent_output in latent_outputs:
         output_decode_start = time.perf_counter()
@@ -339,10 +383,12 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
                 "width": latent_output["width"],
                 "height": latent_output["height"],
                 "denoise_ms": latent_output["denoise_ms"],
+                "sampling": latent_output["sampling"],
                 "vae_decode_ms": _elapsed_ms(output_decode_start),
             }
         )
         image.close()
+        _send_progress(progress_stream, "output", output=outputs[-1])
         del images
     torch.cuda.synchronize()
     timings["vae_decode_ms"] = _elapsed_ms(decode_start)
@@ -379,6 +425,8 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             "gpu": torch.cuda.get_device_name(0),
             "matrix_multiply": "fp8-triton",
             "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+            "reference_preprocessing": reference_preprocessing,
+            "vae_tiling": vae_tiling,
             "attention": "flash_attn2",
             "rope": "torch",
             "sampler": profile["sampler"],
@@ -388,6 +436,7 @@ def _run(request: dict[str, Any], progress_stream: TextIO) -> dict[str, Any]:
             "pinned_gib": round(host_buffers["pinned_gib"], 2),
             "streamed_blocks": host_buffers["streamed_blocks"],
             "resident_blocks": resident_block_count,
+            "residency_budget": residency_budget,
             "phase_order": "conditioner->vae_encode->transformer->vae_decode",
         },
     }
@@ -404,7 +453,41 @@ def _send_progress(stream: TextIO, kind: str, **values: Any) -> None:
     stream.write(json.dumps({"kind": kind, **values}, separators=(",", ":")) + "\n")
 
 
-def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]) -> list[Any]:
+def _max_denoise_tokens(
+    cases: list[dict[str, Any]],
+    conditioned: dict[str, dict[str, Any]],
+    encoded_groups: dict[tuple[str, ...], list[dict[str, Any]]],
+) -> int:
+    largest = 0
+    for case in cases:
+        condition = conditioned[case["name"]]
+        reference_tokens = sum(
+            item["image_latents"].shape[1]
+            for item in encoded_groups[condition["vae_group"]]
+        )
+        output_tokens = (case["width"] // 16) * (case["height"] // 16)
+        largest = max(largest, output_tokens + reference_tokens + max(condition["txt_seq_lens"]))
+    return largest
+
+
+def _weight_storage_bytes(torch: Any, *modules: Any, device: str) -> int:
+    """Count shared weight storage once, including aliases in stream buffers."""
+    seen = set()
+    total = 0
+    for module in modules:
+        for holder in _iter_weight_objects(module):
+            for value in vars(holder).values():
+                if not isinstance(value, torch.Tensor) or value.device.type != device:
+                    continue
+                storage = value.untyped_storage()
+                key = (value.device, storage.data_ptr())
+                if key not in seen:
+                    seen.add(key)
+                    total += storage.nbytes()
+    return total
+
+
+def _enable_resident_blocks(torch: Any, runner: Any, max_tokens: int, *, extra_state_bytes: int = 0) -> tuple[list[Any], dict[str, int]]:
     """Keep as many transformer blocks permanently on the GPU as VRAM allows.
 
     The 60-block fp8 transformer does not fit in VRAM, so LightX2V streams every
@@ -419,7 +502,7 @@ def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]
 
     infer = runner.model.transformer_infer
     if getattr(infer, "offload_manager", None) is None:
-        return []
+        return [], {}
     blocks = runner.model.transformer_weights.blocks
     # Clone the engine's own stream buffer: it went through load(weight_dict) at
     # checkpoint time, which sets attributes (bias, scale buffers) that a freshly
@@ -429,29 +512,36 @@ def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]
     buffer_template = infer.offload_manager.cuda_buffers[0]
     shared = [runner.config, getattr(runner.model, "config", None), buffer_template.config]
     deepcopy_memo = {id(obj): obj for obj in shared if obj is not None}
-    max_pixels = max(case["width"] * case["height"] for case in cases)
     free_bytes, _ = torch.cuda.mem_get_info()
-    # Activation reserve scales from the measured ~2.4 GiB denoise peak at ~1.11 MP,
-    # plus a fixed safety margin for fragmentation and the double stream buffers.
-    reserve_bytes = int(2.4 * 1024**3 * max_pixels / 1_110_000) + int(2.2 * 1024**3)
-    budget = free_bytes - reserve_bytes
+    # Native reference latents join the output tokens in every transformer block.
+    # Pre/post weights move to CUDA only inside model.infer(); the two stream
+    # buffers are already allocated and therefore already excluded from free_bytes.
+    late_weight_bytes = _weight_storage_bytes(torch, runner.model.pre_weight, runner.model.post_weight, device="cpu")
+    workspace_bytes = max_tokens * DENOISE_WORKSPACE_BYTES_PER_TOKEN
+    budget = free_bytes - late_weight_bytes - workspace_bytes - DENOISE_HEADROOM_BYTES - extra_state_bytes
+    block_bytes = _weight_storage_bytes(torch, buffer_template, device="cuda")
+    residency_budget = {
+        "max_denoise_tokens": max_tokens,
+        "free_bytes": free_bytes,
+        "late_weight_bytes": late_weight_bytes,
+        "workspace_bytes": workspace_bytes,
+        "extra_state_bytes": extra_state_bytes,
+        "headroom_bytes": DENOISE_HEADROOM_BYTES,
+        "resident_budget_bytes": budget,
+        "block_bytes": block_bytes,
+    }
     resident_buffers: list[Any] = []
-    block_bytes = 0
     for block_idx in range(len(blocks)):
-        if resident_buffers and budget < block_bytes:
+        if budget < block_bytes:
             break
-        before = torch.cuda.memory_allocated()
         with runner.config.temporarily_unlocked():
             buffer = copy.deepcopy(buffer_template, dict(deepcopy_memo))
         buffer.load_state_dict(blocks[block_idx].state_dict(), block_idx, None)
-        block_bytes = torch.cuda.memory_allocated() - before
         budget -= block_bytes
         resident_buffers.append(buffer)
-        if budget < 0:
-            break
     torch.cuda.synchronize()
     if not resident_buffers:
-        return []
+        return [], residency_budget
     resident = len(resident_buffers)
 
     def infer_with_resident_blocks(
@@ -503,7 +593,7 @@ def _enable_resident_blocks(torch: Any, runner: Any, cases: list[dict[str, Any]]
         return hidden_states
 
     infer.infer_func = types.MethodType(infer_with_resident_blocks, infer)
-    return resident_buffers
+    return resident_buffers, residency_budget
 
 
 def _pin_streamed_host_weights(torch: Any, runner: Any, streamed_start: int) -> dict[str, Any]:

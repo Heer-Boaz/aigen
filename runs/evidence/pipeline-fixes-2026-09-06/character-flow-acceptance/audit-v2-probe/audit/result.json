@@ -1,0 +1,16 @@
+{
+  "candidate_identity": "9eb099bc2da9dace858305c0322eb630fc06c8ce70dbe7299b4c48295519cb44",
+  "group_id": "edit",
+  "image_index": 2,
+  "passed": true,
+  "regions": [],
+  "request": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/audit-v2-probe/audit/request.json",
+  "response": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/audit-v2-probe/audit/response.json",
+  "selected": {
+    "case_id": "candidate-0",
+    "height": 1024,
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-0.png",
+    "seed": 91,
+    "width": 768
+  }
+}

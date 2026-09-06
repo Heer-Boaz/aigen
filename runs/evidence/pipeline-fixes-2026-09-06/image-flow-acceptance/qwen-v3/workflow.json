@@ -1,0 +1,189 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-f008c23c3b70479c84ae41e8880e08a7",
+  "name": "qwen-image-edit-2511-lightning image flow",
+  "nodes": [
+    {
+      "id": "ref0",
+      "title": "Reference 1",
+      "layout": {
+        "x": 4,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+      }
+    },
+    {
+      "id": "edit",
+      "title": "Style variants",
+      "layout": {
+        "x": 50,
+        "y": 2
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+        "seed_mode": "fixed",
+        "seed": 74,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "continue",
+      "title": "Continue with selected image",
+      "layout": {
+        "x": 96,
+        "y": 2
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Change the background to light gray, keeping the subject and illustration style unchanged.",
+        "seed_mode": "fixed",
+        "seed": 73,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-f840ddb8c5b54a59ac6c338d46999d14",
+      "title": "Style variants · seed 72",
+      "layout": {
+        "x": 50,
+        "y": 18
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+        "seed_mode": "fixed",
+        "seed": 72,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-65101519383d4f07aad5aa1d9e8ac401",
+      "title": "Image variants",
+      "layout": {
+        "x": 136,
+        "y": 2
+      },
+      "kind": "image-collection",
+      "config": {}
+    },
+    {
+      "id": "node-d9a85f24ab4e4402a9378be3c6503a33",
+      "title": "Selected image",
+      "layout": {
+        "x": 176,
+        "y": 2
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": {
+          "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/qwen-v3/workflows/runs/workflow-f008c23c3b70479c84ae41e8880e08a7/attempt-20260906T035849190281Z-e6b6c0c1e584/nodes/node-f840ddb8c5b54a59ac6c338d46999d14/result.json",
+          "producer_signature": "b2dad0b92ffd44b54ab695584646bcf4de52d22cd60600e9675a17512856ea0a",
+          "output_port": "image",
+          "artifact_identity": "47fac8c43aa8e68028191843f43093dca2707cf59bf0198a0a6e38ff8c9a67df"
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "edit",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "next",
+      "source": {
+        "node_id": "node-d9a85f24ab4e4402a9378be3c6503a33",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "continue",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-7f36a085257547a888b4e9d64ddbf0ce",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-f840ddb8c5b54a59ac6c338d46999d14",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-280144c42b36467d88bd34c2a84a96ea",
+      "source": {
+        "node_id": "edit",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-65101519383d4f07aad5aa1d9e8ac401",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-1bef9ac927d44248876955c796e028f4",
+      "source": {
+        "node_id": "node-f840ddb8c5b54a59ac6c338d46999d14",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-65101519383d4f07aad5aa1d9e8ac401",
+        "port": "images"
+      },
+      "order": 1
+    },
+    {
+      "id": "connection-55a09f4db0924550ad348711eeea50d0",
+      "source": {
+        "node_id": "node-65101519383d4f07aad5aa1d9e8ac401",
+        "port": "collection"
+      },
+      "target": {
+        "node_id": "node-d9a85f24ab4e4402a9378be3c6503a33",
+        "port": "collection"
+      },
+      "order": 0
+    }
+  ]
+}

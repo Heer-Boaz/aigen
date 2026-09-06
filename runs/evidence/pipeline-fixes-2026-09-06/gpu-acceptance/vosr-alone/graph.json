@@ -1,0 +1,54 @@
+{
+  "connections": [
+    {
+      "id": "wire-b",
+      "order": 0,
+      "source": {
+        "node_id": "src-b",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "b",
+        "port": "image"
+      }
+    }
+  ],
+  "name": "VOSR GPU acceptance",
+  "nodes": [
+    {
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/views/sprite-geom-gradriel.png"
+      },
+      "id": "src-b",
+      "kind": "image-source",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "title": "b"
+    },
+    {
+      "config": {
+        "align_method": "wavelet",
+        "cfg_scale": 1.5,
+        "infer_steps": 25,
+        "long_side": 1024,
+        "model": "vosr-1.4b-ms-upscale",
+        "scale": 2,
+        "seed": 42,
+        "seed_mode": "fixed",
+        "sizing": "long-side",
+        "tile_size": 512,
+        "weak_cond_strength_aelq": 0.2
+      },
+      "id": "b",
+      "kind": "image-postprocess",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "title": "b"
+    }
+  ],
+  "version": 3
+}

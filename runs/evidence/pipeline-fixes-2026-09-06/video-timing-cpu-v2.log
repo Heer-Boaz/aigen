@@ -1,0 +1,8 @@
+test_fractional_cfr_and_transparent_frames (test_video_timing.VideoTimingTests.test_fractional_cfr_and_transparent_frames) ... ok
+test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video (test_video_timing.VideoTimingTests.test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video) ... ok
+test_vfr_extract_assemble_retains_every_frame_time_and_order (test_video_timing.VideoTimingTests.test_vfr_extract_assemble_retains_every_frame_time_and_order) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.253s
+
+OK

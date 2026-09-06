@@ -3,13 +3,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+import shutil
 from typing import Any
-
-from PIL import Image
 
 from aigen.canny_control import CannyControl, CannyControlError, render_canny_control
 from aigen.character_conditioning_models import CharacterConditioningPlanError, CharacterConditioningPlanSpec
 from aigen.character_conditioning_planner import CharacterConditioningPlanner
+from aigen.character_edit import DEFAULT_CHARACTER_AUDIT_ITERATIONS, run_character_edit
+from aigen.character_edit_audit import AuditContextImage, CharacterAuditGroup
 from aigen.character_reference_models import CharacterReferenceError
 from aigen.character_reference_pack import load_character_reference_pack
 from aigen.depth_v2_control import DepthV2Control, DepthV2ControlError, render_depth_v2_control
@@ -18,11 +19,19 @@ from aigen.generation.qwen_image_edit_identity import (
     QwenControlImage,
     QwenIdentityCase,
     QwenImageEditProfile,
-    run_qwen_image_edit_cases,
+    prepare_qwen_edit_inputs,
 )
+from aigen.generation.qwen_image_edit_lightx2v import (
+    LIGHTX2V_QWEN_EDIT_2511_PROFILE, QwenImageEditLightX2VProfile,
+)
+from aigen.generation.image_edit import QWEN_2511_LIGHTNING_BACKEND
+from aigen.generation.image_edit_batch import ImageEditBatchCase, ImageEditBatchLora, ImageEditBatchRequest
+from aigen.image_edit_defaults import QWEN_2511_DEFAULT_SCHEDULER, QWEN_2511_SAMPLER
 from aigen.image_assets import image_asset_json
+from aigen.image_io import open_image
 from aigen.manifest_io import resolve_existing_path, write_json
 from aigen.progress import StatusReporter
+from aigen.vlm_qwen import QwenVlmConfig
 
 
 class QwenCharacterEditError(RuntimeError):
@@ -87,6 +96,12 @@ def run_qwen_character_edit(
     pose_mode: str = DEFAULT_QWEN_POSE_MODE,
     structure_source_path: Path | None = None,
     structure_control: str | None = None,
+    canvas_size: tuple[int, int] | None = None,
+    max_iterations: int = DEFAULT_CHARACTER_AUDIT_ITERATIONS,
+    audit_config: QwenVlmConfig | None = None,
+    loras: Sequence[ImageEditBatchLora] = (),
+    sampler: str = QWEN_2511_SAMPLER,
+    scheduler: str = QWEN_2511_DEFAULT_SCHEDULER,
     progress: StatusReporter,
 ) -> dict[str, Any]:
     instruction = instruction.strip()
@@ -98,8 +113,6 @@ def run_qwen_character_edit(
         raise QwenCharacterEditError("qwen-edit-run requires either --pack or --image inputs")
     if (structure_source_path is None) != (structure_control is None):
         raise QwenCharacterEditError("--structure-source and --structure-control must be provided together")
-    if pose_source_path is not None and structure_source_path is not None:
-        raise QwenCharacterEditError("--pose-source and --structure-source cannot be combined in one edit")
     if structure_control is not None and structure_control not in QWEN_STRUCTURE_MODE_BY_CONTROL:
         allowed = ", ".join(QWEN_STRUCTURE_CONTROL_NAMES)
         raise QwenCharacterEditError(f"Unknown structure control {structure_control}; expected one of: {allowed}")
@@ -127,6 +140,12 @@ def run_qwen_character_edit(
         pose_sources=pose_sources,
         structure_source_path=structure_source_path,
         structure_control=structure_control,
+        canvas_size=canvas_size,
+        max_iterations=max_iterations,
+        audit_config=audit_config,
+        loras=loras,
+        sampler=sampler,
+        scheduler=scheduler,
         output_dir=output_dir,
         profile=profile,
         max_side=max_side,
@@ -169,8 +188,27 @@ def run_planned_qwen_character_edit(
     postprocess: str,
     result_kind: str,
     manifest_context: dict[str, Any] | None,
+    canvas_size: tuple[int, int] | None = None,
+    max_iterations: int = DEFAULT_CHARACTER_AUDIT_ITERATIONS,
+    audit_config: QwenVlmConfig | None = None,
+    loras: Sequence[ImageEditBatchLora] = (),
+    sampler: str = QWEN_2511_SAMPLER,
+    scheduler: str = QWEN_2511_DEFAULT_SCHEDULER,
     progress: StatusReporter,
 ) -> dict[str, Any]:
+    if not isinstance(profile, QwenImageEditLightX2VProfile) or profile.name != LIGHTX2V_QWEN_EDIT_2511_PROFILE:
+        raise QwenCharacterEditError("The active Qwen character route requires Qwen-Image-Edit-2511 FP8 Lightning via LightX2V")
+    if nunchaku_blocks_on_gpu is not None:
+        raise QwenCharacterEditError("Nunchaku block settings do not apply to the LightX2V character route")
+    if postprocess not in ("none", "vosr"):
+        raise QwenCharacterEditError("Character postprocess must be none or vosr")
+    if max_side < 32:
+        raise QwenCharacterEditError("max_side must be at least 32")
+    output_dir = output_dir.expanduser().resolve()
+    if output_dir.exists() and any(output_dir.iterdir()):
+        if not overwrite:
+            raise QwenCharacterEditError(f"Output exists and overwrite=false: {output_dir}")
+        shutil.rmtree(output_dir)
     available_modes_by_case = {
         case.name: tuple(
             [QWEN_POSE_CONDITIONING_MODE[pose_sources[case.name].mode]]
@@ -210,6 +248,7 @@ def run_planned_qwen_character_edit(
                 "model": structure_control_result.model.as_posix(),
             }
         conditioning_result[control_name] = {
+            "role": "scene source",
             "source_image": image_asset_json(source_path),
             "preprocessor": preprocessor,
         }
@@ -217,36 +256,57 @@ def run_planned_qwen_character_edit(
         conditioning_plans,
         pose_sources=pose_sources,
     )
-    output_dir = output_dir.resolve()
-    result = run_qwen_image_edit_cases(
+    prepared = prepare_qwen_edit_inputs(
         source_images=planned.source_images,
         references=planned.reference_paths,
-        guides=guides,
-        controls=controls,
-        output_dir=output_dir,
-        profile=profile,
-        edit_cases=edit_cases,
-        max_side=max_side,
-        steps=steps,
-        true_cfg_scale=true_cfg_scale,
-        guidance_scale=guidance_scale,
-        seed=seed,
-        max_sequence_length=max_sequence_length,
-        candidates_per_case=candidates_per_case,
-        overwrite=overwrite,
-        nunchaku_blocks_on_gpu=nunchaku_blocks_on_gpu,
-        aspect_ratio=aspect_ratio,
-        canvas_size=None,
-        upscale_long_side=upscale_long_side,
-        postprocess=postprocess,
-        result_kind=result_kind,
-        manifest_context=manifest_context,
+        guides=guides, controls=controls, cases=edit_cases, profile=profile,
+        max_side=max_side, aspect_ratio=aspect_ratio, canvas_size=canvas_size,
+        directory=output_dir / "inputs", progress=progress,
+    )
+    candidates = []
+    groups = []
+    for case_index, case in enumerate(edit_cases):
+        inputs = prepared[case.name]
+        width, height = inputs.canvas_size
+        seeds = case.seeds or tuple(seed + case_index * candidates_per_case + index for index in range(candidates_per_case))
+        ids = tuple(f"case-{case_index}-candidate-{index}" for index in range(len(seeds)))
+        candidates.extend(ImageEditBatchCase(
+            id=candidate_id, prompt=case.prompt, image_paths=inputs.image_paths,
+            width=width, height=height, seed=candidate_seed,
+            output_path=output_dir / f"{candidate_id}.png",
+        ) for candidate_id, candidate_seed in zip(ids, seeds, strict=True))
+        context_images = tuple(AuditContextImage(
+            conditioning_result[name]["role"], Path(conditioning_result[name]["source_image"]["path"]),
+        ) for name in (*case.guides, *case.controls))
+        groups.append(CharacterAuditGroup(
+            id=case.name, instruction=case.prompt, route=_case_route_kind(case),
+            references=tuple(planned.source_images[name] for name in case.source_images)
+            + tuple(planned.reference_paths[name] for name in case.references),
+            context_images=context_images, candidate_ids=ids,
+        ))
+    write_json(output_dir / "conditioning.json", {
+        "conditioning": conditioning_result,
+        "cases": {case.name: {
+            "canvas": prepared[case.name].canvas_size,
+            "images": [image_asset_json(path) for path in prepared[case.name].image_paths],
+            "controls": {name: str(path) for name, path in prepared[case.name].control_paths.items()},
+        } for case in edit_cases},
+    })
+    audited = run_character_edit(
+        ImageEditBatchRequest(
+            backend=QWEN_2511_LIGHTNING_BACKEND, cases=tuple(candidates), loras=tuple(loras),
+            steps=steps, guidance=true_cfg_scale, guidance_scale=guidance_scale,
+            max_sequence_length=max_sequence_length, sampler=sampler, scheduler=scheduler,
+        ),
+        audit_groups=groups, output_dir=output_dir / "edit", max_iterations=max_iterations,
+        audit_config=audit_config,
+        upscale_long_side=upscale_long_side if postprocess == "vosr" else None,
         progress=progress,
     )
-    for control_name in controls:
-        conditioning_result[control_name]["control_image"] = result["controls"][control_name]
-    if conditioning_result:
-        result["conditioning"] = conditioning_result
+    result = audited.to_json() | {
+        "kind": result_kind, "conditioning": str(output_dir / "conditioning.json"),
+        "manifest_context": manifest_context,
+    }
     write_json(output_dir / "result.json", result)
     return result
 
@@ -304,10 +364,10 @@ def _build_qwen_character_edit_request(
 
 
 def _direct_request_route(*, pose_source_present: bool, structure_source_present: bool) -> tuple[str, str]:
-    if pose_source_present:
-        return "pose_transfer", "single_image_pose"
     if structure_source_present:
         return "scene_insertion", "single_image_scene"
+    if pose_source_present:
+        return "pose_transfer", "single_image_pose"
     return "unknown_reference_edit", "single_image_reference_edit"
 
 
@@ -399,6 +459,7 @@ def _prepare_pose_inputs(
             guide_name = _pose_guide_name(pose_source.name)
             guides[guide_name] = source_path
             conditioning_result[guide_name] = {
+                "role": "pose source",
                 "source_image": image_asset_json(source_path),
                 "preprocessor": {
                     "tool": "qwen_native_pose_reference",
@@ -412,6 +473,7 @@ def _prepare_pose_inputs(
             content_box=pose_control.content_box,
         )
         conditioning_result[control_name] = {
+            "role": "pose source",
             "source_image": image_asset_json(source_path),
             "preprocessor": pose_control.metadata
             | {
@@ -439,7 +501,7 @@ def _render_pose_conditioning(
     source_path = resolve_existing_path(pose_source_path.as_posix(), Path.cwd())
     progress.phase("build DWPose keypoint control")
     try:
-        with Image.open(source_path) as source_image:
+        with open_image(source_path) as source_image:
             control = render_dwpose_control(
                 source_image,
                 source_label=source_path.as_posix(),
@@ -457,7 +519,7 @@ def _render_structure_conditioning(
     source_path = resolve_existing_path(structure_source_path.as_posix(), Path.cwd())
     progress.phase(f"build {structure_control} scene control")
     try:
-        with Image.open(source_path) as source_image:
+        with open_image(source_path) as source_image:
             if structure_control == "depth":
                 control = render_depth_v2_control(
                     source_image,

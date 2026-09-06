@@ -1,0 +1,2 @@
+{"label": "segment-resume", "gpu_free_mib": 15229}
+{"status": "completed", "stage": "segment-resume", "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/mask-original.png"}

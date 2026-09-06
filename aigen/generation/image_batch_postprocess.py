@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any
 
 from aigen.generation.image_upscale import (
+    IMAGE_UPSCALE_IMPLEMENTATION_REVISION,
     ImageUpscaleError,
     IllustrationUpscaler,
     upscale_model_names,
@@ -231,6 +232,7 @@ def _run_batch(
         return tuple(
             {
                 "model": result.model_name,
+                "implementation_revision": IMAGE_UPSCALE_IMPLEMENTATION_REVISION,
                 "model_path": result.model_path.as_posix(),
                 "device": result.device,
                 "scale": result.scale,

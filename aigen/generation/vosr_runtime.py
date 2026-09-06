@@ -15,6 +15,7 @@ from aigen.progress import StatusReporter
 
 
 VAE_SCALE_FACTOR = 8
+VOSR_IMPLEMENTATION_REVISION = "3"
 
 
 class VosrRuntime:
@@ -165,15 +166,20 @@ class VosrRuntime:
                 (0, pad_width, 0, pad_height),
                 mode="replicate",
             )
-        sr_tensor = self.official.tiled_latent_inference(
-            self.model,
-            self.vosr,
-            self.vae,
-            self.venc,
-            lq.to(self.device),
-            self.args,
-            device=self.device,
-        )
+        # Upstream VAE sampling and tiled inference use the default generators.
+        # Give each image an isolated stream, independent of earlier batch/cache work.
+        with self.torch.random.fork_rng(devices=[self.device]), self.torch.cuda.device(self.device):
+            self.torch.default_generator.manual_seed(self.args.seed)
+            self.torch.cuda.manual_seed(self.args.seed)
+            sr_tensor = self.official.tiled_latent_inference(
+                self.model,
+                self.vosr,
+                self.vae,
+                self.venc,
+                lq.to(self.device),
+                self.args,
+                device=self.device,
+            )
         sr_tensor = sr_tensor[..., : target_size[1], : target_size[0]]
         pixels = sr_tensor[0].float().cpu().mul_(0.5).add_(0.5)
         del sr_tensor

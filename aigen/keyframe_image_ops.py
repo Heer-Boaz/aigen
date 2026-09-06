@@ -53,8 +53,9 @@ def outside_mask_change(base: Image.Image, refined: Image.Image, feather_mask: I
 
 
 def exact_outside_mask_diff(base: Image.Image, refined: Image.Image, repaint_mask: Image.Image) -> dict[str, Any]:
-    base_array = np.asarray(base.convert("RGB"), dtype=np.uint8)
-    refined_array = np.asarray(refined.convert("RGB"), dtype=np.uint8)
+    mode = "RGBA" if any("A" in image.getbands() or "transparency" in image.info for image in (base, refined)) else "RGB"
+    base_array = np.asarray(base.convert(mode), dtype=np.uint8)
+    refined_array = np.asarray(refined.convert(mode), dtype=np.uint8)
     repaint = np.asarray(repaint_mask.convert("L"), dtype=np.uint8) > 0
     outside = ~repaint
     changed = np.any(base_array != refined_array, axis=2) & outside

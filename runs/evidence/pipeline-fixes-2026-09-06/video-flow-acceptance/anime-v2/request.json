@@ -1,0 +1,44 @@
+{
+  "anime": {
+    "fps": 16,
+    "frames": 33,
+    "keyframe_fit": "pad",
+    "keyframes": [
+      "start",
+      "end"
+    ],
+    "negative_prompt": null,
+    "precision": "fp8",
+    "sampling": "lightning-4",
+    "seed": 83,
+    "steps": 4
+  },
+  "input": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+  "ltx": {
+    "conditioning_strength": 1.0,
+    "effective_canvas": [
+      576,
+      704
+    ],
+    "fps": 24,
+    "frames": 33,
+    "keyframe_fit": "pad",
+    "model": "nvfp4",
+    "negative_prompt": "Camera movement.",
+    "phases": 1,
+    "positions": [
+      0,
+      16,
+      32
+    ],
+    "resolution": "513x641",
+    "seed": 83,
+    "solver": "distilled_8_steps",
+    "steps": 8
+  },
+  "min_free_mib": 13000,
+  "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+  "scope": "Same approved selected input at each keyframe; actual graph indices, fit, generation, extraction, CPU frame processing and assembly. No character-specific code or model downloads.",
+  "second_seed": 84,
+  "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+}

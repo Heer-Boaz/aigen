@@ -1,0 +1,43 @@
+{
+  "phase": "finished",
+  "elapsed_seconds": 73.41600013499556,
+  "torch_allocated_mib": 32.0,
+  "torch_reserved_mib": 15518.0,
+  "torch_peak_allocated_mib": 14523.00830078125,
+  "allocator": null,
+  "preflight": {
+    "nvidia_smi_used_mb": 780,
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "steps": [
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 72.56394107999222,
+      "torch_allocated_mib": 13660.81591796875,
+      "torch_reserved_mib": 13850.0,
+      "torch_peak_allocated_mib": 13660.81591796875
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 73.2041101299983,
+      "torch_allocated_mib": 13661.19091796875,
+      "torch_reserved_mib": 15518.0,
+      "torch_peak_allocated_mib": 14523.00830078125
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 73.2046546049969,
+      "torch_allocated_mib": 13661.56591796875,
+      "torch_reserved_mib": 15518.0,
+      "torch_peak_allocated_mib": 14523.00830078125
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 73.22860622699955,
+      "torch_allocated_mib": 13679.56640625,
+      "torch_reserved_mib": 15518.0,
+      "torch_peak_allocated_mib": 14523.00830078125
+    }
+  ]
+}

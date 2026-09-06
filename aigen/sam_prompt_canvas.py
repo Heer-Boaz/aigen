@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 from rich.color import Color
 from rich.style import Style
 from rich.text import Text
@@ -13,6 +13,7 @@ from textual.message import Message
 from textual.widgets import Static
 
 from aigen.runtime_profiles import resolve_project_path
+from aigen.image_io import open_image
 
 
 class SAMPromptCanvas(Static):
@@ -249,9 +250,9 @@ class SAMPromptCanvas(Static):
         if path is None or not path.is_file():
             return None
         try:
-            with Image.open(path) as image:
+            with open_image(path) as image:
                 return np.asarray(
-                    ImageOps.exif_transpose(image).convert("RGB"),
+                    image.convert("RGB"),
                     dtype=np.uint8,
                 ).copy()
         except OSError:

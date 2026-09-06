@@ -1,0 +1,18 @@
+[
+  {
+    "case": "pristine",
+    "returncode": 0,
+    "stdout": "[aigen] git -C /tmp/aigen-patch-contract-zhzv7cg2 apply /home/boaz/aigen/scripts/patches/lightx2v-fp8-direct-output.patch\n"
+  },
+  {
+    "case": "already-applied",
+    "returncode": 0,
+    "stdout": "[aigen] LightX2V direct FP8 output patch is already applied\n"
+  },
+  {
+    "case": "incompatible-source",
+    "returncode": 1,
+    "stderr": "[aigen] error: LightX2V source does not match the direct FP8 output patch: /tmp/aigen-patch-contract-zhzv7cg2\n",
+    "source_preserved": true
+  }
+]

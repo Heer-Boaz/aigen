@@ -1,0 +1,11 @@
+{"label": "generation", "gpu_free_mib": 15377}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Reference 1"}
+{"label": "generation", "phase": "completed Style variants"}
+{"label": "generation", "phase": "completed Style variants \u00b7 seed 72"}
+{"label": "cache", "gpu_free_mib": 15377}
+{"label": "changed-seed", "gpu_free_mib": 15377}
+{"label": "changed-seed", "phase": "starting"}
+{"label": "changed-seed", "phase": "reused Style variants \u00b7 seed 72"}
+{"label": "changed-seed", "phase": "completed Style variants"}
+{"status": "variants-and-selection-completed", "inspect_before_continuing": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/qwen-v3/selected.png"}

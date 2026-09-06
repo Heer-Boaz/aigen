@@ -7,6 +7,8 @@ from typing import Any
 
 from aigen.generation.runtime_diagnostics import module_device_report
 from aigen.generation.runtime_types import resolve_torch_dtype
+from aigen.model_artifacts import local_model_files
+from aigen.runtime_profiles import MODELS_ROOT
 
 
 DEFAULT_JUDGE_ID = "qwen2.5-vl-7b"
@@ -15,6 +17,7 @@ DEFAULT_JUDGE_REVISION = "cc594898137f460bfe9f0759e9844b3ce807cfb5"
 DEFAULT_JUDGE_QUANTIZATION = "bitsandbytes-8bit"
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
 DEFAULT_MIN_PIXELS = 256 * 28 * 28
+DEFAULT_QWEN_VLM_MODEL = MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct"
 
 
 class QwenVlmError(RuntimeError):
@@ -212,14 +215,14 @@ def validate_local_qwen_model(config: QwenVlmConfig) -> None:
             "Missing local Qwen VLM. Download "
             f"{config.repo_id} to {config.model.as_posix()} before running vision judging."
         )
-    config_path = config.model / "config.json"
-    if not config_path.exists():
-        raise QwenVlmError(f"Local Qwen VLM is incomplete; missing {config_path.as_posix()}")
-    if not any(config.model.glob("*.safetensors")):
-        raise QwenVlmError(
-            "Local Qwen VLM is incomplete; missing safetensors weights in "
-            f"{config.model.as_posix()}"
-        )
+    index = config.model / "model.safetensors.index.json"
+    weights = index if index.is_file() else config.model / "model.safetensors"
+    try:
+        local_model_files((weights, *(config.model / name for name in (
+            "config.json", "preprocessor_config.json", "tokenizer.json", "tokenizer_config.json",
+        ))))
+    except (FileNotFoundError, ValueError) as error:
+        raise QwenVlmError(f"Local Qwen VLM is incomplete: {error}") from error
 
 
 def qwen_vlm_device_map(torch: Any) -> dict[str, int | str]:

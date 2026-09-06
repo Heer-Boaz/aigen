@@ -1,0 +1,48 @@
+Skipping import of cpp extensions due to incompatible torch version 2.8.0+cu128 for torchao version 0.14.1             Please see https://github.com/pytorch/ao/issues/2919 for more info
+{"gpu_preflight": {"nvidia_smi_used_mb": 1193, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 6}}
+{"source": "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png", "input_shape": [1, 3, 1, 3888, 3840], "tile": null}
+{"elapsed_seconds": 0.4899084409989882, "peak_allocated_mib": 14138.6201171875, "peak_reserved_mib": 14352.0}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/vae_probe.py", line 38, in <module>
+    latents = vae.encode(pixels).latent_dist.mode()
+              ^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/utils/accelerate_utils.py", line 46, in wrapper
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/models/autoencoders/autoencoder_kl_qwenimage.py", line 834, in encode
+    h = self._encode(x)
+        ^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/models/autoencoders/autoencoder_kl_qwenimage.py", line 801, in _encode
+    out = self.encoder(x[:, :, :1, :, :], feat_cache=self._enc_feat_map, feat_idx=self._enc_conv_idx)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/models/autoencoders/autoencoder_kl_qwenimage.py", line 462, in forward
+    x = layer(x, feat_cache, feat_idx)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/models/autoencoders/autoencoder_kl_qwenimage.py", line 265, in forward
+    x = self.conv1(x, feat_cache[idx])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/diffusers/models/autoencoders/autoencoder_kl_qwenimage.py", line 81, in forward
+    x = F.pad(x, padding)
+        ^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/nn/functional.py", line 5290, in pad
+    return torch._C._nn.pad(input, pad, mode, value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error: device not ready

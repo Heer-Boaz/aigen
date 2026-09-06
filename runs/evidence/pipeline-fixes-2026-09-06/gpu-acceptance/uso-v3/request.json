@@ -1,0 +1,275 @@
+{
+  "configuration": {
+    "jobs": {
+      "anime-segmentation": {
+        "backend": "segmentation",
+        "min_free_mib": 8500,
+        "model": "anime-segmentation"
+      },
+      "anime-tui-smooth": {
+        "backend": "anime-tui",
+        "min_free_mib": 12000,
+        "source": "smooth"
+      },
+      "anime-tui-sprite": {
+        "backend": "anime-tui",
+        "min_free_mib": 12000,
+        "source": "sprite"
+      },
+      "animesharp-x4": {
+        "backend": "upscale",
+        "min_free_mib": 8500,
+        "model": "animesharp-x4"
+      },
+      "flux-dev": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "flux2-dev-nvfp4",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed": 71,
+        "width": 1152
+      },
+      "flux-dev-v2": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "flux2-dev-nvfp4",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed": 71,
+        "width": 1152
+      },
+      "illustrationjanai-dat2": {
+        "backend": "upscale",
+        "min_free_mib": 8500,
+        "model": "illustrationjanai-dat2"
+      },
+      "illustrationjanai-esrgan": {
+        "backend": "upscale",
+        "min_free_mib": 8500,
+        "model": "illustrationjanai-esrgan"
+      },
+      "klein-edit": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": null
+      },
+      "klein-strength": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": 0.5
+      },
+      "klein-strength-v2": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": 0.5
+      },
+      "klein-strength-v3": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": 0.5
+      },
+      "ltx-smooth": {
+        "backend": "ltx",
+        "min_free_mib": 12000,
+        "negative_prompt": "Camera movement.",
+        "source": "smooth"
+      },
+      "ltx-sprite": {
+        "backend": "ltx",
+        "min_free_mib": 12000,
+        "source": "sprite"
+      },
+      "ltx-sprite-v2": {
+        "backend": "ltx",
+        "min_free_mib": 12000,
+        "negative_prompt": "Camera movement.",
+        "source": "sprite"
+      },
+      "qwen-base": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "qwen-image-edit-2511-base",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed": 71,
+        "width": 1152
+      },
+      "qwen-lightning": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed": 71,
+        "width": 1152
+      },
+      "qwen-lightning-v2": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed": 71,
+        "width": 1152
+      },
+      "qwen-single-native": {
+        "backend": "image-edit",
+        "height": 1536,
+        "min_free_mib": 12000,
+        "model": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+        "references": [
+          "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+        ],
+        "seed": 71,
+        "width": 1152
+      },
+      "sam": {
+        "backend": "segmentation",
+        "min_free_mib": 8500,
+        "model": "sam"
+      },
+      "sam2": {
+        "backend": "segmentation",
+        "min_free_mib": 8500,
+        "model": "sam2"
+      },
+      "uso": {
+        "backend": "image-edit",
+        "height": 1024,
+        "min_free_mib": 12000,
+        "model": "uso-flux1-dev-fp8",
+        "prompt": "Redraw image 1 with the linework and shading of image 2.",
+        "seed": 71,
+        "width": 768
+      },
+      "uso-v2": {
+        "backend": "image-edit",
+        "height": 1024,
+        "min_free_mib": 12000,
+        "model": "uso-flux1-dev-fp8",
+        "prompt": "Redraw image 1 with the linework and shading of image 2.",
+        "seed": 71,
+        "width": 768
+      },
+      "uso-v3": {
+        "backend": "image-edit",
+        "height": 1024,
+        "min_free_mib": 12000,
+        "model": "uso-flux1-dev-fp8",
+        "prompt": "Redraw image 1 with the linework and shading of image 2.",
+        "seed": 71,
+        "width": 768
+      },
+      "vosr-alone": {
+        "backend": "vosr",
+        "cache_root": "workflow-alone",
+        "min_free_mib": 8500,
+        "order": [
+          "b"
+        ]
+      },
+      "vosr-cache-partial": {
+        "backend": "vosr",
+        "cache_root": "workflow-partial",
+        "min_free_mib": 8500,
+        "order": [
+          "a",
+          "b"
+        ]
+      },
+      "vosr-cache-prime": {
+        "backend": "vosr",
+        "cache_root": "workflow-partial",
+        "min_free_mib": 8500,
+        "order": [
+          "a"
+        ]
+      },
+      "vosr-reverse": {
+        "backend": "vosr",
+        "cache_root": "workflow-reverse",
+        "min_free_mib": 8500,
+        "order": [
+          "b",
+          "a"
+        ]
+      },
+      "vosr-together": {
+        "backend": "vosr",
+        "cache_root": "workflow-together",
+        "min_free_mib": 8500,
+        "order": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    "klein": {
+      "canvases": [
+        [
+          768,
+          1024
+        ],
+        [
+          1152,
+          1536
+        ]
+      ],
+      "loras": [],
+      "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+      "references": [
+        "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+        "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+      ],
+      "sampler": "flowmatch-euler",
+      "seeds": [
+        71
+      ],
+      "steps": 4
+    },
+    "segmentation": {
+      "annotation": "One foreground point, visually placed on the central figure for mask acceptance; no identity extraction.",
+      "input": "/home/boaz/aigen/assets/characters/jillian/views/front.png",
+      "point": [
+        1424,
+        1899
+      ]
+    },
+    "upscale_inputs": [
+      "/home/boaz/aigen/assets/characters/jillian/views/style-pixel-tile384.png",
+      "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/palette-alpha.png"
+    ],
+    "video": {
+      "inputs": {
+        "smooth": "/home/boaz/aigen/assets/characters/jillian/views/front.png",
+        "sprite": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+      },
+      "prompt": "The character gently shifts weight and blinks while holding the standing pose. Static camera, white background, consistent character design and rendering style."
+    },
+    "vosr": {
+      "inputs": {
+        "a": "/home/boaz/aigen/assets/characters/jillian/views/style-pixel-tile384.png",
+        "b": "/home/boaz/aigen/assets/characters/jillian/views/sprite-geom-gradriel.png"
+      },
+      "settings": {
+        "align_method": "wavelet",
+        "cfg_scale": 1.5,
+        "infer_steps": 25,
+        "long_side": 1024,
+        "scale": 2,
+        "seed": 42,
+        "sizing": "long-side",
+        "tile_size": 512,
+        "weak_cond_strength_aelq": 0.2
+      }
+    }
+  },
+  "job": "uso-v3",
+  "probe": {
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py",
+    "sha256": "840e04ec329d0e8cc32ede292431c434a58b16c0062bc9d545a3f6aa9d836254"
+  },
+  "started_utc": "2026-09-06T02:02:02.494233+00:00"
+}

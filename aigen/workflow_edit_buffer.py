@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import UnionType
@@ -15,6 +16,11 @@ from aigen.workflow_graph import (
     AnimeGenI2VNode,
     FramePostprocessNode,
     ImageEditNode,
+    CharacterEditNode,
+    ImageCollectionNode,
+    ImageSelectionNode,
+    ImageSelectionConfig,
+    ImageResultReference,
     ImagePostprocessNode,
     NodeKind,
     NodeLayout,
@@ -475,6 +481,54 @@ class WorkflowEditBuffer:
             _property_edit_label(self._document, edit),
         )
 
+    def create_image_variants(self, node_id: str, seeds: Sequence[int]) -> tuple[str, str]:
+        original = self._document.node(node_id)
+        if not isinstance(original, ImageEditNode):
+            raise ValueError("select an Image edit node to create seed variants")
+        if not seeds or len(set(seeds)) != len(seeds):
+            raise ValueError("enter one or more distinct integer seeds")
+        config = original.config.model_copy(update={"seed_mode": "fixed", "seed": seeds[0]})
+        first = original.model_copy(update={"config": config})
+        nodes = [first if node.id == node_id else node for node in self._document.nodes]
+        variants = [first]
+        wires = list(self._document.connections)
+        incoming = [wire for wire in wires if wire.target.node_id == node_id]
+        bottom = max(node.layout.y for node in nodes) + 16
+        for index, seed in enumerate(seeds[1:]):
+            variant = original.model_copy(update={
+                "id": f"node-{uuid.uuid4().hex}", "title": f"{original.title[:135]} · seed {seed}"[:160],
+                "layout": NodeLayout(x=original.layout.x, y=bottom + index * 16),
+                "config": original.config.model_copy(update={"seed_mode": "fixed", "seed": seed}),
+            })
+            nodes.append(variant)
+            variants.append(variant)
+            wires.extend(wire.model_copy(update={
+                "id": f"connection-{uuid.uuid4().hex}",
+                "target": NodePortRef(node_id=variant.id, port=wire.target.port),
+            }) for wire in incoming)
+        right = max(node.layout.x for node in nodes) + 40
+        collection = ImageCollectionNode(id=f"node-{uuid.uuid4().hex}", title="Image variants", layout=NodeLayout(x=right, y=original.layout.y))
+        selection = ImageSelectionNode(id=f"node-{uuid.uuid4().hex}", title="Selected image", layout=NodeLayout(x=right + 40, y=original.layout.y))
+        # Existing consumers continue from the saved choice; reference ordering is unchanged.
+        wires = [wire.model_copy(update={"source": NodePortRef(node_id=selection.id, port="image")})
+                 if wire.source.node_id == original.id else wire for wire in wires]
+        wires.extend(WorkflowConnection(
+            id=f"connection-{uuid.uuid4().hex}", source=NodePortRef(node_id=variant.id, port="image"),
+            target=NodePortRef(node_id=collection.id, port="images"), order=index,
+        ) for index, variant in enumerate(variants))
+        wires.append(WorkflowConnection(
+            id=f"connection-{uuid.uuid4().hex}", source=NodePortRef(node_id=collection.id, port="collection"),
+            target=NodePortRef(node_id=selection.id, port="collection"),
+        ))
+        self._commit(_rebuild_graph(self._document, nodes=[*nodes, collection, selection], connections=wires), "Create seed variants")
+        return collection.id, selection.id
+
+    def select_image(self, node_id: str, reference: ImageResultReference) -> bool:
+        node = self._document.node(node_id)
+        if not isinstance(node, ImageSelectionNode):
+            raise ValueError("image selection requires a Selected image node")
+        return self._replace_node(node.model_copy(update={"config": ImageSelectionConfig(selected=reference)}), "Select image")
+
     def update_node_config(
         self,
         node_id: str,
@@ -570,6 +624,7 @@ def _document_with_property_edit(
     if edit.node_id is None:
         return WorkflowGraph(
             version=document.version,
+            workflow_id=document.workflow_id,
             name=cast(str, edit.raw_value),
             nodes=document.nodes,
             connections=document.connections,
@@ -587,6 +642,8 @@ def _document_with_property_edit(
             edit.raw_value,
             model_field.annotation,
         )
+        if value == getattr(node.config, edit.field_name):
+            return document
         if (
             isinstance(
                 node,
@@ -636,6 +693,7 @@ def _rebuild_graph(
 ) -> WorkflowGraph:
     return WorkflowGraph(
         version=document.version,
+        workflow_id=document.workflow_id,
         name=document.name,
         nodes=document.nodes if nodes is None else nodes,
         connections=(
@@ -732,7 +790,7 @@ def _apply_backend_defaults(
     value: object,
     config_payload: dict[str, object],
 ) -> None:
-    if isinstance(node, ImageEditNode) and field_name == "backend":
+    if isinstance(node, (ImageEditNode, CharacterEditNode)) and field_name == "backend":
         settings = image_edit_backend_settings(str(value))
         config_payload.update(
             steps=settings.steps,
@@ -741,6 +799,8 @@ def _apply_backend_defaults(
             sampler=settings.sampler,
             scheduler=settings.scheduler,
         )
+        if isinstance(node, CharacterEditNode) and value == "flux2-klein":
+            config_payload.update(max_sequence_length=None, guidance_scale=None)
     elif (
         isinstance(node, AnimeGenI2VNode)
         and field_name == "sampling"

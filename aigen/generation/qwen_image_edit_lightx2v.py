@@ -4,7 +4,8 @@ import json
 import os
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,8 @@ from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 LIGHTX2V_QWEN_EDIT_2511_PROFILE = "lightx2v-qwen-edit-2511-fp8-lightning-8step"
 LIGHTX2V_QWEN_EDIT_2511_BASE_PROFILE = "lightx2v-qwen-edit-2511-fp8-base-40step"
 LIGHTX2V_REVISION = "b96309e82899145aebd8ecf95c387894aba66b1e"
+LIGHTX2V_FP8_PATCH = PROJECT_ROOT / "scripts/patches/lightx2v-fp8-direct-output.patch"
+QWEN_EDIT_IMPLEMENTATION_REVISION = "5"
 QWEN_EDIT_2511_REVISION = "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
 QWEN_EDIT_2511_LIGHTNING_REVISION = "d74eba145674fd7e31b949324e148e21e7118abd"
 
@@ -132,6 +135,8 @@ def run_lightx2v_qwen_image_edit(
     sampler: str,
     scheduler: str,
     progress: StatusReporter,
+    record_dir: Path | None = None,
+    on_output: Callable[[dict[str, Any]], None] | None = None,
 ) -> LightX2VQwenResult:
     if guidance_scale != 1.0:
         raise QwenImageEditLightX2VError(
@@ -162,8 +167,22 @@ def run_lightx2v_qwen_image_edit(
         raise QwenImageEditLightX2VError(
             "Qwen-Image-Edit-2511 LightX2V runtime is incomplete: " + ", ".join(missing)
         )
+    patch_check = subprocess.run(
+        ("git", "-C", source.as_posix(), "apply", "--reverse", "--check", LIGHTX2V_FP8_PATCH.as_posix()),
+        capture_output=True,
+        text=True,
+    )
+    if patch_check.returncode:
+        raise QwenImageEditLightX2VError(
+            "LightX2V requires the direct FP8 output patch; run scripts/install_lightx2v.sh. "
+            + patch_check.stderr.strip()
+        )
 
-    with tempfile.TemporaryDirectory(prefix="aigen-lightx2v-job-") as temporary_dir:
+    if record_dir is not None:
+        record_dir.mkdir(parents=True)
+    job_directory = (nullcontext(record_dir) if record_dir is not None
+                     else tempfile.TemporaryDirectory(prefix="aigen-lightx2v-job-"))
+    with job_directory as temporary_dir:
         temporary_path = Path(temporary_dir)
         request_path = temporary_path / "request.json"
         response_path = temporary_path / "response.json"
@@ -197,6 +216,9 @@ def run_lightx2v_qwen_image_edit(
                             "image_paths": [path.as_posix() for path in case.image_paths],
                             "width": case.width,
                             "height": case.height,
+                            **({"mask": {"source_image": str(case.mask.source_image),
+                                         "mask_image": str(case.mask.mask_image),
+                                         "strength": case.mask.strength}} if case.mask is not None else {}),
                             "outputs": [
                                 {
                                     "name": output.name,
@@ -240,7 +262,7 @@ def run_lightx2v_qwen_image_edit(
             ) as worker:
                 try:
                     for line in worker.stdout:
-                        _apply_worker_progress(line, progress)
+                        _apply_worker_progress(line, progress, on_output=on_output)
                     returncode = worker.wait()
                 except BaseException:
                     if worker.poll() is None:
@@ -248,7 +270,7 @@ def run_lightx2v_qwen_image_edit(
                     raise
         response = _read_worker_response(response_path)
         if returncode != 0 or response.get("status") != "completed":
-            message = response.get("message")
+            message = response.get("traceback") or response.get("message")
             if not message:
                 worker_output = worker_log_path.read_text(
                     encoding="utf-8", errors="replace"
@@ -260,7 +282,10 @@ def run_lightx2v_qwen_image_edit(
             outputs=tuple(response["outputs"]),
             timings_ms=dict(response["timings_ms"]),
             memory=dict(response["memory"]),
-            environment=dict(response["environment"]),
+            environment={
+                **response["environment"],
+                "implementation_revision": QWEN_EDIT_IMPLEMENTATION_REVISION,
+            },
         )
 
 
@@ -295,6 +320,7 @@ def lightx2v_profile_json(profile: QwenImageEditLightX2VProfile) -> dict[str, An
             "engine": {
                 "repo_id": "ModelTC/LightX2V",
                 "revision": LIGHTX2V_REVISION,
+                "patches": [LIGHTX2V_FP8_PATCH.name],
                 "path": (lightx2v_runtime_root() / "LightX2V").as_posix(),
             },
         },
@@ -315,12 +341,18 @@ def _read_worker_response(path: Path) -> dict[str, Any]:
         raise QwenImageEditLightX2VError(f"Invalid LightX2V worker response {path}: {error}") from error
 
 
-def _apply_worker_progress(line: str, progress: StatusReporter) -> None:
+def _apply_worker_progress(
+    line: str, progress: StatusReporter,
+    *, on_output: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
     try:
         event = json.loads(line)
     except json.JSONDecodeError as error:
         raise QwenImageEditLightX2VError("Invalid LightX2V worker progress event") from error
     match event["kind"]:
+        case "output":
+            if on_output is not None:
+                on_output(event["output"])
         case "phase":
             progress.phase(event["text"])
         case "begin":

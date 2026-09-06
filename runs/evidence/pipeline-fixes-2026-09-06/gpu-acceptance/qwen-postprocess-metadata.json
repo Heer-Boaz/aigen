@@ -1,0 +1,32 @@
+{
+  "raw_publish_bytes_equal": true,
+  "upscaler_not_called": true,
+  "canvas_metadata": [
+    {
+      "mode": "explicit_size",
+      "aspect_owner": "explicit_size",
+      "aspect_ratio": null,
+      "target_pixels": 5120,
+      "alignment": 16,
+      "postprocess": "none",
+      "target_size": [
+        64,
+        80
+      ]
+    },
+    {
+      "mode": "explicit_size",
+      "aspect_owner": "explicit_size",
+      "aspect_ratio": null,
+      "target_pixels": 5120,
+      "alignment": 16,
+      "postprocess": "vosr-1.4b-ms-upscale",
+      "upscale_long_side": 2048,
+      "upscale_model": "VOSR-1.4B-ms",
+      "target_size": [
+        64,
+        80
+      ]
+    }
+  ]
+}

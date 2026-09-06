@@ -1,0 +1,21 @@
+test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio (test_workflow_video_flow.WorkflowVideoTests.test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio) ... ERROR
+test_metadata_cache_is_content_and_decoder_revision_addressed (test_workflow_video_flow.WorkflowVideoTests.test_metadata_cache_is_content_and_decoder_revision_addressed) ... ok
+test_moved_source_reuses_extraction_with_current_audio_location (test_workflow_video_flow.WorkflowVideoTests.test_moved_source_reuses_extraction_with_current_audio_location) ... ok
+test_fractional_cfr_and_transparent_frames (test_video_timing.VideoTimingTests.test_fractional_cfr_and_transparent_frames) ... ok
+test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video (test_video_timing.VideoTimingTests.test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video) ... ok
+test_vfr_extract_assemble_retains_every_frame_time_and_order (test_video_timing.VideoTimingTests.test_vfr_extract_assemble_retains_every_frame_time_and_order) ... ok
+
+======================================================================
+ERROR: test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio (test_workflow_video_flow.WorkflowVideoTests.test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_video_flow.py", line 66, in test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio
+    verify_video(output.info, frames=4, fps=Fraction(25), audio=True)
+  File "/home/boaz/aigen/aigen/media_timing.py", line 161, in verify_video
+    raise MediaError(f"video frame timing does not match the requested {fps} FPS")
+aigen.media_timing.MediaError: video frame timing does not match the requested 25 FPS
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.215s
+
+FAILED (errors=1)

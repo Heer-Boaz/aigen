@@ -1,0 +1,5 @@
+{"node_id": "src-a", "node_kind": "image-source", "status": "completed"}
+{"node_id": "src-b", "node_kind": "image-source", "status": "completed"}
+{"node_id": "a", "node_kind": "image-postprocess", "status": "reused"}
+{"node_id": "b", "node_kind": "image-postprocess", "status": "running"}
+{"node_id": "b", "node_kind": "image-postprocess", "status": "completed"}

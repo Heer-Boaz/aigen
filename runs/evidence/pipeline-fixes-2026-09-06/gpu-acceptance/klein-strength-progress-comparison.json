@@ -1,0 +1,11 @@
+{
+  "same_output_hashes": [
+    "e1f7abfae27b3c34e72578efdd8dab419ca1912fdb229a2d0fc2c444a072851a",
+    "18943ecd062056b3c880285cfccd7a7576bac66fdc46ee5a13421b6c66388d25"
+  ],
+  "images_byte_identical": true,
+  "completed": 4,
+  "total": 4,
+  "reference_count": 2,
+  "strength": 0.5
+}

@@ -1,0 +1,121 @@
+{
+  "flux-dev": {
+    "events": [
+      {
+        "kind": "begin",
+        "total": 8,
+        "text": "inference"
+      },
+      {
+        "kind": "step",
+        "text": "inference 1/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 2/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 3/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 4/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 5/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 6/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 7/8"
+      },
+      {
+        "kind": "begin",
+        "total": 0,
+        "text": "decoding"
+      },
+      {
+        "kind": "begin",
+        "total": 4,
+        "text": "inference"
+      },
+      {
+        "kind": "step",
+        "text": "inference 1/4"
+      },
+      {
+        "kind": "begin",
+        "total": 0,
+        "text": "Aborting"
+      }
+    ],
+    "phase_metrics": []
+  },
+  "ltx": {
+    "events": [
+      {
+        "kind": "begin",
+        "total": 8,
+        "text": "inference"
+      },
+      {
+        "kind": "step",
+        "text": "inference 1/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 2/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 3/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 4/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 5/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 6/8"
+      },
+      {
+        "kind": "step",
+        "text": "inference 7/8"
+      },
+      {
+        "kind": "begin",
+        "total": 0,
+        "text": "decoding"
+      },
+      {
+        "kind": "begin",
+        "total": 4,
+        "text": "inference"
+      },
+      {
+        "kind": "step",
+        "text": "inference 1/4"
+      },
+      {
+        "kind": "begin",
+        "total": 0,
+        "text": "Aborting"
+      }
+    ],
+    "phase_metrics": [
+      "inference",
+      "decoding",
+      "inference",
+      "Aborting"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "option": "--steps",
+    "returncode": 1,
+    "stderr": "starting | elapsed 00:00 | cpu   0.0% | gpu   2% | vram 1009/16303 MB (6%)\n{\"error\": \"ValidationError\", \"message\": \"1 validation error for ImageEditBatchRequest\\nsteps\\n  Input should be greater than 0 [type=greater_than, input_value=0, input_type=int]\\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than\", \"status\": \"error\"}\nfailed | elapsed 00:00 | cpu   4.9% | gpu   3% | vram 1009/16303 MB (6%)\n",
+    "stdout": ""
+  },
+  {
+    "option": "--max-sequence-length",
+    "returncode": 1,
+    "stderr": "starting | elapsed 00:00 | cpu   0.0% | gpu   3% | vram 1009/16303 MB (6%)\n{\"error\": \"ValidationError\", \"message\": \"1 validation error for ImageEditBatchRequest\\nmax_sequence_length\\n  Input should be greater than 0 [type=greater_than, input_value=0, input_type=int]\\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than\", \"status\": \"error\"}\nfailed | elapsed 00:00 | cpu   3.0% | gpu   3% | vram 1009/16303 MB (6%)\n",
+    "stdout": ""
+  }
+]

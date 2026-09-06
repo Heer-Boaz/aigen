@@ -1,0 +1,221 @@
+{
+  "controls": {},
+  "environment": {
+    "attention": "flash_attn2",
+    "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+    "cuda": "12.8",
+    "engine": "LightX2V",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "host_buffers": "pinned",
+    "implementation_revision": "4",
+    "matrix_multiply": "fp8-triton",
+    "phase_order": "conditioner->vae_encode->transformer->vae_decode",
+    "pinned_blocks": 28,
+    "pinned_gib": 8.87,
+    "postprocess": "none",
+    "reference_preprocessing": {
+      "cases": {
+        "image": {
+          "input_sizes_wh": [
+            [
+              1086,
+              1448
+            ]
+          ],
+          "prompt_seq_lens": [
+            210,
+            188
+          ],
+          "vae_sizes_hw": [
+            [
+              1440,
+              1072
+            ]
+          ]
+        }
+      },
+      "policy": "native-vae-upstream-semantic",
+      "semantic_target_pixels": 147456
+    },
+    "residency_budget": {
+      "block_bytes": 340292616,
+      "free_bytes": 14962130944,
+      "headroom_bytes": 1073741824,
+      "late_weight_bytes": 81046656,
+      "max_denoise_tokens": 13152,
+      "resident_budget_bytes": 11221554048,
+      "workspace_bytes": 2585788416
+    },
+    "resident_blocks": 32,
+    "rope": "torch",
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift",
+    "streamed_blocks": 28,
+    "torch": "2.8.0+cu128",
+    "vae_tiling": {
+      "tile_sample_min_height": 2048,
+      "tile_sample_min_width": 2048,
+      "tile_sample_stride_height": 1536,
+      "tile_sample_stride_width": 1536
+    }
+  },
+  "generation": {
+    "guidance_scale": 1.0,
+    "max_controls_per_case": 0,
+    "max_guides_per_case": 0,
+    "max_inputs_per_case": 1,
+    "max_references_per_case": 0,
+    "max_sequence_length": 512,
+    "max_side": 1792,
+    "max_source_images_per_case": 1,
+    "native_canvas_pixels": 1769472,
+    "negative_prompt": null,
+    "num_images_per_case": 1,
+    "output_canvas": {
+      "alignment": 16,
+      "aspect_owner": "explicit_size",
+      "aspect_ratio": null,
+      "mode": "explicit_size",
+      "postprocess": "none",
+      "target_pixels": 1769472,
+      "target_size": [
+        1152,
+        1536
+      ]
+    },
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift",
+    "seed": 71,
+    "steps": 40,
+    "true_cfg_scale": 4.0
+  },
+  "guides": {},
+  "kind": "image-edit-result",
+  "memory": {
+    "max_rss_mib": 36237.21484375,
+    "mem_available_after_mib": 71128.86328125,
+    "mem_available_before_mib": 87017.921875,
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_peak_used_mb": 14633,
+    "nvidia_smi_preflight_used_mb": 923,
+    "nvidia_smi_preflight_utilization_gpu": 3,
+    "peak_vram_mib": {
+      "conditioning": 9889.6376953125,
+      "decode": 7410.99365234375,
+      "denoise": 12624.876953125,
+      "vae_encode": 3313.83056640625
+    },
+    "pswpin_delta": 241,
+    "pswpout_delta": 156,
+    "read_gib": 35.51396560668945,
+    "swap_free_after_mib": 80310.3046875,
+    "swap_free_before_mib": 80309.76171875,
+    "timing_valid_no_swap_growth": false
+  },
+  "output": {
+    "contact_sheet": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/contact_sheet.png",
+    "directory": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output",
+    "raw": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/raw",
+    "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/result.json"
+  },
+  "outputs": [
+    {
+      "candidate_index": 0,
+      "case": "image",
+      "controls": [],
+      "guides": [],
+      "height": 1536,
+      "image": {
+        "height": 1536,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/image.png",
+        "sha256": "d26dd3e8b4b3b5ac84d349a365d5d11a01230ddb1c1a9e8a3a8bebc9a2bc2fbf",
+        "width": 1152
+      },
+      "name": "image",
+      "postprocess": {
+        "mode": "none"
+      },
+      "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+      "raw_height": 1536,
+      "raw_image": {
+        "height": 1536,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/raw/image.png",
+        "sha256": "d26dd3e8b4b3b5ac84d349a365d5d11a01230ddb1c1a9e8a3a8bebc9a2bc2fbf",
+        "width": 1152
+      },
+      "raw_width": 1152,
+      "references": [],
+      "seed": 71,
+      "source_images": [
+        "image_1"
+      ],
+      "timings_ms": {
+        "denoise_ms": 322262.38636999915,
+        "vae_decode_ms": 656.5010479971534
+      },
+      "width": 1152
+    }
+  ],
+  "profile": {
+    "default_guidance_scale": 1.0,
+    "default_steps": 40,
+    "default_true_cfg_scale": 4.0,
+    "dtype": "bfloat16",
+    "load_strategy": "lightx2v-qwen-image-edit-2511-fp8-block-offload",
+    "local_files_only": true,
+    "models": {
+      "base": {
+        "path": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511",
+        "repo_id": "Qwen/Qwen-Image-Edit-2511",
+        "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
+      },
+      "conditioner": {
+        "path": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511/text_encoder",
+        "repo_id": "Qwen/Qwen-Image-Edit-2511",
+        "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
+      },
+      "engine": {
+        "patches": [
+          "lightx2v-fp8-direct-output.patch"
+        ],
+        "path": "/home/boaz/.cache/aigen-lightx2v/LightX2V",
+        "repo_id": "ModelTC/LightX2V",
+        "revision": "b96309e82899145aebd8ecf95c387894aba66b1e"
+      },
+      "lightx2v_transformer": {
+        "path": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors",
+        "repo_id": "lightx2v/Qwen-Image-Edit-2511-Lightning",
+        "revision": "d74eba145674fd7e31b949324e148e21e7118abd",
+        "variant": "fp8_e4m3fn_scaled"
+      }
+    },
+    "name": "lightx2v-qwen-edit-2511-fp8-base-40step",
+    "prompt_conditioning": "qwen25-vl-fp8-w8a8-language-bf16-vision-native-multimodal",
+    "scheduler": "flow-match-euler"
+  },
+  "references": {},
+  "source_images": {
+    "image_1": {
+      "height": 1448,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "sha256": "796680bdde8179c38f616fe2a085368b75b12b63b54bc0411227486bf53d4f0f",
+      "width": 1086
+    }
+  },
+  "status": "completed",
+  "timings_ms": {
+    "condition_encode_ms": 1947.0617269980721,
+    "conditioner_load_ms": 8517.387065003277,
+    "denoise_ms": 322500.6947560032,
+    "host_pin_ms": 16716.966877007508,
+    "postprocess_ms": 0.6451070075854659,
+    "resident_upload_ms": 4007.906429003924,
+    "total_ms": 365197.3386210011,
+    "transformer_load_ms": 7742.734625004232,
+    "vae_decode_ms": 889.6925260050921,
+    "vae_encode_ms": 893.9972840016708
+  }
+}

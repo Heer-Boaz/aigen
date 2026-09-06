@@ -1,0 +1,116 @@
+{
+  "audit": {
+    "attention_impl": "sdpa",
+    "dtype": "bfloat16",
+    "id": "qwen2.5-vl-7b",
+    "max_new_tokens": 256,
+    "max_pixels": 401408,
+    "min_pixels": 200704,
+    "model": "/home/boaz/aigen/aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+    "quantization": "bitsandbytes-8bit",
+    "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+    "temperature": 0.0
+  },
+  "cases": [
+    {
+      "candidates": [
+        {
+          "case_id": "candidate-0",
+          "height": 1024,
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+          "seed": 101,
+          "width": 768
+        },
+        {
+          "case_id": "candidate-1",
+          "height": 1024,
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-1.png",
+          "seed": 102,
+          "width": 768
+        }
+      ],
+      "contexts": [
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/mask/000000-selected-sam2-mask.png",
+          "role": "repaint mask: white is editable; black is preserved"
+        }
+      ],
+      "expected": {
+        "passed": false
+      },
+      "images": [
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+          "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+        },
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/mask/000000-selected-sam2-mask.png",
+          "sha256": "4f6ff29676084fc0df0406ffa297c74e8f85f7a8e8b3e88fecf924e3e44c74f5"
+        },
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+          "sha256": "7a60361a2fce81a2d25211907d34a7b2ae11fa7f76c8c4d7885d0505d970d48a"
+        },
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-1.png",
+          "sha256": "0f0b362f77857af7e396b4307133904bcb70126bc6f01b51c23c063be1315805"
+        }
+      ],
+      "instruction": "Change the white background to pale blue, keeping the character unchanged.",
+      "name": "missing-background-change",
+      "prompt": "Select the candidate that best fulfills the requested edit while remaining visually faithful to the character references. Judge the requested changes and their natural visual consequences as intended, including any requested change of style. Pass only if the requested visual change is visibly complete and there are no unintended visual deviations. A missing or incomplete requested change is a failure, even when the references are preserved. If every candidate has defects, select the closest one and fail it.\nRequested edit: Change the white background to pale blue, keeping the character unchanged.\nRoute: local_repair_or_inpaint\nImage 1: reference.\nImage 2: repaint mask: white is editable; black is preserved.\nImage 3: candidate.\nImage 4: candidate.\nReturn one JSON object with exactly these keys: passed (boolean for the selected candidate), image_index (the selected candidate's image number: 3, 4), regions (short pointers locating its visible defects, or an empty list when passed). Return region names only, without descriptions or repair instructions.",
+      "references": [
+        "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png"
+      ],
+      "route": "local_repair_or_inpaint"
+    },
+    {
+      "candidates": [
+        {
+          "case_id": "candidate-0",
+          "height": 1024,
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-0.png",
+          "seed": 91,
+          "width": 768
+        },
+        {
+          "case_id": "candidate-1",
+          "height": 1024,
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-1.png",
+          "seed": 92,
+          "width": 768
+        }
+      ],
+      "contexts": [],
+      "expected": {
+        "passed": true,
+        "seed": 91
+      },
+      "images": [
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+          "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+        },
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-0.png",
+          "sha256": "e9c2924e18136c24ecc620a1a7aba29d21da813b4386eaaf1502c3b8ea8d1cb9"
+        },
+        {
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-1.png",
+          "sha256": "7fbc90271a5c6002ef77a446284015a2b0a66c625f29a30046cb6e7a54b20989"
+        }
+      ],
+      "instruction": "Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.",
+      "name": "completed-front-view",
+      "prompt": "Select the candidate that best fulfills the requested edit while remaining visually faithful to the character references. Judge the requested changes and their natural visual consequences as intended, including any requested change of style. Pass only if the requested visual change is visibly complete and there are no unintended visual deviations. A missing or incomplete requested change is a failure, even when the references are preserved. If every candidate has defects, select the closest one and fail it.\nRequested edit: Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.\nRoute: unknown_reference_edit\nImage 1: reference.\nImage 2: candidate.\nImage 3: candidate.\nReturn one JSON object with exactly these keys: passed (boolean for the selected candidate), image_index (the selected candidate's image number: 2, 3), regions (short pointers locating its visible defects, or an empty list when passed). Return region names only, without descriptions or repair instructions.",
+      "references": [
+        "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png"
+      ],
+      "route": "unknown_reference_edit"
+    }
+  ],
+  "min_free_mib": 13000,
+  "review_status": "approved",
+  "reviewer": "review_gpu_prompts"
+}

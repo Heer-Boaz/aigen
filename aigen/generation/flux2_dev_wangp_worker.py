@@ -136,7 +136,7 @@ class _ProgressCallbacks:
             self.phase = text
             self.total = 0
             self.current = 0
-            _send(self.stream, "phase", text=text)
+            _send(self.stream, "begin", total=0, text=text)
 
     def on_progress(self, update: Any) -> None:
         phase = str(update.phase or "").strip()

@@ -1,0 +1,15 @@
+test_different_source_is_rejected_before_qwen_generation (test_workflow_mask_flow.WorkflowMaskFlowTests.test_different_source_is_rejected_before_qwen_generation) ... ok
+test_form_import_without_extra_references_keeps_profile_defaults (test_workflow_mask_flow.WorkflowMaskFlowTests.test_form_import_without_extra_references_keeps_profile_defaults) ... ok
+test_mask_cache_refine_raw_audit_and_original_rgba_preservation (test_workflow_mask_flow.WorkflowMaskFlowTests.test_mask_cache_refine_raw_audit_and_original_rgba_preservation) ... ok
+test_region_plan_import_pins_original_source_and_mask_after_reload (test_workflow_mask_flow.WorkflowMaskFlowTests.test_region_plan_import_pins_original_source_and_mask_after_reload) ... ok
+test_same_source_bytes_reimport_with_different_artifact_identity (test_workflow_mask_flow.WorkflowMaskFlowTests.test_same_source_bytes_reimport_with_different_artifact_identity) ... ok
+test_existing_model_replacement_is_visible_in_the_same_process (test_model_artifact_identity.ModelArtifactIdentityTests.test_existing_model_replacement_is_visible_in_the_same_process) ... ok
+test_klein_inventory_detects_added_conditioner_files (test_model_artifact_identity.ModelArtifactIdentityTests.test_klein_inventory_detects_added_conditioner_files) ... ok
+test_qwen_and_vosr_cache_tracks_active_local_checkpoints (test_model_artifact_identity.ModelArtifactIdentityTests.test_qwen_and_vosr_cache_tracks_active_local_checkpoints) ... ok
+test_segmentation_cache_uses_only_the_selected_engine_runtime (test_model_artifact_identity.ModelArtifactIdentityTests.test_segmentation_cache_uses_only_the_selected_engine_runtime) ... ok
+test_uso_cache_tracks_all_worker_model_paths_and_processor_files (test_model_artifact_identity.ModelArtifactIdentityTests.test_uso_cache_tracks_all_worker_model_paths_and_processor_files) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.054s
+
+OK

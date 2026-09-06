@@ -1,0 +1,9 @@
+{
+  "elapsed_seconds": 318.14723988100013,
+  "returncode": 0,
+  "statuses": {
+    "generate": "completed",
+    "selected": "completed"
+  },
+  "stdout_closed": true
+}

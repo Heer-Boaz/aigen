@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "name": "CPU TUI audit",
+  "nodes": [
+    {
+      "id": "source",
+      "title": "Synthetic source",
+      "layout": {
+        "x": 2,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/tui-data-268496e8/source.png"
+      }
+    },
+    {
+      "id": "fix",
+      "title": "Native grid",
+      "layout": {
+        "x": 34,
+        "y": 2
+      },
+      "kind": "image-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "full",
+        "low_memory": false,
+        "force_step": 2.0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "fix",
+        "port": "image"
+      },
+      "order": 0
+    }
+  ]
+}

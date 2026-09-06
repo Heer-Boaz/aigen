@@ -4,7 +4,7 @@ import gc
 import json
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,7 @@ from typing import Any
 from aigen.generation.runtime_diagnostics import cuda_memory_stats
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
+from aigen.model_artifacts import local_model_files
 
 
 ANIMEGEN_MODEL_REVISION = "6278659f803518d72dd312a1f522e3b34b1afd72"
@@ -22,6 +23,7 @@ ANIMEGEN_PRECISIONS = ("fp8", "bf16")
 ANIMEGEN_DEFAULT_FRAMES = 81
 ANIMEGEN_DEFAULT_FPS = 16
 ANIMEGEN_MAX_AREA = 832 * 480
+ANIMEGEN_IMPLEMENTATION_REVISION = "2"
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,7 @@ class ResolvedAnimeGenSettings:
     steps: int
     precision: str
     profile: AnimeGenSamplingProfile
+    keyframe_fit: str = "stretch"
 
 
 ANIMEGEN_SAMPLING_PROFILES = {
@@ -76,6 +79,20 @@ class AnimeGenI2VError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class AnimeGenInstallation:
+    model: Path
+    base: Path
+    lightning: Path
+    files: tuple[Path, ...]
+
+
+def resolve_animegen_installation(*, lightning_required: bool) -> AnimeGenInstallation:
+    model, base, lightning = _animegen_model_root(), _base_model_root(), _lightning_model_root()
+    files = _validate_models(model, base, lightning, lightning_required=lightning_required)
+    return AnimeGenInstallation(model, base, lightning, files)
+
+
 def animegen_sampling_profile(sampling: str) -> AnimeGenSamplingProfile:
     try:
         return ANIMEGEN_SAMPLING_PROFILES[sampling]
@@ -92,6 +109,7 @@ def resolve_animegen_settings(
     sampling: str,
     steps: int | None,
     precision: str,
+    keyframe_fit: str = "stretch",
 ) -> ResolvedAnimeGenSettings:
     if frames < 5 or (frames - 1) % 4 != 0:
         raise AnimeGenI2VError(
@@ -99,6 +117,8 @@ def resolve_animegen_settings(
         )
     if fps <= 0:
         raise AnimeGenI2VError("frames per second must be positive")
+    if keyframe_fit not in ("crop", "pad", "stretch"):
+        raise AnimeGenI2VError(f"unsupported keyframe fit: {keyframe_fit}")
     profile = animegen_sampling_profile(sampling)
     resolved_steps = profile.steps if steps is None else steps
     if resolved_steps <= 0:
@@ -114,6 +134,7 @@ def resolve_animegen_settings(
         steps=resolved_steps,
         precision=precision,
         profile=profile,
+        keyframe_fit=keyframe_fit,
     )
 
 
@@ -136,6 +157,7 @@ class AnimeGenI2VResult:
     seed: int
     elapsed_seconds: float
     cuda_memory: dict[str, int]
+    keyframe_fit: str = "stretch"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -159,6 +181,7 @@ class AnimeGenI2VResult:
             "seed": self.seed,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
             "cuda_memory": self.cuda_memory,
+            "keyframe_fit": self.keyframe_fit,
         }
 
 
@@ -175,6 +198,8 @@ def generate_animegen_i2v(
     precision: str,
     seed: int,
     progress: StatusReporter,
+    keyframe_fit: str = "stretch",
+    installation: AnimeGenInstallation | None = None,
 ) -> AnimeGenI2VResult:
     return generate_animegen_i2v_seed_sweep(
         prompt=prompt,
@@ -188,6 +213,8 @@ def generate_animegen_i2v(
         precision=precision,
         seeds=(seed,),
         progress=progress,
+        keyframe_fit=keyframe_fit,
+        installation=installation,
     )[0]
 
 
@@ -204,6 +231,9 @@ def generate_animegen_i2v_seed_sweep(
     precision: str,
     seeds: Sequence[int],
     progress: StatusReporter,
+    keyframe_fit: str = "stretch",
+    installation: AnimeGenInstallation | None = None,
+    on_output: Callable[[AnimeGenI2VResult], None] | None = None,
 ) -> tuple[AnimeGenI2VResult, ...]:
     resolved = resolve_animegen_settings(
         frames=frames,
@@ -211,6 +241,7 @@ def generate_animegen_i2v_seed_sweep(
         sampling=sampling,
         steps=steps,
         precision=precision,
+        keyframe_fit=keyframe_fit,
     )
     image, last_image, output, normalized_seeds = _validate_request(
         prompt=prompt,
@@ -238,15 +269,8 @@ def generate_animegen_i2v_seed_sweep(
     if existing is not None:
         raise AnimeGenI2VError(f"output already exists: {existing}")
 
-    animegen_model = _animegen_model_root()
-    base_model = _base_model_root()
-    lightning_model = _lightning_model_root()
-    _validate_models(
-        animegen_model,
-        base_model,
-        lightning_model,
-        lightning_required=sampling_profile.lightning,
-    )
+    installation = resolve_animegen_installation(lightning_required=sampling_profile.lightning) if installation is None else installation
+    animegen_model, base_model, lightning_model = installation.model, installation.base, installation.lightning
     output.parent.mkdir(parents=True, exist_ok=True)
 
     progress.phase(f"load AnimeGen-I2V {precision}")
@@ -267,9 +291,11 @@ def generate_animegen_i2v_seed_sweep(
             multiple_of=pipeline.vae_scale_factor_spatial
             * pipeline.transformer.config.patch_size[1],
         )
-        start = start.resize((width, height))
+        from aigen.image_io import fit_image_canvas
+
+        start = fit_image_canvas(start, (width, height), keyframe_fit)
         end = (
-            load_image(last_image.as_posix()).resize((width, height))
+            fit_image_canvas(load_image(last_image.as_posix()), (width, height), keyframe_fit)
             if last_image is not None
             else None
         )
@@ -325,6 +351,7 @@ def generate_animegen_i2v_seed_sweep(
                     "prompt": generation_prompt,
                     "image": image.as_posix(),
                     "last_image": last_image.as_posix() if last_image is not None else None,
+                    "keyframe_fit": keyframe_fit,
                     "width": width,
                     "height": height,
                     "frames": frames,
@@ -378,8 +405,11 @@ def generate_animegen_i2v_seed_sweep(
                     seed=seed,
                     elapsed_seconds=elapsed_seconds,
                     cuda_memory=memory,
+                    keyframe_fit=keyframe_fit,
                 )
             )
+            if on_output is not None:
+                on_output(results[-1])
 
         progress.phase("AnimeGen-I2V generation completed")
         return tuple(results)
@@ -575,7 +605,7 @@ def _validate_models(
     lightning_model: Path,
     *,
     lightning_required: bool,
-) -> None:
+) -> tuple[Path, ...]:
     required = [
         animegen_model / "transformer/config.json",
         animegen_model / "transformer/diffusion_pytorch_model.safetensors.index.json",
@@ -584,7 +614,12 @@ def _validate_models(
         base_model / "model_index.json",
         base_model / "scheduler/scheduler_config.json",
         base_model / "text_encoder/model.safetensors.index.json",
+        base_model / "text_encoder/config.json",
         base_model / "tokenizer/tokenizer.json",
+        base_model / "tokenizer/tokenizer_config.json",
+        base_model / "tokenizer/special_tokens_map.json",
+        base_model / "tokenizer/spiece.model",
+        base_model / "vae/config.json",
         base_model / "vae/diffusion_pytorch_model.safetensors",
     ]
     if lightning_required:
@@ -596,8 +631,7 @@ def _validate_models(
                 / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors",
             )
         )
-    missing = next((path for path in required if not path.is_file()), None)
-    if missing is not None:
-        raise AnimeGenI2VError(
-            f"AnimeGen-I2V model set is incomplete; run scripts/download_animegen_i2v.sh: {missing}"
-        )
+    try:
+        return local_model_files(tuple(required))
+    except (OSError, ValueError, KeyError) as error:
+        raise AnimeGenI2VError(f"AnimeGen-I2V model set is incomplete: {error}") from error

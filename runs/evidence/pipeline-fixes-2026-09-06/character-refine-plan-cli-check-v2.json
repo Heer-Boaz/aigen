@@ -1,0 +1,16 @@
+{
+  "arguments": [
+    "characters",
+    "qwen-edit-refine-plan",
+    "--image",
+    "/tmp/tmp8cwjhqu9/source.png",
+    "--mask",
+    "/tmp/tmp8cwjhqu9/mask.png",
+    "--instruction",
+    "Change the background to pale blue.",
+    "--compact"
+  ],
+  "returncode": 0,
+  "stderr": "starting | elapsed 00:00 | cpu   0.0% | gpu   2% | vram 965/16303 MB (6%)\ncompleted | elapsed 00:00 | cpu   8.8% | gpu   2% | vram 965/16303 MB (6%)\n",
+  "stdout": "{\"candidates\": 2, \"conditioning_modes\": [\"region_mask\"], \"conditioning_tools\": [], \"kind\": \"qwen-character-refine-plan\", \"mask_image\": {\"height\": 48, \"mode\": \"L\", \"path\": \"/tmp/tmp8cwjhqu9/mask.png\", \"sha256\": \"85c676d8a09be61b1effe310ca3da8e512fb26e29fcb60a9c383f8a46ca57b42\", \"width\": 32}, \"mask_source\": {\"conditioning_tools\": [], \"mask\": \"/tmp/tmp8cwjhqu9/mask.png\", \"type\": \"mask\"}, \"output_mode\": \"masked_refine_candidates\", \"prompt\": \"Change the background to pale blue.\", \"prompt_source\": \"user_instruction\", \"references\": [], \"refs_used\": [], \"route_kind\": \"local_repair_or_inpaint\", \"source_image\": {\"height\": 48, \"mode\": \"RGB\", \"path\": \"/tmp/tmp8cwjhqu9/source.png\", \"sha256\": \"422390b40e8cc0e7882b3fe7f034bc62c75b0c5ea2a65d6cb67ddcd4d10d9c4b\", \"width\": 32}, \"source_instruction\": \"Change the background to pale blue.\", \"status\": \"planned\"}\n"
+}

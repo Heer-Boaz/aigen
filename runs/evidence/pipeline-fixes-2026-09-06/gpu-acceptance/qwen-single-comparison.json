@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "name": "Original sprite",
+      "path": "assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+    },
+    {
+      "name": "Qwen Lightning 8 / CFG 1 / seed 71",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-single-native/output/image.png"
+    },
+    {
+      "name": "Qwen base 40 / CFG 4 / seed 71",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-base-single-native/output/image.png"
+    }
+  ],
+  "note": "Same one-reference request. Separate general image-edit backends; no automatic model selection."
+}

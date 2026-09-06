@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from aigen.manifest_io import atomic_write_json, read_json
 from aigen.workflow_graph import WORKFLOW_DOCUMENT_VERSION, WorkflowGraph
@@ -9,10 +10,18 @@ from aigen.workflow_graph import WORKFLOW_DOCUMENT_VERSION, WorkflowGraph
 
 def load_workflow_document(path: Path) -> WorkflowGraph:
     payload = read_json(path, label="workflow document")
+    if payload.get("version") == WORKFLOW_DOCUMENT_VERSION and "workflow_id" not in payload:
+        raise ValueError(f"workflow v{WORKFLOW_DOCUMENT_VERSION} document is missing workflow_id: {path}")
     if payload.get("version") == 1:
         payload = _upgrade_version_one(payload)
     if payload.get("version") == 2:
         payload = _upgrade_version_two(payload)
+    if payload.get("version") == 3:
+        payload = {
+            **payload,
+            "version": WORKFLOW_DOCUMENT_VERSION,
+            "workflow_id": f"workflow-{uuid5(NAMESPACE_URL, path.expanduser().resolve().as_uri()).hex}",
+        }
     return WorkflowGraph.model_validate(payload)
 
 
@@ -36,7 +45,7 @@ def _upgrade_version_one(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _upgrade_version_two(payload: dict[str, Any]) -> dict[str, Any]:
     upgraded = dict(payload)
-    upgraded["version"] = WORKFLOW_DOCUMENT_VERSION
+    upgraded["version"] = 3
     upgraded["nodes"] = [
         _upgrade_version_two_node(node)
         for node in payload.get("nodes", ())

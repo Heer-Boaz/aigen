@@ -1,0 +1,7 @@
+{"label": "refine", "gpu_free_mib": 13202}
+{"label": "refine", "phase": "starting"}
+{"label": "refine", "phase": "completed Source image"}
+{"label": "refine", "phase": "completed SAM selection"}
+{"label": "refine", "phase": "completed"}
+{"label": "refine-cache", "gpu_free_mib": 15338}
+{"status": "completed", "stage": "refine", "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-strength-1-v3/accepted.png"}

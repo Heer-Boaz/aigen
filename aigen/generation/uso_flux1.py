@@ -16,6 +16,7 @@ from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
 
 
 USO_SOURCE_REVISION = "6587514aa3adf8e8f46e5f7e804239651d30b32d"
+USO_IMPLEMENTATION_REVISION = "2"
 USO_MODEL_TYPE = "flux-dev-fp8"
 USO_CONTENT_REFERENCE_SIZE = 512
 USO_MAX_REFERENCES = 3
@@ -67,6 +68,7 @@ class UsoFlux1Result:
             ],
             "runtime": "official ByteDance USO",
             "runtime_revision": USO_SOURCE_REVISION,
+            "implementation_revision": USO_IMPLEMENTATION_REVISION,
             "model_type": USO_MODEL_TYPE,
             "quantization": "on-load FP8 E4M3",
             "elapsed_seconds": round(self.elapsed_seconds, 3),
@@ -151,6 +153,7 @@ def generate_uso_flux1_seed_sweep(
                 {
                     "kind": "aigen-uso-flux1-dev-fp8-config",
                     "runtime_revision": USO_SOURCE_REVISION,
+                    "implementation_revision": USO_IMPLEMENTATION_REVISION,
                     "request": request,
                     "environment": response["environment"],
                     "seed_elapsed_seconds": response["elapsed_seconds"],
@@ -236,16 +239,32 @@ def _models_root() -> Path:
     return Path(configured).expanduser().resolve() if configured else MODELS_ROOT
 
 
+def uso_flux1_model_paths(models_root: Path | None = None) -> dict[str, Path]:
+    root = _models_root() / "uso" if models_root is None else models_root
+    flux_root = root / "black-forest-labs/FLUX.1-dev"
+    uso_root = root / "bytedance-research/USO/uso_flux_v1.0"
+    return {
+        "FLUX_DEV_FP8": flux_root / "flux1-dev.safetensors",
+        "AE": flux_root / "ae.safetensors",
+        "T5": root / "xlabs-ai/xflux_text_encoders",
+        "CLIP": root / "openai/clip-vit-large-patch14",
+        "LORA": uso_root / "dit_lora.safetensors",
+        "PROJECTION_MODEL": uso_root / "projector.safetensors",
+        "SIGLIP_PATH": root / "google/siglip-so400m-patch14-384",
+    }
+
+
 def _validate_runtime(source_root: Path, models_root: Path) -> None:
+    paths = uso_flux1_model_paths(models_root)
     required = (
         source_root / "uso/flux/pipeline.py",
-        models_root / "black-forest-labs/FLUX.1-dev/flux1-dev.safetensors",
-        models_root / "black-forest-labs/FLUX.1-dev/ae.safetensors",
-        models_root / "bytedance-research/USO/uso_flux_v1.0/dit_lora.safetensors",
-        models_root / "bytedance-research/USO/uso_flux_v1.0/projector.safetensors",
-        models_root / "xlabs-ai/xflux_text_encoders/model.safetensors.index.json",
-        models_root / "openai/clip-vit-large-patch14/model.safetensors",
-        models_root / "google/siglip-so400m-patch14-384/model.safetensors",
+        paths["FLUX_DEV_FP8"],
+        paths["AE"],
+        paths["LORA"],
+        paths["PROJECTION_MODEL"],
+        paths["T5"] / "model.safetensors.index.json",
+        paths["CLIP"] / "model.safetensors",
+        paths["SIGLIP_PATH"] / "model.safetensors",
     )
     missing = [path for path in required if not path.is_file()]
     if missing:
@@ -281,19 +300,12 @@ def _run_worker(
         )
         if path
     )
-    flux_root = models_root / "black-forest-labs/FLUX.1-dev"
-    uso_root = models_root / "bytedance-research/USO/uso_flux_v1.0"
+    environment.update(
+        (name, path.as_posix())
+        for name, path in uso_flux1_model_paths(models_root).items()
+    )
     environment.update(
         AIGEN_USO_ROOT=runtime_root.as_posix(),
-        FLUX_DEV_FP8=(flux_root / "flux1-dev.safetensors").as_posix(),
-        AE=(flux_root / "ae.safetensors").as_posix(),
-        T5=(models_root / "xlabs-ai/xflux_text_encoders").as_posix(),
-        CLIP=(models_root / "openai/clip-vit-large-patch14").as_posix(),
-        LORA=(uso_root / "dit_lora.safetensors").as_posix(),
-        PROJECTION_MODEL=(uso_root / "projector.safetensors").as_posix(),
-        SIGLIP_PATH=(
-            models_root / "google/siglip-so400m-patch14-384"
-        ).as_posix(),
         PYTHONUNBUFFERED="1",
         TOKENIZERS_PARALLELISM="false",
     )

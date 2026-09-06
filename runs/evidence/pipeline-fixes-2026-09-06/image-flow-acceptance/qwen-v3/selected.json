@@ -1,0 +1,17 @@
+{
+  "image": {
+    "content_sha256": "bcf7ecf235aa8fc04bed8cc9baad7a657ec9745b291d002af0a85657fff45ab8",
+    "identity": "47fac8c43aa8e68028191843f43093dca2707cf59bf0198a0a6e38ff8c9a67df",
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/qwen-v3/workflows/cache/nodes/b2/b2dad0b92ffd44b54ab695584646bcf4de52d22cd60600e9675a17512856ea0a/outputs/image/000000-node-f840ddb8c5b54a59ac6c338d46999d14.png",
+    "type": "image"
+  },
+  "node_id": "node-f840ddb8c5b54a59ac6c338d46999d14",
+  "reference": {
+    "artifact_identity": "47fac8c43aa8e68028191843f43093dca2707cf59bf0198a0a6e38ff8c9a67df",
+    "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/qwen-v3/workflows/runs/workflow-f008c23c3b70479c84ae41e8880e08a7/attempt-20260906T035849190281Z-e6b6c0c1e584/nodes/node-f840ddb8c5b54a59ac6c338d46999d14/result.json",
+    "output_port": "image",
+    "producer_signature": "b2dad0b92ffd44b54ab695584646bcf4de52d22cd60600e9675a17512856ea0a"
+  },
+  "seed": 72,
+  "title": "Style variants · seed 72"
+}

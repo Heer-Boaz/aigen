@@ -1,0 +1,16 @@
+{"gpu_free_mib": 15219, "wait_seconds": 117.75763146900863}
+/home/boaz/aigen/.venv/lib/python3.12/site-packages/bitsandbytes/autograd/_functions.py:123: UserWarning: MatMul8bitLt: inputs will be cast from torch.bfloat16 to float16 during quantization
+  warnings.warn(f"MatMul8bitLt: inputs will be cast from {A.dtype} to float16 during quantization")
+{"name": "missing-background-change", "verdict": {"passed": true, "image_index": 3, "regions": []}, "seed": 101, "report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/missing-background-change/result.json", "matches_review": false}
+{"name": "completed-front-view", "verdict": {"passed": true, "image_index": 2, "regions": []}, "seed": 91, "report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/completed-front-view/result.json", "matches_review": true}
+Traceback (most recent call last):
+  File "<stdin>", line 18, in <module>
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit_completion_probe.py", line 92, in <module>
+    {"prepare": prepare, "run": run}[sys.argv[1]]()
+  File "runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit_completion_probe.py", line 88, in run
+    assert all(record["matches_review"] for record in records), records
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [{'name': 'missing-background-change', 'verdict': {'passed': True, 'image_index': 3, 'regions': []}, 'seed': 101, 'report': '/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/missing-background-change/result.json', 'matches_review': False}, {'name': 'completed-front-view', 'verdict': {'passed': True, 'image_index': 2, 'regions': []}, 'seed': 91, 'report': '/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/completed-front-view/result.json', 'matches_review': True}]

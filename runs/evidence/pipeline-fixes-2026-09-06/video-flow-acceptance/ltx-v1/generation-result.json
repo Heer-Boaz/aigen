@@ -1,0 +1,16 @@
+{
+  "elapsed_seconds": 180.23712041000545,
+  "returncode": 0,
+  "statuses": {
+    "assemble": "completed",
+    "extract": "completed",
+    "generate": "completed",
+    "generate2": "completed",
+    "keyframe0": "completed",
+    "keyframe1": "completed",
+    "keyframe2": "completed",
+    "process": "completed",
+    "selected": "completed"
+  },
+  "stdout_closed": true
+}

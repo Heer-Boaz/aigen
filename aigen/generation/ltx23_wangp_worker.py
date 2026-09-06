@@ -303,7 +303,7 @@ class _ProgressCallbacks:
             self._total_steps = 0
             self._current_step = 0
             self._phase_metrics.start(text)
-            _send_progress(self._stream, "phase", text=text)
+            _send_progress(self._stream, "begin", total=0, text=text)
 
     def on_progress(self, update: Any) -> None:
         phase = str(update.phase or "").strip()
@@ -334,9 +334,7 @@ class _ProgressCallbacks:
                     text=f"{phase or 'denoising'} {self._current_step}/{total}",
                 )
         elif phase and phase != self._phase:
-            self._phase = phase
-            self._phase_metrics.start(phase)
-            _send_progress(self._stream, "phase", text=phase)
+            self.on_status(phase)
 
     def finish(self) -> None:
         self._phase_metrics.finish()

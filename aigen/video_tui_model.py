@@ -48,6 +48,7 @@ class VideoForm:
                 LTX23_DEFAULT_NEGATIVE_PROMPT,
             ),
             "resolution": FormField("resolution", "Resolution", "640x640"),
+            "keyframe_fit": FormField("keyframe_fit", "Keyframe fit", "crop"),
             "frames": FormField("frames", "Frames", "121"),
             "fps": FormField("fps", "FPS", str(LTX23_DEFAULT_FPS)),
             "steps": FormField("steps", "Steps", "15"),
@@ -121,6 +122,9 @@ class VideoForm:
                 for backend in VIDEO_BACKENDS
             )
         backend = self.field("backend").value
+        if field.name == "keyframe_fit":
+            return tuple(DropdownOption(label, mode) for label, mode in (
+                ("Crop to canvas", "crop"), ("Pad with white", "pad"), ("Stretch to canvas", "stretch")))
         if field.name == "model" and backend == LTX23_BACKEND:
             return tuple(DropdownOption(model, model) for model in LTX23_MODEL_TYPES)
         if field.name == "solver" and backend == LTX23_BACKEND:
@@ -257,6 +261,8 @@ class VideoForm:
             output,
         ]
         seed_values: list[str] = []
+        if backend in {LTX23_BACKEND, ANIMEGEN_BACKEND}:
+            command.extend(("--keyframe-fit", self.field("keyframe_fit").value.strip()))
         if backend == LTX23_BACKEND:
             command.extend(
                 (
@@ -382,6 +388,7 @@ class VideoForm:
         if backend == LTX23_BACKEND:
             self._fields.update(
                 {
+                    "keyframe_fit": FormField("keyframe_fit", "Keyframe fit", "crop"),
                     "resolution": FormField("resolution", "Resolution", "640x640"),
                     "negative_prompt": FormField(
                         "negative_prompt",
@@ -421,6 +428,7 @@ class VideoForm:
         elif backend == ANIMEGEN_BACKEND:
             self._fields.update(
                 {
+                    "keyframe_fit": FormField("keyframe_fit", "Keyframe fit", "stretch"),
                     "frames": FormField(
                         "frames",
                         "Frames",
@@ -463,6 +471,7 @@ class VideoForm:
                 (
                     "negative_prompt",
                     "resolution",
+                    "keyframe_fit",
                     "frames",
                     "fps",
                     "steps",
@@ -474,7 +483,7 @@ class VideoForm:
             )
             slot_kinds = {"keyframe", "seed"}
         elif backend == ANIMEGEN_BACKEND:
-            fixed_names.extend(("frames", "fps", "sampling", "steps", "precision"))
+            fixed_names.extend(("frames", "fps", "sampling", "steps", "precision", "keyframe_fit"))
             slot_kinds = {"image", "seed"}
         else:
             fixed_names.extend(("frames", "steps", "overlap_group_offloading"))

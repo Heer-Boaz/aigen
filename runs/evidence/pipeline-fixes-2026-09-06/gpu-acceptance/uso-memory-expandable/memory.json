@@ -1,0 +1,365 @@
+{
+  "phase": "finished",
+  "elapsed_seconds": 70.30604435699934,
+  "torch_allocated_mib": 32.0,
+  "torch_reserved_mib": 82.0,
+  "torch_peak_allocated_mib": 14357.3583984375,
+  "allocator": "expandable_segments:True",
+  "preflight": {
+    "nvidia_smi_used_mb": 781,
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "steps": [
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 22.66014946901123,
+      "torch_allocated_mib": 13498.916015625,
+      "torch_reserved_mib": 13512.0,
+      "torch_peak_allocated_mib": 13498.916015625
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 23.678517606007517,
+      "torch_allocated_mib": 13499.291015625,
+      "torch_reserved_mib": 14516.0,
+      "torch_peak_allocated_mib": 14356.6083984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 23.679035773006035,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14516.0,
+      "torch_peak_allocated_mib": 14356.6083984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 24.950862145007704,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 24.95139296000707,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 26.224050930002704,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 26.22456010201131,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 27.497997165002744,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 27.498488968005404,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 28.773435470007826,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 28.77393578500778,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 30.051375337003265,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 30.05219034300535,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 31.328808570004185,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 31.329307816005894,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 32.60431702200731,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 32.60482205401058,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 33.881291771002,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 33.88179924299766,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 35.1562790050084,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 35.157387393002864,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 36.43143014900852,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 36.431936520006275,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 37.70877860600012,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 37.70994343800703,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 38.98773933300981,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 38.98826058600389,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 40.2628388919984,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 40.26334369000688,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 41.533425745001296,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 41.53391881599964,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 42.809754856003565,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 42.81026685499819,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 44.08482958300738,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 44.085337308002636,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 45.36298022100527,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 45.36347423300322,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 46.638362195008085,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 46.638866994006094,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 47.91435270701186,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 47.91485107901099,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 49.19232367500081,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 49.193157095010974,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 50.46977602400875,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 50.470312838006066,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 51.7466479880095,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 51.74714516100357,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 53.022740747008356,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_begin",
+      "elapsed_seconds": 53.02349514501111,
+      "torch_allocated_mib": 13499.666015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    },
+    {
+      "phase": "step_end",
+      "elapsed_seconds": 54.29996501300775,
+      "torch_allocated_mib": 13500.041015625,
+      "torch_reserved_mib": 14518.0,
+      "torch_peak_allocated_mib": 14357.3583984375
+    }
+  ]
+}

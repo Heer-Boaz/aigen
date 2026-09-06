@@ -70,6 +70,7 @@ class ImageTUIFooter(Widget):
                     Button("Save Pack", name="save-pack", compact=True),
                     Button("Save Config", name="save-config", compact=True),
                     Button("Load Config", name="load-config", compact=True),
+                    Button("Open as workflow", name="image-workflow", compact=True),
                     Button(
                         "Generate",
                         name="generate",
@@ -103,6 +104,7 @@ class ImageTUIFooter(Widget):
                     ),
                     Button("Remove", name="remove-video", compact=True),
                     Button("Browse", name="browse-video", compact=True),
+                    Button("Open as workflow", name="video-workflow", compact=True),
                     Button(
                         "Generate",
                         name="video-generate",
@@ -124,6 +126,7 @@ class ImageTUIFooter(Widget):
                         compact=True,
                     ),
                     Button("Clear prompts", name="sam-clear", compact=True),
+                    Button("Open as workflow", name="sam-workflow", id="sam-workflow", compact=True),
                     Button(
                         "Run",
                         name="sam-segment",
@@ -156,7 +159,9 @@ class ImageTUIFooter(Widget):
                         variant="primary",
                         compact=True,
                     ),
-                    Button("New", name="workflow-new", compact=True),
+                    Button("New image flow", name="workflow-new", compact=True),
+                    Button("New character flow", name="workflow-new-character", compact=True),
+                    Button("New video flow", name="workflow-new-video", compact=True),
                     Button("Load", name="workflow-load", compact=True),
                     min_column_width=12,
                     stretch_height=False,

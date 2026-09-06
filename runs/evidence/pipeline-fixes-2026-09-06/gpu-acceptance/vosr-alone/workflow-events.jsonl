@@ -1,0 +1,3 @@
+{"node_id": "src-b", "node_kind": "image-source", "status": "completed"}
+{"node_id": "b", "node_kind": "image-postprocess", "status": "running"}
+{"node_id": "b", "node_kind": "image-postprocess", "status": "completed"}

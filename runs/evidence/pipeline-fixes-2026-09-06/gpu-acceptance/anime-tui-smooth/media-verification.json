@@ -1,0 +1,23 @@
+{
+  "video": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/anime-tui-smooth/workflows/cache/nodes/11/116813bdd2d57c35e89fde3c23459f120550f862112ff366bb6a6154c339f0e4/outputs/video.mp4",
+  "ffprobe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "index": 0,
+        "codec_type": "video",
+        "width": 544,
+        "height": 720,
+        "r_frame_rate": "16/1",
+        "avg_frame_rate": "16/1",
+        "time_base": "1/16384",
+        "duration": "2.062500",
+        "nb_frames": "33",
+        "nb_read_frames": "33"
+      }
+    ]
+  },
+  "extracted_frame_count": 33,
+  "contact_sheet": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/anime-tui-smooth/workflows/cache/nodes/78/78094627be7c018a5b7330d6d4c4010d33c3f4c5437809c2e7a54431eec1a7ec/outputs/contact-sheet.png"
+}

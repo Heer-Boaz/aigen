@@ -1,0 +1,30 @@
+{
+  "allocated_after_close_mib": 32.0,
+  "cases": [
+    {
+      "matches_review": false,
+      "name": "missing-background-change",
+      "report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/missing-background-change/result.json",
+      "seed": 101,
+      "verdict": {
+        "image_index": 3,
+        "passed": true,
+        "regions": []
+      }
+    },
+    {
+      "matches_review": true,
+      "name": "completed-front-view",
+      "report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/completed-front-view/result.json",
+      "seed": 91,
+      "verdict": {
+        "image_index": 2,
+        "passed": true,
+        "regions": []
+      }
+    }
+  ],
+  "elapsed_seconds": 27.194110550000914,
+  "peak_allocated_mib": 9676.50341796875,
+  "reserved_after_close_mib": 40.0
+}

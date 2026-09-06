@@ -1,0 +1,10 @@
+{"gpu_preflight": {"nvidia_smi_used_mb": 8024, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 86}, "free_mib": 8279}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 186, in <module>
+    main()
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 142, in main
+    initial_gpu = preflight(job["min_free_mib"])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 25, in preflight
+    raise RuntimeError(f"GPU occupied: {free} MiB free; this probe needs {min_free_mib} MiB")
+RuntimeError: GPU occupied: 8279 MiB free; this probe needs 12000 MiB

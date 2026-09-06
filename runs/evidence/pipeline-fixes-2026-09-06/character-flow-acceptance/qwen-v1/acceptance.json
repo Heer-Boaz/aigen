@@ -1,0 +1,150 @@
+{
+  "backend": "qwen",
+  "cache": {
+    "elapsed_seconds": 1.3469026850070804,
+    "returncode": 0,
+    "statuses": {
+      "edit": "reused",
+      "reference": "completed"
+    },
+    "stdout_closed": true
+  },
+  "generation": {
+    "elapsed_seconds": 195.76536150199536,
+    "returncode": 0,
+    "statuses": {
+      "edit": "completed",
+      "reference": "completed"
+    },
+    "stdout_closed": true
+  },
+  "result": {
+    "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/cache/nodes/97/976ccc5b08b26deba4b41a1608e126e9f841a5113e9ea1fb16f3e073d94a7edc/result.json",
+    "details": {
+      "case_record": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267/outputs/backend-result.json",
+      "completed_at": "2026-09-06T06:34:38.253337+00:00",
+      "effective_config": {
+        "aspect_ratio": null,
+        "audit": {
+          "attention_impl": "sdpa",
+          "dtype": "bfloat16",
+          "id": "qwen2.5-vl-7b",
+          "max_new_tokens": 256,
+          "max_pixels": 401408,
+          "min_pixels": 200704,
+          "model": "/home/boaz/aigen/aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+          "quantization": "bitsandbytes-8bit",
+          "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+          "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+          "temperature": 0.0
+        },
+        "backend": "qwen-image-edit-2511-lightning",
+        "candidates": 2,
+        "guidance": 1.0,
+        "guidance_scale": null,
+        "height": 1536,
+        "max_iterations": 2,
+        "max_sequence_length": null,
+        "pose_mode": "native",
+        "prompt": "Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.",
+        "sampler": "flowmatch-euler",
+        "scheduler": "flowmatch-dynamic-shift",
+        "seed": 91,
+        "seed_mode": "fixed",
+        "steps": 8,
+        "strength": null,
+        "structure_control": "depth",
+        "upscale_long_side": null,
+        "width": 1152
+      },
+      "inputs": {
+        "references": [
+          {
+            "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+            "identity": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+            "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+            "type": "image"
+          }
+        ]
+      },
+      "measured_outputs": {
+        "image": {
+          "audit_report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267/outputs/character/edit/round-1/audit/group-0/result.json",
+          "candidate_identity": "90d3cb3633ae3d7f114f594477e1ab2b3c0942090de0c59baa10ffcb6585da32",
+          "height": 1536,
+          "images": 1,
+          "raw": {
+            "case_id": "case-0-candidate-0",
+            "height": 1536,
+            "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267/outputs/character/edit/round-1/raw/case-0-candidate-0.png",
+            "seed": 91,
+            "width": 1152
+          },
+          "seed": 91,
+          "width": 1152
+        }
+      },
+      "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267"
+    },
+    "image_origins": {},
+    "node_id": "edit",
+    "node_kind": "character-edit",
+    "outputs": {
+      "image": {
+        "content_sha256": "762c14b446acfaa72600e34de15465975124b95e05e48a12a0d2b27841f755eb",
+        "identity": "2f820ed39bc7f45b4c65cfa45bd1eccbd6312987e700100414637ba693233d85",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/cache/nodes/97/976ccc5b08b26deba4b41a1608e126e9f841a5113e9ea1fb16f3e073d94a7edc/outputs/image/000000-case-0-candidate-0.png",
+        "type": "image"
+      }
+    },
+    "provenance": {
+      "backend": {
+        "name": "character-edit",
+        "revision": "1"
+      },
+      "executor": {
+        "name": "aigen-workflow-executor",
+        "revision": "4"
+      },
+      "models": [
+        {
+          "name": "LightX2V",
+          "revision": "b96309e82899145aebd8ecf95c387894aba66b1e"
+        },
+        {
+          "name": "Qwen-Image-Edit-2511",
+          "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
+        },
+        {
+          "name": "Qwen-Image-Edit-2511 transformer",
+          "revision": "d74eba145674fd7e31b949324e148e21e7118abd"
+        },
+        {
+          "name": "character audit model and processor",
+          "revision": "6b9b44d5e76c9440a842d46eb0f8ec0589f398a4bde44d3bfa0ef7e0b0c90ef1"
+        },
+        {
+          "name": "character audit prompt",
+          "revision": "2"
+        },
+        {
+          "name": "character audit runtime",
+          "revision": "96badbf882f9171c7d1abb92d3b2184ef885a4502c99f20cc22e1e4302f5a618"
+        },
+        {
+          "name": "character raw audit and retry",
+          "revision": "1"
+        },
+        {
+          "name": "image-edit-batch/qwen-2511",
+          "revision": "1/4"
+        }
+      ]
+    },
+    "signature": "976ccc5b08b26deba4b41a1608e126e9f841a5113e9ea1fb16f3e073d94a7edc",
+    "status": "reused",
+    "title": "Character edit",
+    "version": 2
+  },
+  "selected_seed": 91
+}

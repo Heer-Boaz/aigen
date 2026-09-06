@@ -10,9 +10,10 @@ from typing import Any
 from PIL import Image
 
 from aigen.image_assets import image_asset_json
+from aigen.image_io import image_alpha, open_image
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
-from aigen.generation.vosr_runtime import VosrRuntime
+from aigen.generation.vosr_runtime import VOSR_IMPLEMENTATION_REVISION, VosrRuntime
 
 
 VOSR_SOURCE_REVISION = "25fbf8e6cb9656b8991c24474f408bdce6fcb1b1"
@@ -114,6 +115,7 @@ def upscale_files_with_vosr(
                                 "input": image_asset_json(item.input_path),
                                 "output": image_asset_json(item.output_path),
                                 "backend": "aigen-vosr",
+                                "implementation_revision": VOSR_IMPLEMENTATION_REVISION,
                                 "source_revision": VOSR_SOURCE_REVISION,
                                 "model_revision": VOSR_MODEL_REVISION,
                                 "model": VOSR_MODEL_NAME,
@@ -158,12 +160,13 @@ def _prepare_vosr_file(
 ) -> _PreparedVosrFile:
     resolved_input = input_path.resolve(strict=True)
     resolved_output = output_path.resolve()
-    with Image.open(resolved_input) as source:
-        source.load()
-        alpha = source.getchannel("A") if "A" in source.getbands() else None
+    with open_image(resolved_input) as source:
+        alpha = image_alpha(source)
         metadata = _image_metadata(source)
         image = source.convert("RGB")
     if alpha is not None and resolved_output.suffix.lower() in {".jpg", ".jpeg"}:
+        alpha.close()
+        image.close()
         raise VosrBackendError("JPEG cannot preserve alpha")
     if long_side is None:
         target_size = (image.width * scale, image.height * scale)

@@ -1,0 +1,6 @@
+{"label": "continuation", "gpu_free_mib": 15377}
+{"label": "continuation", "phase": "starting"}
+{"label": "continuation", "phase": "completed Selected image"}
+{"label": "continuation", "phase": "completed Continue with selected image"}
+{"label": "continuation", "phase": "completed"}
+{"status": "continuation-completed", "image": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/continued.png"}

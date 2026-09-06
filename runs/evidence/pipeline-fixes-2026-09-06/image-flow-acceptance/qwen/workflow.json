@@ -1,0 +1,184 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-6373e27194e54ec4a843fc31903d3c0e",
+  "name": "qwen-image-edit-2511-lightning image flow",
+  "nodes": [
+    {
+      "id": "ref0",
+      "title": "Reference 1",
+      "layout": {
+        "x": 4,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+      }
+    },
+    {
+      "id": "edit",
+      "title": "Style variants",
+      "layout": {
+        "x": 50,
+        "y": 2
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+        "seed_mode": "fixed",
+        "seed": 71,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "continue",
+      "title": "Continue with selected image",
+      "layout": {
+        "x": 96,
+        "y": 2
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Change the background to light gray, keeping the subject and illustration style unchanged.",
+        "seed_mode": "fixed",
+        "seed": 73,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-b06c8041b77a446ea8411aba28f6da3d",
+      "title": "Style variants · seed 72",
+      "layout": {
+        "x": 50,
+        "y": 18
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+        "seed_mode": "fixed",
+        "seed": 72,
+        "aspect_ratio": "",
+        "width": 1152,
+        "height": 1536,
+        "steps": 8,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-463d3f15057041aba14686927de67914",
+      "title": "Image variants",
+      "layout": {
+        "x": 136,
+        "y": 2
+      },
+      "kind": "image-collection",
+      "config": {}
+    },
+    {
+      "id": "node-7f37adeef1c64ddd9c22cb5d9cc241ec",
+      "title": "Selected image",
+      "layout": {
+        "x": 176,
+        "y": 2
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": null
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "edit",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "next",
+      "source": {
+        "node_id": "node-7f37adeef1c64ddd9c22cb5d9cc241ec",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "continue",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-0230927dcdd44f9fb32fe1c880549dc3",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-b06c8041b77a446ea8411aba28f6da3d",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-7c7ef3798015438fa512a6bfec531ed1",
+      "source": {
+        "node_id": "edit",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-463d3f15057041aba14686927de67914",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-673529f3c5954214921674c4c0c6fb70",
+      "source": {
+        "node_id": "node-b06c8041b77a446ea8411aba28f6da3d",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-463d3f15057041aba14686927de67914",
+        "port": "images"
+      },
+      "order": 1
+    },
+    {
+      "id": "connection-4567b766952b48f1ab1f03a2fc733bd2",
+      "source": {
+        "node_id": "node-463d3f15057041aba14686927de67914",
+        "port": "collection"
+      },
+      "target": {
+        "node_id": "node-7f37adeef1c64ddd9c22cb5d9cc241ec",
+        "port": "collection"
+      },
+      "order": 0
+    }
+  ]
+}

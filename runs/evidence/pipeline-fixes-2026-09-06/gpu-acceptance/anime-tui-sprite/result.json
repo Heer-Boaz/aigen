@@ -1,0 +1,39 @@
+{
+  "elapsed_seconds": 341.7539943160082,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 772,
+    "nvidia_smi_utilization_gpu": 2
+  },
+  "minimum_host_available_mib": 25281.31640625,
+  "nvidia_smi_peak_used_mib": 13807,
+  "process_peak_rss_mib": 582.87890625,
+  "result": {
+    "cache": {
+      "returncode": 0,
+      "statuses": {
+        "frames": "reused",
+        "sheet": "reused",
+        "source": "completed",
+        "video": "reused"
+      },
+      "stdout_closed": true
+    },
+    "generation": {
+      "returncode": 0,
+      "statuses": {
+        "frames": "completed",
+        "sheet": "completed",
+        "source": "completed",
+        "video": "completed"
+      },
+      "stdout_closed": true
+    }
+  },
+  "status": "completed",
+  "swap_in_bytes": 10936320,
+  "swap_increase_mib": 156.45703125,
+  "swap_out_bytes": 160813056,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

@@ -1,0 +1,50 @@
+{
+  "elapsed_seconds": 46.04682653999771,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 2598,
+    "nvidia_smi_utilization_gpu": 17
+  },
+  "minimum_host_available_mib": 81712.203125,
+  "nvidia_smi_peak_used_mib": 7266,
+  "process_peak_rss_mib": 11782.109375,
+  "result": {
+    "comparisons": {
+      "b": {
+        "image": {
+          "height": 1024,
+          "mode": "RGB",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/cache/nodes/ad/ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb/outputs/image/image.png",
+          "sha256": "6e3d5f68a08a4f7410c383592a5b5098d75b2347b8b6b2cc175cc4e077e77fad",
+          "width": 769
+        },
+        "node_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/runs/b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87/attempt-20260906T001512884412Z-0bcfce596a0f/nodes/b/result.json",
+        "signature": "ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb"
+      }
+    },
+    "kind": "workflow-run",
+    "nodes": {
+      "b": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/runs/b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87/attempt-20260906T001512884412Z-0bcfce596a0f/nodes/b/result.json",
+      "src-b": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/runs/b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87/attempt-20260906T001512884412Z-0bcfce596a0f/nodes/src-b/result.json"
+    },
+    "outputs": {
+      "b": {
+        "image": {
+          "identity": "cedebbe89ca4d3dec85adc4303fc3429db717194536071fa4fded2524261b62d",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/cache/nodes/ad/ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb/outputs/image/image.png",
+          "type": "image"
+        }
+      }
+    },
+    "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/runs/b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87/attempt-20260906T001512884412Z-0bcfce596a0f/result.json",
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-alone/runs/b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87/attempt-20260906T001512884412Z-0bcfce596a0f",
+    "status": "completed",
+    "workflow_digest": "b6dd35be8e9bbb72061f00bbd99cbc603f44f9f0e01a2bb8cafe91db8c576a87"
+  },
+  "status": "completed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 3946.61767578125,
+  "torch_peak_reserved_mib": 4380.0
+}

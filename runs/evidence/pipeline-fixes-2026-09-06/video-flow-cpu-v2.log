@@ -1,0 +1,11 @@
+test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio (test_workflow_video_flow.WorkflowVideoTests.test_import_process_assemble_reuses_pixels_but_carries_current_timing_and_audio) ... ok
+test_metadata_cache_is_content_and_decoder_revision_addressed (test_workflow_video_flow.WorkflowVideoTests.test_metadata_cache_is_content_and_decoder_revision_addressed) ... ok
+test_moved_source_reuses_extraction_with_current_audio_location (test_workflow_video_flow.WorkflowVideoTests.test_moved_source_reuses_extraction_with_current_audio_location) ... ok
+test_fractional_cfr_and_transparent_frames (test_video_timing.VideoTimingTests.test_fractional_cfr_and_transparent_frames) ... ok
+test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video (test_video_timing.VideoTimingTests.test_preserve_audio_origin_and_replace_with_second_stream_without_shortening_video) ... ok
+test_vfr_extract_assemble_retains_every_frame_time_and_order (test_video_timing.VideoTimingTests.test_vfr_extract_assemble_retains_every_frame_time_and_order) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.125s
+
+OK

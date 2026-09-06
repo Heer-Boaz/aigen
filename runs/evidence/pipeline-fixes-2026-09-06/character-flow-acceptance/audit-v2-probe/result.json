@@ -1,0 +1,14 @@
+{
+  "allocated_after_close_mib": 32.0,
+  "candidate_identity": "9eb099bc2da9dace858305c0322eb630fc06c8ce70dbe7299b4c48295519cb44",
+  "elapsed_seconds": 17.06507356899965,
+  "peak_allocated_mib": 9561.87158203125,
+  "report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/audit-v2-probe/audit/result.json",
+  "reserved_after_close_mib": 88.0,
+  "selected_seed": 91,
+  "verdict": {
+    "image_index": 2,
+    "passed": true,
+    "regions": []
+  }
+}

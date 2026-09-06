@@ -1,0 +1,828 @@
+{
+  "anime-segmentation": {
+    "elapsed_seconds": 8.340086666998104,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 781,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 86830.7421875,
+    "nvidia_smi_peak_used_mib": 2056,
+    "process_peak_rss_mib": 1830.828125,
+    "result_path": "anime-segmentation/result.json",
+    "status": "completed",
+    "swap_in_bytes": 1019904,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "anime-tui-smooth": {
+    "elapsed_seconds": 419.72403027101245,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 781,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "media_verification": "anime-tui-smooth/media-verification.json",
+    "minimum_host_available_mib": 23921.94140625,
+    "nvidia_smi_peak_used_mib": 13874,
+    "process_peak_rss_mib": 582.76953125,
+    "result_path": "anime-tui-smooth/result.json",
+    "status": "completed",
+    "swap_in_bytes": 18980864,
+    "swap_increase_mib": 28.3984375,
+    "swap_out_bytes": 31154176,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "anime-tui-sprite": {
+    "elapsed_seconds": 341.7539943160082,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 772,
+      "nvidia_smi_utilization_gpu": 2
+    },
+    "media_verification": "anime-tui-sprite/media-verification.json",
+    "minimum_host_available_mib": 25281.31640625,
+    "nvidia_smi_peak_used_mib": 13807,
+    "process_peak_rss_mib": 582.87890625,
+    "result_path": "anime-tui-sprite/result.json",
+    "status": "completed",
+    "swap_in_bytes": 10936320,
+    "swap_increase_mib": 156.45703125,
+    "swap_out_bytes": 160813056,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "animesharp-x4": {
+    "elapsed_seconds": 2.2673470779991476,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2985,
+      "nvidia_smi_utilization_gpu": 9
+    },
+    "minimum_host_available_mib": 86781.0859375,
+    "nvidia_smi_peak_used_mib": 5636,
+    "process_peak_rss_mib": 1376.11328125,
+    "result_path": "animesharp-x4/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 2425.646484375,
+    "torch_peak_reserved_mib": 3418.0,
+    "worker_environments": []
+  },
+  "flux-dev-v2": {
+    "elapsed_seconds": 465.98163150400796,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1428,
+      "nvidia_smi_utilization_gpu": 6
+    },
+    "minimum_host_available_mib": 30064.4921875,
+    "nvidia_smi_peak_used_mib": 9223,
+    "process_peak_rss_mib": 545.71484375,
+    "result_path": "flux-dev-v2/result.json",
+    "status": "completed",
+    "swap_in_bytes": 24576,
+    "swap_increase_mib": 270.62890625,
+    "swap_out_bytes": 200798208,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0,
+    "worker_environments": [
+      {
+        "attention": "sdpa",
+        "cuda": "13.0",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "peak_allocated_mib": 6247.1,
+        "peak_reserved_mib": 10500.0,
+        "preload_mib": 4000,
+        "runtime_profile": 2,
+        "torch": "2.10.0+cu130"
+      }
+    ]
+  },
+  "illustrationjanai-dat2": {
+    "elapsed_seconds": 16.059557649001363,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2985,
+      "nvidia_smi_utilization_gpu": 8
+    },
+    "minimum_host_available_mib": 85813.9921875,
+    "nvidia_smi_peak_used_mib": 8018,
+    "process_peak_rss_mib": 2101.58203125,
+    "result_path": "illustrationjanai-dat2/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 2553.10205078125,
+    "torch_peak_reserved_mib": 4748.0,
+    "worker_environments": []
+  },
+  "illustrationjanai-esrgan": {
+    "elapsed_seconds": 2.329287579006632,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2985,
+      "nvidia_smi_utilization_gpu": 8
+    },
+    "minimum_host_available_mib": 86702.515625,
+    "nvidia_smi_peak_used_mib": 6680,
+    "process_peak_rss_mib": 1385.890625,
+    "result_path": "illustrationjanai-esrgan/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 2425.646484375,
+    "torch_peak_reserved_mib": 3418.0,
+    "worker_environments": []
+  },
+  "klein-edit": {
+    "elapsed_seconds": 78.19517594100034,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2800,
+      "nvidia_smi_utilization_gpu": 9
+    },
+    "minimum_host_available_mib": 76862.2421875,
+    "nvidia_smi_peak_used_mib": 15973,
+    "process_peak_rss_mib": 11571.30859375,
+    "result_path": "klein-edit/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 11988.59033203125,
+    "torch_peak_reserved_mib": 14818.0,
+    "worker_environments": []
+  },
+  "klein-strength": {
+    "elapsed_seconds": 30.426019643986365,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1286,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 76816.34765625,
+    "nvidia_smi_peak_used_mib": 15878,
+    "process_peak_rss_mib": 11581.078125,
+    "result_path": "klein-strength/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 11989.10888671875,
+    "torch_peak_reserved_mib": 14818.0,
+    "worker_environments": []
+  },
+  "klein-strength-v2": {
+    "elapsed_seconds": 15.94118715300283,
+    "error": "ValueError: Version 4 of 'kernels-community/finegrained-fp8' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or pass an explicit `revision=<commit>`.",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 780,
+      "nvidia_smi_utilization_gpu": 5
+    },
+    "minimum_host_available_mib": 87098.7421875,
+    "nvidia_smi_peak_used_mib": 10123,
+    "process_peak_rss_mib": 10122.140625,
+    "result_path": "klein-strength-v2/result.json",
+    "status": "failed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 9052.7392578125,
+    "torch_peak_reserved_mib": 9058.0
+  },
+  "klein-strength-v3": {
+    "elapsed_seconds": 49.998959229997126,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 780,
+      "nvidia_smi_utilization_gpu": 4
+    },
+    "minimum_host_available_mib": 77342.015625,
+    "nvidia_smi_peak_used_mib": 15673,
+    "process_peak_rss_mib": 11571.21484375,
+    "result_path": "klein-strength-v3/result.json",
+    "status": "completed",
+    "swap_in_bytes": 348160,
+    "swap_increase_mib": 12.29296875,
+    "swap_out_bytes": 12771328,
+    "torch_peak_allocated_mib": 11989.10888671875,
+    "torch_peak_reserved_mib": 14818.0,
+    "worker_environments": []
+  },
+  "ltx-smooth": {
+    "backend_environment": {
+      "attention": "sdpa",
+      "compute_capability": "12.0",
+      "cuda": "13.0",
+      "elapsed_seconds": 195.648,
+      "engine": "WanGP",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti",
+      "model_type": "ltx2_22B_nvfp4",
+      "peak_allocated_mib": 5151.5,
+      "peak_reserved_mib": 5438.0,
+      "preload_mib": 4000,
+      "runtime_profile": 2,
+      "torch": "2.10.0+cu130"
+    },
+    "elapsed_seconds": 208.5418534240016,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 883,
+      "nvidia_smi_utilization_gpu": 4
+    },
+    "media_verification": "ltx-smooth/media-verification.json",
+    "minimum_host_available_mib": 36787.078125,
+    "nvidia_smi_peak_used_mib": 13491,
+    "process_peak_rss_mib": 544.80078125,
+    "result_path": "ltx-smooth/result.json",
+    "status": "completed",
+    "swap_in_bytes": 2719744,
+    "swap_increase_mib": 13.8125,
+    "swap_out_bytes": 10797056,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "ltx-sprite": {
+    "elapsed_seconds": 0.3081736639869632,
+    "error": "Ltx23KeyframesError: video negative prompt must not be empty",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1049,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 87970.546875,
+    "nvidia_smi_peak_used_mib": 1049,
+    "process_peak_rss_mib": 544.87890625,
+    "result_path": "ltx-sprite/result.json",
+    "status": "failed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "ltx-sprite-v2": {
+    "backend_environment": {
+      "attention": "sdpa",
+      "compute_capability": "12.0",
+      "cuda": "13.0",
+      "elapsed_seconds": 147.329,
+      "engine": "WanGP",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti",
+      "model_type": "ltx2_22B_nvfp4",
+      "peak_allocated_mib": 5151.5,
+      "peak_reserved_mib": 5438.0,
+      "preload_mib": 4000,
+      "runtime_profile": 2,
+      "torch": "2.10.0+cu130"
+    },
+    "elapsed_seconds": 162.69318329700036,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1050,
+      "nvidia_smi_utilization_gpu": 40
+    },
+    "media_verification": "ltx-sprite-v2/media-verification.json",
+    "minimum_host_available_mib": 37222.34375,
+    "nvidia_smi_peak_used_mib": 6091,
+    "process_peak_rss_mib": 541.08984375,
+    "result_path": "ltx-sprite-v2/result.json",
+    "status": "completed",
+    "swap_in_bytes": 2015232,
+    "swap_increase_mib": 80.80859375,
+    "swap_out_bytes": 85164032,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "qwen-base-single-native": {
+    "backend_environment": {
+      "attention": "flash_attn2",
+      "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+      "cuda": "12.8",
+      "engine": "LightX2V",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti",
+      "host_buffers": "pinned",
+      "implementation_revision": "4",
+      "matrix_multiply": "fp8-triton",
+      "phase_order": "conditioner->vae_encode->transformer->vae_decode",
+      "pinned_blocks": 28,
+      "pinned_gib": 8.87,
+      "postprocess": "none",
+      "reference_preprocessing": {
+        "cases": {
+          "image": {
+            "input_sizes_wh": [
+              [
+                1086,
+                1448
+              ]
+            ],
+            "prompt_seq_lens": [
+              210,
+              188
+            ],
+            "vae_sizes_hw": [
+              [
+                1440,
+                1072
+              ]
+            ]
+          }
+        },
+        "policy": "native-vae-upstream-semantic",
+        "semantic_target_pixels": 147456
+      },
+      "residency_budget": {
+        "block_bytes": 340292616,
+        "free_bytes": 14962130944,
+        "headroom_bytes": 1073741824,
+        "late_weight_bytes": 81046656,
+        "max_denoise_tokens": 13152,
+        "resident_budget_bytes": 11221554048,
+        "workspace_bytes": 2585788416
+      },
+      "resident_blocks": 32,
+      "rope": "torch",
+      "sampler": "flowmatch-euler",
+      "scheduler": "flowmatch-dynamic-shift",
+      "streamed_blocks": 28,
+      "torch": "2.8.0+cu128",
+      "vae_tiling": {
+        "tile_sample_min_height": 2048,
+        "tile_sample_min_width": 2048,
+        "tile_sample_stride_height": 1536,
+        "tile_sample_stride_width": 1536
+      }
+    },
+    "elapsed_seconds": 376.79382880699995,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 923,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 70072.8828125,
+    "nvidia_smi_peak_used_mib": 14633,
+    "process_peak_rss_mib": 569.46484375,
+    "result_path": "qwen-base-single-native/result.json",
+    "status": "completed",
+    "swap_in_bytes": 1024000,
+    "swap_increase_mib": 0.52734375,
+    "swap_out_bytes": 638976,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "qwen-lightning": {
+    "elapsed_seconds": 24.11486605099344,
+    "error": "ImageEditError: Qwen-Image-Edit-2511 LightX2V failed: CUDA driver error: device not ready",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 973,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 82846.48828125,
+    "nvidia_smi_peak_used_mib": 15947,
+    "process_peak_rss_mib": 667.85546875,
+    "result_path": "qwen-lightning/result.json",
+    "status": "failed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "qwen-lightning-v2": {
+    "elapsed_seconds": 96.51962752800318,
+    "error": "ImageEditError: Qwen-Image-Edit-2511 LightX2V failed: CUDA driver error: device not ready",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1563,
+      "nvidia_smi_utilization_gpu": 18
+    },
+    "minimum_host_available_mib": 66427.80859375,
+    "nvidia_smi_peak_used_mib": 15904,
+    "process_peak_rss_mib": 667.765625,
+    "result_path": "qwen-lightning-v2/result.json",
+    "status": "failed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "qwen-native-fp8-direct": {
+    "mode": "native double-buffer offload, zero extra resident blocks",
+    "nvidia_smi_peak_used_mib": 14530,
+    "phase_peak_allocated_mib": {
+      "conditioning": 9889.6376953125,
+      "decode": 7461.849609375,
+      "denoise": 8376.5498046875,
+      "vae_encode": 8640.02001953125
+    },
+    "quantization_patch": "lightx2v-fp8-direct-output.patch",
+    "response_path": "qwen-native-fp8-direct/response.json",
+    "status": "completed",
+    "timing_valid_no_swap_growth": false,
+    "torch_sampled_peak_reserved_mib": 13028.0,
+    "total_denoise_tokens": 71692
+  },
+  "qwen-single-native": {
+    "backend_environment": {
+      "attention": "flash_attn2",
+      "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+      "cuda": "12.8",
+      "engine": "LightX2V",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti",
+      "host_buffers": "pinned",
+      "implementation_revision": "4",
+      "matrix_multiply": "fp8-triton",
+      "phase_order": "conditioner->vae_encode->transformer->vae_decode",
+      "pinned_blocks": 28,
+      "pinned_gib": 8.87,
+      "postprocess": "vosr-1.4b-ms-upscale",
+      "reference_preprocessing": {
+        "cases": {
+          "image": {
+            "input_sizes_wh": [
+              [
+                1086,
+                1448
+              ]
+            ],
+            "prompt_seq_lens": [
+              210
+            ],
+            "vae_sizes_hw": [
+              [
+                1440,
+                1072
+              ]
+            ]
+          }
+        },
+        "policy": "native-vae-upstream-semantic",
+        "semantic_target_pixels": 147456
+      },
+      "residency_budget": {
+        "block_bytes": 340292616,
+        "free_bytes": 14962130944,
+        "headroom_bytes": 1073741824,
+        "late_weight_bytes": 81046656,
+        "max_denoise_tokens": 13152,
+        "resident_budget_bytes": 11221554048,
+        "workspace_bytes": 2585788416
+      },
+      "resident_blocks": 32,
+      "rope": "torch",
+      "sampler": "flowmatch-euler",
+      "scheduler": "flowmatch-dynamic-shift",
+      "streamed_blocks": 28,
+      "torch": "2.8.0+cu128",
+      "vae_tiling": {
+        "tile_sample_min_height": 2048,
+        "tile_sample_min_width": 2048,
+        "tile_sample_stride_height": 1536,
+        "tile_sample_stride_width": 1536
+      }
+    },
+    "elapsed_seconds": 65.39122893400781,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1201,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 70709.83203125,
+    "nvidia_smi_peak_used_mib": 14888,
+    "process_peak_rss_mib": 569.1171875,
+    "result_path": "qwen-single-native/result.json",
+    "status": "completed",
+    "swap_in_bytes": 917504,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "sam": {
+    "elapsed_seconds": 2.6269486130040605,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 3036,
+      "nvidia_smi_utilization_gpu": 9
+    },
+    "minimum_host_available_mib": 86023.640625,
+    "nvidia_smi_peak_used_mib": 6253,
+    "process_peak_rss_mib": 2204.921875,
+    "result_path": "sam/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 2793.83642578125,
+    "torch_peak_reserved_mib": 3128.0
+  },
+  "sam2": {
+    "elapsed_seconds": 3.5944081010093214,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2985,
+      "nvidia_smi_utilization_gpu": 9
+    },
+    "minimum_host_available_mib": 86129.37890625,
+    "nvidia_smi_peak_used_mib": 3972,
+    "process_peak_rss_mib": 2278.21875,
+    "result_path": "sam2/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 458.140625,
+    "torch_peak_reserved_mib": 700.0
+  },
+  "uso": {
+    "elapsed_seconds": 71.04346954199718,
+    "error": "ImageEditError: USO generation failed: CUDA error: out of memory",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 777,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 65378.71875,
+    "nvidia_smi_peak_used_mib": 15970,
+    "process_peak_rss_mib": 545.98828125,
+    "result_path": "uso/result.json",
+    "status": "failed",
+    "swap_in_bytes": 4096,
+    "swap_increase_mib": 40.13671875,
+    "swap_out_bytes": 41062400,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "uso-seed-alone": {
+    "elapsed_seconds": 88.84541553900635,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 923,
+      "nvidia_smi_utilization_gpu": 4
+    },
+    "minimum_host_available_mib": 62246.2265625,
+    "nvidia_smi_peak_used_mib": 15728,
+    "process_peak_rss_mib": 545.8515625,
+    "result_path": "uso-seed-alone/result.json",
+    "status": "completed",
+    "swap_in_bytes": 1163264,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0,
+    "worker_environments": [
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "implementation_revision": "2",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      }
+    ]
+  },
+  "uso-seed-reverse": {
+    "elapsed_seconds": 110.3435433459963,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 883,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 60260.171875,
+    "nvidia_smi_peak_used_mib": 15690,
+    "process_peak_rss_mib": 545.8828125,
+    "result_path": "uso-seed-reverse/result.json",
+    "status": "completed",
+    "swap_in_bytes": 90112,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0,
+    "worker_environments": [
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "implementation_revision": "2",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      },
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "implementation_revision": "2",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      }
+    ]
+  },
+  "uso-seed-together": {
+    "elapsed_seconds": 114.87406098500651,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 923,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 59536.4453125,
+    "nvidia_smi_peak_used_mib": 15730,
+    "process_peak_rss_mib": 546.02734375,
+    "result_path": "uso-seed-together/result.json",
+    "status": "completed",
+    "swap_in_bytes": 675840,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0,
+    "worker_environments": [
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "implementation_revision": "2",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      },
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "implementation_revision": "2",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      }
+    ]
+  },
+  "uso-v2": {
+    "elapsed_seconds": 132.0955597919965,
+    "error": "ImageEditError: USO generation failed: CUDA error: out of memory",
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 1201,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 65618.58984375,
+    "nvidia_smi_peak_used_mib": 15868,
+    "process_peak_rss_mib": 545.32421875,
+    "result_path": "uso-v2/result.json",
+    "status": "failed",
+    "swap_in_bytes": 2146304,
+    "swap_increase_mib": 4.15234375,
+    "swap_out_bytes": 4513792,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0
+  },
+  "uso-v3": {
+    "elapsed_seconds": 65.15070593899873,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 781,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 63043.875,
+    "nvidia_smi_peak_used_mib": 15586,
+    "process_peak_rss_mib": 545.4375,
+    "result_path": "uso-v3/result.json",
+    "status": "completed",
+    "swap_in_bytes": 5177344,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 1724416,
+    "torch_peak_allocated_mib": 0.0,
+    "torch_peak_reserved_mib": 0.0,
+    "worker_environments": [
+      {
+        "content_reference_size": 512,
+        "cuda": "13.0",
+        "cuda_allocator_config": "expandable_segments:True",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti",
+        "model_type": "flux-dev-fp8",
+        "offload": true,
+        "peak_allocated_mib": 14357.4,
+        "peak_reserved_mib": 14518.0,
+        "torch": "2.12.1+cu130"
+      }
+    ]
+  },
+  "vosr-alone": {
+    "elapsed_seconds": 46.04682653999771,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2598,
+      "nvidia_smi_utilization_gpu": 17
+    },
+    "minimum_host_available_mib": 81712.203125,
+    "nvidia_smi_peak_used_mib": 7266,
+    "process_peak_rss_mib": 11782.109375,
+    "result_path": "vosr-alone/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 3946.61767578125,
+    "torch_peak_reserved_mib": 4380.0
+  },
+  "vosr-cache-partial": {
+    "elapsed_seconds": 35.44507104199147,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 3153,
+      "nvidia_smi_utilization_gpu": 12
+    },
+    "minimum_host_available_mib": 81054.1953125,
+    "nvidia_smi_peak_used_mib": 7593,
+    "process_peak_rss_mib": 11781.94921875,
+    "result_path": "vosr-cache-partial/result.json",
+    "status": "completed",
+    "swap_in_bytes": 4096,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 3946.61767578125,
+    "torch_peak_reserved_mib": 4380.0
+  },
+  "vosr-cache-prime": {
+    "elapsed_seconds": 42.586446524001076,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2876,
+      "nvidia_smi_utilization_gpu": 9
+    },
+    "minimum_host_available_mib": 81338.84765625,
+    "nvidia_smi_peak_used_mib": 7895,
+    "process_peak_rss_mib": 11789.7109375,
+    "result_path": "vosr-cache-prime/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 3958.79931640625,
+    "torch_peak_reserved_mib": 4372.0
+  },
+  "vosr-reverse": {
+    "elapsed_seconds": 60.26807199900213,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2868,
+      "nvidia_smi_utilization_gpu": 8
+    },
+    "minimum_host_available_mib": 80937.8828125,
+    "nvidia_smi_peak_used_mib": 7939,
+    "process_peak_rss_mib": 11781.9921875,
+    "result_path": "vosr-reverse/result.json",
+    "status": "completed",
+    "swap_in_bytes": 0,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 3958.79931640625,
+    "torch_peak_reserved_mib": 4382.0
+  },
+  "vosr-together": {
+    "elapsed_seconds": 57.477904747996945,
+    "initial_gpu": {
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_used_mb": 2482,
+      "nvidia_smi_utilization_gpu": 3
+    },
+    "minimum_host_available_mib": 79845.10546875,
+    "nvidia_smi_peak_used_mib": 7848,
+    "process_peak_rss_mib": 11782.453125,
+    "result_path": "vosr-together/result.json",
+    "status": "completed",
+    "swap_in_bytes": 16384,
+    "swap_increase_mib": 0.0,
+    "swap_out_bytes": 0,
+    "torch_peak_allocated_mib": 3958.79931640625,
+    "torch_peak_reserved_mib": 4372.0
+  }
+}

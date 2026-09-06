@@ -1,0 +1,225 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-ba2690445ae7438ea67b81bfcd9470cc",
+  "name": "flux2-klein image flow",
+  "nodes": [
+    {
+      "id": "ref0",
+      "title": "Reference 1",
+      "layout": {
+        "x": 4,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+      }
+    },
+    {
+      "id": "ref1",
+      "title": "Reference 2",
+      "layout": {
+        "x": 4,
+        "y": 8
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+      }
+    },
+    {
+      "id": "edit",
+      "title": "Style variants",
+      "layout": {
+        "x": 50,
+        "y": 5
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed_mode": "fixed",
+        "seed": 74,
+        "aspect_ratio": "",
+        "width": 768,
+        "height": 1024,
+        "steps": 4,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "continue",
+      "title": "Continue with selected image",
+      "layout": {
+        "x": 96,
+        "y": 5
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Change the background to light gray, keeping the subject and illustration style unchanged.",
+        "seed_mode": "fixed",
+        "seed": 73,
+        "aspect_ratio": "",
+        "width": 768,
+        "height": 1024,
+        "steps": 4,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-adcb928cf30248f4bf0c3675a42dff46",
+      "title": "Style variants · seed 72",
+      "layout": {
+        "x": 50,
+        "y": 24
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+        "seed_mode": "fixed",
+        "seed": 72,
+        "aspect_ratio": "",
+        "width": 768,
+        "height": 1024,
+        "steps": 4,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "node-2ab6d3069a7e4470ab35fbf88ca915c4",
+      "title": "Image variants",
+      "layout": {
+        "x": 136,
+        "y": 5
+      },
+      "kind": "image-collection",
+      "config": {}
+    },
+    {
+      "id": "node-7ef563cb92424f0c803e40b39afe8ed6",
+      "title": "Selected image",
+      "layout": {
+        "x": 176,
+        "y": 5
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": {
+          "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/runs/workflow-ba2690445ae7438ea67b81bfcd9470cc/attempt-20260906T033538130075Z-025880073559/nodes/node-adcb928cf30248f4bf0c3675a42dff46/result.json",
+          "producer_signature": "2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b",
+          "output_port": "image",
+          "artifact_identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba"
+        }
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "edit",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire1",
+      "source": {
+        "node_id": "ref1",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "edit",
+        "port": "references"
+      },
+      "order": 1
+    },
+    {
+      "id": "next",
+      "source": {
+        "node_id": "node-7ef563cb92424f0c803e40b39afe8ed6",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "continue",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-4614c84aa38f41a787b8bddb8bc24a57",
+      "source": {
+        "node_id": "ref0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-adcb928cf30248f4bf0c3675a42dff46",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-eb85e4db885a41abaf00f851e89dfd69",
+      "source": {
+        "node_id": "ref1",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-adcb928cf30248f4bf0c3675a42dff46",
+        "port": "references"
+      },
+      "order": 1
+    },
+    {
+      "id": "connection-33a260ee44fe4e17ad3bdf28ad5ea830",
+      "source": {
+        "node_id": "edit",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-2ab6d3069a7e4470ab35fbf88ca915c4",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-9e51a22d68dd47a3ad210463cebe852f",
+      "source": {
+        "node_id": "node-adcb928cf30248f4bf0c3675a42dff46",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-2ab6d3069a7e4470ab35fbf88ca915c4",
+        "port": "images"
+      },
+      "order": 1
+    },
+    {
+      "id": "connection-3c013da820a0406e8ca94ee15f1a96b6",
+      "source": {
+        "node_id": "node-2ab6d3069a7e4470ab35fbf88ca915c4",
+        "port": "collection"
+      },
+      "target": {
+        "node_id": "node-7ef563cb92424f0c803e40b39afe8ed6",
+        "port": "collection"
+      },
+      "order": 0
+    }
+  ]
+}

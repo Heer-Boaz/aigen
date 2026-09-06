@@ -1,0 +1,9 @@
+{
+  "native_allocator": "fails during second denoiser step",
+  "expandable_allocator": "completes all 25 steps and decode",
+  "diagnostic_and_public_image_bytes_equal": false,
+  "finding": "Separate pre-existing uncontrolled reference VAE sampling; fixed next with an output-scoped RNG seed.",
+  "native_memory": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-memory-native/memory.json",
+  "expandable_memory": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-memory-expandable/memory.json",
+  "public_result": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-v3/result.json"
+}

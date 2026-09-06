@@ -1,0 +1,37 @@
+test_form_import_preserves_cli_whitespace_default_seed_and_input_order (test_workflow_result_contracts.WorkflowResultContractTests.test_form_import_preserves_cli_whitespace_default_seed_and_input_order) ... ERROR
+test_replaced_or_unverifiable_historical_inputs_never_show_current_pixels (test_workflow_result_contracts.WorkflowResultContractTests.test_replaced_or_unverifiable_historical_inputs_never_show_current_pixels) ... ok
+test_batch_failure_keeps_completed_candidate_and_resumes_other_seed (test_workflow_image_flow.ImageFlowTests.test_batch_failure_keeps_completed_candidate_and_resumes_other_seed) ... ok
+test_legacy_identity_roundtrip_undo_and_rename (test_workflow_image_flow.ImageFlowTests.test_legacy_identity_roundtrip_undo_and_rename) ... ok
+test_old_result_without_content_hash_still_resolves_against_immutable_cache (test_workflow_image_flow.ImageFlowTests.test_old_result_without_content_hash_still_resolves_against_immutable_cache) ... ok
+test_random_selection_survives_reload_and_cuts_generator_dependencies (test_workflow_image_flow.ImageFlowTests.test_random_selection_survives_reload_and_cuts_generator_dependencies) ... ok
+test_seed_granularity_history_and_original_metadata (test_workflow_image_flow.ImageFlowTests.test_seed_granularity_history_and_original_metadata) ... ok
+test_unselected_continuation_fails_before_generation (test_workflow_image_flow.ImageFlowTests.test_unselected_continuation_fails_before_generation) ... ok
+
+======================================================================
+ERROR: test_form_import_preserves_cli_whitespace_default_seed_and_input_order (test_workflow_result_contracts.WorkflowResultContractTests.test_form_import_preserves_cli_whitespace_default_seed_and_input_order)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/aigen/workflow_compilation.py", line 371, in _compile_node_config
+    settings = resolve_image_edit_settings(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/image_edit.py", line 325, in resolve_image_edit_settings
+    raise ImageEditError(
+aigen.generation.image_edit.ImageEditError: flux2-klein does not expose CFG guidance
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_result_contracts.py", line 35, in test_form_import_preserves_cli_whitespace_default_seed_and_input_order
+    compiled = compile_workflow(graph, target_node_ids=("edit",))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/workflow_compilation.py", line 237, in compile_workflow
+    config=_compile_node_config(node),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/workflow_compilation.py", line 387, in _compile_node_config
+    raise ValueError(
+ValueError: invalid image-edit settings for node edit: flux2-klein does not expose CFG guidance
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.744s
+
+FAILED (errors=1)

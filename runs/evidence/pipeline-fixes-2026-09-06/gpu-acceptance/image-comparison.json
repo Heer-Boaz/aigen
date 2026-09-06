@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "name": "Original sprite",
+      "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+    },
+    {
+      "name": "Klein 4 steps / seed 71",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-edit/1152x1536-seed71.png"
+    },
+    {
+      "name": "FLUX.2 Dev / seed 71",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/flux-dev-v2/output/image.png"
+    },
+    {
+      "name": "Qwen Lightning / seed 71",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-native-fp8-direct/image.png"
+    },
+    {
+      "name": "USO / seed 71 / reproducible VAE",
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-seed-alone/output/image.png"
+    }
+  ],
+  "note": "Same 3:4 aspect for every displayed image. Display thumbnails only; original model references retained. USO uses the separately reviewed content/style instruction; no cross-seed consistency claim."
+}

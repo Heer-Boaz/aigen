@@ -1,0 +1,81 @@
+{
+  "klein-v2": {
+    "cache_seconds": 1.2480903350078734,
+    "global_swap_in_delta_bytes": 7069696,
+    "global_swap_out_delta_bytes": 0,
+    "measured_output": {
+      "audit_report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v2/workflows/runs/workflow-4ad71802101b40b6902307e573228926/attempt-20260906T062755582716Z-4f8fe6dc8b0b/executions/a42eb10e10b9401bb433b0062b92a890/outputs/character/round-1/audit/group-0/result.json",
+      "candidate_identity": "9eb099bc2da9dace858305c0322eb630fc06c8ce70dbe7299b4c48295519cb44",
+      "height": 2048,
+      "images": 1,
+      "raw": {
+        "case_id": "candidate-0",
+        "height": 1024,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v2/workflows/runs/workflow-4ad71802101b40b6902307e573228926/attempt-20260906T062755582716Z-4f8fe6dc8b0b/executions/a42eb10e10b9401bb433b0062b92a890/outputs/character/round-1/raw/candidate-0.png",
+        "seed": 91,
+        "width": 768
+      },
+      "seed": 91,
+      "width": 1536
+    },
+    "sampled_global_peak_mib": 11808,
+    "seconds": 102.82245782799146,
+    "selected_seed": 91
+  },
+  "qwen-v1": {
+    "backend_memory": {
+      "max_rss_mib": 35273.3203125,
+      "mem_available_after_mib": 72187.4609375,
+      "mem_available_before_mib": 87070.0234375,
+      "nvidia_smi_device_total_mb": 16303,
+      "nvidia_smi_peak_used_mb": 14710,
+      "nvidia_smi_preflight_used_mb": 925,
+      "nvidia_smi_preflight_utilization_gpu": 17,
+      "peak_vram_mib": {
+        "conditioning": 9889.6376953125,
+        "decode": 7401.77392578125,
+        "denoise": 12985.0322265625,
+        "vae_encode": 1813.02783203125
+      },
+      "pswpin_delta": 14,
+      "pswpout_delta": 3525,
+      "read_gib": 35.50650405883789,
+      "swap_free_after_mib": 80187.64453125,
+      "swap_free_before_mib": 80201.37890625,
+      "timing_valid_no_swap_growth": false
+    },
+    "backend_timings_ms": {
+      "condition_encode_ms": 1507.2568430041429,
+      "conditioner_load_ms": 7042.021648012451,
+      "denoise_ms": 49623.999575007474,
+      "host_pin_ms": 51225.42317699117,
+      "postprocess_ms": 1.758812999469228,
+      "resident_upload_ms": 3769.004767993465,
+      "total_ms": 124309.18461200781,
+      "transformer_load_ms": 6300.851661013439,
+      "vae_decode_ms": 1732.243036996806,
+      "vae_encode_ms": 470.2503400039859
+    },
+    "cache_seconds": 1.3469026850070804,
+    "global_swap_in_delta_bytes": 61440,
+    "global_swap_out_delta_bytes": 14438400,
+    "measured_output": {
+      "audit_report": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267/outputs/character/edit/round-1/audit/group-0/result.json",
+      "candidate_identity": "90d3cb3633ae3d7f114f594477e1ab2b3c0942090de0c59baa10ffcb6585da32",
+      "height": 1536,
+      "images": 1,
+      "raw": {
+        "case_id": "case-0-candidate-0",
+        "height": 1536,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/workflows/runs/workflow-e4d270a9286a479b9cac4621b2175b03/attempt-20260906T063124775250Z-31c51926e611/executions/2ab5f93356d84209a39c3e79f30e5267/outputs/character/edit/round-1/raw/case-0-candidate-0.png",
+        "seed": 91,
+        "width": 1152
+      },
+      "seed": 91,
+      "width": 1152
+    },
+    "sampled_global_peak_mib": 14710,
+    "seconds": 195.76536150199536,
+    "selected_seed": 91
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "configuration": {
+    "jobs": {
+      "klein-edit": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": null
+      },
+      "klein-strength": {
+        "backend": "klein",
+        "min_free_mib": 12000,
+        "strength": 0.5
+      },
+      "vosr-alone": {
+        "backend": "vosr",
+        "cache_root": "workflow-alone",
+        "min_free_mib": 8500,
+        "order": [
+          "b"
+        ]
+      },
+      "vosr-cache-partial": {
+        "backend": "vosr",
+        "cache_root": "workflow-partial",
+        "min_free_mib": 8500,
+        "order": [
+          "a",
+          "b"
+        ]
+      },
+      "vosr-cache-prime": {
+        "backend": "vosr",
+        "cache_root": "workflow-partial",
+        "min_free_mib": 8500,
+        "order": [
+          "a"
+        ]
+      },
+      "vosr-reverse": {
+        "backend": "vosr",
+        "cache_root": "workflow-reverse",
+        "min_free_mib": 8500,
+        "order": [
+          "b",
+          "a"
+        ]
+      },
+      "vosr-together": {
+        "backend": "vosr",
+        "cache_root": "workflow-together",
+        "min_free_mib": 8500,
+        "order": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    "klein": {
+      "canvases": [
+        [
+          768,
+          1024
+        ],
+        [
+          1152,
+          1536
+        ]
+      ],
+      "loras": [],
+      "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+      "references": [
+        "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+        "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+      ],
+      "sampler": "flowmatch-euler",
+      "seeds": [
+        71
+      ],
+      "steps": 4
+    },
+    "vosr": {
+      "inputs": {
+        "a": "/home/boaz/aigen/assets/characters/jillian/views/style-pixel-tile384.png",
+        "b": "/home/boaz/aigen/assets/characters/jillian/views/sprite-geom-gradriel.png"
+      },
+      "settings": {
+        "align_method": "wavelet",
+        "cfg_scale": 1.5,
+        "infer_steps": 25,
+        "long_side": 1024,
+        "scale": 2,
+        "seed": 42,
+        "sizing": "long-side",
+        "tile_size": 512,
+        "weak_cond_strength_aelq": 0.2
+      }
+    }
+  },
+  "job": "vosr-reverse",
+  "probe": {
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py",
+    "sha256": "4329600405b8dadea3c1c2c0f8cf380c767b51c7ce4c5f1dbfced21367906a31"
+  },
+  "started_utc": "2026-09-06T00:17:40.492437+00:00"
+}

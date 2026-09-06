@@ -1,0 +1,9 @@
+{
+  "new_defaults": {
+    "cli": 1.0,
+    "execution": 1.0,
+    "form": 1.0,
+    "graph": 1.0
+  },
+  "retained_saved_strength": 0.6
+}

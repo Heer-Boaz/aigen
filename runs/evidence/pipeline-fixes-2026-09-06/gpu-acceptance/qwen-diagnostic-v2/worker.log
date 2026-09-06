@@ -1,0 +1,95 @@
+{"kind":"phase","text":"loading Qwen runtime"}
+spas_sage_attn is not installed.
+Skipping import of cpp extensions due to incompatible torch version 2.8.0+cu128 for torchao version 0.14.1             Please see https://github.com/pytorch/ao/issues/2919 for more info
+{"kind":"phase","text":"loading Qwen pipeline"}
+{'do_mm_calib': False, 'cpu_offload': True, 'max_area': False, 'vae_stride': (4, 8, 8), 'patch_size': 2, 'feature_caching': 'NoCaching', 'teacache_thresh': 0.26, 'use_ret_steps': False, 'use_bfloat16': True, 'lora_configs': None, 'use_prompt_enhancer': False, 'parallel': False, 'seq_parallel': False, 'cfg_parallel': False, 'enable_cfg': False, 'use_image_encoder': True, 'task': 'i2i', 'support_tasks': [], 'model_path': '/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511', 'model_cls': 'qwen_image', 'CONDITION_IMAGE_SIZE': 147456, 'USE_IMAGE_ID_IN_PROMPT': True, 'prompt_template_encode': "<|im_start|>system\nDescribe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image. Generate a new image that meets the user's requirements while maintaining consistency with the original input where appropriate.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n", 'prompt_template_encode_start_idx': 64, 'unload_modules': True, 'offload_granularity': 'block', 'vae_cpu_offload': False, 'qwen25vl_cpu_offload': False, 'dit_quantized': True, 'dit_quant_scheme': 'fp8-triton', 'dit_quantized_ckpt': '/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors', 'qwen25vl_quantized': False, 'qwen25vl_quantized_ckpt': False, 'tokenizer_max_length': 512, 'infer_steps': 8, 'target_width': 832, 'target_height': 480, 'sample_guide_scale': 1.0, 'sample_shift': 5.0, 'rope_type': 'torch', 'fps': 16, 'boundary': 0.9, 'boundary_step_index': 2, 'denoising_step_list': [1000, 750, 500, 250], 'audio_fps': 24000, 'double_precision_rope': True, 'attn_type': 'flash_attn2', 'norm_modulate_backend': 'torch', '_wm_cli_snapshot': {}, '_class_name': 'QwenImageTransformer2DModel', '_diffusers_version': '0.36.0.dev0', 'attention_head_dim': 128, 'axes_dims_rope': [16, 56, 56], 'guidance_embeds': False, 'in_channels': 64, 'joint_attention_dim': 3584, 'num_attention_heads': 24, 'num_layers': 60, 'out_channels': 16, 'zero_cond_t': True, 'vae_scale_factor': 8}
+{"kind":"phase","text":"loading image conditioner"}
+{"kind":"phase","text":"encoding reference images"}
+{"kind":"phase","text":"encoding reference latents"}
+There are modules in AutoencoderKLQwenImage that should be kept in float32: []. Casting directly with `to()` can lead to inconsistent results; set `torch_dtype` in `from_pretrained()` instead to keep these modules in float32.
+{"kind":"phase","text":"loading denoiser"}
+{"kind":"phase","text":"placing denoiser blocks on GPU"}
+{"kind":"phase","text":"pinning streamed weights"}
+{"kind":"begin","total":8,"text":"denoising 0/8"}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/aigen/generation/qwen_image_edit_lightx2v_worker.py", line 36, in main
+    response = _run(request, progress_stream)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/qwen_image_edit_lightx2v_worker.py", line 302, in _run
+    latents, generator = runner.run()
+                         ^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/runners/qwen_image/qwen_image_runner.py", line 331, in run
+    self.model.infer(self.inputs)
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/utils/custom_compiler.py", line 47, in wrapper
+    return state["original_func"](self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/model.py", line 142, in infer
+    noise_pred = self._infer_cond_uncond(latents_input, inputs["text_encoder_output"]["prompt_embeds"], infer_condition=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/model.py", line 61, in _infer_cond_uncond
+    hidden_states = self.transformer_infer.infer(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/infer/transformer_infer.py", line 528, in infer
+    return self.infer_func(
+           ^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/qwen_image_edit_lightx2v_worker.py", line 498, in infer_with_resident_blocks
+    encoder_hidden_states, hidden_states = self.infer_block(
+                                           ^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/infer/transformer_infer.py", line 376, in infer_block
+    img_query, img_key, img_value, img_gate1, img_mod2 = self.infer_img_qkv(
+                                                         ^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/infer/transformer_infer.py", line 137, in infer_img_qkv
+    img_query, img_key = self.apply_rope_func(img_query, img_key, img_freqs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/infer/utils.py", line 118, in apply_qwen_rope_with_torch
+    return _apply_qwen_rope_with_torch_impl(xq, xk, cos_sin_cache)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.cache/aigen-lightx2v/LightX2V/lightx2v/models/networks/qwen_image/infer/utils.py", line 76, in _apply_qwen_rope_with_torch_impl
+    return xq_out.type_as(xq), xk_out.type_as(xk)
+                               ^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error: device not ready
+terminate called after throwing an instance of 'c10::AcceleratorError'
+  what():  CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception raised from c10_cuda_check_implementation at /pytorch/c10/cuda/CUDAException.cpp:42 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x79ab3937eeb0 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x111c7 (0x79ab397861c7 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0xc69459 (0x79aadc269459 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: <unknown function> + 0xc643a3 (0x79aadc2643a3 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xc6b2dc (0x79aadc26b2dc in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0x434a5f (0x79ab2bc34a5f in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_python.so)
+frame #6: c10::TensorImpl::~TensorImpl() + 0x9 (0x79ab3935c179 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libc10.so)
+frame #7: <unknown function> + 0x6c9e58 (0x79ab2bec9e58 in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_python.so)
+frame #8: <unknown function> + 0x6ca22d (0x79ab2beca22d in /home/boaz/.cache/aigen-lightx2v/venv/lib/python3.12/site-packages/torch/lib/libtorch_python.so)
+frame #9: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806dd0]
+frame #10: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d40e]
+frame #11: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806f60]
+frame #12: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d40e]
+frame #13: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806f60]
+frame #14: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d40e]
+frame #15: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806f60]
+frame #16: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d40e]
+frame #17: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806dd0]
+frame #18: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d40e]
+frame #19: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x182d4e3]
+frame #20: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1806dd0]
+frame #21: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x186a9aa]
+frame #22: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1869ef9]
+frame #23: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1955976]
+frame #24: Py_FinalizeEx + 0xf0 (0x19545b0 in /home/boaz/.cache/aigen-lightx2v/venv/bin/python)
+frame #25: Py_RunMain + 0x38c (0x197964c in /home/boaz/.cache/aigen-lightx2v/venv/bin/python)
+frame #26: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x1979298]
+frame #27: /home/boaz/.cache/aigen-lightx2v/venv/bin/python() [0x19790ac]
+frame #28: <unknown function> + 0x2a601 (0x79ab3a22a601 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #29: __libc_start_main + 0x88 (0x79ab3a22a718 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #30: _start + 0x29 (0x19c1ea9 in /home/boaz/.cache/aigen-lightx2v/venv/bin/python)
+

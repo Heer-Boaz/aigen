@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 import gc
 from math import gcd, log, sqrt
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from time import perf_counter
 from types import MethodType
 from typing import Any
 
 from PIL import Image
+
+from aigen.image_io import open_image
 
 from aigen.generation.image_generation_requests import (
     ImageGenerationCaseRequest,
@@ -373,6 +374,7 @@ def run_qwen_image_edit_cases(
     loras: Sequence[LoraLoadSpec] = (),
     sampler: str = QWEN_2511_SAMPLER,
     scheduler: str = QWEN_2511_DEFAULT_SCHEDULER,
+    on_raw_output: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     resolved_loras = tuple(loras)
     if resolved_loras:
@@ -454,6 +456,7 @@ def run_qwen_image_edit_cases(
                 sampler=sampler,
                 scheduler=scheduler,
                 progress=progress,
+                on_raw_output=on_raw_output,
             )
         except QwenImageEditLightX2VError as error:
             raise QwenImageEditIdentityError(str(error)) from error
@@ -471,6 +474,7 @@ def run_qwen_image_edit_cases(
             controls=controls,
             selected_cases=selected_cases,
             max_side=max_side,
+            input_max_side=max_side,
             native_canvas_pixels=native_canvas_pixels,
             aspect_ratio=aspect_ratio,
             canvas_size=canvas_size,
@@ -557,6 +561,7 @@ def run_qwen_image_edit_cases(
                     canvas_size=canvas_size,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
+                    postprocess=postprocess,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -574,7 +579,7 @@ def run_qwen_image_edit_cases(
             "memory": cuda_memory_stats(torch, "cuda") | memory,
             "environment": environment
             | {
-                "postprocess": VOSR_POSTPROCESS_NAME,
+                "postprocess": postprocess,
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -623,6 +628,7 @@ def _run_qwen_image_edit_cases_lightx2v(
     sampler: str,
     scheduler: str,
     progress: StatusReporter,
+    on_raw_output: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     preflight = nvidia_smi_preflight_limit(QWEN_IDENTITY_PREFLIGHT_LIMIT_MB)
     memory_sampler = NvidiaSmiMemorySampler(preflight)
@@ -636,50 +642,52 @@ def _run_qwen_image_edit_cases_lightx2v(
             controls=controls,
             selected_cases=selected_cases,
             max_side=max_side,
+            input_max_side=None,
             native_canvas_pixels=native_canvas_pixels,
             aspect_ratio=aspect_ratio,
             canvas_size=canvas_size,
             progress=progress,
         )
-        with TemporaryDirectory(prefix="aigen-qwen-2511-inputs-") as temporary_dir:
-            staged_paths = _stage_lightx2v_input_images(reference_step, Path(temporary_dir))
-            requests = []
-            for case_index, case in enumerate(selected_cases):
-                case_seeds = case.seeds or tuple(
-                    seed + case_index * candidates_per_case + candidate_index
-                    for candidate_index in range(candidates_per_case)
-                )
-                width, height = reference_step.canvas_sizes[case.name]
-                requests.append(
-                    ImageGenerationCaseRequest(
-                        name=case.name,
-                        prompt=case.prompt,
-                        image_paths=tuple(staged_paths[id(image)] for image in _case_input_images(reference_step, case)),
-                        width=width,
-                        height=height,
-                        outputs=tuple(
-                            ImageGenerationOutputRequest(
-                                name=_case_output_name(case.name, candidate_index, len(case_seeds)),
-                                seed=case_seed,
-                                path=raw_dir
-                                / f"{_case_output_name(case.name, candidate_index, len(case_seeds))}.png",
-                            )
-                            for candidate_index, case_seed in enumerate(case_seeds)
-                        ),
-                    )
-                )
-            backend_result = run_lightx2v_qwen_image_edit(
-                profile=profile,
-                cases=tuple(requests),
-                steps=steps,
-                true_cfg_scale=true_cfg_scale,
-                guidance_scale=guidance_scale,
-                max_sequence_length=max_sequence_length,
-                loras=loras,
-                sampler=sampler,
-                scheduler=scheduler,
-                progress=progress,
+        staged_paths = _stage_lightx2v_input_images(reference_step, output_dir / "inputs")
+        requests = []
+        for case_index, case in enumerate(selected_cases):
+            case_seeds = case.seeds or tuple(
+                seed + case_index * candidates_per_case + candidate_index
+                for candidate_index in range(candidates_per_case)
             )
+            width, height = reference_step.canvas_sizes[case.name]
+            requests.append(
+                ImageGenerationCaseRequest(
+                    name=case.name,
+                    prompt=case.prompt,
+                    image_paths=tuple(staged_paths[id(image)] for image in _case_input_images(reference_step, case)),
+                    width=width,
+                    height=height,
+                    outputs=tuple(
+                        ImageGenerationOutputRequest(
+                            name=_case_output_name(case.name, candidate_index, len(case_seeds)),
+                            seed=case_seed,
+                            path=raw_dir
+                            / f"{_case_output_name(case.name, candidate_index, len(case_seeds))}.png",
+                        )
+                        for candidate_index, case_seed in enumerate(case_seeds)
+                    ),
+                )
+            )
+        backend_result = run_lightx2v_qwen_image_edit(
+            profile=profile,
+            cases=tuple(requests),
+            steps=steps,
+            true_cfg_scale=true_cfg_scale,
+            guidance_scale=guidance_scale,
+            max_sequence_length=max_sequence_length,
+            loras=loras,
+            sampler=sampler,
+            scheduler=scheduler,
+            progress=progress,
+            record_dir=output_dir / "worker",
+            on_output=on_raw_output,
+        )
 
         cases_by_name = {case.name: case for case in selected_cases}
         raw_outputs = []
@@ -762,6 +770,7 @@ def _run_qwen_image_edit_cases_lightx2v(
                     canvas_size=canvas_size,
                     native_canvas_pixels=native_canvas_pixels,
                     upscale_long_side=upscale_long_side,
+                    postprocess=postprocess,
                 ),
             },
             "source_images": {name: image_asset_json(path) for name, path in sorted(source_images.items())},
@@ -777,7 +786,7 @@ def _run_qwen_image_edit_cases_lightx2v(
             "memory": memory,
             "environment": backend_result.environment
             | {
-                "postprocess": VOSR_POSTPROCESS_NAME,
+                "postprocess": postprocess,
             },
             "output": {
                 "directory": output_dir.as_posix(),
@@ -797,10 +806,53 @@ def _run_qwen_image_edit_cases_lightx2v(
             memory_sampler.stop()
 
 
+@dataclass(frozen=True)
+class QwenPreparedEditInputs:
+    image_paths: tuple[Path, ...]
+    canvas_size: tuple[int, int]
+    control_paths: dict[str, Path]
+
+
+def prepare_qwen_edit_inputs(
+    *,
+    source_images: Mapping[str, Path],
+    references: Mapping[str, Path],
+    guides: Mapping[str, Path],
+    controls: Mapping[str, QwenControlImage],
+    cases: Sequence[QwenIdentityCase],
+    profile: QwenImageEditLightX2VProfile,
+    max_side: int,
+    aspect_ratio: tuple[int, int] | None,
+    canvas_size: tuple[int, int] | None,
+    directory: Path,
+    progress: StatusReporter,
+) -> dict[str, QwenPreparedEditInputs]:
+    """Materialize native references and fitted controls for a durable edit batch."""
+    _validate_qwen_canvas_size(canvas_size, aspect_ratio=aspect_ratio)
+    _validate_edit_cases(cases)
+    _validate_image_inputs(source_images, references, guides, controls, cases)
+    step = _prepare_qwen_identity_references(
+        source_images=source_images, references=references, guides=guides,
+        controls=controls, selected_cases=cases, max_side=max_side,
+        input_max_side=None, native_canvas_pixels=_native_canvas_pixels(profile),
+        aspect_ratio=aspect_ratio, canvas_size=canvas_size, progress=progress,
+    )
+    paths = _stage_lightx2v_input_images(step, directory)
+    return {
+        case.name: QwenPreparedEditInputs(
+            image_paths=tuple(paths[id(image)] for image in _case_input_images(step, case)),
+            canvas_size=step.canvas_sizes[case.name],
+            control_paths={name: paths[id(step.control_images[(case.name, name)])] for name in case.controls},
+        )
+        for case in cases
+    }
+
+
 def _stage_lightx2v_input_images(
     reference_step: QwenIdentityReferenceStep,
     directory: Path,
 ) -> dict[int, Path]:
+    directory.mkdir(parents=True, exist_ok=True)
     images = (
         tuple(reference_step.source_images.values())
         + tuple(reference_step.reference_images.values())
@@ -1004,6 +1056,7 @@ def _prepare_qwen_identity_references(
     controls: Mapping[str, QwenControlImage],
     selected_cases: Sequence[QwenIdentityCase],
     max_side: int,
+    input_max_side: int | None,
     native_canvas_pixels: int | None,
     aspect_ratio: tuple[int, int] | None,
     canvas_size: tuple[int, int] | None,
@@ -1011,16 +1064,16 @@ def _prepare_qwen_identity_references(
 ) -> QwenIdentityReferenceStep:
     progress.phase("prepare qwen identity references")
     loaded_source_images = {
-        name: _load_reference_image(source_images[name], max_side=max_side)
+        name: _load_reference_image(source_images[name], max_side=input_max_side)
         for name in _used_source_image_names(selected_cases)
     }
     used_reference_names = _used_reference_names(selected_cases)
     reference_images = {
-        name: _load_reference_image(references[name], max_side=max_side)
+        name: _load_reference_image(references[name], max_side=input_max_side)
         for name in used_reference_names
     }
     guide_images = {
-        name: _load_reference_image(guides[name], max_side=max_side)
+        name: _load_reference_image(guides[name], max_side=input_max_side)
         for name in _used_guide_names(selected_cases)
     }
     fitted_controls: dict[tuple[str, tuple[int, int]], Image.Image] = {}
@@ -1264,12 +1317,7 @@ def _passthrough_qwen_identity_outputs(
     output_dir: Path,
     progress: StatusReporter,
 ) -> QwenIdentityPostprocessStep:
-    """Publish the raw denoise output as the candidate, skipping the upscaler.
-
-    Pixel art is finished the moment it leaves the model: the VOSR upscaler resamples the
-    hard block edges and leaves halos around them, so its output is strictly worse than
-    what it was given. It also costs about as much as a third of the denoise.
-    """
+    """Publish the raw denoise output when no postprocessing was requested."""
     start = perf_counter()
     outputs = []
     for raw_output in raw_outputs:
@@ -1790,8 +1838,10 @@ def _load_reference_image(
     *,
     max_side: int | None,
 ) -> Image.Image:
-    with Image.open(path) as image:
+    with open_image(path) as image:
         rgb = image.convert("RGB")
+    if max_side is None:
+        return rgb
     return _fit_image_to_max_side(rgb, max_side=max_side)
 
 
@@ -1881,10 +1931,6 @@ def _fit_image_to_canvas(
         padded.paste(image, ((canvas_size[0] - image.width) // 2, (canvas_size[1] - image.height) // 2))
     if padded.size == target_size:
         return padded
-    if padded.width < target_width:
-        canvas = Image.new("RGB", target_size, fill)
-        canvas.paste(padded, ((target_width - padded.width) // 2, (target_height - padded.height) // 2))
-        return canvas
     return padded.resize(target_size, Image.Resampling.LANCZOS)
 
 
@@ -2027,6 +2073,7 @@ def _output_canvas_json(
     canvas_size: tuple[int, int] | None,
     native_canvas_pixels: int | None,
     upscale_long_side: int,
+    postprocess: str,
 ) -> dict[str, Any]:
     if canvas_size is not None:
         mode = "explicit_size"
@@ -2042,10 +2089,11 @@ def _output_canvas_json(
         "aspect_ratio": list(aspect_ratio) if aspect_ratio is not None else None,
         "target_pixels": target_pixels,
         "alignment": 16,
-        "postprocess": VOSR_POSTPROCESS_NAME,
-        "upscale_long_side": upscale_long_side,
-        "upscale_model": VOSR_MODEL_NAME,
+        "postprocess": postprocess,
     }
+    if postprocess != "none":
+        payload["upscale_long_side"] = upscale_long_side
+        payload["upscale_model"] = VOSR_MODEL_NAME
     if canvas_size is not None:
         payload["target_size"] = list(canvas_size)
     return payload

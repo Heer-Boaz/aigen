@@ -1,0 +1,16 @@
+{
+  "image": {
+    "identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/cache/nodes/2e/2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b/outputs/image/000000-node-adcb928cf30248f4bf0c3675a42dff46.png",
+    "type": "image"
+  },
+  "node_id": "node-adcb928cf30248f4bf0c3675a42dff46",
+  "reference": {
+    "artifact_identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba",
+    "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/runs/workflow-ba2690445ae7438ea67b81bfcd9470cc/attempt-20260906T033538130075Z-025880073559/nodes/node-adcb928cf30248f4bf0c3675a42dff46/result.json",
+    "output_port": "image",
+    "producer_signature": "2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b"
+  },
+  "seed": 72,
+  "title": "Style variants · seed 72"
+}

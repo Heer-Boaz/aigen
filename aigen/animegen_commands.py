@@ -23,6 +23,7 @@ def add_animegen_command(subparsers: Any) -> None:
     )
     command.add_argument("--image", type=Path, required=True, help="Start frame")
     command.add_argument("--last-image", type=Path, help="Optional end frame")
+    command.add_argument("--keyframe-fit", choices=("crop", "pad", "stretch"), default="stretch", help="Fit keyframes to the output canvas; pad uses white")
     command.add_argument("--prompt", required=True, help="Motion instruction")
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--frames", type=int, default=ANIMEGEN_DEFAULT_FRAMES)
@@ -78,6 +79,7 @@ def run_animegen_command(
                 sampling=args.sampling,
                 steps=args.steps,
                 precision=args.precision,
+                keyframe_fit=args.keyframe_fit,
                 seed=seeds[0],
                 progress=progress,
             )
@@ -93,6 +95,7 @@ def run_animegen_command(
                 sampling=args.sampling,
                 steps=args.steps,
                 precision=args.precision,
+                keyframe_fit=args.keyframe_fit,
                 seeds=seeds,
                 progress=progress,
             )

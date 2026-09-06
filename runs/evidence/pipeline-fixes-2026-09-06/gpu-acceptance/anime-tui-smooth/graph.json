@@ -1,0 +1,107 @@
+{
+  "version": 3,
+  "name": "AnimeGen GPU smooth",
+  "nodes": [
+    {
+      "id": "source",
+      "title": "Original reference",
+      "layout": {
+        "x": 2,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/assets/characters/jillian/views/front.png"
+      }
+    },
+    {
+      "id": "video",
+      "title": "AnimeGen idle loop",
+      "layout": {
+        "x": 34,
+        "y": 2
+      },
+      "kind": "animegen-i2v",
+      "config": {
+        "prompt": "The character gently shifts weight and blinks while holding the standing pose. Static camera, white background, consistent character design and rendering style.",
+        "seed_mode": "fixed",
+        "seed": 71,
+        "frames": 33,
+        "fps": 16,
+        "sampling": "lightning-8",
+        "steps": 8,
+        "precision": "fp8"
+      }
+    },
+    {
+      "id": "sheet",
+      "title": "Contact sheet",
+      "layout": {
+        "x": 66,
+        "y": 2
+      },
+      "kind": "video-contact-sheet",
+      "config": {}
+    },
+    {
+      "id": "frames",
+      "title": "Decoded frames",
+      "layout": {
+        "x": 66,
+        "y": 12
+      },
+      "kind": "extract-video-frames",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "video",
+        "port": "start"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire1",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "video",
+        "port": "end"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire2",
+      "source": {
+        "node_id": "video",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "sheet",
+        "port": "video"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire3",
+      "source": {
+        "node_id": "video",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "frames",
+        "port": "video"
+      },
+      "order": 0
+    }
+  ]
+}

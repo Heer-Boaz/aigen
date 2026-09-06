@@ -1,0 +1,18 @@
+{
+  "elapsed_seconds": 15.94118715300283,
+  "error": "ValueError: Version 4 of 'kernels-community/finegrained-fp8' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or pass an explicit `revision=<commit>`.",
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 780,
+    "nvidia_smi_utilization_gpu": 5
+  },
+  "minimum_host_available_mib": 87098.7421875,
+  "nvidia_smi_peak_used_mib": 10123,
+  "process_peak_rss_mib": 10122.140625,
+  "status": "failed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 9052.7392578125,
+  "torch_peak_reserved_mib": 9058.0
+}

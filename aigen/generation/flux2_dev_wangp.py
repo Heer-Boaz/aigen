@@ -76,6 +76,8 @@ def generate_flux2_dev_seed_sweep(
     seeds = tuple(seeds)
     if not seeds:
         raise Flux2DevError("FLUX.2 dev requires at least one seed")
+    if len(set(seeds)) != len(seeds):
+        raise Flux2DevError("FLUX.2 dev seed sweep contains duplicate seeds")
 
     output = output.expanduser().resolve()
     outputs = tuple(

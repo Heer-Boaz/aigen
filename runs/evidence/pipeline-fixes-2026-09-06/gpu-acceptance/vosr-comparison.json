@@ -1,0 +1,71 @@
+{
+  "status": "passed",
+  "sha256": {
+    "a": "5998bd86a48b7a799697f67abd5881d10c4fb0832225052a0677bf59ed1052d3",
+    "b": "6e3d5f68a08a4f7410c383592a5b5098d75b2347b8b6b2cc175cc4e077e77fad"
+  },
+  "partial_cache_events": [
+    {
+      "node_id": "src-a",
+      "node_kind": "image-source",
+      "status": "completed"
+    },
+    {
+      "node_id": "src-b",
+      "node_kind": "image-source",
+      "status": "completed"
+    },
+    {
+      "node_id": "a",
+      "node_kind": "image-postprocess",
+      "status": "reused"
+    },
+    {
+      "node_id": "b",
+      "node_kind": "image-postprocess",
+      "status": "running"
+    },
+    {
+      "node_id": "b",
+      "node_kind": "image-postprocess",
+      "status": "completed"
+    }
+  ],
+  "jobs": {
+    "vosr-alone": {
+      "elapsed_seconds": 46.04682653999771,
+      "torch_peak_allocated_mib": 3946.61767578125,
+      "nvidia_smi_peak_used_mib": 7266,
+      "swap_increase_mib": 0.0,
+      "swap_out_bytes": 0
+    },
+    "vosr-together": {
+      "elapsed_seconds": 57.477904747996945,
+      "torch_peak_allocated_mib": 3958.79931640625,
+      "nvidia_smi_peak_used_mib": 7848,
+      "swap_increase_mib": 0.0,
+      "swap_out_bytes": 0
+    },
+    "vosr-reverse": {
+      "elapsed_seconds": 60.26807199900213,
+      "torch_peak_allocated_mib": 3958.79931640625,
+      "nvidia_smi_peak_used_mib": 7939,
+      "swap_increase_mib": 0.0,
+      "swap_out_bytes": 0
+    },
+    "vosr-cache-prime": {
+      "elapsed_seconds": 42.586446524001076,
+      "torch_peak_allocated_mib": 3958.79931640625,
+      "nvidia_smi_peak_used_mib": 7895,
+      "swap_increase_mib": 0.0,
+      "swap_out_bytes": 0
+    },
+    "vosr-cache-partial": {
+      "elapsed_seconds": 35.44507104199147,
+      "torch_peak_allocated_mib": 3946.61767578125,
+      "nvidia_smi_peak_used_mib": 7593,
+      "swap_increase_mib": 0.0,
+      "swap_out_bytes": 0
+    }
+  }
+}

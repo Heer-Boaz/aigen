@@ -1,0 +1,35 @@
+{
+  "candidates": [
+    {
+      "case_id": "candidate-0",
+      "height": 1024,
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-0.png",
+      "seed": 91,
+      "width": 768
+    },
+    {
+      "case_id": "candidate-1",
+      "height": 1024,
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-1.png",
+      "seed": 92,
+      "width": 768
+    }
+  ],
+  "group_id": "edit",
+  "images": [
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+      "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+    },
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-0.png",
+      "sha256": "e9c2924e18136c24ecc620a1a7aba29d21da813b4386eaaf1502c3b8ea8d1cb9"
+    },
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/klein-v1/workflows/runs/workflow-c032c8ecff9348a5ad1a179631c3975c/attempt-20260906T061425526869Z-9406bcbae724/executions/6df0a70c37414316b45c7b55de2aa934/outputs/character/round-1/raw/candidate-1.png",
+      "sha256": "7fbc90271a5c6002ef77a446284015a2b0a66c625f29a30046cb6e7a54b20989"
+    }
+  ],
+  "prompt": "Select the candidate that best fulfills the requested edit while remaining visually faithful to the character references. Judge the requested changes and their natural visual consequences as intended, including any requested change of style. Pass only if the selected candidate fulfills the request and has no unintended visual deviations. If every candidate has defects, select the closest one and fail it.\nRequested edit: Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.\nRoute: unknown_reference_edit\nImage 1: reference.\nImage 2: candidate.\nImage 3: candidate.\nReturn one JSON object with exactly these keys: passed (boolean for the selected candidate), image_index (the selected candidate's image number: 2, 3), regions (short pointers locating its visible defects, or an empty list when passed). Return region names only, without descriptions or repair instructions.",
+  "revision": "2"
+}

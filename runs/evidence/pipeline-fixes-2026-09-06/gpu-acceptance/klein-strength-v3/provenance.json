@@ -1,0 +1,110 @@
+{
+  "inputs": [
+    {
+      "height": 1448,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "sha256": "796680bdde8179c38f616fe2a085368b75b12b63b54bc0411227486bf53d4f0f",
+      "width": 1086
+    },
+    {
+      "height": 3890,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png",
+      "sha256": "dfa77fe11fcb531eade69a00b93a3ad070aaa1d706a5baed09a40c76da383e17",
+      "width": 3840
+    }
+  ],
+  "model_stat_inventory": [
+    {
+      "name": "FLUX.2 Klein scaled-FP8 transformer",
+      "revision": "f2de54682bcb250146a3f20d630847418ed180425af4339d13ee4eb840ee7a33",
+      "root": "/home/boaz/aigen/aigen/models/flux2/black-forest-labs/FLUX.2-klein-9b-fp8"
+    },
+    {
+      "name": "FLUX.2 Klein VAE and scheduler",
+      "revision": "71c51a0870b637601fc53b966534fb5abc4e6c9b96cc293be3b03aaf0f44fd1a",
+      "root": "/home/boaz/aigen/aigen/models/flux2/black-forest-labs/FLUX.2-klein-9B"
+    },
+    {
+      "name": "Qwen3-8B-FP8 conditioner",
+      "revision": "629eaedd20167e2eb2d9cd17c1130a692738472c5499aab10d22510a4a9a7a72",
+      "root": "/home/boaz/aigen/aigen/models/flux2/Qwen/Qwen3-8B-FP8"
+    }
+  ],
+  "runtime": {
+    "distributions": [
+      {
+        "direct_url": null,
+        "name": "accelerate",
+        "version": "1.14.0"
+      },
+      {
+        "direct_url": null,
+        "name": "comfy-kitchen",
+        "version": "0.2.20"
+      },
+      {
+        "direct_url": {
+          "url": "https://github.com/huggingface/diffusers.git",
+          "vcs_info": {
+            "commit_id": "d4b2bfc04615787846bac271e74a1c033e714e67",
+            "vcs": "git"
+          }
+        },
+        "name": "diffusers",
+        "version": "0.40.0.dev0"
+      },
+      {
+        "direct_url": null,
+        "name": "einops",
+        "version": "0.8.2"
+      },
+      {
+        "direct_url": {
+          "url": "https://github.com/black-forest-labs/flux2.git",
+          "vcs_info": {
+            "commit_id": "50fe5162777813d869182b139e83b10743caef15",
+            "requested_revision": "50fe5162777813d869182b139e83b10743caef15",
+            "vcs": "git"
+          }
+        },
+        "name": "flux",
+        "version": "0.1.0"
+      },
+      {
+        "direct_url": null,
+        "name": "numpy",
+        "version": "2.5.1"
+      },
+      {
+        "direct_url": null,
+        "name": "pillow",
+        "version": "12.3.0"
+      },
+      {
+        "direct_url": null,
+        "name": "safetensors",
+        "version": "0.8.0"
+      },
+      {
+        "direct_url": null,
+        "name": "tokenizers",
+        "version": "0.22.2"
+      },
+      {
+        "direct_url": null,
+        "name": "torch",
+        "version": "2.12.1"
+      },
+      {
+        "direct_url": null,
+        "name": "transformers",
+        "version": "5.14.1"
+      }
+    ],
+    "fingerprint": "9c6f9c90a25cb5f52aa25ca082b17709ee7e4496d63483e5b327fda65387423c",
+    "format": "aigen.python-runtime.v1",
+    "python": "3.12.13"
+  }
+}

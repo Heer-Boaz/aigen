@@ -1,0 +1,70 @@
+{
+  "elapsed_seconds": 60.26807199900213,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 2868,
+    "nvidia_smi_utilization_gpu": 8
+  },
+  "minimum_host_available_mib": 80937.8828125,
+  "nvidia_smi_peak_used_mib": 7939,
+  "process_peak_rss_mib": 11781.9921875,
+  "result": {
+    "comparisons": {
+      "a": {
+        "image": {
+          "height": 1024,
+          "mode": "RGB",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/cache/nodes/c6/c6c9019dd78a9d120133865cd19b1a397ee9fc88c42be42aff6d5616e9bb5f04/outputs/image.png",
+          "sha256": "5998bd86a48b7a799697f67abd5881d10c4fb0832225052a0677bf59ed1052d3",
+          "width": 1024
+        },
+        "node_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/a/result.json",
+        "signature": "c6c9019dd78a9d120133865cd19b1a397ee9fc88c42be42aff6d5616e9bb5f04"
+      },
+      "b": {
+        "image": {
+          "height": 1024,
+          "mode": "RGB",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/cache/nodes/ad/ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb/outputs/image.png",
+          "sha256": "6e3d5f68a08a4f7410c383592a5b5098d75b2347b8b6b2cc175cc4e077e77fad",
+          "width": 769
+        },
+        "node_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/b/result.json",
+        "signature": "ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb"
+      }
+    },
+    "kind": "workflow-run",
+    "nodes": {
+      "a": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/a/result.json",
+      "b": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/b/result.json",
+      "src-a": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/src-a/result.json",
+      "src-b": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/nodes/src-b/result.json"
+    },
+    "outputs": {
+      "a": {
+        "image": {
+          "identity": "68bd373980ceec9523713c04ca3fd2013f1cdd0044fb7350f249d955473f26a8",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/cache/nodes/c6/c6c9019dd78a9d120133865cd19b1a397ee9fc88c42be42aff6d5616e9bb5f04/outputs/image.png",
+          "type": "image"
+        }
+      },
+      "b": {
+        "image": {
+          "identity": "cedebbe89ca4d3dec85adc4303fc3429db717194536071fa4fded2524261b62d",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/cache/nodes/ad/ade190f5d04112c26a48a0fd49167fe82c2f072fca64e2b2a06618c0e2bd62eb/outputs/image.png",
+          "type": "image"
+        }
+      }
+    },
+    "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b/result.json",
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/workflow-reverse/runs/89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65/attempt-20260906T001741455102Z-aa95fe85061b",
+    "status": "completed",
+    "workflow_digest": "89f503be053a72de9f4752ea2728496bd6b20e1561824b80cda21c84119bbf65"
+  },
+  "status": "completed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 3958.79931640625,
+  "torch_peak_reserved_mib": 4382.0
+}

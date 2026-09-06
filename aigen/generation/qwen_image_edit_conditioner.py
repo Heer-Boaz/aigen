@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from diffusers.image_processor import VaeImageProcessor
+from PIL import Image
 from transformers import (
     FineGrainedFP8Config,
     Qwen2Tokenizer,
@@ -15,6 +16,7 @@ from transformers.utils import logging as transformers_logging
 
 from lightx2v.models.input_encoders.hf.qwen25.qwen25_vlforconditionalgeneration import (
     Qwen25_VLForConditionalGeneration_TextEncoder,
+    calculate_dimensions,
 )
 from lightx2v_platform.base.global_var import AI_DEVICE
 
@@ -23,6 +25,21 @@ class QwenImageEditFp8Conditioner(Qwen25_VLForConditionalGeneration_TextEncoder)
     def __init__(self, config: Any, model_path: Path) -> None:
         self.model_path = model_path
         super().__init__(config)
+
+    def preprocess_image(
+        self, image: Image.Image
+    ) -> tuple[Image.Image, torch.Tensor, tuple[int, int], tuple[int, int]]:
+        # Keep the upstream multimodal context size: expanding its image-token
+        # sequence regressed edit following in the controlled resolution test.
+        condition_width, condition_height = calculate_dimensions(
+            self.CONDITION_IMAGE_SIZE, image.width / image.height
+        )
+        condition_image = self.image_processor.resize(image, condition_height, condition_width)
+        # Preserve source resolution in the parallel appearance channel. The VAE
+        # needs only compression/packing alignment, not a fixed 1 MP bucket.
+        vae_image = self.image_processor.preprocess(image).unsqueeze(2)
+        vae_height, vae_width = vae_image.shape[-2:]
+        return condition_image, vae_image, (condition_height, condition_width), (vae_height, vae_width)
 
     def load(self) -> None:
         transformers_logging.disable_progress_bar()

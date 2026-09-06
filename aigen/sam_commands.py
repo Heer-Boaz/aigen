@@ -10,7 +10,9 @@ import numpy as np
 from PIL import Image
 
 from aigen.command_io import command_error_payload, dump_json, write_json
+from aigen.image_io import open_image
 from aigen.keyframe_segmentation import (
+    SEGMENTATION_IMPLEMENTATION_REVISION,
     AnimeForegroundSegmenter,
     AnimeSegmentationConfig,
     KeyframeSegmentationError,
@@ -169,6 +171,7 @@ def segment_image(
     outputs["result"] = result_path.as_posix()
     result = {
         "kind": "sam-segmentation-result",
+        "implementation_revision": SEGMENTATION_IMPLEMENTATION_REVISION,
         "status": "completed",
         "engine": engine,
         "input": input_path.as_posix(),
@@ -222,7 +225,7 @@ def _build_mask(
     if feather < 0 or feather > 128:
         raise ValueError("Mask feather must be between 0 and 128 pixels.")
     _validate_prompt(prompt_mode, box, positive_points)
-    with Image.open(input_path) as source:
+    with open_image(input_path) as source:
         image = source.convert("RGB")
     image_array = np.asarray(image, dtype=np.uint8)
     progress.phase(f"load {engine}")

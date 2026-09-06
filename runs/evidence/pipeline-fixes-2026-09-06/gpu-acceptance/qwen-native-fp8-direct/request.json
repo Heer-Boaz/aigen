@@ -1,0 +1,34 @@
+{
+  "kind": "aigen-qwen-image-edit-lightx2v-job",
+  "profile": {
+    "name": "lightx2v-qwen-edit-2511-fp8-lightning-8step",
+    "base_model": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511",
+    "transformer_model": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511-Lightning/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_8steps_v1.0.safetensors",
+    "conditioner_model": "/home/boaz/aigen/aigen/models/lightx2v/Qwen/Qwen-Image-Edit-2511/text_encoder",
+    "steps": 8,
+    "true_cfg_scale": 1.0,
+    "guidance_scale": 1.0,
+    "max_sequence_length": 512,
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift"
+  },
+  "cases": [
+    {
+      "name": "image",
+      "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+      "image_paths": [
+        "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+        "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+      ],
+      "width": 1152,
+      "height": 1536,
+      "outputs": [
+        {
+          "name": "image-seed71",
+          "seed": 71,
+          "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-native-fp8-direct/image.png"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "elapsed_seconds": 16.059557649001363,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 2985,
+    "nvidia_smi_utilization_gpu": 8
+  },
+  "minimum_host_available_mib": 85813.9921875,
+  "nvidia_smi_peak_used_mib": 8018,
+  "process_peak_rss_mib": 2101.58203125,
+  "result": {
+    "images": [
+      {
+        "height": 1024,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/illustrationjanai-dat2/image-0.png",
+        "sha256": "22066951e4bcce5c5f53674464a01a527c2706c59796b36734959320a3ce96e3",
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "mode": "RGBA",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/illustrationjanai-dat2/image-1.png",
+        "sha256": "cf9c82ff61539ab9f04647063bdffeccb6a41c6ba63a4a56aa8a8d85981ec827",
+        "width": 1024
+      }
+    ],
+    "model": "illustrationjanai-dat2",
+    "outputs": [
+      {
+        "device": "cuda",
+        "elapsed_ms": 2423.461810001754,
+        "natural_size": [
+          1536,
+          1536
+        ],
+        "scale": 4.0,
+        "target_size": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "device": "cuda",
+        "elapsed_ms": 319.46271799097303,
+        "natural_size": [
+          64,
+          64
+        ],
+        "scale": 4.0,
+        "target_size": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "status": "completed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 2553.10205078125,
+  "torch_peak_reserved_mib": 4748.0
+}

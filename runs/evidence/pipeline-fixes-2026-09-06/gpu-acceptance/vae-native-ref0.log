@@ -1,0 +1,5 @@
+Skipping import of cpp extensions due to incompatible torch version 2.8.0+cu128 for torchao version 0.14.1             Please see https://github.com/pytorch/ao/issues/2919 for more info
+{"gpu_preflight": {"nvidia_smi_used_mb": 1193, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 5}}
+{"source": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png", "input_shape": [1, 3, 1, 1440, 1072], "tile": null}
+{"status": "completed", "latent_shape": [1, 16, 1, 180, 134], "finite": true}
+{"elapsed_seconds": 0.7155989129969385, "peak_allocated_mib": 3305.70556640625, "peak_reserved_mib": 3414.0}

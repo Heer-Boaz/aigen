@@ -1,0 +1,10 @@
+{"label": "generation", "gpu_free_mib": 15378}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Reference 2"}
+{"label": "generation", "phase": "completed"}
+{"label": "cache", "gpu_free_mib": 15378}
+{"label": "changed-seed", "gpu_free_mib": 15378}
+{"label": "changed-seed", "phase": "starting"}
+{"label": "changed-seed", "phase": "reused Style variants \u00b7 seed 72"}
+{"label": "changed-seed", "phase": "completed"}
+{"status": "variants-and-selection-completed", "inspect_before_continuing": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png"}

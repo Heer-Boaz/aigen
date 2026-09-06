@@ -1,0 +1,106 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-704bcdc6de4249a084f60bc52ad9b3d1",
+  "name": "SAM selection",
+  "nodes": [
+    {
+      "id": "source",
+      "title": "Source image",
+      "layout": {
+        "x": 4,
+        "y": 4
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png"
+      }
+    },
+    {
+      "id": "segment",
+      "title": "SAM selection",
+      "layout": {
+        "x": 50,
+        "y": 6
+      },
+      "kind": "sam-segment",
+      "config": {
+        "engine": "sam2",
+        "device": "cuda",
+        "prompt_mode": "box",
+        "mask_candidate": null,
+        "box": "238,104,528,914",
+        "positive_points": "",
+        "negative_points": "",
+        "threshold": 28.0,
+        "grow": 0,
+        "feather": 0,
+        "fill_holes": true,
+        "largest_component": true,
+        "invert": true
+      }
+    },
+    {
+      "id": "node-b3dee71e3ab0405da3416d7ecbdd6b51",
+      "title": "Qwen regional edit",
+      "layout": {
+        "x": 96,
+        "y": 3
+      },
+      "kind": "character-refine",
+      "config": {
+        "backend": "qwen-image-edit-2511-lightning",
+        "prompt": "Change the white background to pale blue, keeping the character unchanged.",
+        "seed_mode": "fixed",
+        "seed": 101,
+        "steps": 8,
+        "guidance": 1.0,
+        "guidance_scale": 1.0,
+        "strength": 0.6,
+        "max_side": null,
+        "max_sequence_length": 512,
+        "sampler": "flowmatch-euler",
+        "scheduler": "flowmatch-dynamic-shift",
+        "candidates": 2,
+        "max_iterations": 2
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire-0",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "segment",
+        "port": "source"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-cd5b4a1326e14a6f8e1caf09229fe114",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "node-b3dee71e3ab0405da3416d7ecbdd6b51",
+        "port": "source"
+      },
+      "order": 0
+    },
+    {
+      "id": "connection-8c100d2f8179443bb3953e732ffa6004",
+      "source": {
+        "node_id": "segment",
+        "port": "mask"
+      },
+      "target": {
+        "node_id": "node-b3dee71e3ab0405da3416d7ecbdd6b51",
+        "port": "mask"
+      },
+      "order": 0
+    }
+  ]
+}

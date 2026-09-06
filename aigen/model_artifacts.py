@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 
@@ -19,6 +18,24 @@ class ModelArtifactComponent:
     name: str
     root: Path
     files: tuple[Path, ...]
+
+
+def local_model_files(paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Resolve local checkpoint indices at admission, before loading any weights."""
+    files = dict.fromkeys(paths)
+    for path in paths:
+        if not path.is_file():
+            raise FileNotFoundError(f"model file is missing: {path}")
+        if path.name.endswith(".safetensors.index.json"):
+            shards = set(json.loads(path.read_text())["weight_map"].values())
+            for name in sorted(shards):
+                if Path(name).name != name:
+                    raise ValueError(f"checkpoint index contains a non-local shard filename: {path}: {name}")
+                shard = path.parent / name
+                if not shard.is_file():
+                    raise FileNotFoundError(f"model shard named by {path} is missing: {shard}")
+                files[shard] = None
+    return tuple(files)
 
 
 def build_model_artifact_provenance(
@@ -123,7 +140,6 @@ def validate_model_artifact_provenance(payload: dict[str, object]) -> None:
         raise ValueError("model artifact provenance fingerprint mismatch")
 
 
-@lru_cache(maxsize=None)
 def model_artifact_stat_revision(component: ModelArtifactComponent) -> str:
     root = component.root.expanduser().resolve()
     inventory = []

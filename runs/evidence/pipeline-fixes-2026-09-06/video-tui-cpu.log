@@ -1,0 +1,8 @@
+test_cli_video_history_open_export_and_portable_frame_archive (test_workflow_video_tui.WorkflowVideoUITests.test_cli_video_history_open_export_and_portable_frame_archive) ... Executing <Task pending name='Task-2' coro=<WorkflowVideoUITests.test_cli_video_history_open_export_and_portable_frame_archive() running at /home/boaz/aigen/tests/test_workflow_video_tui.py:39> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> cb=[_run_until_complete_cb() at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:181] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:100> took 0.213 seconds
+Executing <Task pending name='Task-2' coro=<WorkflowVideoUITests.test_cli_video_history_open_export_and_portable_frame_archive() running at /home/boaz/aigen/tests/test_workflow_video_tui.py:39> cb=[_run_until_complete_cb() at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:181] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:100> took 0.529 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 4.429s
+
+OK

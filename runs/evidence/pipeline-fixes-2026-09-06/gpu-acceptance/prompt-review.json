@@ -1,0 +1,41 @@
+{
+  "reviewer": "/root/review_gpu_prompts",
+  "documents_read": [
+    "docs/prompting.md (complete)",
+    "docs/PLAN.md"
+  ],
+  "images_inspected": [
+    "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+    "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png",
+    "/home/boaz/aigen/assets/characters/jillian/views/front.png"
+  ],
+  "image_edit": {
+    "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+    "ordered_references": [
+      "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+    ],
+    "verdict": "approved unchanged",
+    "scope": "Klein, FLUX dev and Qwen 2511 backend acceptance; no sampling or quality guarantee",
+    "reason": "Explicit input roles, concise grounded transformation and preservation; character agnostic; no forbidden pseudo-analysis or negative list."
+  },
+  "uso": {
+    "prompt": "Redraw image 1 with the linework and shading of image 2.",
+    "verdict": "minimal correction by reviewer adopted",
+    "ordered_roles": [
+      "content image",
+      "style image"
+    ],
+    "reason": "Reviewer requested an explicit direct instruction instead of an empty prompt."
+  },
+  "video": {
+    "prompt": "The character gently shifts weight and blinks while holding the standing pose. Static camera, white background, consistent character design and rendering style.",
+    "negative_prompt": "",
+    "verdict": "approved unchanged",
+    "sources": {
+      "sprite": "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "smooth": "/home/boaz/aigen/assets/characters/jillian/views/front.png"
+    },
+    "intent": "33-frame idle loop, same reference for start/end; separate sprite and smooth illustration trials"
+  }
+}

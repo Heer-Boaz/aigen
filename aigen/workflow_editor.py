@@ -16,6 +16,9 @@ from aigen.workflow_edit_buffer import (
     WorkflowPropertyEditError,
 )
 from aigen.workflow_graph import (
+    ImageEditNode,
+    ImageSelectionNode,
+    ImageResultReference,
     NodeKind,
     NodePortRef,
     WorkflowGraph,
@@ -28,6 +31,10 @@ from aigen.workflow_inspector import (
     WorkflowInspector,
 )
 from aigen.workflow_layout import NODE_WIDTH
+from aigen.workflow_run_state import WorkflowRunState
+from aigen.workflow_results_tui import WorkflowResults
+from aigen.tui_dialogs import PromptDialog
+from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
 
 
 class WorkflowEditorBody(Container):
@@ -132,9 +139,10 @@ class WorkflowEditor(ModalScreen[None]):
         pass
 
     class RunRequested(Message):
-        def __init__(self, document: WorkflowGraph) -> None:
+        def __init__(self, document: WorkflowGraph, target_node_ids: tuple[str, ...] | None = None) -> None:
             super().__init__()
             self.document = document
+            self.target_node_ids = target_node_ids
 
     class StopRequested(Message):
         pass
@@ -157,10 +165,14 @@ class WorkflowEditor(ModalScreen[None]):
     def __init__(
         self,
         edit_buffer: WorkflowEditBuffer,
+        run_state: WorkflowRunState,
+        runs_root: Path = DEFAULT_WORKFLOW_RUNS_ROOT,
     ) -> None:
         super().__init__()
         self._edit_buffer = edit_buffer
+        self._run_state = run_state
         self._running = False
+        self._runs_root = runs_root
 
     def compose(self) -> ComposeResult:
         with Container(id="workflow-editor-shell"):
@@ -219,6 +231,7 @@ class WorkflowEditor(ModalScreen[None]):
                     classes="workflow-edit-control",
                     compact=True,
                 ),
+                Button("Seed variants", id="workflow-variants", classes="workflow-edit-control", compact=True),
                 min_column_width=10,
                 stretch_height=False,
                 regular=False,
@@ -254,6 +267,8 @@ class WorkflowEditor(ModalScreen[None]):
                     variant="primary",
                     compact=True,
                 ),
+                Button("Run to here", id="workflow-run-target", classes="workflow-edit-control", compact=True),
+                Button("Results", id="workflow-results", classes="workflow-edit-control", compact=True),
                 Button(
                     "Stop",
                     id="workflow-stop",
@@ -296,11 +311,15 @@ class WorkflowEditor(ModalScreen[None]):
         self._update_history_actions()
         self._set_status("Workflow running" if running else "Ready")
 
-    def set_runtime_statuses(self, statuses: dict[str, str]) -> None:
-        self.query_one(WorkflowCanvas).set_runtime_statuses(statuses)
+    def refresh_runtime_statuses(self) -> None:
+        self.query_one(WorkflowCanvas).set_runtime_statuses(
+            self._run_state.project(self._edit_buffer.document)
+        )
 
-    def set_runtime_status(self, node_id: str, status: str) -> None:
-        self.query_one(WorkflowCanvas).set_runtime_status(node_id, status)
+    def refresh_runtime_status(self, node_id: str) -> None:
+        self.query_one(WorkflowCanvas).set_runtime_status(
+            node_id, self._run_state.status(node_id),
+        )
 
     def set_status(self, message: str) -> None:
         self._set_status(message)
@@ -439,6 +458,8 @@ class WorkflowEditor(ModalScreen[None]):
         editor = event.select
         if not isinstance(editor, PropertySelect) or not editor.is_mounted:
             return
+        if event.value == editor.original_value:
+            return
         if not await self.commit_pending_property():
             editor.value = editor.original_value
             return
@@ -500,6 +521,20 @@ class WorkflowEditor(ModalScreen[None]):
                 self.post_message(self.LoadRequested())
             case "workflow-run":
                 self._run()
+            case "workflow-run-target":
+                node_id = self.query_one(WorkflowCanvas).selected_node_id
+                if node_id is not None:
+                    self.post_message(self.RunRequested(self._edit_buffer.document, (node_id,)))
+                else:
+                    self.notify("Select the result node to run to.")
+            case "workflow-variants":
+                self._variants()
+            case "workflow-results":
+                node_id = self.query_one(WorkflowCanvas).selected_node_id
+                if node_id is not None:
+                    self.app.push_screen(WorkflowResults(self._edit_buffer.document, node_id, self._runs_root), self._image_selected)
+                else:
+                    self.notify("Select a node to inspect its results.")
             case "workflow-stop":
                 self.post_message(self.StopRequested())
             case "workflow-close":
@@ -578,6 +613,38 @@ class WorkflowEditor(ModalScreen[None]):
     def _run(self) -> None:
         self.post_message(self.RunRequested(self._edit_buffer.document))
 
+    def _variants(self) -> None:
+        node_id = self.query_one(WorkflowCanvas).selected_node_id
+        if node_id is None or not isinstance(self._edit_buffer.document.node(node_id), ImageEditNode):
+            self.notify("Select an Image edit node to create seed variants.")
+            return
+        node = self._edit_buffer.document.node(node_id)
+        seeds = ", ".join(str(node.config.seed + offset) for offset in range(3))
+        self.app.push_screen(PromptDialog("Seed variants", "Distinct integer seeds, separated by commas", seeds),
+                             lambda value: self._variants_entered(node_id, value))
+
+    def _variants_entered(self, node_id: str, value: str | None) -> None:
+        if value is None:
+            return
+        try:
+            seeds = tuple(int(part.strip()) for part in value.split(","))
+            collection_id, _ = self._edit_buffer.create_image_variants(node_id, seeds)
+        except ValueError as error:
+            self.notify(str(error), severity="error")
+            return
+        self.query_one(WorkflowCanvas).set_selected_node(collection_id)
+        self.run_worker(self._show_document())
+        self._set_status("Variants created. Save, then Run to here; inspect Results to choose an image.")
+
+    def _image_selected(self, selection: tuple[str, ImageResultReference] | None) -> None:
+        if selection is None:
+            return
+        node_id, reference = selection
+        self._edit_buffer.select_image(node_id, reference)
+        self.query_one(WorkflowCanvas).set_selected_node(node_id)
+        self.run_worker(self._show_document())
+        self.post_message(self.SaveRequested())
+
     async def _update_config_field(
         self,
         node_id: str,
@@ -600,6 +667,7 @@ class WorkflowEditor(ModalScreen[None]):
     async def _show_document(self) -> None:
         canvas = self.query_one(WorkflowCanvas)
         canvas.set_document(self._edit_buffer.document)
+        self.refresh_runtime_statuses()
         await self.query_one(WorkflowInspector).show(
             self._edit_buffer.document,
             canvas.selected_node_id,

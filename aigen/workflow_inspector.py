@@ -24,12 +24,19 @@ from aigen.workflow_graph import (
     AnimeGenI2VNode,
     FramePostprocessNode,
     ImageEditNode,
+    LoraSourceNode,
+    CharacterEditNode,
+    BindMaskNode, SamSegmentNode, CharacterRefineNode,
+    ImageSelectionNode,
     ImagePostprocessNode,
     VosrPostprocessConfig,
     WorkflowGraph,
     WorkflowNode,
     node_definition,
+    Ltx23Node, HunyuanI2VNode, PositionedKeyframeNode, AudioSourceNode, AssembleVideoNode,
 )
+from aigen.generation.ltx23_settings import LTX23_MODEL_TYPES, LTX23_SOLVERS, LTX23_PHASES
+from aigen.generation.hunyuanvideo15 import HUNYUANVIDEO15_STEPS
 
 
 PROPERTY_LABEL_MIN_WIDTH = 8
@@ -319,6 +326,46 @@ class WorkflowInspector(VerticalScroll):
             node_definition(node.kind).label,
             classes="workflow-inspector-kind",
         )
+        if isinstance(node, ImageSelectionNode):
+            selected = node.config.selected
+            yield Static(
+                f"Saved image: {selected.artifact_identity[:16]}\nResults changes this choice; Run continues from the saved image."
+                if selected else "Run the connected collection, then choose an image in Results.",
+                markup=False,
+            )
+        if isinstance(node, LoraSourceNode):
+            yield Static("Import a trained LoRA for a matching image backend. Local training currently supports FLUX.1; Klein and Qwen LoRAs can be imported. Dataset preparation creates image/caption pairs.", markup=False)
+        if isinstance(node, Ltx23Node):
+            yield Static(f"Keyframes: positions 0–{node.config.frames - 1}. Canvas rounds up to multiples of 64px before fitting. No generated audio. Pad uses white.", markup=False)
+        elif isinstance(node, AnimeGenI2VNode):
+            yield Static("Start image and optional end image. Canvas follows the start image's aspect. No generated audio. Pad uses white.", markup=False)
+        elif isinstance(node, HunyuanI2VNode):
+            yield Static("One start image; native 480p aspect buckets; 24 FPS. Frames: 4n+1. No generated audio.", markup=False)
+        elif isinstance(node, PositionedKeyframeNode):
+            yield Static("Frame position starts at 0. Connect this keyframe to LTX.", markup=False)
+        elif isinstance(node, AudioSourceNode):
+            yield Static("Container stream index; leave blank for the first audio stream. Replacement audio starts at video time zero.", markup=False)
+        elif isinstance(node, AssembleVideoNode):
+            yield Static("Retain the recorded frame timeline. Preserve, remove, or replace audio; video determines the end time. Transparent frames use the chosen background.", markup=False)
+        if isinstance(node, CharacterEditNode):
+            yield Static("Raw candidates → visual audit → bounded retry → accepted image. VOSR runs after acceptance; leave upscale long side blank for raw output. Qwen supports depth/edge/keypoint controls. Image numbers follow references, native pose, then structural controls.", markup=False)
+        if isinstance(node, CharacterRefineNode):
+            yield Static("Qwen-2511 regional edit → raw audit → accepted image. Image 1 is the source; references follow in connection order. White mask pixels are editable; original pixels and alpha outside the mask are preserved. Strength selects round(steps × strength) denoising steps. Blank max side keeps native resolution.", markup=False)
+        if isinstance(node, SamSegmentNode):
+            yield Static("Select with SAM, then connect the mask and the same source to a regional edit. Coordinates refer to the displayed source. Positive/negative points use x,y;x,y. White is editable; grey mask edges retain feathering.", markup=False)
+        if isinstance(node, BindMaskNode):
+            yield Static("Bind a supplied mask image to its source. A selection imported from a region plan retains the original source and mask checksums.", markup=False)
+        if isinstance(node, (ImageEditNode, CharacterEditNode)):
+            capabilities = image_edit_backend_settings(node.config.backend)
+            count = f"1–{capabilities.max_references}" if capabilities.max_references is not None else "1+"
+            description = f"References: {count}, in connection order. Canvas alignment: {capabilities.dimension_alignment}px."
+            if capabilities.image_slot_labels:
+                description += "\n" + " → ".join(capabilities.image_slot_labels)
+            if capabilities.lora_architecture:
+                description += f"\nLoRA: {capabilities.lora_architecture}"
+            if capabilities.strength_description:
+                description += "\n" + capabilities.strength_description
+            yield Static(description, markup=False)
         yield PropertyRow(
             node_id=node.id,
             field_name="title",
@@ -446,12 +493,22 @@ def _node_property_options(
     field_name: str,
 ) -> tuple[tuple[str, object], ...] | None:
     values: tuple[str, ...] | None = None
-    if isinstance(node, ImageEditNode):
-        if field_name == "backend":
-            values = IMAGE_EDIT_BACKENDS
+    if isinstance(node, (ImageEditNode, CharacterEditNode)):
+        if isinstance(node, CharacterEditNode) and field_name == "pose_mode" and node.config.backend == "flux2-klein":
+            values = ("native",)
+        elif field_name == "backend":
+            if isinstance(node, CharacterEditNode):
+                from aigen.character_edit import CHARACTER_EDIT_BACKENDS
+                values = CHARACTER_EDIT_BACKENDS
+            else:
+                values = IMAGE_EDIT_BACKENDS
         elif field_name in {"sampler", "scheduler"}:
             settings = image_edit_backend_settings(node.config.backend)
             values = getattr(settings, f"{field_name}s")
+            default = getattr(settings, field_name)
+            return ((f"Backend default ({default})", None),) + tuple(
+                (value, value) for value in values
+            )
     elif isinstance(node, (ImagePostprocessNode, FramePostprocessNode)):
         if field_name == "model":
             values = image_batch_postprocess_model_names()
@@ -460,14 +517,27 @@ def _node_property_options(
             values = ANIMEGEN_SAMPLINGS
         elif field_name == "precision":
             values = ANIMEGEN_PRECISIONS
+    elif isinstance(node, Ltx23Node):
+        if field_name == "model":
+            values = tuple(LTX23_MODEL_TYPES)
+        elif field_name == "solver":
+            values = tuple(sorted(LTX23_SOLVERS))
+        elif field_name == "phases":
+            return tuple((str(value), value) for value in sorted(LTX23_PHASES))
+    elif isinstance(node, HunyuanI2VNode) and field_name == "steps":
+        return tuple((str(value), value) for value in sorted(HUNYUANVIDEO15_STEPS))
     if values is None:
         return None
     return tuple((value, value) for value in values)
 
 
 def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
+    if isinstance(node, (ImageSelectionNode, BindMaskNode)):
+        return ()
     fields = tuple(type(node.config).model_fields)
     hidden: set[str] = set()
+    if isinstance(node, CharacterEditNode) and node.config.backend == "flux2-klein":
+        hidden.update(("structure_control", "max_sequence_length", "guidance_scale"))
     if (
         "seed_mode" in type(node.config).model_fields
         and getattr(node.config, "seed_mode") == "random"

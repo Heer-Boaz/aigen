@@ -1,0 +1,5 @@
+{
+  "hunyuan_generate.py": "https://raw.githubusercontent.com/Tencent-Hunyuan/HunyuanVideo-1.5/60783e704160023913bee78f0b47036d393d4dfa/generate.py",
+  "hidream_nodes.py": "https://raw.githubusercontent.com/Comfy-Org/ComfyUI/26515acd23fa291a8f5ab53c5997258598de0701/comfy_extras/nodes_hidream_o1.py",
+  "boogu_turbo.py": "https://raw.githubusercontent.com/Boogu-Project/Boogu-Image/29c040ff975d19231911753a0dbf976ae98621b1/boogu/pipelines/boogu/pipeline_boogu_turbo.py"
+}

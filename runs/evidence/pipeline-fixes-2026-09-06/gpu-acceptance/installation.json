@@ -1,0 +1,51 @@
+{
+  "flux-dev": {
+    "preflight": "passed"
+  },
+  "ltx": {
+    "preflight": "passed"
+  },
+  "uso": {
+    "preflight": "passed",
+    "model_root": "/home/boaz/aigen/aigen/models/uso"
+  },
+  "hidream": {
+    "preflight": "failed",
+    "error": "HiDream-O1 runtime is incomplete; run scripts/install_comfy_image_runtime.sh and scripts/download_hidream_o1.sh: /home/boaz/.cache/aigen-comfy-image/venv/bin/python, /home/boaz/.cache/aigen-comfy-image/ComfyUI/nodes.py, /home/boaz/.cache/aigen-comfy-image/ComfyUI/comfy_extras/nodes_hidream_o1.py, /home/boaz/aigen/aigen/models/comfy/checkpoints/hidream_o1_image_fp8_scaled.safetensors"
+  },
+  "boogu": {
+    "preflight": "failed",
+    "error": "Boogu-Image runtime is incomplete; run scripts/install_boogu_image_runtime.sh and scripts/download_boogu_image.sh: /home/boaz/.cache/aigen-boogu/venv/bin/python, /home/boaz/.cache/aigen-boogu/Boogu-Image/boogu/pipelines/boogu/pipeline_boogu_turbo.py, /home/boaz/aigen/aigen/models/boogu/Boogu-Image-0.1-Edit-Turbo-fp8/model_index.json, /home/boaz/aigen/aigen/models/boogu/Boogu-Image-0.1-Edit-Turbo-fp8/mllm/model-00001-of-00002.safetensors, /home/boaz/aigen/aigen/models/boogu/Boogu-Image-0.1-Edit-Turbo-fp8/transformer/diffusion_pytorch_model-00001-of-00002.bin, /home/boaz/aigen/aigen/models/boogu/Boogu-Image-0.1-Edit-Turbo-fp8/vae/diffusion_pytorch_model.safetensors"
+  },
+  "hunyuan": {
+    "preflight": "failed",
+    "error": "HunyuanVideo-1.5 runtime is incomplete; run scripts/install_hunyuanvideo15.sh: /home/boaz/.cache/aigen-hunyuanvideo15/venv/bin/torchrun, /home/boaz/.cache/aigen-hunyuanvideo15/HunyuanVideo-1.5/generate.py"
+  },
+  "animegen": {
+    "preflight": "passed"
+  },
+  "animesharp-x4": {
+    "model_file": "/home/boaz/aigen/aigen/models/upscale_models/Kim2091/AnimeSharp/4x-AnimeSharp.safetensors",
+    "exists": true
+  },
+  "illustrationjanai-dat2": {
+    "model_file": "/home/boaz/aigen/aigen/models/upscale_models/halllooo/4x_illustrationJaNaiV1/4x_IllustrationJaNai_V1_DAT2_190k.pth",
+    "exists": true
+  },
+  "illustrationjanai-esrgan": {
+    "model_file": "/home/boaz/aigen/aigen/models/upscale_models/halllooo/4x_illustrationJaNaiV1/4x_IllustrationJaNai_V1_ESRGAN_135k.pth",
+    "exists": true
+  },
+  "sam": {
+    "path": "/home/boaz/aigen/aigen/models/segmentation/ybelkada/segment-anything/checkpoints/sam_vit_b_01ec64.pth",
+    "exists": true
+  },
+  "sam2": {
+    "path": "/home/boaz/aigen/aigen/models/segmentation/facebook/sam2.1-hiera-tiny",
+    "exists": true
+  },
+  "anime-segmentation": {
+    "path": "/home/boaz/aigen/aigen/models/segmentation/skytnt/anime-seg/isnetis.onnx",
+    "exists": true
+  }
+}

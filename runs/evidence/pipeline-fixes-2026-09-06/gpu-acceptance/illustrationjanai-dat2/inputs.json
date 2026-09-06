@@ -1,0 +1,18 @@
+{
+  "images": [
+    {
+      "height": 384,
+      "mode": "RGB",
+      "path": "/home/boaz/aigen/assets/characters/jillian/views/style-pixel-tile384.png",
+      "sha256": "9d772ce906d2e2300c4bb79ce31f5a11f5b5eed39712cb86701b362bb0c5c361",
+      "width": 384
+    },
+    {
+      "height": 16,
+      "mode": "P",
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/palette-alpha.png",
+      "sha256": "9a9ad5c152157079eb124d27bdb152d396ad40abf5c184ad87b49a64526b376f",
+      "width": 16
+    }
+  ]
+}

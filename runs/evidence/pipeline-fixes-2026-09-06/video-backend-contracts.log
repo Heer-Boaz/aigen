@@ -1,0 +1,9 @@
+test_anime_form_fit_and_hunyuan_missing_runtime_preflight (test_workflow_video_contracts.WorkflowVideoContractTests.test_anime_form_fit_and_hunyuan_missing_runtime_preflight) ... ok
+test_fit_policy_changes_only_the_prepared_canvas (test_workflow_video_contracts.WorkflowVideoContractTests.test_fit_policy_changes_only_the_prepared_canvas) ... ok
+test_form_cli_graph_and_adapter_keep_ltx_positions_seeds_and_effective_canvas (test_workflow_video_contracts.WorkflowVideoContractTests.test_form_cli_graph_and_adapter_keep_ltx_positions_seeds_and_effective_canvas) ... ok
+test_missing_checkpoint_shard_is_rejected_before_loading (test_workflow_video_contracts.WorkflowVideoContractTests.test_missing_checkpoint_shard_is_rejected_before_loading) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.434s
+
+OK

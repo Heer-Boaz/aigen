@@ -1,0 +1,292 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-0f5909b28c034824921bc6d720ced6d3",
+  "name": "ltx video flow acceptance",
+  "nodes": [
+    {
+      "id": "selected",
+      "title": "Saved image choice",
+      "layout": {
+        "x": 4,
+        "y": 8
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": {
+          "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/runs/workflow-ba2690445ae7438ea67b81bfcd9470cc/attempt-20260906T033538130075Z-025880073559/nodes/node-adcb928cf30248f4bf0c3675a42dff46/result.json",
+          "producer_signature": "2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b",
+          "output_port": "image",
+          "artifact_identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba"
+        }
+      }
+    },
+    {
+      "id": "generate",
+      "title": "LTX",
+      "layout": {
+        "x": 96,
+        "y": 5
+      },
+      "kind": "ltx23-keyframes",
+      "config": {
+        "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+        "negative_prompt": "Camera movement.",
+        "seed_mode": "fixed",
+        "seed": 83,
+        "resolution": "513x641",
+        "frames": 33,
+        "fps": 24,
+        "steps": 8,
+        "phases": 1,
+        "solver": "distilled_8_steps",
+        "conditioning_strength": 1.0,
+        "model": "nvfp4",
+        "keyframe_fit": "pad"
+      }
+    },
+    {
+      "id": "keyframe0",
+      "title": "Frame 0",
+      "layout": {
+        "x": 50,
+        "y": 2
+      },
+      "kind": "positioned-keyframe",
+      "config": {
+        "frame": 0
+      }
+    },
+    {
+      "id": "keyframe1",
+      "title": "Frame 16",
+      "layout": {
+        "x": 50,
+        "y": 8
+      },
+      "kind": "positioned-keyframe",
+      "config": {
+        "frame": 16
+      }
+    },
+    {
+      "id": "keyframe2",
+      "title": "Frame 32",
+      "layout": {
+        "x": 50,
+        "y": 14
+      },
+      "kind": "positioned-keyframe",
+      "config": {
+        "frame": 32
+      }
+    },
+    {
+      "id": "generate2",
+      "title": "LTX second seed",
+      "layout": {
+        "x": 96,
+        "y": 11
+      },
+      "kind": "ltx23-keyframes",
+      "config": {
+        "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+        "negative_prompt": "Camera movement.",
+        "seed_mode": "fixed",
+        "seed": 84,
+        "resolution": "513x641",
+        "frames": 33,
+        "fps": 24,
+        "steps": 8,
+        "phases": 1,
+        "solver": "distilled_8_steps",
+        "conditioning_strength": 1.0,
+        "model": "nvfp4",
+        "keyframe_fit": "pad"
+      }
+    },
+    {
+      "id": "extract",
+      "title": "Extract frames",
+      "layout": {
+        "x": 142,
+        "y": 5
+      },
+      "kind": "extract-video-frames",
+      "config": {}
+    },
+    {
+      "id": "process",
+      "title": "CPU frame processing",
+      "layout": {
+        "x": 188,
+        "y": 5
+      },
+      "kind": "frame-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 2.0
+      }
+    },
+    {
+      "id": "assemble",
+      "title": "Finished video",
+      "layout": {
+        "x": 234,
+        "y": 5
+      },
+      "kind": "assemble-video",
+      "config": {
+        "audio_policy": "preserve",
+        "background": "black"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "keyframe0",
+        "port": "image"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire1",
+      "source": {
+        "node_id": "keyframe0",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate",
+        "port": "keyframes"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire2",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "keyframe1",
+        "port": "image"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire3",
+      "source": {
+        "node_id": "keyframe1",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate",
+        "port": "keyframes"
+      },
+      "order": 1
+    },
+    {
+      "id": "wire4",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "keyframe2",
+        "port": "image"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire5",
+      "source": {
+        "node_id": "keyframe2",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate",
+        "port": "keyframes"
+      },
+      "order": 2
+    },
+    {
+      "id": "wire6",
+      "source": {
+        "node_id": "keyframe0",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate2",
+        "port": "keyframes"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire7",
+      "source": {
+        "node_id": "keyframe1",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate2",
+        "port": "keyframes"
+      },
+      "order": 1
+    },
+    {
+      "id": "wire8",
+      "source": {
+        "node_id": "keyframe2",
+        "port": "keyframe"
+      },
+      "target": {
+        "node_id": "generate2",
+        "port": "keyframes"
+      },
+      "order": 2
+    },
+    {
+      "id": "wire9",
+      "source": {
+        "node_id": "generate",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "extract",
+        "port": "video"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire10",
+      "source": {
+        "node_id": "extract",
+        "port": "images"
+      },
+      "target": {
+        "node_id": "process",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire11",
+      "source": {
+        "node_id": "process",
+        "port": "images"
+      },
+      "target": {
+        "node_id": "assemble",
+        "port": "images"
+      },
+      "order": 0
+    }
+  ]
+}

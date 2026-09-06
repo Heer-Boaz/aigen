@@ -1,0 +1,10 @@
+test_canvas_and_batch_order_do_not_change_reference_context (test_flux2_klein_conditioning.KleinConditioningTests.test_canvas_and_batch_order_do_not_change_reference_context) ... ok
+test_progress_counts_the_prepared_schedule_for_every_output (test_flux2_klein_conditioning.KleinConditioningTests.test_progress_counts_the_prepared_schedule_for_every_output) ... ok
+test_reference_aspect_and_resolution_follow_upstream (test_flux2_klein_conditioning.KleinConditioningTests.test_reference_aspect_and_resolution_follow_upstream) ... ok
+test_changed_backend_implementation_invalidates_cache_signature (test_generation_contracts.GenerationContractTests.test_changed_backend_implementation_invalidates_cache_signature) ... ok
+test_duplicate_seeds_are_rejected_before_creating_outputs (test_generation_contracts.GenerationContractTests.test_duplicate_seeds_are_rejected_before_creating_outputs) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 3.087s
+
+OK

@@ -198,12 +198,17 @@ Also reject:
   supported but optional for a one-image edit.
 - Do not populate the empty negative prompt for the established 8-step,
   no-CFG route.
-- The pinned LightX2V route resizes the condition image to an area of 147,456
-  pixels (roughly 384×384 for a square input) and creates a separate VAE image.
-  Its multimodal conditioning can guess a plausible interpretation, but it
-  cannot recover or verify ground truth absent from an ambiguous 128×128
-  sprite. A compact, grounded prompt may disambiguate those facts; the wrapper
-  template cannot establish missing ground truth.
+- The local Qwen-2511 conditioner retains source resolution in the VAE channel,
+  aligned to 16 pixels for latent packing, instead of a fixed 1024²-pixel image.
+  VAE encoding and decoding use overlapping 2048-pixel tiles with a 1536-pixel
+  stride above that dimension limit, retaining the aligned source resolution.
+  The parallel Qwen2.5-VL encoder keeps LightX2V's 384²-pixel semantic input:
+  expanding that input regressed edit following in the controlled comparison.
+  This internal encoder produces embeddings from image tokens and the edit
+  instruction; it does not generate an intermediate text description.
+  More VAE detail does not establish style consistency or recover missing
+  ground truth. A compact, grounded prompt may disambiguate visible facts;
+  the wrapper template cannot establish missing ground truth.
 
 ## Reverse-source prompts for the pix2pix corpus
 

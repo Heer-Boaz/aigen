@@ -1,0 +1,8 @@
+{"label": "generation", "gpu_free_mib": 15376}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Saved image choice"}
+{"label": "generation", "phase": "completed"}
+{"label": "assembly", "gpu_free_mib": 15379}
+{"label": "assembly", "phase": "starting"}
+{"label": "assembly", "phase": "completed Extract frames"}
+{"status": "completed", "backend": "anime", "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v1/export.mp4"}

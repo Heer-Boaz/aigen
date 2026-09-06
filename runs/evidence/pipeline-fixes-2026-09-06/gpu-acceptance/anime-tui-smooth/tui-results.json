@@ -1,0 +1,22 @@
+{
+  "cache": {
+    "returncode": 0,
+    "statuses": {
+      "frames": "reused",
+      "sheet": "reused",
+      "source": "completed",
+      "video": "reused"
+    },
+    "stdout_closed": true
+  },
+  "generation": {
+    "returncode": 0,
+    "statuses": {
+      "frames": "completed",
+      "sheet": "completed",
+      "source": "completed",
+      "video": "completed"
+    },
+    "stdout_closed": true
+  }
+}

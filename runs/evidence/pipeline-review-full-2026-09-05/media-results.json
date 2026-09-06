@@ -1,0 +1,32 @@
+{
+  "sam_orientation": {
+    "model_input_hw": [
+      32,
+      64
+    ],
+    "points": [
+      [
+        16,
+        40
+      ]
+    ],
+    "canvas_hw": [
+      64,
+      32
+    ]
+  },
+  "illustration_upscale_alpha": {
+    "input_mode": "RGBA",
+    "tensor_channels": 3,
+    "output_mode": "RGB"
+  },
+  "vosr_rgba_alpha": "preserved by preprocessing; palette tRNS differs, see backend-results.json",
+  "hunyuan_requested_to_latent_frames": {
+    "49": 13,
+    "50": 13,
+    "51": 13,
+    "52": 13,
+    "53": 14
+  },
+  "scope": "Real image preprocessing and pinned Hunyuan shape calculation. SAM neural segmentation doubled; no model execution or actual Hunyuan video-length reproduction."
+}

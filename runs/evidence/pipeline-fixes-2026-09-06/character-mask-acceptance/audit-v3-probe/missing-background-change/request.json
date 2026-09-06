@@ -1,0 +1,39 @@
+{
+  "candidates": [
+    {
+      "case_id": "candidate-0",
+      "height": 1024,
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+      "seed": 101,
+      "width": 768
+    },
+    {
+      "case_id": "candidate-1",
+      "height": 1024,
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-1.png",
+      "seed": 102,
+      "width": 768
+    }
+  ],
+  "group_id": "missing-background-change",
+  "images": [
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+      "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+    },
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/mask/000000-selected-sam2-mask.png",
+      "sha256": "4f6ff29676084fc0df0406ffa297c74e8f85f7a8e8b3e88fecf924e3e44c74f5"
+    },
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+      "sha256": "7a60361a2fce81a2d25211907d34a7b2ae11fa7f76c8c4d7885d0505d970d48a"
+    },
+    {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-1.png",
+      "sha256": "0f0b362f77857af7e396b4307133904bcb70126bc6f01b51c23c063be1315805"
+    }
+  ],
+  "prompt": "Select the candidate that best fulfills the requested edit while remaining visually faithful to the character references. Judge the requested changes and their natural visual consequences as intended, including any requested change of style. Pass only if the requested visual change is visibly complete and there are no unintended visual deviations. A missing or incomplete requested change is a failure, even when the references are preserved. If every candidate has defects, select the closest one and fail it.\nRequested edit: Change the white background to pale blue, keeping the character unchanged.\nRoute: local_repair_or_inpaint\nImage 1: reference.\nImage 2: repaint mask: white is editable; black is preserved.\nImage 3: candidate.\nImage 4: candidate.\nReturn one JSON object with exactly these keys: passed (boolean for the selected candidate), image_index (the selected candidate's image number: 3, 4), regions (short pointers locating its visible defects, or an empty list when passed). Return region names only, without descriptions or repair instructions.",
+  "revision": "3"
+}

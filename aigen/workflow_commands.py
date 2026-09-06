@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aigen.command_io import command_error_payload, dump_json
+from aigen.manifest_io import ManifestIOError
+from aigen.workflow_cache import WorkflowCacheError
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
 from aigen.workflow_compilation import (
@@ -23,7 +25,7 @@ from aigen.workflow_execution import (
     execute_workflow,
     format_workflow_event,
 )
-from aigen.workflow_templates import keyframed_video_workflow_template
+from aigen.workflow_templates import character_workflow_template, image_style_workflow_template, keyframed_video_workflow_template
 
 
 DEFAULT_WORKFLOW_RUNS_ROOT = PROJECT_ROOT / "runs" / "workflows"
@@ -41,21 +43,24 @@ def add_workflow_commands(subparsers: Any) -> None:
 
     new = operations.add_parser(
         "new",
-        help="Write a new keyframed-video workflow document",
+        help="Write a new image, character or keyframed-video workflow document",
     )
     new.add_argument("--output", type=Path, required=True)
+    new.add_argument("--template", choices=("image", "character", "video"), default="image")
 
     validate = operations.add_parser(
         "validate",
         help="Validate a workflow document for execution",
     )
     validate.add_argument("--input", type=Path, required=True)
+    validate.add_argument("--target", action="append", dest="targets", help="Execute only this node and its dependencies; repeat for multiple targets")
 
     run = operations.add_parser(
         "run",
         help="Execute a workflow with exact-node resume",
     )
     run.add_argument("--input", type=Path, required=True)
+    run.add_argument("--target", action="append", dest="targets", help="Execute only this node and its dependencies; repeat for multiple targets")
     run.add_argument(
         "--runs-root",
         type=Path,
@@ -77,7 +82,8 @@ def run_workflow_command(
                 raise WorkflowExecutionError(
                     f"workflow document already exists: {output}"
                 )
-            graph = keyframed_video_workflow_template()
+            graph = {"image": image_style_workflow_template, "character": character_workflow_template,
+                     "video": keyframed_video_workflow_template}[args.template]()
             save_workflow_document(graph, output)
             payload = {
                 "status": "completed",
@@ -86,7 +92,7 @@ def run_workflow_command(
             }
         elif args.workflow_operation == "validate":
             path = args.input.expanduser().resolve()
-            workflow = compile_workflow(load_workflow_document(path))
+            workflow = compile_workflow(load_workflow_document(path), target_node_ids=args.targets)
             payload = {
                 "status": "completed",
                 "kind": "workflow-validation",
@@ -96,7 +102,8 @@ def run_workflow_command(
             }
         elif args.workflow_operation == "run":
             workflow = compile_workflow_run(
-                load_workflow_document(args.input.expanduser().resolve())
+                load_workflow_document(args.input.expanduser().resolve()),
+                target_node_ids=args.targets,
             )
             forward_progress = os.environ.get("AIGEN_PROGRESS") == "json"
 
@@ -154,7 +161,7 @@ def run_workflow_command(
     except WorkflowInterrupted as error:
         dump_json(stderr, command_error_payload(error), pretty=True)
         return 130
-    except (OSError, ValueError, WorkflowExecutionError) as error:
+    except (OSError, ValueError, ManifestIOError, WorkflowCacheError, WorkflowExecutionError) as error:
         dump_json(stderr, command_error_payload(error), pretty=True)
         return 1
 

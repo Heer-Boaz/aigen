@@ -378,6 +378,29 @@ route. Its stages also run sequentially:
    cheaper than a full-frame pass (bounded iterations).
 4. (Optional) load upscaler/refiner → finish.
 
+VAE reference resolution is independent of the output canvas. The local
+Qwen-2511 conditioner keeps source resolution with latent-packing alignment,
+overriding LightX2V's fixed 1024²-pixel VAE preprocessing. The internal Qwen2.5-VL
+encoder retains its upstream 384²-pixel semantic input; expanding that input
+regressed edit following in the controlled comparison. This internal encoder
+produces multimodal embeddings, not a generated character description. Larger
+VAE references increase the denoising workload; the sequential model lifecycle
+and block offload remain responsible for memory use.
+
+The Qwen VAE uses Diffusers' overlapping tiles when either image dimension
+exceeds 2048 pixels (2048-pixel tiles, 1536-pixel stride). This applies to
+encoding and decoding without reducing the reference or output resolution.
+Images within that limit retain the untiled path.
+
+The pinned LightX2V runtime applies `scripts/patches/lightx2v-fp8-direct-output.patch`:
+the existing Triton quantizer writes directly to FP8 instead of first allocating
+a full FP32 output tensor. Scale calculation and clamping are unchanged.
+Additional resident transformer blocks are admitted before allocation, using
+the largest combined output/reference/text sequence and accounting for the
+pre/post weights loaded later. The native double stream buffers already count
+against free VRAM; insufficient extra residency budget leaves native streaming
+in place.
+
 Weights stream from
 pinned system RAM. Every timing run records seconds/step, peak VRAM, WSL RAM,
 and swap usage — the moment swap grows, the measurement is invalid as a

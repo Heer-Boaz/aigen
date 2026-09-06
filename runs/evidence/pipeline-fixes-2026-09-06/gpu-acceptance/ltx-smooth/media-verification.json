@@ -1,0 +1,21 @@
+{
+  "video": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/ltx-smooth/video.mp4",
+  "ffprobe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "index": 0,
+        "codec_type": "video",
+        "width": 768,
+        "height": 1024,
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "time_base": "1/12288",
+        "duration": "1.375000",
+        "nb_frames": "33",
+        "nb_read_frames": "33"
+      }
+    ]
+  }
+}

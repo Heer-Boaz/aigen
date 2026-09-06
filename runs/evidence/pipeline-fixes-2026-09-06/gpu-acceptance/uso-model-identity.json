@@ -1,0 +1,61 @@
+{
+  "model_paths": {
+    "FLUX_DEV_FP8": "/home/boaz/aigen/aigen/models/uso/black-forest-labs/FLUX.1-dev/flux1-dev.safetensors",
+    "AE": "/home/boaz/aigen/aigen/models/uso/black-forest-labs/FLUX.1-dev/ae.safetensors",
+    "T5": "/home/boaz/aigen/aigen/models/uso/xlabs-ai/xflux_text_encoders",
+    "CLIP": "/home/boaz/aigen/aigen/models/uso/openai/clip-vit-large-patch14",
+    "LORA": "/home/boaz/aigen/aigen/models/uso/bytedance-research/USO/uso_flux_v1.0/dit_lora.safetensors",
+    "PROJECTION_MODEL": "/home/boaz/aigen/aigen/models/uso/bytedance-research/USO/uso_flux_v1.0/projector.safetensors",
+    "SIGLIP_PATH": "/home/boaz/aigen/aigen/models/uso/google/siglip-so400m-patch14-384"
+  },
+  "workflow_provenance": {
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "3"
+    },
+    "backend": {
+      "name": "image-edit-api/uso",
+      "revision": "2/2"
+    },
+    "models": [
+      {
+        "name": "USO AE",
+        "revision": "79246aeaa2d50260f808369362f714d447eb99a532301657e7f821332b769457"
+      },
+      {
+        "name": "USO CLIP",
+        "revision": "c7d0c3b6581af9439b81f292fe82ce313429924c8e2fd1f6ca089dd34a8bd57c"
+      },
+      {
+        "name": "USO FLUX_DEV_FP8",
+        "revision": "3f9fecfc1a6188b820ba47b989436bea56c102c3202ad8c7173725e76b33dcd5"
+      },
+      {
+        "name": "USO LORA",
+        "revision": "ffd636223b4422ea6ce513952eea861e3b714c59d0865a6d471b40efd0d76502"
+      },
+      {
+        "name": "USO PROJECTION_MODEL",
+        "revision": "7de63146fbbe60c8de21f074ed8768f261d26e7e143acb76b5268bed2ea075c7"
+      },
+      {
+        "name": "USO SIGLIP_PATH",
+        "revision": "5cfd140f7f236dd0319a5f706ec9b3b3e30d1e31bfc0ffee59a5cc18e4e465a3"
+      },
+      {
+        "name": "USO T5",
+        "revision": "cbdc53149126854877a1a74fe50aaa95cee2615b742f5467ffc6ee6a086ab1dd"
+      },
+      {
+        "name": "USO model",
+        "revision": "flux-dev-fp8"
+      },
+      {
+        "name": "USO source",
+        "revision": "6587514aa3adf8e8f46e5f7e804239651d30b32d"
+      }
+    ]
+  },
+  "metadata_inventory_elapsed_ms": 31.146520996117033,
+  "note": "Filesystem metadata inventory only; no neural weights loaded or hashed."
+}

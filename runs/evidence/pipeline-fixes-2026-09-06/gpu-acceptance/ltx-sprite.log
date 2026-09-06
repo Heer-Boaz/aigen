@@ -1,0 +1,22 @@
+{"gpu_preflight": {"nvidia_smi_used_mb": 1049, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 3}, "free_mib": 15254}
+{"phase": "starting", "completed": 0, "total": 0, "elapsed_seconds": 3.6326004192233086e-05, "remaining_seconds": null, "final": false, "cpu_percent": 0.0, "gpu_percent": 4, "vram_used_mb": 1049, "vram_total_mb": 16303, "process_rss_mib": 515.41796875, "host_available_mib": 88001.03125, "swap_used_mib": 562.93359375, "swap_in_bytes": 216363008, "swap_out_bytes": 1710018560}
+{"phase": "failed", "completed": 0, "total": 0, "elapsed_seconds": 0.2697390200046357, "remaining_seconds": null, "final": true, "cpu_percent": 29.097605893186007, "gpu_percent": 3, "vram_used_mb": 1049, "vram_total_mb": 16303, "process_rss_mib": 545.84375, "host_available_mib": 87970.546875, "swap_used_mib": 562.93359375, "swap_in_bytes": 216363008, "swap_out_bytes": 1710018560}
+{"status": "failed", "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/ltx-sprite/result.json"}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 186, in <module>
+    main()
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 164, in main
+    output["result"] = runner(config, job, directory, progress)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/application_probes.py", line 50, in run_ltx
+    result = generate_ltx23_keyframes(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/ltx23_keyframes.py", line 116, in generate_ltx23_keyframes
+    return generate_ltx23_keyframes_seed_sweep(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/ltx23_keyframes.py", line 156, in generate_ltx23_keyframes_seed_sweep
+    normalized_keyframes = _validate_request(
+                           ^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/ltx23_keyframes.py", line 302, in _validate_request
+    raise Ltx23KeyframesError("video negative prompt must not be empty")
+aigen.generation.ltx23_keyframes.Ltx23KeyframesError: video negative prompt must not be empty

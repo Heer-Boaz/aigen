@@ -1,0 +1,65 @@
+{
+  "elapsed_seconds": 78.19517594100034,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 2800,
+    "nvidia_smi_utilization_gpu": 9
+  },
+  "minimum_host_available_mib": 76862.2421875,
+  "nvidia_smi_peak_used_mib": 15973,
+  "process_peak_rss_mib": 11571.30859375,
+  "result": {
+    "conditioning_ms": 9884.509750991128,
+    "generation_ms": 62480.01156101236,
+    "images": [
+      {
+        "height": 1024,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-edit/768x1024-seed71.png",
+        "sha256": "9f95d484d7f38902fc9baf203427b3f726e9476a028dd57ed469661b79c8f91a",
+        "width": 768
+      },
+      {
+        "height": 1536,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-edit/1152x1536-seed71.png",
+        "sha256": "0a16ee39ecf971be92fca995d8f56c5bed5918f0bd8e52155a31fe95e407907a",
+        "width": 1152
+      }
+    ],
+    "implementation_revision": "2",
+    "model_load_ms": 1492.4372700043023,
+    "outputs": [
+      {
+        "case": "768x1024",
+        "decode_ms": 393.53400499385316,
+        "denoise_ms": 11552.426281996304,
+        "height": 1024,
+        "name": "768x1024-seed71",
+        "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-edit/768x1024-seed71.png",
+        "reference_count": 2,
+        "seed": 71,
+        "width": 768
+      },
+      {
+        "case": "1152x1536",
+        "decode_ms": 1016.3727929902961,
+        "denoise_ms": 37767.24944599846,
+        "height": 1536,
+        "name": "1152x1536-seed71",
+        "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-edit/1152x1536-seed71.png",
+        "reference_count": 2,
+        "seed": 71,
+        "width": 1152
+      }
+    ],
+    "peak_vram_mb": 11989,
+    "sampler": "flowmatch-euler"
+  },
+  "status": "completed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 11988.59033203125,
+  "torch_peak_reserved_mib": 14818.0
+}

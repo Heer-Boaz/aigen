@@ -23,6 +23,7 @@ DEFAULT_TRAINER_SCRIPT = PROJECT_ROOT / "tools" / "diffusers" / "train_dreamboot
 DEFAULT_BASE_MODEL = PROJECT_ROOT / "aigen" / "models" / "diffusers" / "black-forest-labs" / "FLUX.1-dev-bnb-4bit"
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "runs" / "lora"
 LOCAL_PROFILE_NAME = "flux-lora-local-16gb"
+LORA_TRAINING_ARCHITECTURE = "flux1"
 TRAIN_CAPTION_COLUMN = "prompt"
 REQUIRED_FLUX_MODEL_ENTRIES = (
     "model_index.json",
@@ -65,6 +66,7 @@ def lora_training_preflight(dataset_dir: Path) -> dict[str, Any]:
     return {
         "status": plan["status"],
         "profile": plan["profile"],
+        "architecture": LORA_TRAINING_ARCHITECTURE,
         "dataset": plan["dataset"],
         "local_gpu": plan["local_gpu"],
         "missing": plan["missing"],
@@ -110,6 +112,7 @@ def build_lora_train_plan(
     return {
         "status": "ready_to_launch" if not missing else "missing_local_inputs",
         "profile": LOCAL_PROFILE_NAME,
+        "architecture": LORA_TRAINING_ARCHITECTURE,
         "trainer_source": {
             "kind": "official_diffusers_example",
             "url": TRAINER_SOURCE_URL,
@@ -317,6 +320,10 @@ def _base_model_kind(base_model: Path) -> str:
     if not config_path.exists():
         return "local_flux_transformer"
     config = read_json(config_path, label="FLUX transformer config")
+    if config.get("_class_name") != "FluxTransformer2DModel":
+        raise LoraTrainingError(
+            f"The local trainer supports FLUX.1 LoRA training; {config_path} declares {config.get('_class_name')!r}"
+        )
     quantization = config.get("quantization_config")
     if isinstance(quantization, dict) and quantization.get("load_in_4bit"):
         return "local_4bit_flux_transformer"

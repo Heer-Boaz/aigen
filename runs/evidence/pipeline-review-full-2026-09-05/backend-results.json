@@ -1,0 +1,51 @@
+{
+  "scope": "CPU dataflow only. Real pinned VOSR noise generation with neural doubles; real workflow/cache/batching; FLUX dev worker doubled. No neural quality or VRAM claim.",
+  "vosr": {
+    "together": {
+      "a": {
+        "sha256": "272e86994c2a5ac63b745689643a5f3b1242e9e6c6a23c3c5f033da4cd0cd822",
+        "signature": "29ef47a9a84a0cd1669c5fb17adaa7b3f669025b54ef923191c4d1fcf23724ea",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/together/cache/nodes/29/29ef47a9a84a0cd1669c5fb17adaa7b3f669025b54ef923191c4d1fcf23724ea/outputs/image.png"
+      },
+      "b": {
+        "sha256": "083e96f4963a99befc38415f602af421286c41a271cfe4bcd34d383b72f8f909",
+        "signature": "6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/together/cache/nodes/6d/6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6/outputs/image.png"
+      }
+    },
+    "alone": {
+      "b": {
+        "sha256": "272e86994c2a5ac63b745689643a5f3b1242e9e6c6a23c3c5f033da4cd0cd822",
+        "signature": "6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/alone/cache/nodes/6d/6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6/outputs/image/image.png"
+      }
+    },
+    "one_cached": {
+      "a": {
+        "sha256": "272e86994c2a5ac63b745689643a5f3b1242e9e6c6a23c3c5f033da4cd0cd822",
+        "signature": "29ef47a9a84a0cd1669c5fb17adaa7b3f669025b54ef923191c4d1fcf23724ea",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/partial-cache/cache/nodes/29/29ef47a9a84a0cd1669c5fb17adaa7b3f669025b54ef923191c4d1fcf23724ea/outputs/image/image.png"
+      },
+      "b": {
+        "sha256": "272e86994c2a5ac63b745689643a5f3b1242e9e6c6a23c3c5f033da4cd0cd822",
+        "signature": "6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/partial-cache/cache/nodes/6d/6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6/outputs/image/image.png"
+      }
+    },
+    "upstream_sha256": "ac105989f1c3e1c7c055617b3542ae0eb33fc84839547a745c266c1b52fd1bb3"
+  },
+  "flux_duplicate_seeds": {
+    "request_count": 2,
+    "returned_count": 2,
+    "unique_output_count": 1,
+    "requested_paths": [
+      "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/flux-duplicate/image-seed7.png",
+      "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/backend-data-0c5e8c75/flux-duplicate/image-seed7.png"
+    ]
+  },
+  "palette_alpha": {
+    "input_mode": "P",
+    "input_transparency": 0,
+    "prepared_alpha": null
+  }
+}

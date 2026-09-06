@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from graphlib import TopologicalSorter
 from hashlib import sha256
 from pathlib import Path
-from typing import Literal, TypeVar, cast
+from typing import Literal, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict
+from PIL import Image
 
-from aigen.generation.animegen_i2v import generate_animegen_i2v
 from aigen.generation.image_batch_postprocess import (
     ImageBatchPostprocessResult,
     postprocess_image_batch,
@@ -30,13 +29,10 @@ from aigen.generation.image_edit_batch import (
     ImageEditBatchCase,
     ImageEditBatchLora,
     ImageEditBatchRequest,
+    ImageEditBatchOutput,
     run_image_edit_batch,
 )
-from aigen.generation.video_postprocess import (
-    create_video_contact_sheet,
-    extract_video_frames,
-)
-from aigen.manifest_io import atomic_write_json, sha256_file
+from aigen.manifest_io import atomic_write_json, read_json, sha256_file
 from aigen.progress import (
     DEFAULT_PROGRESS_INTERVAL_SECONDS,
     SILENT_STATUS,
@@ -45,9 +41,11 @@ from aigen.progress import (
 )
 from aigen.system_telemetry import SystemTelemetrySampler
 from aigen.workflow_compilation import (
-    CompiledAnimeGenConfig,
     CompiledImageEditConfig,
+    CompiledCharacterEditConfig,
+    CompiledCharacterRefineConfig,
     CompiledImageSourceConfig,
+    CompiledImageSelectionConfig,
     CompiledIllustrationUpscaleConfig,
     CompiledLoraSourceConfig,
     CompiledNode,
@@ -59,42 +57,57 @@ from aigen.workflow_compilation import (
     CompiledWorkflow,
     CompiledWuPixelizationConfig,
     execution_config_payload,
+    CompiledVideoSourceConfig, CompiledAudioSourceConfig,
 )
 from aigen.workflow_artifacts import (
     ImageArtifact,
+    ImageCollectionArtifact,
     ImageSequenceArtifact,
     LoraArtifact,
     ReferencePackArtifact,
     VideoArtifact,
     WorkflowArtifact,
+    AudioArtifact, KeyframeArtifact, one_artifact, with_sequence_timing,
 )
 from aigen.workflow_document_io import save_workflow_document
 from aigen.workflow_graph import (
-    AnimeGenI2VNode,
     ArtifactType,
     ExtractVideoFramesNode,
     FramePostprocessNode,
     ImageEditNode,
+    CharacterEditNode,
+    BindMaskNode, SamSegmentNode, CharacterRefineNode,
+    ImageCollectionNode,
+    ImageSelectionNode,
+    ImageResultReference,
     ImagePostprocessNode,
     ImageSourceNode,
     LoraSourceNode,
     NodeKind,
     ReferencePackNode,
-    VideoContactSheetNode,
     WorkflowGraph,
     WorkflowNode,
     WorkflowConnection,
     node_definition,
+    VideoSourceNode, AudioSourceNode, PositionedKeyframeNode,
 )
 from aigen.workflow_cache import (
     GeneratedNodeOutput,
     NodeCacheHit,
     NodeExecutionProvenance,
+    NodeExecutionDetails,
+    NodeCacheWrite,
     NodeInputIdentity,
     WorkflowNodeCache,
     build_node_signature,
 )
 from aigen.workflow_provenance import workflow_node_provenance
+from aigen.workflow_character_execution import execute_character_node
+from aigen.workflow_results import NodeResultManifest, load_node_result
+from aigen.workflow_video_execution import (
+    VIDEO_EXECUTION_NODES, VIDEO_SEED_SWEEP_NODES, execute_video_node, execute_video_seed_sweep,
+)
+from aigen.media_timing import load_audio_track, video_audio_track
 
 
 WORKFLOW_EVENT_PREFIX = "AIGEN_WORKFLOW "
@@ -107,18 +120,6 @@ class WorkflowExecutionError(RuntimeError):
 
 class WorkflowInterrupted(WorkflowExecutionError):
     pass
-
-
-class RuntimeModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class NodeResultManifest(RuntimeModel):
-    version: Literal[WORKFLOW_RUN_VERSION] = WORKFLOW_RUN_VERSION
-    node_id: str
-    node_kind: NodeKind
-    signature: str
-    outputs: dict[str, WorkflowArtifact]
 
 
 @dataclass(frozen=True)
@@ -183,6 +184,7 @@ class _PendingNodeExecution:
 @dataclass(frozen=True)
 class _NodeOutcome:
     outputs: Mapping[str, WorkflowArtifact]
+    cache_hit: NodeCacheHit | None = None
 
 
 def execute_workflow(
@@ -197,11 +199,22 @@ def execute_workflow(
     execution_order = workflow.execution_order
     workflow_digest = workflow.digest
     workflow_root = runs_root.expanduser().resolve()
-    run_dir = _create_run_dir(workflow_root, workflow_digest)
+    run_dir = _create_run_dir(workflow_root, graph.workflow_id)
     node_cache = WorkflowNodeCache(workflow_root / "cache")
     snapshot_path = _save_snapshot(graph, run_dir)
+    atomic_write_json(run_dir / "execution.json", {
+        "workflow_digest": workflow_digest,
+        "targets": workflow.terminal_node_ids,
+        "execution_order": execution_order,
+        "effective_configs": {node_id: execution_config_payload(workflow.node(node_id).config) for node_id in execution_order},
+        "snapshot": snapshot_path.as_posix(),
+    })
     outputs_by_node: dict[str, dict[str, WorkflowArtifact]] = {}
     node_manifests: dict[str, Path] = {}
+
+    def forward_node_progress(node_id: str, payload: dict[str, object]) -> None:
+        if node_progress_sink is not None and node_id not in node_manifests:
+            node_progress_sink(node_id, payload)
     order_index = {
         node_id: index
         for index, node_id in enumerate(execution_order)
@@ -237,8 +250,27 @@ def execute_workflow(
                         compiled_node.incoming,
                         outputs_by_node,
                     )
-                    source_outputs = _source_outputs(compiled_node)
-                    provenance = workflow_node_provenance(node)
+                    source_outputs = _source_outputs(compiled_node, node_cache)
+                    if isinstance(node, ImageCollectionNode):
+                        candidates = tuple(
+                            load_node_result(node_manifests[wire.source.node_id]).candidate(
+                                node_manifests[wire.source.node_id], wire.source.port,
+                            )
+                            for wire in compiled_node.incoming["images"]
+                        )
+                        source_outputs = {"collection": ImageCollectionArtifact(
+                            candidates=candidates,
+                            identity=_digest([candidate.output_id for candidate in candidates]),
+                        )}
+                    elif isinstance(node, PositionedKeyframeNode):
+                        image = one_artifact(inputs, "image", ImageArtifact)
+                        source_outputs = {"keyframe": KeyframeArtifact(
+                            image=image, frame=node.config.frame, identity=_digest({"image": image.identity, "frame": node.config.frame}))}
+                    elif isinstance(node, BindMaskNode):
+                        from aigen.workflow_mask_execution import bind_mask
+                        source_outputs = {"mask": bind_mask(one_artifact(inputs, "source", ImageArtifact),
+                                                            Path(one_artifact(inputs, "image", ImageArtifact).path), node.config)}
+                    provenance = workflow_node_provenance(node, compiled_node.config)
                     signature = _node_signature(
                         compiled_node,
                         inputs,
@@ -266,6 +298,7 @@ def execute_workflow(
                             outcome = _outcome_from_cache_hit(
                                 node,
                                 cache_hit,
+                                inputs,
                             )
                             status = "reused"
 
@@ -293,7 +326,11 @@ def execute_workflow(
                         run_dir,
                         node,
                         signature,
-                        outcome.outputs,
+                        outcome,
+                        compiled_node=compiled_node,
+                        inputs=inputs,
+                        provenance=provenance,
+                        status=status,
                     )
                     _emit(
                         event_sink,
@@ -336,19 +373,19 @@ def execute_workflow(
                     node_kind=item.node.kind,
                     status="running",
                 )
-            outcomes = _execute_group(
-                group,
-                node_cache=node_cache,
-                node_progress_sink=node_progress_sink,
-            )
-            for item, outcome in zip(group, outcomes, strict=True):
+            def completed(item: _PendingNodeExecution, outcome: _NodeOutcome) -> None:
+                nonlocal active_node_ids
                 node_id = item.node.id
                 outputs_by_node[node_id] = dict(outcome.outputs)
                 node_manifests[node_id] = _write_node_manifest(
                     run_dir,
                     item.node,
                     item.signature,
-                    outcome.outputs,
+                    outcome,
+                    compiled_node=item.compiled_node,
+                    inputs=item.inputs,
+                    provenance=item.provenance,
+                    status="completed",
                 )
                 pending.pop(node_id)
                 sorter.done(node_id)
@@ -359,6 +396,19 @@ def execute_workflow(
                     status="completed",
                 )
                 progress.step(f"completed {item.node.title}")
+                active_node_ids = tuple(active for active in active_node_ids if active != node_id)
+                _write_run_state(run_dir, graph, workflow_digest, snapshot_path,
+                                 status="running", node_manifests=node_manifests)
+
+            record_dir = run_dir / "executions" / uuid4().hex
+            record_dir.mkdir(parents=True)
+            _execute_group(
+                group,
+                node_cache=node_cache,
+                node_progress_sink=forward_node_progress,
+                record_dir=record_dir,
+                on_completed=completed,
+            )
             active_node_ids = ()
             _write_run_state(
                 run_dir,
@@ -467,43 +517,24 @@ def _next_execution_group(
         pending,
         key=lambda item: order_index[item.node.id],
     )
-    first = ordered[0]
-    if _is_batchable_image_edit(first.image_edit_plan):
-        key = (
-            "image-edit",
-            _image_edit_batch_key(
-                cast(_ResolvedImageEditPlan, first.image_edit_plan)
-            ),
-        )
-    elif isinstance(first.node, ImagePostprocessNode):
-        key = (
-            "image-postprocess",
-            _digest(execution_config_payload(first.compiled_node.config)),
-        )
-    else:
-        return (first,)
-    return tuple(
-        item
-        for item in ordered
-        if (
-            (
-                "image-edit",
-                _image_edit_batch_key(
-                    cast(_ResolvedImageEditPlan, item.image_edit_plan)
-                ),
-            )
-            if _is_batchable_image_edit(item.image_edit_plan)
-            else (
-                "image-postprocess",
-                _digest(
-                    execution_config_payload(item.compiled_node.config)
-                ),
-            )
-            if isinstance(item.node, ImagePostprocessNode)
-            else ("node", item.node.id)
-        )
-        == key
-    )
+    key = _execution_group_key(ordered[0])
+    return (ordered[0], *(item for item in ordered[1:] if _execution_group_key(item) == key))
+
+
+def _execution_group_key(item: _PendingNodeExecution) -> tuple[str, str]:
+    if _is_batchable_image_edit(item.image_edit_plan):
+        return "image-edit", _image_edit_batch_key(cast(_ResolvedImageEditPlan, item.image_edit_plan))
+    if isinstance(item.node, ImagePostprocessNode):
+        return "image-postprocess", _digest(execution_config_payload(item.compiled_node.config))
+    if isinstance(item.node, VIDEO_SEED_SWEEP_NODES):
+        config = execution_config_payload(item.compiled_node.config)
+        del config["seed"], config["seed_mode"]
+        return item.node.kind, _digest({
+            "config": config,
+            "inputs": {port: [artifact.identity for artifact in artifacts] for port, artifacts in item.inputs.items()},
+            "provenance": item.provenance.model_dump(mode="json"),
+        })
+    return "node", item.node.id
 
 
 def _is_batchable_image_edit(
@@ -577,29 +608,32 @@ def _execute_group(
     *,
     node_cache: WorkflowNodeCache,
     node_progress_sink: NodeProgressSink | None,
-) -> tuple[_NodeOutcome, ...]:
+    record_dir: Path,
+    on_completed: Callable[[_PendingNodeExecution, _NodeOutcome], None],
+) -> None:
     if all(_is_batchable_image_edit(item.image_edit_plan) for item in group):
-        return _execute_image_edit_group(
-            group,
-            node_cache=node_cache,
-            node_progress_sink=node_progress_sink,
+        _execute_image_edit_group(
+            group, node_cache=node_cache, node_progress_sink=node_progress_sink,
+            record_dir=record_dir, on_completed=on_completed,
         )
-    if len(group) > 1 and all(
-        isinstance(item.node, ImagePostprocessNode) for item in group
-    ):
-        return _execute_image_postprocess_group(
-            group,
-            node_cache=node_cache,
-            node_progress_sink=node_progress_sink,
+    elif isinstance(group[0].node, VIDEO_SEED_SWEEP_NODES):
+        _execute_video_group(
+            group, node_cache=node_cache, node_progress_sink=node_progress_sink,
+            record_dir=record_dir, on_completed=on_completed,
         )
-    return tuple(
-        _execute_node(
-            item,
-            node_cache=node_cache,
-            node_progress_sink=node_progress_sink,
+    elif len(group) > 1 and all(isinstance(item.node, ImagePostprocessNode) for item in group):
+        outcomes = _execute_image_postprocess_group(
+            group, node_cache=node_cache, node_progress_sink=node_progress_sink,
+            record_dir=record_dir,
         )
-        for item in group
-    )
+        for item, outcome in zip(group, outcomes, strict=True):
+            on_completed(item, outcome)
+    else:
+        for item in group:
+            on_completed(item, _execute_node(
+                item, node_cache=node_cache, node_progress_sink=node_progress_sink,
+                record_dir=record_dir,
+            ))
 
 
 def _execute_image_edit_group(
@@ -607,100 +641,52 @@ def _execute_image_edit_group(
     *,
     node_cache: WorkflowNodeCache,
     node_progress_sink: NodeProgressSink | None,
-) -> tuple[_NodeOutcome, ...]:
-    plans = tuple(
-        cast(_ResolvedImageEditPlan, item.image_edit_plan)
-        for item in group
-    )
+    record_dir: Path,
+    on_completed: Callable[[_PendingNodeExecution, _NodeOutcome], None],
+) -> None:
+    plans = tuple(cast(_ResolvedImageEditPlan, item.image_edit_plan) for item in group)
     with ExitStack() as stack:
-        writes = tuple(
-            stack.enter_context(
-                node_cache.begin(
-                    item.signature,
-                    node_kind=item.node.kind,
-                    provenance=item.provenance,
-                )
-            )
+        writes = {
+            item.node.id: stack.enter_context(node_cache.begin(
+                item.signature, node_kind=item.node.kind, provenance=item.provenance,
+            ))
             for item in group
-        )
+        }
         request = ImageEditBatchRequest(
             backend=plans[0].backend,
             cases=tuple(
                 ImageEditBatchCase(
-                    id=item.node.id,
-                    prompt=plan.prompt,
-                    image_paths=plan.references,
-                    width=plan.width,
-                    height=plan.height,
-                    seed=plan.seed,
-                    output_path=write.output_dir / "image.png",
+                    id=item.node.id, prompt=plan.prompt, image_paths=plan.references,
+                    width=plan.width, height=plan.height, seed=plan.seed,
+                    output_path=record_dir / "images" / f"{item.node.id}.png",
                 )
-                for item, plan, write in zip(
-                    group,
-                    plans,
-                    writes,
-                    strict=True,
-                )
+                for item, plan in zip(group, plans, strict=True)
             ),
-            loras=plans[0].loras,
-            steps=plans[0].steps,
-            guidance=plans[0].guidance,
-            strength=plans[0].strength,
-            sampler=plans[0].sampler,
-            scheduler=plans[0].scheduler,
+            loras=plans[0].loras, steps=plans[0].steps, guidance=plans[0].guidance,
+            strength=plans[0].strength, sampler=plans[0].sampler, scheduler=plans[0].scheduler,
         )
-        with _node_progress(
-            tuple(item.node.id for item in group),
-            node_progress_sink,
-        ) as node_progress:
+        items = {item.node.id: item for item in group}
+        completed: set[str] = set()
+
+        def output_completed(output: ImageEditBatchOutput) -> None:
+            if output.case_id not in items or output.case_id in completed:
+                raise WorkflowExecutionError(f"unexpected or duplicate image-edit output: {output.case_id}")
+            item = items[output.case_id]
+            expected = record_dir / "images" / f"{item.node.id}.png"
+            if output.path.resolve() != expected:
+                raise WorkflowExecutionError(f"image-edit returned the wrong output for {item.node.id}: {output.path}")
+            generated = {"image": GeneratedNodeOutput(ArtifactType.IMAGE, (_require_file(expected, item.node),))}
+            outcome = _publish_generated(writes[item.node.id], item, generated, record_dir)
+            completed.add(item.node.id)
+            on_completed(item, outcome)
+
+        with _node_progress(tuple(items), node_progress_sink, record_dir) as node_progress:
             result = run_image_edit_batch(
-                request,
-                progress=node_progress,
+                request, progress=node_progress, record_dir=record_dir / "backend",
+                on_output=output_completed,
             )
-        outputs_by_case = {
-            output.case_id: output
-            for output in result.outputs
-        }
-        expected_case_ids = {item.node.id for item in group}
-        if set(outputs_by_case) != expected_case_ids:
-            raise WorkflowExecutionError(
-                "image-edit batch returned cases "
-                f"{sorted(outputs_by_case)}; expected "
-                f"{sorted(expected_case_ids)}"
-            )
-        validated_outputs = tuple(
-            _require_file(
-                outputs_by_case[item.node.id].path,
-                item.node,
-            )
-            for item in group
-        )
-        outcomes = []
-        for item, write, output_path in zip(
-            group,
-            writes,
-            validated_outputs,
-            strict=True,
-        ):
-            output = outputs_by_case[item.node.id]
-            expected = write.output_dir / "image.png"
-            if output.path.resolve() != expected.resolve():
-                raise WorkflowExecutionError(
-                    f"image-edit batch returned the wrong output for "
-                    f"{item.node.id!r}: {output.path}"
-                )
-            cache_hit = write.publish(
-                {
-                    "image": GeneratedNodeOutput(
-                        artifact_type=ArtifactType.IMAGE,
-                        paths=(output_path,),
-                    )
-                }
-            )
-            outcomes.append(
-                _outcome_from_cache_hit(item.node, cache_hit)
-            )
-        return tuple(outcomes)
+        if completed != set(items) or {output.case_id for output in result.outputs} != completed:
+            raise WorkflowExecutionError("image-edit batch did not publish every requested case")
 
 
 def format_workflow_event(payload: dict[str, object]) -> str:
@@ -712,8 +698,38 @@ def format_workflow_event(payload: dict[str, object]) -> str:
     )
 
 
-def _create_run_dir(workflow_root: Path, workflow_digest: str) -> Path:
-    attempts_root = workflow_root / "runs" / workflow_digest
+def _execute_video_group(
+    group: Sequence[_PendingNodeExecution],
+    *,
+    node_cache: WorkflowNodeCache,
+    node_progress_sink: NodeProgressSink | None,
+    record_dir: Path,
+    on_completed: Callable[[_PendingNodeExecution, _NodeOutcome], None],
+) -> None:
+    by_seed: dict[int, list[_PendingNodeExecution]] = {}
+    for item in group:
+        seed = item.compiled_node.config.seed
+        by_seed.setdefault(seed, []).append(item)
+    seeds = tuple(by_seed)
+
+    def completed(seed: int, generated: dict[str, GeneratedNodeOutput]) -> None:
+        items = by_seed.pop(seed, None)
+        if items is None:
+            raise WorkflowExecutionError(f"unexpected or duplicate video seed-sweep output: {seed}")
+        for item in items:
+            with node_cache.begin(item.signature, node_kind=item.node.kind, provenance=item.provenance) as write:
+                on_completed(item, _publish_generated(write, item, generated, record_dir))
+
+    first = group[0]
+    with _node_progress(tuple(item.node.id for item in group), node_progress_sink, record_dir) as progress:
+        execute_video_seed_sweep(first.compiled_node, first.inputs, seeds, record_dir / "outputs",
+                                 progress=progress, on_output=completed)
+    if by_seed:
+        raise WorkflowExecutionError("video seed sweep did not publish every requested output")
+
+
+def _create_run_dir(workflow_root: Path, workflow_id: str) -> Path:
+    attempts_root = workflow_root / "runs" / workflow_id
     attempts_root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir = attempts_root / f"attempt-{timestamp}-{uuid4().hex[:12]}"
@@ -745,6 +761,7 @@ def _write_run_state(
         "version": WORKFLOW_RUN_VERSION,
         "status": status,
         "workflow_name": graph.name,
+        "workflow_id": graph.workflow_id,
         "workflow_digest": workflow_digest,
         "workflow_snapshot": snapshot_path.as_posix(),
         "nodes": {
@@ -783,8 +800,20 @@ def _resolve_inputs(
 
 def _source_outputs(
     compiled_node: CompiledNode,
+    node_cache: WorkflowNodeCache,
 ) -> dict[str, WorkflowArtifact] | None:
     node = compiled_node.node
+    if isinstance(node, VideoSourceNode):
+        path = cast(CompiledVideoSourceConfig, compiled_node.config).path
+        identity = sha256_file(path)
+        return {"video": VideoArtifact(path=path.as_posix(), identity=identity, content_sha256=identity,
+                                       info=node_cache.video_info(path, identity))}
+    if isinstance(node, AudioSourceNode):
+        config = cast(CompiledAudioSourceConfig, compiled_node.config)
+        track = load_audio_track(config.path, stream_index=config.stream_index)
+        return {"audio": AudioArtifact(track=track, identity=_digest(track.model_dump(mode="json", exclude={"path"})))}
+    if isinstance(node, ImageSelectionNode):
+        return {"image": cast(CompiledImageSelectionConfig, compiled_node.config).image}
     if isinstance(node, ImageSourceNode):
         path = cast(CompiledImageSourceConfig, compiled_node.config).path
         identity = sha256_file(path)
@@ -792,6 +821,7 @@ def _source_outputs(
             "image": ImageArtifact(
                 path=path.as_posix(),
                 identity=identity,
+                content_sha256=identity,
             )
         }
     if isinstance(node, ReferencePackNode):
@@ -817,6 +847,7 @@ def _source_outputs(
                 path=pack.path.as_posix(),
                 references=tuple(path.as_posix() for path in references),
                 identity=identity,
+                reference_sha256s=tuple(item["sha256"] for item in identity_payload["references"]),
             )
         }
     if isinstance(node, LoraSourceNode):
@@ -845,6 +876,8 @@ def _node_signature(
     provenance: NodeExecutionProvenance,
 ) -> str:
     node = compiled_node.node
+    if isinstance(node, FramePostprocessNode) and one_artifact(inputs, "images", ImageSequenceArtifact).pixel_identity is None:
+        raise WorkflowExecutionError("frame pixel identity is missing; extract the source video again")
     return build_node_signature(
         node_kind=node.kind,
         execution_config=execution_config_payload(compiled_node.config),
@@ -852,7 +885,7 @@ def _node_signature(
             port: tuple(
                 NodeInputIdentity(
                     artifact_type=artifact.type,
-                    identity=artifact.identity,
+                    identity=artifact.pixel_identity if isinstance(node, FramePostprocessNode) and isinstance(artifact, ImageSequenceArtifact) else artifact.identity,
                 )
                 for artifact in artifacts
             )
@@ -877,9 +910,14 @@ def _write_node_manifest(
     run_dir: Path,
     node: WorkflowNode,
     signature: str,
-    outputs: Mapping[str, WorkflowArtifact],
+    outcome: _NodeOutcome,
+    *,
+    compiled_node: CompiledNode,
+    inputs: Mapping[str, Sequence[WorkflowArtifact]],
+    provenance: NodeExecutionProvenance,
+    status: Literal["completed", "reused"],
 ) -> Path:
-    final_outputs = dict(outputs)
+    final_outputs = dict(outcome.outputs)
     _validate_output_contract(node, final_outputs)
     manifest_path = run_dir / "nodes" / node.id / "result.json"
     manifest = NodeResultManifest(
@@ -887,6 +925,18 @@ def _write_node_manifest(
         node_kind=node.kind,
         signature=signature,
         outputs=final_outputs,
+        title=node.title,
+        status=status,
+        provenance=provenance,
+        cache_manifest=outcome.cache_hit.manifest_path.as_posix() if outcome.cache_hit else None,
+        details=(outcome.cache_hit.details if outcome.cache_hit else NodeExecutionDetails(
+            completed_at=datetime.now(UTC).isoformat(),
+            effective_config=execution_config_payload(compiled_node.config),
+            inputs={port: tuple(artifacts) for port, artifacts in inputs.items()},
+            measured_outputs=_measure_outputs(final_outputs),
+        )),
+        image_origins=({"image": cast(CompiledImageSelectionConfig, compiled_node.config).reference}
+                       if isinstance(node, ImageSelectionNode) else {}),
     )
     atomic_write_json(
         manifest_path,
@@ -898,10 +948,22 @@ def _write_node_manifest(
 def _outcome_from_cache_hit(
     node: WorkflowNode,
     hit: NodeCacheHit,
+    inputs: Mapping[str, Sequence[WorkflowArtifact]],
 ) -> _NodeOutcome:
     _validate_output_contract(node, hit.outputs)
+    outputs = hit.outputs
+    if isinstance(node, FramePostprocessNode):
+        source = one_artifact(inputs, "images", ImageSequenceArtifact)
+        outputs = {"images": with_sequence_timing(cast(ImageSequenceArtifact, hit.outputs["images"]),
+                                                  timeline=source.timeline, audio=source.audio)}
+    elif isinstance(node, ExtractVideoFramesNode):
+        video = one_artifact(inputs, "video", VideoArtifact)
+        assert video.info is not None and video.content_sha256 is not None
+        outputs = {"images": with_sequence_timing(cast(ImageSequenceArtifact, hit.outputs["images"]),
+            timeline=video.info.timeline, audio=video_audio_track(Path(video.path), video.info, video.content_sha256))}
     return _NodeOutcome(
-        outputs=hit.outputs,
+        outputs=outputs,
+        cache_hit=hit,
     )
 
 
@@ -910,20 +972,15 @@ def _execute_node(
     *,
     node_cache: WorkflowNodeCache,
     node_progress_sink: NodeProgressSink | None,
+    record_dir: Path,
 ) -> _NodeOutcome:
     with node_cache.begin(
-        pending.signature,
-        node_kind=pending.node.kind,
-        provenance=pending.provenance,
+        pending.signature, node_kind=pending.node.kind, provenance=pending.provenance,
     ) as write:
-        cache_hit = write.publish(
-            _run_generated_node(
-                pending,
-                write.output_dir,
-                node_progress_sink=node_progress_sink,
-            )
+        generated = _run_generated_node(
+            pending, record_dir / "outputs", node_progress_sink=node_progress_sink,
         )
-    return _outcome_from_cache_hit(pending.node, cache_hit)
+        return _publish_generated(write, pending, generated, record_dir)
 
 
 def _execute_image_postprocess_group(
@@ -931,63 +988,75 @@ def _execute_image_postprocess_group(
     *,
     node_cache: WorkflowNodeCache,
     node_progress_sink: NodeProgressSink | None,
+    record_dir: Path,
 ) -> tuple[_NodeOutcome, ...]:
-    first_config = cast(
-        CompiledPostprocessConfig,
-        group[0].compiled_node.config,
-    )
-    output_names = tuple(f"{item.node.id}.png" for item in group)
-    sources = tuple(
-        _one_artifact(item.inputs, "image", ImageArtifact)
-        for item in group
-    )
-    with ExitStack() as stack:
-        writes = tuple(
-            stack.enter_context(
-                node_cache.begin(
-                    item.signature,
-                    node_kind=item.node.kind,
-                    provenance=item.provenance,
-                )
-            )
-            for item in group
+    first_config = cast(CompiledPostprocessConfig, group[0].compiled_node.config)
+    sources = tuple(one_artifact(item.inputs, "image", ImageArtifact) for item in group)
+    with _node_progress(tuple(item.node.id for item in group), node_progress_sink, record_dir) as node_progress:
+        result = _postprocess_images(
+            first_config, tuple(Path(source.path) for source in sources), record_dir / "outputs",
+            output_names=tuple(f"{item.node.id}.png" for item in group), progress=node_progress,
         )
-        batch_output = writes[0].output_dir / "batch"
-        with _node_progress(
-            tuple(item.node.id for item in group),
-            node_progress_sink,
-        ) as node_progress:
-            result = _postprocess_images(
-                first_config,
-                tuple(Path(source.path) for source in sources),
-                batch_output,
-                output_names=output_names,
-                progress=node_progress,
-            )
-        staged_outputs = []
-        for item, write, generated in zip(
-            group,
-            writes,
-            result.outputs,
-            strict=True,
-        ):
-            output = write.output_dir / "image.png"
-            generated.replace(output)
-            staged_outputs.append((item, write, output))
-        outcomes = []
-        for item, write, output in staged_outputs:
-            cache_hit = write.publish(
-                {
-                    "image": GeneratedNodeOutput(
-                        artifact_type=ArtifactType.IMAGE,
-                        paths=(output,),
-                    )
-                }
-            )
-            outcomes.append(
-                _outcome_from_cache_hit(item.node, cache_hit)
-            )
-        return tuple(outcomes)
+    outcomes = []
+    for item, output in zip(group, result.outputs, strict=True):
+        with node_cache.begin(item.signature, node_kind=item.node.kind, provenance=item.provenance) as write:
+            outcomes.append(_publish_generated(
+                write, item, {"image": GeneratedNodeOutput(ArtifactType.IMAGE, (output,))}, record_dir,
+            ))
+    return tuple(outcomes)
+
+
+def _publish_generated(
+    write: NodeCacheWrite,
+    item: _PendingNodeExecution,
+    generated: Mapping[str, GeneratedNodeOutput],
+    record_dir: Path,
+) -> _NodeOutcome:
+    config = execution_config_payload(item.compiled_node.config)
+    if item.image_edit_plan is not None:
+        config.update(width=item.image_edit_plan.width, height=item.image_edit_plan.height)
+    measured = {}
+    for port, output in generated.items():
+        if output.artifact_type in (ArtifactType.IMAGE, ArtifactType.IMAGE_SEQUENCE, ArtifactType.MASK):
+            with Image.open(output.paths[0]) as image:
+                measured[port] = {"width": image.width, "height": image.height, "images": len(output.paths)}
+        elif output.artifact_type == ArtifactType.VIDEO:
+            assert output.video_info is not None
+            info = output.video_info
+            measured[port] = {**info.model_dump(mode="json"), "frames": info.frames, "fps": str(info.fps)}
+    if isinstance(item.node, (CharacterEditNode, CharacterRefineNode)):
+        result = read_json(record_dir / "outputs" / "backend-result.json", label="character result")
+        selected = result["outputs"][0]
+        measured["image"].update(
+            seed=selected["raw"]["seed"], candidate_identity=selected["candidate_identity"],
+            audit_report=selected["audit_report"], raw=selected["raw"],
+        )
+    details = NodeExecutionDetails(
+        completed_at=datetime.now(UTC).isoformat(), effective_config=config,
+        inputs={port: tuple(artifacts) for port, artifacts in item.inputs.items()},
+        measured_outputs=measured, record_dir=record_dir.as_posix(),
+        case_record=(record_dir / "backend" / "cases" / f"{item.node.id}.json").as_posix()
+        if _is_batchable_image_edit(item.image_edit_plan)
+        else (record_dir / "outputs" / f"seed-{config['seed']}" / "backend-result.json").as_posix()
+        if isinstance(item.node, VIDEO_SEED_SWEEP_NODES)
+        else (record_dir / "outputs" / "backend-result.json").as_posix()
+        if isinstance(item.node, (CharacterEditNode, CharacterRefineNode, SamSegmentNode)) else None,
+    )
+    hit = write.publish(write.import_outputs(generated), details=details)
+    return _outcome_from_cache_hit(item.node, hit, item.inputs)
+
+
+def _measure_outputs(outputs: Mapping[str, WorkflowArtifact]) -> dict[str, dict[str, object]]:
+    measured = {}
+    for port, artifact in outputs.items():
+        if isinstance(artifact, ImageArtifact):
+            with Image.open(artifact.path) as image:
+                measured[port] = {"width": image.width, "height": image.height}
+        elif isinstance(artifact, ImageCollectionArtifact):
+            measured[port] = {"candidates": len(artifact.candidates)}
+        elif isinstance(artifact, VideoArtifact) and artifact.info is not None:
+            measured[port] = {**artifact.info.model_dump(mode="json"), "frames": artifact.info.frames, "fps": str(artifact.info.fps)}
+    return measured
 
 
 def _run_generated_node(
@@ -996,9 +1065,25 @@ def _run_generated_node(
     *,
     node_progress_sink: NodeProgressSink | None,
 ) -> dict[str, GeneratedNodeOutput]:
+    staging.mkdir(parents=True)
     node = pending.node
     inputs = pending.inputs
-    with _node_progress((node.id,), node_progress_sink) as node_progress:
+    with _node_progress((node.id,), node_progress_sink, staging.parent) as node_progress:
+        if isinstance(node, SamSegmentNode):
+            from aigen.workflow_mask_execution import execute_sam_node
+            return execute_sam_node(node.config, inputs, staging, progress=node_progress)
+        if isinstance(node, CharacterRefineNode):
+            from aigen.workflow_mask_execution import execute_character_refine_node
+            return execute_character_refine_node(
+                cast(CompiledCharacterRefineConfig, pending.compiled_node.config), inputs,
+                _image_edit_reference_paths(node, inputs), _image_edit_loras(node, inputs), staging, progress=node_progress,
+            )
+        if isinstance(node, CharacterEditNode):
+            return execute_character_node(
+                cast(CompiledCharacterEditConfig, pending.compiled_node.config),
+                _image_edit_reference_paths(node, inputs), _image_edit_loras(node, inputs),
+                inputs, staging, progress=node_progress,
+            )
         if isinstance(node, ImageEditNode):
             plan = cast(
                 _ResolvedImageEditPlan,
@@ -1037,7 +1122,7 @@ def _run_generated_node(
             }
 
         if isinstance(node, ImagePostprocessNode):
-            source = _one_artifact(inputs, "image", ImageArtifact)
+            source = one_artifact(inputs, "image", ImageArtifact)
             result = _postprocess_images(
                 cast(
                     CompiledPostprocessConfig,
@@ -1055,75 +1140,11 @@ def _run_generated_node(
                 )
             }
 
-        if isinstance(node, AnimeGenI2VNode):
-            start = _one_artifact(inputs, "start", ImageArtifact)
-            end_artifacts = inputs.get("end", ())
-            end = (
-                cast(ImageArtifact, end_artifacts[0])
-                if end_artifacts
-                else None
-            )
-            config = cast(
-                CompiledAnimeGenConfig,
-                pending.compiled_node.config,
-            )
-            settings = config.settings
-            output = staging / "video.mp4"
-            result = generate_animegen_i2v(
-                prompt=config.prompt,
-                image=Path(start.path),
-                last_image=Path(end.path) if end is not None else None,
-                output=output,
-                frames=settings.frames,
-                fps=settings.fps,
-                sampling=settings.sampling,
-                steps=settings.steps,
-                precision=settings.precision,
-                seed=config.seed,
-                progress=node_progress,
-            )
-            return {
-                "video": GeneratedNodeOutput(
-                    artifact_type=ArtifactType.VIDEO,
-                    paths=(_require_file(result.output, node),),
-                )
-            }
-
-        if isinstance(node, VideoContactSheetNode):
-            video = _one_artifact(inputs, "video", VideoArtifact)
-            node_progress.phase("create video contact sheet")
-            output = create_video_contact_sheet(
-                Path(video.path),
-                staging / "contact-sheet.png",
-            )
-            node_progress.phase("video contact sheet completed")
-            return {
-                "image": GeneratedNodeOutput(
-                    artifact_type=ArtifactType.IMAGE,
-                    paths=(_require_file(output, node),),
-                )
-            }
-
-        if isinstance(node, ExtractVideoFramesNode):
-            video = _one_artifact(inputs, "video", VideoArtifact)
-            result = extract_video_frames(
-                Path(video.path),
-                staging / "frames",
-                progress=node_progress,
-            )
-            paths = tuple(
-                result.output_dir / f"frame-{index:06d}.png"
-                for index in range(result.frames)
-            )
-            return {
-                "images": GeneratedNodeOutput(
-                    artifact_type=ArtifactType.IMAGE_SEQUENCE,
-                    paths=paths,
-                )
-            }
+        if isinstance(node, VIDEO_EXECUTION_NODES):
+            return execute_video_node(pending.compiled_node, inputs, staging, progress=node_progress)
 
         if isinstance(node, FramePostprocessNode):
-            source = _one_artifact(
+            source = one_artifact(
                 inputs,
                 "images",
                 ImageSequenceArtifact,
@@ -1152,11 +1173,11 @@ def _run_generated_node(
 
 
 def _image_edit_reference_paths(
-    node: ImageEditNode,
+    node: ImageEditNode | CharacterEditNode | CharacterRefineNode,
     inputs: Mapping[str, Sequence[WorkflowArtifact]],
 ) -> tuple[Path, ...]:
     references: list[Path] = []
-    for artifact in inputs["references"]:
+    for artifact in inputs.get("references", ()):
         if isinstance(artifact, ImageArtifact):
             references.append(Path(artifact.path))
         elif isinstance(artifact, ReferencePackArtifact):
@@ -1169,7 +1190,7 @@ def _image_edit_reference_paths(
 
 
 def _image_edit_loras(
-    node: ImageEditNode,
+    node: ImageEditNode | CharacterEditNode | CharacterRefineNode,
     inputs: Mapping[str, Sequence[WorkflowArtifact]],
 ) -> tuple[LoraArtifact, ...]:
     artifacts = inputs.get("loras", ())
@@ -1260,45 +1281,24 @@ def _postprocess_images(
     )
 
 
+@contextmanager
 def _node_progress(
     node_ids: Sequence[str],
     sink: NodeProgressSink | None,
-) -> StatusReporter:
-    if sink is None:
-        return SILENT_STATUS
+    record_dir: Path,
+):
+    with (record_dir / "progress.jsonl").open("w", encoding="utf-8", buffering=1) as log:
+        def forward(payload: dict[str, object]) -> None:
+            log.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+            if sink is not None:
+                for node_id in node_ids:
+                    sink(node_id, payload)
 
-    def forward(payload: dict[str, object]) -> None:
-        for node_id in node_ids:
-            sink(node_id, payload)
-
-    return RuntimeStatus.callback(
-        interval_seconds=DEFAULT_PROGRESS_INTERVAL_SECONDS,
-        callback=forward,
-        telemetry=SystemTelemetrySampler(),
-    )
-
-
-ArtifactT = TypeVar("ArtifactT", bound=RuntimeModel)
-
-
-def _one_artifact(
-    inputs: Mapping[str, Sequence[WorkflowArtifact]],
-    port: str,
-    artifact_class: type[ArtifactT],
-) -> ArtifactT:
-    artifacts = inputs[port]
-    if len(artifacts) != 1:
-        raise WorkflowExecutionError(
-            f"workflow input {port!r} does not contain one "
-            f"{artifact_class.__name__}"
-        )
-    artifact = artifacts[0]
-    if not isinstance(artifact, artifact_class):
-        raise WorkflowExecutionError(
-            f"workflow input {port!r} does not contain one "
-            f"{artifact_class.__name__}"
-        )
-    return artifact
+        with RuntimeStatus.callback(
+            interval_seconds=DEFAULT_PROGRESS_INTERVAL_SECONDS,
+            callback=forward, telemetry=SystemTelemetrySampler(),
+        ) as progress:
+            yield progress
 
 
 def _validate_output_contract(

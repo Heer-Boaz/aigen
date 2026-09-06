@@ -1,0 +1,192 @@
+{
+  "kind": "pipeline-review-cpu-probes",
+  "gpu_models_run": false,
+  "limits": "Neural upscaler and VAE are doubles; actual owner control flow, Diffusers image processor, packing and cache signature code execute.",
+  "reference_upscale_calls": [
+    {
+      "source_wh": [
+        128,
+        256
+      ],
+      "target_wh": [
+        512,
+        512
+      ]
+    }
+  ],
+  "batch_order": {
+    "workflow_batch_keys_equal": true,
+    "small_then_large_encodings": [
+      {
+        "mode": "reference",
+        "sizes_hw": [
+          [
+            512,
+            512
+          ]
+        ]
+      }
+    ],
+    "large_then_small_encodings": [
+      {
+        "mode": "reference",
+        "sizes_hw": [
+          [
+            1024,
+            1024
+          ]
+        ]
+      }
+    ],
+    "large_alone_encodings": [
+      {
+        "mode": "reference",
+        "sizes_hw": [
+          [
+            1024,
+            1024
+          ]
+        ]
+      }
+    ],
+    "large_after_small_reference_sizes_hw": [
+      [
+        512,
+        512
+      ]
+    ],
+    "large_alone_reference_sizes_hw": [
+      [
+        1024,
+        1024
+      ]
+    ]
+  },
+  "strength_multiple_references": {
+    "supplied": 2,
+    "upscaler_calls": [
+      {
+        "source_wh": [
+          128,
+          256
+        ],
+        "target_wh": [
+          512,
+          512
+        ]
+      },
+      {
+        "source_wh": [
+          256,
+          128
+        ],
+        "target_wh": [
+          512,
+          512
+        ]
+      }
+    ],
+    "encoded": [
+      {
+        "mode": "init",
+        "sizes_hw": [
+          [
+            512,
+            512
+          ]
+        ]
+      }
+    ],
+    "reference_context_present": false
+  },
+  "strength_large_canvas": {
+    "requested_wh": [
+      1536,
+      1536
+    ],
+    "source_latent_shape": [
+      1,
+      128,
+      64,
+      64
+    ],
+    "packed_tokens": 4096,
+    "position_tokens": 9216,
+    "unpack_error": "Expected index [9216, 128] to be no larger than self [9216, 128] apart from dimension 0 and to be no larger size than src [4096, 128]"
+  },
+  "workflow_provenance": {
+    "changed_owners": {
+      "aigen/generation/qwen_image_edit_conditioner.py": {
+        "head_sha256": "3d861416e55f15ba14e360006304c05179243bc2c8e69018b2961412e6f5a8fb",
+        "working_sha256": "c91c50b1d3e6d16e6f614a34de147e26975612a2df8bd32f2d100cb237d0a487"
+      },
+      "aigen/generation/qwen_image_edit_identity.py": {
+        "head_sha256": "3b845054a791510b7ead1c0018a0f8540f7cc27f44897ea0ebb6ca507a2865eb",
+        "working_sha256": "1a139c6de844ed18ece1575b7c5dac6a3dcee3d5eb808a161c952dbb9d47da0e"
+      },
+      "aigen/generation/qwen_image_edit_lightx2v_worker.py": {
+        "head_sha256": "ea6cbebef4c45be47f83b49ec90b592cfd9b26442462fa7041fa3ea56511deab",
+        "working_sha256": "baeb3b77b4860c60ece700ff2d377e66c060d52872f51be813294b530897ad53"
+      }
+    },
+    "head_key": "356f518b125c4bb03c26f92c5029fbbbbe37433f61a094077bcdd9c1964c8fdb",
+    "working_key": "356f518b125c4bb03c26f92c5029fbbbbe37433f61a094077bcdd9c1964c8fdb",
+    "provenance": {
+      "executor": {
+        "name": "aigen-workflow-executor",
+        "revision": "3"
+      },
+      "backend": {
+        "name": "image-edit-batch",
+        "revision": "1"
+      },
+      "models": [
+        {
+          "name": "LightX2V",
+          "revision": "b96309e82899145aebd8ecf95c387894aba66b1e"
+        },
+        {
+          "name": "Qwen-Image-Edit-2511",
+          "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9"
+        },
+        {
+          "name": "Qwen-Image-Edit-2511 transformer",
+          "revision": "d74eba145674fd7e31b949324e148e21e7118abd"
+        }
+      ]
+    },
+    "limit": "Compares HEAD provenance code with working-tree code; imported profile/schema constants are unchanged. This proves key reuse, not that a particular production cache entry exists."
+  },
+  "existing_run_postprocess_metadata": [
+    {
+      "run": "sprite-front-qwen2511-base-40step-v1",
+      "canvas_postprocess": "vosr-1.4b-ms-upscale",
+      "environment_postprocess": "vosr-1.4b-ms-upscale",
+      "actual_output_postprocess": {
+        "mode": "none"
+      },
+      "raw_equals_final_sha256": true
+    },
+    {
+      "run": "sprite-front-qwen2511-native-refs-40step-v2",
+      "canvas_postprocess": "vosr-1.4b-ms-upscale",
+      "environment_postprocess": "vosr-1.4b-ms-upscale",
+      "actual_output_postprocess": {
+        "mode": "none"
+      },
+      "raw_equals_final_sha256": true
+    }
+  ],
+  "upscaler_accumulator_calculation": {
+    "source_wh": [
+      3840,
+      3890
+    ],
+    "scale": 4,
+    "dtype_bytes": 4,
+    "channels": 3,
+    "natural_pixels": 239001600,
+    "two_accumulators_GiB": 5.34210205078125,
+    "limit": "Calculated tensor sizes in the live upscaler implementation; no GPU allocation or model execution performed."
+  }
+}

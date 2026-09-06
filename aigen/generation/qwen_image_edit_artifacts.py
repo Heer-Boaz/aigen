@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 
 from aigen.generation.qwen_image_edit_lightx2v import (
-    QWEN25_VL_BF16_MODEL,
-    QWEN_IMAGE_EDIT_2511_LIGHTNING_MODEL,
-    QWEN_IMAGE_EDIT_2511_LOCAL_MODEL,
+    QwenImageEditLightX2VProfile,
     lightx2v_runtime_root,
 )
 from aigen.model_artifacts import (
@@ -33,14 +30,21 @@ QWEN_IMAGE_EDIT_LIGHTX2V_RUNTIME_DISTRIBUTIONS = (
 )
 
 
-@lru_cache(maxsize=1)
 def qwen_2511_lightning_model_artifacts() -> tuple[ModelArtifactComponent, ...]:
-    model_root = Path(QWEN_IMAGE_EDIT_2511_LOCAL_MODEL).resolve()
-    transformer = QWEN_IMAGE_EDIT_2511_LIGHTNING_MODEL.resolve()
+    from aigen.generation.qwen_image_edit_lightx2v import (
+        LIGHTX2V_QWEN_EDIT_2511_PROFILE, QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES,
+    )
+
+    return qwen_2511_model_artifacts(QWEN_IMAGE_EDIT_LIGHTX2V_PROFILES[LIGHTX2V_QWEN_EDIT_2511_PROFILE])
+
+
+def qwen_2511_model_artifacts(profile: QwenImageEditLightX2VProfile) -> tuple[ModelArtifactComponent, ...]:
+    model_root = Path(profile.base_model).resolve()
+    transformer = profile.transformer_model.resolve()
     return (
         _directory_component(
             "Qwen-Image-Edit-2511 conditioner",
-            QWEN25_VL_BF16_MODEL.resolve(),
+            profile.conditioner_model.resolve(),
         ),
         _directory_component(
             "Qwen-Image-Edit-2511 processor",
@@ -51,7 +55,7 @@ def qwen_2511_lightning_model_artifacts() -> tuple[ModelArtifactComponent, ...]:
             (model_root / "scheduler").resolve(),
         ),
         ModelArtifactComponent(
-            name="Qwen-Image-Edit-2511 scaled-FP8 Lightning transformer",
+            name=f"Qwen-Image-Edit-2511 {profile.transformer_variant} transformer",
             root=transformer.parent,
             files=(transformer,),
         ),

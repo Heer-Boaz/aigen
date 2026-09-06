@@ -1,0 +1,9 @@
+test_cpu_run_cache_status_edits_reopen_and_stop (test_workflow_properties.WorkflowPropertyUITests.test_cpu_run_cache_status_edits_reopen_and_stop) ... Executing <Task pending name="message pump Screen(id='_default')" coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.115 seconds
+Executing <Task pending name='message pump WorkflowEditor()' coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.106 seconds
+Executing <Task pending name='message pump WorkflowEditor()' coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.111 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 4.410s
+
+OK

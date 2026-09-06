@@ -6,11 +6,12 @@ from enum import StrEnum
 from graphlib import CycleError, TopologicalSorter
 from types import MappingProxyType
 from typing import Annotated, Literal, TypeAlias, TypeVar
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-WORKFLOW_DOCUMENT_VERSION = 3
+WORKFLOW_DOCUMENT_VERSION = 4
 _STABLE_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]*$"
 StableId: TypeAlias = Annotated[
     str,
@@ -19,23 +20,39 @@ StableId: TypeAlias = Annotated[
 
 
 class ArtifactType(StrEnum):
+    MASK = "mask"
     IMAGE = "image"
     REFERENCE_PACK = "reference-pack"
     LORA = "lora"
     VIDEO = "video"
     IMAGE_SEQUENCE = "image-sequence"
+    IMAGE_COLLECTION = "image-collection"
+    AUDIO = "audio"
+    KEYFRAME = "keyframe"
 
 
 class NodeKind(StrEnum):
+    BIND_MASK = "bind-mask"
+    SAM_SEGMENT = "sam-segment"
+    CHARACTER_REFINE = "character-refine"
     IMAGE_SOURCE = "image-source"
     REFERENCE_PACK = "reference-pack"
     LORA_SOURCE = "lora-source"
     IMAGE_EDIT = "image-edit"
+    CHARACTER_EDIT = "character-edit"
+    IMAGE_COLLECTION = "image-collection"
+    IMAGE_SELECTION = "image-selection"
     IMAGE_POSTPROCESS = "image-postprocess"
     ANIMEGEN_I2V = "animegen-i2v"
     VIDEO_CONTACT_SHEET = "video-contact-sheet"
     EXTRACT_VIDEO_FRAMES = "extract-video-frames"
     FRAME_POSTPROCESS = "frame-postprocess"
+    VIDEO_SOURCE = "video-source"
+    AUDIO_SOURCE = "audio-source"
+    POSITIONED_KEYFRAME = "positioned-keyframe"
+    LTX23 = "ltx23-keyframes"
+    HUNYUAN_I2V = "hunyuanvideo15-i2v"
+    ASSEMBLE_VIDEO = "assemble-video"
 
 
 class WorkflowModel(BaseModel):
@@ -49,6 +66,19 @@ class NodeLayout(WorkflowModel):
 
 class ImageSourceConfig(WorkflowModel):
     path: str = ""
+
+
+class VideoSourceConfig(WorkflowModel):
+    path: str = ""
+
+
+class AudioSourceConfig(WorkflowModel):
+    path: str = ""
+    stream_index: int | None = Field(default=None, ge=0)
+
+
+class PositionedKeyframeConfig(WorkflowModel):
+    frame: int = Field(default=0, ge=0)
 
 
 class ReferencePackConfig(WorkflowModel):
@@ -73,6 +103,70 @@ class ImageEditConfig(WorkflowModel):
     strength: float | None = None
     sampler: str | None = None
     scheduler: str | None = None
+
+
+class CharacterEditConfig(ImageEditConfig):
+    backend: Literal["flux2-klein", "qwen-image-edit-2511-lightning"] = "flux2-klein"
+    candidates: int = Field(default=2, ge=1)
+    max_iterations: int = Field(default=2, ge=1)
+    upscale_long_side: int | None = Field(default=2048, gt=0)
+    pose_mode: Literal["native", "keypoint"] = "native"
+    structure_control: Literal["depth", "edge"] = "depth"
+    max_sequence_length: int | None = Field(default=None, ge=1, le=1024)
+    guidance_scale: float | None = None
+
+
+class BindMaskConfig(WorkflowModel):
+    source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    mask_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class SamSegmentConfig(WorkflowModel):
+    engine: Literal["sam2", "sam1", "anime"] = "sam2"
+    device: Literal["cuda", "cpu"] = "cuda"
+    prompt_mode: Literal["auto", "box", "points", "box+points"] = "auto"
+    mask_candidate: int | None = Field(default=None, ge=0, le=2)
+    box: str = ""
+    positive_points: str = ""
+    negative_points: str = ""
+    threshold: float = 28.0
+    grow: int = 0
+    feather: int = Field(default=0, ge=0)
+    fill_holes: bool = True
+    largest_component: bool = True
+    invert: bool = False
+
+
+class CharacterRefineConfig(WorkflowModel):
+    backend: Literal["qwen-image-edit-2511-lightning"] = "qwen-image-edit-2511-lightning"
+    prompt: str = ""
+    seed_mode: Literal["fixed", "random"] = "fixed"
+    seed: int = 0
+    steps: int = Field(default=8, ge=1)
+    guidance: Literal[1.0] = 1.0
+    guidance_scale: Literal[1.0] = 1.0
+    strength: float = Field(default=1.0, gt=0, le=1)
+    max_side: int | None = Field(default=None, ge=16)
+    max_sequence_length: int = Field(default=512, ge=1, le=1024)
+    sampler: Literal["flowmatch-euler", "euler-ancestral"] = "flowmatch-euler"
+    scheduler: Literal["flowmatch-dynamic-shift", "simple"] = "flowmatch-dynamic-shift"
+    candidates: int = Field(default=2, ge=1)
+    max_iterations: int = Field(default=2, ge=1)
+
+
+class ImageResultReference(WorkflowModel):
+    manifest_path: str = Field(min_length=1)
+    producer_signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+    output_port: str = Field(min_length=1)
+    artifact_identity: str = Field(min_length=1)
+
+
+class ImageCollectionConfig(WorkflowModel):
+    pass
+
+
+class ImageSelectionConfig(WorkflowModel):
+    selected: ImageResultReference | None = None
 
 
 class VosrPostprocessConfig(WorkflowModel):
@@ -128,6 +222,37 @@ class AnimeGenI2VConfig(WorkflowModel):
     sampling: str
     steps: int | None = Field(default=None, gt=0)
     precision: str
+    keyframe_fit: Literal["crop", "pad", "stretch"] = "stretch"
+
+
+class Ltx23Config(WorkflowModel):
+    prompt: str = ""
+    negative_prompt: str = ""
+    seed_mode: Literal["fixed", "random"] = "fixed"
+    seed: int = 0
+    resolution: str = "640x640"
+    frames: int = Field(default=121, gt=0)
+    fps: int = Field(default=24, gt=0)
+    steps: int = Field(default=15, gt=0)
+    phases: int = 1
+    solver: str = "res2s"
+    conditioning_strength: float = 1.0
+    model: str = "nvfp4"
+    keyframe_fit: Literal["crop", "pad", "stretch"] = "crop"
+
+
+class HunyuanI2VConfig(WorkflowModel):
+    prompt: str = ""
+    seed_mode: Literal["fixed", "random"] = "fixed"
+    seed: int = 0
+    frames: int = Field(default=49, gt=0)
+    steps: int = 8
+    overlap_group_offloading: bool = True
+
+
+class AssembleVideoConfig(WorkflowModel):
+    audio_policy: Literal["preserve", "remove", "replace"] = "preserve"
+    background: str = "black"
 
 
 class VideoContactSheetConfig(WorkflowModel):
@@ -152,6 +277,21 @@ class ImageSourceNode(WorkflowNodeBase):
     config: ImageSourceConfig = Field(default_factory=ImageSourceConfig)
 
 
+class VideoSourceNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.VIDEO_SOURCE] = NodeKind.VIDEO_SOURCE
+    config: VideoSourceConfig = Field(default_factory=VideoSourceConfig)
+
+
+class AudioSourceNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.AUDIO_SOURCE] = NodeKind.AUDIO_SOURCE
+    config: AudioSourceConfig = Field(default_factory=AudioSourceConfig)
+
+
+class PositionedKeyframeNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.POSITIONED_KEYFRAME] = NodeKind.POSITIONED_KEYFRAME
+    config: PositionedKeyframeConfig = Field(default_factory=PositionedKeyframeConfig)
+
+
 class ReferencePackNode(WorkflowNodeBase):
     kind: Literal[NodeKind.REFERENCE_PACK] = NodeKind.REFERENCE_PACK
     config: ReferencePackConfig = Field(default_factory=ReferencePackConfig)
@@ -167,6 +307,36 @@ class ImageEditNode(WorkflowNodeBase):
     config: ImageEditConfig
 
 
+class CharacterEditNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.CHARACTER_EDIT] = NodeKind.CHARACTER_EDIT
+    config: CharacterEditConfig = Field(default_factory=CharacterEditConfig)
+
+
+class BindMaskNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.BIND_MASK] = NodeKind.BIND_MASK
+    config: BindMaskConfig = Field(default_factory=BindMaskConfig)
+
+
+class SamSegmentNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.SAM_SEGMENT] = NodeKind.SAM_SEGMENT
+    config: SamSegmentConfig = Field(default_factory=SamSegmentConfig)
+
+
+class CharacterRefineNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.CHARACTER_REFINE] = NodeKind.CHARACTER_REFINE
+    config: CharacterRefineConfig = Field(default_factory=CharacterRefineConfig)
+
+
+class ImageCollectionNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.IMAGE_COLLECTION] = NodeKind.IMAGE_COLLECTION
+    config: ImageCollectionConfig = Field(default_factory=ImageCollectionConfig)
+
+
+class ImageSelectionNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.IMAGE_SELECTION] = NodeKind.IMAGE_SELECTION
+    config: ImageSelectionConfig = Field(default_factory=ImageSelectionConfig)
+
+
 class ImagePostprocessNode(WorkflowNodeBase):
     kind: Literal[NodeKind.IMAGE_POSTPROCESS] = NodeKind.IMAGE_POSTPROCESS
     config: ImagePostprocessConfig
@@ -175,6 +345,21 @@ class ImagePostprocessNode(WorkflowNodeBase):
 class AnimeGenI2VNode(WorkflowNodeBase):
     kind: Literal[NodeKind.ANIMEGEN_I2V] = NodeKind.ANIMEGEN_I2V
     config: AnimeGenI2VConfig
+
+
+class Ltx23Node(WorkflowNodeBase):
+    kind: Literal[NodeKind.LTX23] = NodeKind.LTX23
+    config: Ltx23Config = Field(default_factory=Ltx23Config)
+
+
+class HunyuanI2VNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.HUNYUAN_I2V] = NodeKind.HUNYUAN_I2V
+    config: HunyuanI2VConfig = Field(default_factory=HunyuanI2VConfig)
+
+
+class AssembleVideoNode(WorkflowNodeBase):
+    kind: Literal[NodeKind.ASSEMBLE_VIDEO] = NodeKind.ASSEMBLE_VIDEO
+    config: AssembleVideoConfig = Field(default_factory=AssembleVideoConfig)
 
 
 class VideoContactSheetNode(WorkflowNodeBase):
@@ -197,11 +382,23 @@ WorkflowNode: TypeAlias = Annotated[
     | ReferencePackNode
     | LoraSourceNode
     | ImageEditNode
+    | CharacterEditNode
+    | BindMaskNode
+    | SamSegmentNode
+    | CharacterRefineNode
+    | ImageCollectionNode
+    | ImageSelectionNode
     | ImagePostprocessNode
     | AnimeGenI2VNode
     | VideoContactSheetNode
     | ExtractVideoFramesNode
-    | FramePostprocessNode,
+    | FramePostprocessNode
+    | VideoSourceNode
+    | AudioSourceNode
+    | PositionedKeyframeNode
+    | Ltx23Node
+    | HunyuanI2VNode
+    | AssembleVideoNode,
     Field(discriminator="kind"),
 ]
 
@@ -261,11 +458,50 @@ _SEQUENCE_OUTPUT = PortDefinition(
 
 NODE_DEFINITIONS = MappingProxyType(
     {
+        NodeKind.CHARACTER_EDIT: NodeDefinition(
+            kind=NodeKind.CHARACTER_EDIT, label="Character edit",
+            inputs=(
+                PortDefinition("references", (ArtifactType.IMAGE, ArtifactType.REFERENCE_PACK), required=True, multiple=True, label="References"),
+                PortDefinition("loras", (ArtifactType.LORA,), multiple=True, label="LoRAs"),
+                PortDefinition("pose", (ArtifactType.IMAGE,), label="Pose source"),
+                PortDefinition("scene", (ArtifactType.IMAGE,), label="Scene source"),
+            ),
+            outputs=(_IMAGE_OUTPUT,),
+        ),
+        NodeKind.VIDEO_SOURCE: NodeDefinition(kind=NodeKind.VIDEO_SOURCE, label="Video file", outputs=(_VIDEO_OUTPUT,)),
+        NodeKind.AUDIO_SOURCE: NodeDefinition(kind=NodeKind.AUDIO_SOURCE, label="Audio track",
+            outputs=(PortDefinition("audio", (ArtifactType.AUDIO,), label="Audio"),)),
+        NodeKind.POSITIONED_KEYFRAME: NodeDefinition(kind=NodeKind.POSITIONED_KEYFRAME, label="Positioned keyframe",
+            inputs=(PortDefinition("image", (ArtifactType.IMAGE,), required=True, label="Image"),),
+            outputs=(PortDefinition("keyframe", (ArtifactType.KEYFRAME,), label="Keyframe"),)),
+        NodeKind.LTX23: NodeDefinition(kind=NodeKind.LTX23, label="LTX-2.3",
+            inputs=(PortDefinition("keyframes", (ArtifactType.KEYFRAME,), required=True, multiple=True, label="Keyframes"),),
+            outputs=(_VIDEO_OUTPUT,)),
+        NodeKind.HUNYUAN_I2V: NodeDefinition(kind=NodeKind.HUNYUAN_I2V, label="HunyuanVideo-1.5",
+            inputs=(PortDefinition("start", (ArtifactType.IMAGE,), required=True, label="Start"),), outputs=(_VIDEO_OUTPUT,)),
+        NodeKind.ASSEMBLE_VIDEO: NodeDefinition(kind=NodeKind.ASSEMBLE_VIDEO, label="Assemble video",
+            inputs=(PortDefinition("images", (ArtifactType.IMAGE_SEQUENCE,), required=True, label="Frames"),
+                    PortDefinition("audio", (ArtifactType.AUDIO,), label="Replacement audio")), outputs=(_VIDEO_OUTPUT,)),
         NodeKind.IMAGE_SOURCE: NodeDefinition(
             kind=NodeKind.IMAGE_SOURCE,
             label="Image",
             outputs=(_IMAGE_OUTPUT,),
         ),
+        NodeKind.BIND_MASK: NodeDefinition(kind=NodeKind.BIND_MASK, label="Bind mask to source",
+            inputs=(PortDefinition("source", (ArtifactType.IMAGE,), required=True, label="Source"),
+                    PortDefinition("image", (ArtifactType.IMAGE,), required=True, label="Mask image")),
+            outputs=(PortDefinition("mask", (ArtifactType.MASK,), label="Mask"),)),
+        NodeKind.SAM_SEGMENT: NodeDefinition(kind=NodeKind.SAM_SEGMENT, label="SAM segmentation",
+            inputs=(PortDefinition("source", (ArtifactType.IMAGE,), required=True, label="Source"),),
+            outputs=(PortDefinition("mask", (ArtifactType.MASK,), label="Mask"),
+                     PortDefinition("cutout", (ArtifactType.IMAGE,), label="Cutout"),
+                     PortDefinition("preview", (ArtifactType.IMAGE,), label="Preview"))),
+        NodeKind.CHARACTER_REFINE: NodeDefinition(kind=NodeKind.CHARACTER_REFINE, label="Qwen regional edit",
+            inputs=(PortDefinition("source", (ArtifactType.IMAGE,), required=True, label="Source"),
+                    PortDefinition("mask", (ArtifactType.MASK,), required=True, label="Mask"),
+                    PortDefinition("references", (ArtifactType.IMAGE, ArtifactType.REFERENCE_PACK), multiple=True, label="References"),
+                    PortDefinition("loras", (ArtifactType.LORA,), multiple=True, label="LoRAs")),
+            outputs=(_IMAGE_OUTPUT,)),
         NodeKind.REFERENCE_PACK: NodeDefinition(
             kind=NodeKind.REFERENCE_PACK,
             label="Reference pack",
@@ -306,6 +542,18 @@ NODE_DEFINITIONS = MappingProxyType(
                     label="LoRAs",
                 ),
             ),
+            outputs=(_IMAGE_OUTPUT,),
+        ),
+        NodeKind.IMAGE_COLLECTION: NodeDefinition(
+            kind=NodeKind.IMAGE_COLLECTION,
+            label="Image variants",
+            inputs=(PortDefinition("images", (ArtifactType.IMAGE,), required=True, multiple=True, label="Candidates"),),
+            outputs=(PortDefinition("collection", (ArtifactType.IMAGE_COLLECTION,), label="Variants"),),
+        ),
+        NodeKind.IMAGE_SELECTION: NodeDefinition(
+            kind=NodeKind.IMAGE_SELECTION,
+            label="Selected image",
+            inputs=(PortDefinition("collection", (ArtifactType.IMAGE_COLLECTION,), label="Choose from"),),
             outputs=(_IMAGE_OUTPUT,),
         ),
         NodeKind.IMAGE_POSTPROCESS: NodeDefinition(
@@ -388,9 +636,39 @@ def node_definition(kind: NodeKind) -> NodeDefinition:
 
 class WorkflowGraph(WorkflowModel):
     version: Literal[WORKFLOW_DOCUMENT_VERSION] = WORKFLOW_DOCUMENT_VERSION
+    workflow_id: StableId = Field(default_factory=lambda: f"workflow-{uuid4().hex}")
     name: str = Field(min_length=1, max_length=160)
     nodes: tuple[WorkflowNode, ...] = ()
     connections: tuple[WorkflowConnection, ...] = ()
+
+    def execution_inputs(self) -> dict[str, dict[str, tuple[WorkflowConnection, ...]]]:
+        """A saved image choice is an artifact boundary, not a fresh generation."""
+        incoming = self.incoming_connections()
+        for node in self.nodes:
+            if isinstance(node, ImageSelectionNode):
+                incoming[node.id] = {}
+            elif isinstance(node, AssembleVideoNode) and node.config.audio_policy != "replace":
+                incoming[node.id].pop("audio", None)
+        return incoming
+
+    def execution_scope(self, targets: Sequence[str] | None = None) -> tuple[str, ...]:
+        nodes = {node.id for node in self.nodes}
+        if targets is None:
+            connected = {wire.source.node_id for wire in self.connections}
+            targets = tuple(node.id for node in self.nodes if node.id not in connected)
+        unknown = set(targets) - nodes
+        if unknown:
+            raise ValueError(f"unknown workflow targets: {', '.join(sorted(unknown))}")
+        incoming = self.execution_inputs()
+        scope: set[str] = set()
+        work = list(targets)
+        while work:
+            node_id = work.pop()
+            if node_id in scope:
+                continue
+            scope.add(node_id)
+            work.extend(wire.source.node_id for wires in incoming[node_id].values() for wire in wires)
+        return tuple(node.id for node in self.nodes if node.id in scope)
 
     @model_validator(mode="after")
     def validate_graph(self) -> WorkflowGraph:
@@ -484,6 +762,20 @@ class WorkflowGraph(WorkflowModel):
 
     def node(self, node_id: str) -> WorkflowNode:
         return next(node for node in self.nodes if node.id == node_id)
+
+    def incoming_connections(self) -> dict[str, dict[str, tuple[WorkflowConnection, ...]]]:
+        incoming: dict[str, dict[str, list[WorkflowConnection]]] = {
+            node.id: {} for node in self.nodes
+        }
+        for connection in self.connections:
+            incoming[connection.target.node_id].setdefault(connection.target.port, []).append(connection)
+        return {
+            node_id: {
+                port: tuple(sorted(connections, key=lambda connection: connection.order))
+                for port, connections in ports.items()
+            }
+            for node_id, ports in incoming.items()
+        }
 
 
 ItemT = TypeVar("ItemT", WorkflowNodeBase, WorkflowConnection)

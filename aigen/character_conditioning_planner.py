@@ -12,14 +12,10 @@ from aigen.character_conditioning_models import (
 _ALLOWED_MODES_BY_ROUTE = {
     "pose_transfer": ("pose_reference", "pose_keypoint"),
     "local_repair_or_inpaint": ("region_mask",),
-    "scene_insertion": ("depth", "edge_or_sketch"),
+    "scene_insertion": ("depth", "edge_or_sketch", "pose_reference", "pose_keypoint"),
     "outfit_swap": ("region_mask",),
 }
 
-_REQUIRED_MODES_BY_ROUTE = {
-    "local_repair_or_inpaint": frozenset(("region_mask",)),
-}
-_NO_REQUIRED_MODES = frozenset()
 _POSE_MODES = frozenset(("pose_reference", "pose_keypoint"))
 _TOOLS_BY_MODE = {
     "region_mask": ("florence2_region_grounding", "sam2_mask_generation"),
@@ -44,16 +40,15 @@ class CharacterConditioningPlanner:
             raise CharacterConditioningPlanError(
                 f"Unexpected conditioning modes for {route_kind}: {sorted(unexpected_modes)}"
             )
-        if route_kind == "pose_transfer":
-            pose_modes = available_mode_set.intersection(_POSE_MODES)
+        pose_modes = available_mode_set.intersection(_POSE_MODES)
+        if route_kind == "pose_transfer" or pose_modes:
             if len(pose_modes) != 1:
                 raise CharacterConditioningPlanError(
-                    "pose_transfer requires exactly one of pose_reference or pose_keypoint"
+                    "A pose source uses either pose_reference or pose_keypoint"
                 )
-        missing_modes = _REQUIRED_MODES_BY_ROUTE.get(route_kind, _NO_REQUIRED_MODES).difference(available_mode_set)
-        if missing_modes:
+        if route_kind == "local_repair_or_inpaint" and "region_mask" not in available_mode_set:
             raise CharacterConditioningPlanError(
-                f"Missing required conditioning modes for {route_kind}: {sorted(missing_modes)}"
+                "local_repair_or_inpaint requires a region_mask"
             )
         return CharacterConditioningPlanSpec(
             kind=CHARACTER_CONDITIONING_PLAN_KIND,

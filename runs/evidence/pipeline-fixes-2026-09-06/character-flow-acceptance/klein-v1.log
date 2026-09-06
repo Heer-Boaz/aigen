@@ -1,0 +1,23 @@
+{"label": "generation", "gpu_free_mib": 15378}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Reference"}
+{"label": "generation", "phase": "failed"}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/tui_character_probe.py", line 79, in <module>
+    asyncio.run(run(parser.parse_args()))
+  File "/home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/tui_character_probe.py", line 50, in run
+    generated = await run_action(app, editor, pilot, "#workflow-run-target", directory, "generation", request["min_free_mib"])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/tui_probe.py", line 97, in run_action
+    assert process.returncode == 0, record
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'returncode': 1, 'stdout_closed': True, 'elapsed_seconds': 54.47522098800982, 'statuses': {'edit': 'failed', 'reference': 'completed'}}

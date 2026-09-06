@@ -1,10 +1,12 @@
 # aigen
 
-Private AI character keyframe pipeline for game character art. The supported
-workflow is brief-first: the user supplies an approved character view bank, a
-source sprite or frame, and a short action request. Local vision-language and
-vision models plan the identity caption, pose caption, prompt text, controls,
-scoring checks and polish targets from those images.
+Private local image, character and video pipeline application with a TUI.
+The current character flow supplies complete ordered visual references and a
+direct user instruction to an explicitly selected Klein or Qwen backbone.
+A separate model audits raw candidates before optional postprocessing.
+The [workflow guide](docs/workflows.md) covers variants, saved selection,
+regional masked edits, video continuation, caching and export. The character
+architecture is defined by [PLAN.md](docs/PLAN.md).
 
 ```bash
 python -m venv .venv
@@ -186,6 +188,17 @@ through this command. Reference packs are expanded once before backend dispatch,
 preserving their declared image order. Boogu's native one-image limit also
 applies to packs; FLUX.2 Klein, Qwen and HiDream accept multi-image packs.
 
+Both Qwen-2511 backends retain source resolution for VAE reference conditioning,
+with alignment to 16 pixels for latent packing. The output canvas does not cap
+reference size, and the VAE input is no longer resized to a fixed 1024² pixels.
+The parallel Qwen2.5-VL multimodal encoder keeps LightX2V's 384²-pixel semantic
+input: increasing that input to source resolution regressed edit following in
+the controlled comparison. It produces embeddings from images and the edit
+instruction, not an intermediate text description. Larger VAE references
+increase memory use and generation time; improved style consistency has not
+been established. Run metadata records both policies and the actual input/VAE
+dimensions and conditioning sequence lengths under `environment.reference_preprocessing`.
+
 ### Terminal UI
 
 ```bash
@@ -208,11 +221,13 @@ LoRA files are discovered from `loras/` and filtered for the selected model;
 reference packs are discovered from `assets/reference-packs/*.json`.
 Its visible buttons add and remove slots and start or stop generation. Each
 movable field has compact `↑` and `↓` buttons; unavailable directions are dimmed.
-Tab and Shift-Tab focus those buttons; Enter activates the focused button. The
+Tab and Shift-Tab focus those buttons; Enter activates the focused button.
 The Videos tab exposes the configured video backends. The SAM Edit tab exposes standalone
 SAM mask/cutout/preview generation, Florence-2/SAM2 region plans, and a direct Qwen masked
 edit form that consumes either an existing white-on-black mask or a selected region from a
 region-plan result through the character refine owner.
+`Open as workflow` imports SAM selection or native Qwen-2511 regional editing
+into the same saved node graph, with source-bound masks and optional references.
 For SAM box/point prompting, select `Box`, `Points`, or `Box + points` and open `Edit prompts`
 to edit the input image in a large overlay: box mode uses two left clicks for opposite
 corners, left click adds a positive point, and right click (or Shift+left click) adds a
@@ -245,10 +260,19 @@ canvas, reordered where an input accepts multiple values, and edited through
 the responsive inspector. Workflow nodes can also be selected with the arrow
 keys and moved with Shift+arrow. Seeded nodes expose fixed and per-run random
 seed modes.
-Workflow documents are ordinary JSON files. The built-in template generates
-first and last keyframes, post-processes both, feeds them to AnimeGen-I2V,
-creates a contact sheet, extracts every frame, and post-processes that frame
-sequence.
+Workflow documents are ordinary JSON files. `New image flow` starts with two
+ordered references and two image-edit steps. The Images form can also open its
+current settings as a workflow. `Seed variants` creates independently cached
+edits, a candidate collection, and an explicit image selection. Use `Run to
+here` on the collection, compare candidates in `Results`, and save a choice
+with `Select image`. A subsequent run uses that saved artifact as the next
+step's input, including after restarting the app. Results include original
+settings, input previews, run history, logs, and original-file open/export.
+See [the workflow guide](docs/workflows.md) for the complete sequence.
+
+`New video flow` retains the AnimeGen template: generate and post-process
+first/last keyframes, generate a video, create a contact sheet, extract frames,
+and post-process the frame sequence.
 Execution artifacts use a shared content-verified node cache under
 `runs/workflows/cache`; changing a downstream node therefore keeps compatible
 upstream results, even across different workflow documents.
@@ -259,6 +283,8 @@ The same documents can be managed without the TUI:
 .venv/bin/aigen workflow new --output workflow.json
 .venv/bin/aigen workflow validate --input workflow.json
 .venv/bin/aigen workflow run --input workflow.json
+.venv/bin/aigen workflow run --input workflow.json --target collection-node-id
+.venv/bin/aigen workflow new --template video --output video-workflow.json
 ```
 While generation runs, the status line shows the backend's complete progress
 snapshot: progress bar, percentage, completed steps, phase, ETA, elapsed time,

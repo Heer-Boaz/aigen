@@ -1,0 +1,16 @@
+{
+  "arguments": [
+    "characters",
+    "qwen-refine-plan",
+    "--image",
+    "/tmp/tmpeh31mdk0/source.png",
+    "--mask",
+    "/tmp/tmpeh31mdk0/mask.png",
+    "--instruction",
+    "Change the background to pale blue.",
+    "--compact"
+  ],
+  "returncode": 2,
+  "stderr": "usage: aigen characters [-h]\n                        {view-schema,view-bank-schema,view-validate,view-plan,view-run,view-accept,reference-pack,qwen-edit-run,postprocess,vosr-upscale,qwen-edit-refine-plan,qwen-edit-refine,region-plan}\n                        ...\naigen characters: error: argument characters_command: invalid choice: 'qwen-refine-plan' (choose from view-schema, view-bank-schema, view-validate, view-plan, view-run, view-accept, reference-pack, qwen-edit-run, postprocess, vosr-upscale, qwen-edit-refine-plan, qwen-edit-refine, region-plan)\n",
+  "stdout": ""
+}

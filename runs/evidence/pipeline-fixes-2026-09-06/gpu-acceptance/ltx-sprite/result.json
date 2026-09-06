@@ -1,0 +1,18 @@
+{
+  "elapsed_seconds": 0.3081736639869632,
+  "error": "Ltx23KeyframesError: video negative prompt must not be empty",
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 1049,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "minimum_host_available_mib": 87970.546875,
+  "nvidia_smi_peak_used_mib": 1049,
+  "process_peak_rss_mib": 544.87890625,
+  "status": "failed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

@@ -1,0 +1,55 @@
+{
+  "audit": {
+    "attention_impl": "sdpa",
+    "dtype": "bfloat16",
+    "id": "qwen2.5-vl-7b",
+    "max_new_tokens": 256,
+    "max_pixels": 401408,
+    "min_pixels": 200704,
+    "model": "/home/boaz/aigen/aigen/models/vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+    "quantization": "bitsandbytes-8bit",
+    "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+    "temperature": 0.0
+  },
+  "audit_prompt": "Select the candidate that best fulfills the requested edit while remaining visually faithful to the character references. Judge the requested changes and their natural visual consequences as intended, including any requested change of style. Pass only if the selected candidate fulfills the request and has no unintended visual deviations. If every candidate has defects, select the closest one and fail it.\nRequested edit: Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.\nRoute: unknown_reference_edit\nImage 1: reference.\nImage 2: candidate 0.\nImage 3: candidate 1.\nReturn one JSON object with exactly these keys: passed (boolean for the selected candidate), candidate_index (the candidate number), regions (short pointers locating its visible defects, or an empty list when passed). Return region names only, without descriptions or repair instructions.",
+  "max_iterations": 2,
+  "min_free_mib": 13000,
+  "negative_prompt": null,
+  "prompt": "Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.",
+  "retry_seeds": [
+    93,
+    94
+  ],
+  "review_status": "approved",
+  "reviewer": "review_gpu_prompts",
+  "routes": {
+    "klein": {
+      "backend": "flux2-klein",
+      "height": 1024,
+      "sampler": "flowmatch-euler",
+      "scheduler": "flowmatch-dynamic-shift",
+      "steps": 4,
+      "upscale_long_side": 2048,
+      "width": 768
+    },
+    "qwen": {
+      "backend": "qwen-image-edit-2511-lightning",
+      "guidance": 1.0,
+      "height": 1536,
+      "sampler": "flowmatch-euler",
+      "scheduler": "flowmatch-dynamic-shift",
+      "steps": 8,
+      "upscale_long_side": null,
+      "width": 1152
+    }
+  },
+  "seeds": [
+    91,
+    92
+  ],
+  "source": {
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+    "sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84"
+  }
+}

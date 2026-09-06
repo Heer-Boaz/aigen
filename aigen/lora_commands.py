@@ -40,6 +40,7 @@ from aigen.lora_canon import LoraCanonError, audit_lora_dataset_source, init_lor
 from aigen.lora_dataset_models import LoraDatasetError, lora_dataset_schema
 from aigen.lora_datasets import build_lora_dataset
 from aigen.lora_training import (
+    LORA_TRAINING_ARCHITECTURE,
     DEFAULT_BASE_MODEL,
     DEFAULT_TRAINER_SCRIPT,
     LoraLocalTrainConfig,
@@ -57,6 +58,8 @@ from aigen.vlm_qwen import QwenVlmError
 def add_lora_commands(subparsers: Any) -> None:
     lora = subparsers.add_parser("lora", help="LoRA dataset and training preparation tools")
     lora_subparsers = lora.add_subparsers(dest="lora_command", required=True)
+    capabilities = lora_subparsers.add_parser("capabilities", help="List dataset, local-training and image-edit import capabilities")
+    capabilities.add_argument("--compact", action="store_true", help="Write compact JSON")
 
     schema = lora_subparsers.add_parser("dataset-schema", help="Write the LoRA dataset JSON schema")
     schema.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -198,16 +201,16 @@ def add_lora_commands(subparsers: Any) -> None:
 
     training_preflight = lora_subparsers.add_parser(
         "training-preflight",
-        help="Report whether the local GPU is suitable for FLUX LoRA training",
+        help="Report whether local inputs and GPU are suitable for FLUX.1 LoRA training",
     )
     training_preflight.add_argument("dataset_dir", type=Path, help="Built LoRA dataset directory")
     training_preflight.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    train_plan = lora_subparsers.add_parser("train-plan", help="Build the local 16GB FLUX LoRA training plan")
+    train_plan = lora_subparsers.add_parser("train-plan", help="Build the local 16GB FLUX.1 LoRA training plan")
     _add_train_args(train_plan)
     train_plan.add_argument("--compact", action="store_true", help="Write compact JSON")
 
-    train_run = lora_subparsers.add_parser("train-run", help="Run the local 16GB FLUX LoRA training plan")
+    train_run = lora_subparsers.add_parser("train-run", help="Run the local 16GB FLUX.1 LoRA training plan")
     _add_train_args(train_run)
     train_run.add_argument("--dry-run", action="store_true", help="Write the plan without launching training")
     train_run.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -337,6 +340,16 @@ def run_lora_command(
     progress: StatusReporter,
 ) -> int:
     try:
+        if args.lora_command == "capabilities":
+            from aigen.generation.image_edit import IMAGE_EDIT_BACKEND_SETTINGS
+
+            dump_json(stdout, {
+                "dataset": {"format": "image-caption-pairs", "captions": "sidecar TXT and metadata.jsonl", "splits": ["train", "val"]},
+                "local_training": {"architecture": LORA_TRAINING_ARCHITECTURE, "commands": ["lora train-plan", "lora train-run"]},
+                "image_edit_import": [{"backend": backend, "architecture": settings.lora_architecture}
+                    for backend, settings in IMAGE_EDIT_BACKEND_SETTINGS.items() if settings.lora_architecture is not None],
+            }, pretty=not args.compact)
+            return 0
         if args.lora_command == "dataset-schema":
             dump_json(stdout, lora_dataset_schema(), pretty=not args.compact)
             return 0

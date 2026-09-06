@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import gc
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from aigen.flux_geometry import FLUX_TOKEN_SIZE
 from aigen.generation.flux2_scaled_fp8 import load_flux2_klein_scaled_fp8
@@ -18,6 +18,7 @@ from aigen.generation.image_generation_requests import (
 )
 from aigen.generation.flow_match_sampling import euler_ancestral_step
 from aigen.generation.flux2_klein_artifacts import (
+    FLUX2_KLEIN_IMPLEMENTATION_REVISION,
     FLUX2_KLEIN_MODEL_ROOT,
     FLUX2_KLEIN_TEXT_ENCODER,
     FLUX2_KLEIN_TRANSFORMER,
@@ -29,6 +30,7 @@ from aigen.image_edit_defaults import (
     FLUX2_KLEIN_STEPS,
 )
 from aigen.lora_weights import LoraLoadSpec
+from aigen.image_io import open_image
 from aigen.progress import StatusReporter
 FLUX2_KLEIN_RECOMMENDED_MAX_SIDE = 1024
 FLUX2_KLEIN_RECOMMENDED_MIN_SIDE = 256
@@ -118,6 +120,7 @@ class Flux2KleinBatchResult:
     def to_json(self) -> dict[str, Any]:
         payload = {
             "outputs": [output.to_json() for output in self.outputs],
+            "implementation_revision": FLUX2_KLEIN_IMPLEMENTATION_REVISION,
             "generation_ms": self.generation_ms,
             "model_load_ms": self.model_load_ms,
             "peak_vram_mb": self.peak_vram_mb,
@@ -143,6 +146,7 @@ class Flux2KleinResult:
     def to_json(self) -> dict[str, Any]:
         payload = {
             "output": self.output,
+            "implementation_revision": FLUX2_KLEIN_IMPLEMENTATION_REVISION,
             "width": self.width,
             "height": self.height,
             "seed": self.seed,
@@ -166,6 +170,7 @@ class _PreparedFlux2KleinCase:
     image_latents: Any | None
     image_latent_ids: Any | None
     init_source_latent: Any | None = None
+    begin_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -296,6 +301,7 @@ class Flux2KleinSession:
         cases: Sequence[ImageGenerationCaseRequest],
         prompt_embeddings: Mapping[str, Flux2KleinPromptEmbedding],
         progress: StatusReporter,
+        on_output: Callable[[Flux2KleinBatchOutput], None] | None = None,
     ) -> Flux2KleinBatchResult:
         _validate_flux2_klein_cases(cases)
         started = time.perf_counter()
@@ -316,7 +322,6 @@ class Flux2KleinSession:
                     compute_empirical_mu=self.compute_empirical_mu,
                     retrieve_timesteps=self.retrieve_timesteps,
                     sampler=self.sampler,
-                    strength=self.strength,
                     progress=progress,
                 )
                 outputs = _decode_flux2_klein_outputs(
@@ -324,6 +329,7 @@ class Flux2KleinSession:
                     denoised_outputs=denoised_outputs,
                     torch=self.torch,
                     progress=progress,
+                    on_output=on_output,
                 )
             return Flux2KleinBatchResult(
                 outputs=outputs,
@@ -497,6 +503,7 @@ def _prepare_flux2_klein_cases(
     vae.requires_grad_(False)
     has_references = any(case.image_paths for case in cases)
     reference_cache = {}
+    init_cache = {}
     prepared_cases = []
     try:
         if has_references:
@@ -514,26 +521,13 @@ def _prepare_flux2_klein_cases(
                     ) = _prepare_condition_images(
                         pipeline,
                         reference_images,
-                        target_width=case.width,
-                        target_height=case.height,
-                        progress=progress,
                     )
                 finally:
                     for image in reference_images:
                         image.close()
                 image_latents = None
                 image_latent_ids = None
-                init_source_latent = None
-                if strength is not None and condition_images:
-                    # img2img: the first reference is the init image; encode it (unpacked)
-                    # and drop kontext context so its pose is preserved by the init, not a hint.
-                    generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
-                    with torch.no_grad():
-                        init_source_latent = pipeline._encode_vae_image(
-                            condition_images[0].to(device="cuda", dtype=vae.dtype),
-                            generator,
-                        ).cpu()
-                elif condition_images:
+                if condition_images:
                     generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
                     with torch.no_grad():
                         image_latents, image_latent_ids = pipeline.prepare_image_latents(
@@ -548,7 +542,6 @@ def _prepare_flux2_klein_cases(
                 reference_encoding = (
                     image_latents,
                     image_latent_ids,
-                    init_source_latent,
                     inferred_width,
                     inferred_height,
                 )
@@ -556,21 +549,45 @@ def _prepare_flux2_klein_cases(
             (
                 image_latents,
                 image_latent_ids,
-                init_source_latent,
                 inferred_width,
                 inferred_height,
             ) = reference_encoding
+            width = case.width or inferred_width
+            height = case.height or inferred_height
+            init_source_latent = None
+            begin_index = 0
+            if strength is not None and reference_key:
+                begin_index = min(
+                    FLUX2_KLEIN_STEPS - 1,
+                    max(0, round((1.0 - strength) * FLUX2_KLEIN_STEPS)),
+                )
+                init_key = (reference_key[0], width, height)
+                init_source_latent = init_cache.get(init_key)
+                if init_source_latent is None:
+                    # The init fills the output canvas; reference context keeps its own aspect.
+                    with open_image(reference_key[0]) as source, source.convert("RGB") as rgb:
+                        with ImageOps.fit(rgb, (width, height), method=Image.Resampling.LANCZOS) as fitted:
+                            init_image = pipeline.image_processor.preprocess(
+                                fitted, height=height, width=width, resize_mode="crop",
+                            )
+                    generator = torch.Generator(device="cuda").manual_seed(case.outputs[0].seed)
+                    with torch.no_grad():
+                        init_source_latent = pipeline._encode_vae_image(
+                            init_image.to(device="cuda", dtype=vae.dtype), generator,
+                        ).cpu()
+                    init_cache[init_key] = init_source_latent
             prompt_embeds, text_ids = encoded_prompts[case.prompt]
             prepared_cases.append(
                 _PreparedFlux2KleinCase(
                     request=case,
-                    width=case.width or inferred_width,
-                    height=case.height or inferred_height,
+                    width=width,
+                    height=height,
                     prompt_embeds=prompt_embeds,
                     text_ids=text_ids,
                     image_latents=image_latents,
                     image_latent_ids=image_latent_ids,
                     init_source_latent=init_source_latent,
+                    begin_index=begin_index,
                 )
             )
     finally:
@@ -588,11 +605,13 @@ def _denoise_flux2_klein_cases(
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
     sampler: str,
-    strength: float | None = None,
     progress: StatusReporter,
 ) -> tuple[_DenoisedFlux2KleinOutput, ...]:
     transformer = pipeline.transformer
-    total_steps = sum(len(case.request.outputs) for case in prepared_cases) * FLUX2_KLEIN_STEPS
+    total_steps = sum(
+        len(case.request.outputs) * (FLUX2_KLEIN_STEPS - case.begin_index)
+        for case in prepared_cases
+    )
     progress.begin(total_steps, f"denoising 0/{total_steps}")
     denoised_outputs = []
     try:
@@ -607,7 +626,6 @@ def _denoise_flux2_klein_cases(
                     compute_empirical_mu=compute_empirical_mu,
                     retrieve_timesteps=retrieve_timesteps,
                     sampler=sampler,
-                    strength=strength,
                     progress=progress,
                 )
             )
@@ -626,7 +644,6 @@ def _denoise_flux2_klein_case(
     compute_empirical_mu: Any,
     retrieve_timesteps: Any,
     sampler: str,
-    strength: float | None = None,
     progress: StatusReporter,
 ) -> list[_DenoisedFlux2KleinOutput]:
     prompt_embeds = case.prompt_embeds.to("cuda")
@@ -658,26 +675,15 @@ def _denoise_flux2_klein_case(
             sigmas=np.linspace(1.0, 1 / FLUX2_KLEIN_STEPS, FLUX2_KLEIN_STEPS),
             mu=mu,
         )
-        begin_index = 0
-        if case.init_source_latent is not None and strength is not None:
-            # img2img: seed the latent from the noised source so its pose is preserved,
-            # then start denoising partway through the schedule (higher strength = more change).
-            begin_index = min(
-                FLUX2_KLEIN_STEPS - 1,
-                max(0, round((1.0 - strength) * FLUX2_KLEIN_STEPS)),
-            )
-            source = case.init_source_latent.to(device="cuda", dtype=latents.dtype)
-            init_noise = torch.randn(
-                source.shape,
-                generator=generator,
-                device=torch.device("cuda"),
-                dtype=source.dtype,
-            )
-            noised = pipeline.scheduler.scale_noise(
-                source, timesteps[begin_index : begin_index + 1], init_noise
-            )
-            latents = pipeline._pack_latents(noised)
+        begin_index = case.begin_index
         pipeline.scheduler.set_begin_index(begin_index)
+        if case.init_source_latent is not None:
+            source = pipeline._pack_latents(case.init_source_latent).to(
+                device="cuda", dtype=latents.dtype,
+            )
+            latents = pipeline.scheduler.scale_noise(
+                source, timesteps[begin_index : begin_index + 1], latents,
+            )
         ancestral_generator = (
             torch.Generator(device="cuda").manual_seed(output.seed)
             if sampler == "euler-ancestral"
@@ -753,6 +759,7 @@ def _decode_flux2_klein_outputs(
     denoised_outputs: Sequence[_DenoisedFlux2KleinOutput],
     torch: Any,
     progress: StatusReporter,
+    on_output: Callable[[Flux2KleinBatchOutput], None] | None = None,
 ) -> tuple[Flux2KleinBatchOutput, ...]:
     progress.phase("decode images")
     vae = pipeline.vae
@@ -767,6 +774,8 @@ def _decode_flux2_klein_outputs(
                     torch=torch,
                 )
             )
+            if on_output is not None:
+                on_output(outputs[-1])
     finally:
         vae.to("cpu")
         _release_cuda(torch)
@@ -821,7 +830,7 @@ def _decode_flux2_klein_output(
 def _load_reference_images(paths: Sequence[Path]) -> list[Image.Image]:
     images = []
     for path in paths:
-        with Image.open(path) as image:
+        with open_image(path) as image:
             images.append(image.convert("RGB"))
     return images
 
@@ -829,27 +838,11 @@ def _load_reference_images(paths: Sequence[Path]) -> list[Image.Image]:
 def _prepare_condition_images(
     pipeline: Any,
     images: Sequence[Image.Image],
-    target_width: int | None = None,
-    target_height: int | None = None,
-    progress: Any = None,
 ) -> tuple[list[Any], int, int]:
-    from aigen.generation.image_upscale import IllustrationUpscaler, upscale_model_path, DEFAULT_UPSCALE_MODEL
-
     condition_images = []
     width = None
     height = None
     for image in images:
-        if target_width is not None and target_height is not None:
-            if image.size != (target_width, target_height):
-                upscaler = IllustrationUpscaler(model_path=upscale_model_path(DEFAULT_UPSCALE_MODEL))
-                if progress:
-                    progress.phase("upscaling reference to match generation resolution")
-                image = upscaler.upscale(
-                    image,
-                    target_size=(target_width, target_height),
-                    progress=progress
-                ).image
-
         image_width, image_height = image.size
         if image_width * image_height > 1024**2:
             image = pipeline.image_processor._resize_to_target_area(image, 1024**2)

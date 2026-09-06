@@ -29,6 +29,7 @@ def add_ltx23_command(subparsers: Any) -> None:
     )
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--resolution", required=True, help="Output size as WIDTHxHEIGHT")
+    command.add_argument("--keyframe-fit", choices=("crop", "pad", "stretch"), default="crop", help="Fit keyframes to the resolved 64px-aligned canvas; pad uses white")
     command.add_argument("--frames", type=int, default=121)
     command.add_argument(
         "--fps",
@@ -118,6 +119,7 @@ def run_ltx23_command(
                 model=args.model,
                 seed=seeds[0],
                 progress=progress,
+                keyframe_fit=args.keyframe_fit,
             )
             payload = result.to_json()
         else:
@@ -136,6 +138,7 @@ def run_ltx23_command(
                 model=args.model,
                 seeds=seeds,
                 progress=progress,
+                keyframe_fit=args.keyframe_fit,
             )
             payload = {
                 "status": "completed",

@@ -1,0 +1,4 @@
+# Captured logs, generated TUI snapshots and patch context retain original bytes.
+runs/evidence/**/*.log -whitespace
+runs/evidence/**/*.svg -whitespace
+scripts/patches/*.patch -whitespace

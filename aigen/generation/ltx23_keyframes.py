@@ -4,33 +4,24 @@ import json
 import os
 import subprocess
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import PROJECT_ROOT
+from aigen.image_io import fit_image_canvas, open_image
+from aigen.generation.ltx23_runtime import LTX23_WANGP_REVISION, Ltx23Installation, resolve_ltx23_installation
+from aigen.generation.ltx23_settings import (
+    LTX23_MODEL_TYPES, LTX23_DEFAULT_MODEL, LTX23_DEFAULT_FPS, LTX23_DEFAULT_PHASES,
+    LTX23_DEFAULT_CONDITIONING_STRENGTH, LTX23_DEFAULT_NEGATIVE_PROMPT,
+    LTX23_MINIMUM_FRAMES, LTX23_FRAME_STEP, LTX23_PHASES, LTX23_SOLVERS,
+    Ltx23KeyframesError, resolve_ltx23_settings, validate_ltx23_positions,
+)
 
 
-LTX23_WANGP_REVISION = "5582327dc25e45fec6cda0f27144d4dcf7ed104b"
-LTX23_MODEL_TYPES = {
-    "nvfp4": "ltx2_22B_nvfp4",
-    "int8": "ltx2_22B",
-}
-LTX23_DEFAULT_MODEL = "nvfp4"
-LTX23_DEFAULT_FPS = 24
-LTX23_DEFAULT_PHASES = 1
-LTX23_DEFAULT_CONDITIONING_STRENGTH = 1.0
-LTX23_DEFAULT_NEGATIVE_PROMPT = "Morphing, warping, flicker."
-LTX23_MINIMUM_FRAMES = 17
-LTX23_FRAME_STEP = 8
-LTX23_PHASES = frozenset({1, 2})
-LTX23_SOLVERS = frozenset({"distilled_8_steps", "euler", "res2s"})
-
-
-class Ltx23KeyframesError(RuntimeError):
-    pass
+LTX23_IMPLEMENTATION_REVISION = "2"
 
 
 @dataclass(frozen=True)
@@ -62,6 +53,7 @@ class Ltx23KeyframesResult:
     elapsed_seconds: float
     phase_metrics: tuple[dict[str, Any], ...]
     environment: dict[str, Any]
+    keyframe_fit: str = "crop"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -76,6 +68,7 @@ class Ltx23KeyframesResult:
             "model": self.model,
             "model_type": self.model_type,
             "keyframes": [keyframe.to_json() for keyframe in self.keyframes],
+            "keyframe_fit": self.keyframe_fit,
             "resolution": self.resolution,
             "frames": self.frames,
             "fps": self.fps,
@@ -112,6 +105,8 @@ def generate_ltx23_keyframes(
     model: str,
     seed: int,
     progress: StatusReporter,
+    keyframe_fit: str = "crop",
+    installation: Ltx23Installation | None = None,
 ) -> Ltx23KeyframesResult:
     return generate_ltx23_keyframes_seed_sweep(
         prompt=prompt,
@@ -128,6 +123,8 @@ def generate_ltx23_keyframes(
         model=model,
         seeds=(seed,),
         progress=progress,
+        keyframe_fit=keyframe_fit,
+        installation=installation,
     )[0]
 
 
@@ -147,25 +144,27 @@ def generate_ltx23_keyframes_seed_sweep(
     model: str,
     seeds: Sequence[int],
     progress: StatusReporter,
+    keyframe_fit: str = "crop",
+    installation: Ltx23Installation | None = None,
+    on_output: Callable[[Ltx23KeyframesResult], None] | None = None,
 ) -> tuple[Ltx23KeyframesResult, ...]:
     normalized_seeds = tuple(seeds)
     if not normalized_seeds:
         raise Ltx23KeyframesError("LTX-2.3 seed sweep requires at least one seed")
     if len(set(normalized_seeds)) != len(normalized_seeds):
         raise Ltx23KeyframesError("LTX-2.3 seed sweep contains duplicate seeds")
+    settings = resolve_ltx23_settings(
+        resolution=resolution, frames=frames, fps=fps, steps=steps, phases=phases,
+        solver=solver, conditioning_strength=conditioning_strength, model=model, keyframe_fit=keyframe_fit,
+    )
+    requested_resolution = resolution
+    resolution = settings.resolution
     normalized_keyframes = _validate_request(
         prompt=prompt,
         keyframes=keyframes,
         output=output,
-        resolution=resolution,
         frames=frames,
-        fps=fps,
-        steps=steps,
-        phases=phases,
-        solver=solver,
         negative_prompt=negative_prompt,
-        conditioning_strength=conditioning_strength,
-        model=model,
     )
     model_type = LTX23_MODEL_TYPES[model]
     output = output.expanduser().resolve()
@@ -189,17 +188,31 @@ def generate_ltx23_keyframes_seed_sweep(
     if existing is not None:
         raise Ltx23KeyframesError(f"output already exists: {existing}")
 
-    runtime_root = _runtime_root()
-    runtime_python = runtime_root / "venv/bin/python"
-    source_root = runtime_root / "Wan2GP"
-    _validate_runtime(runtime_python, source_root)
+    installation = resolve_ltx23_installation(settings) if installation is None else installation
+    runtime_root, runtime_python, source_root = installation.root, installation.python, installation.source
     output.parent.mkdir(parents=True, exist_ok=True)
+
+    prepared_dir = output.with_name(f"{output.stem}-inputs")
+    prepared_dir.mkdir()
+    prepared_keyframes = []
+    for index, keyframe in enumerate(normalized_keyframes):
+        destination = prepared_dir / f"keyframe-{index:04d}.png"
+        with open_image(keyframe.image) as source:
+            with source.convert("RGB") as rgb:
+                fitted = fit_image_canvas(rgb, (settings.width, settings.height), keyframe_fit)
+                fitted.save(destination)
+                if fitted is not rgb:
+                    fitted.close()
+        prepared_keyframes.append(Ltx23Keyframe(destination, keyframe.frame))
 
     requests = tuple(
         {
             "kind": "aigen-ltx23-keyframes-job",
             "prompt": prompt.strip(),
-            "keyframes": [keyframe.to_json() for keyframe in normalized_keyframes],
+            "keyframes": [keyframe.to_json() for keyframe in prepared_keyframes],
+            "original_keyframes": [keyframe.to_json() for keyframe in normalized_keyframes],
+            "keyframe_fit": keyframe_fit,
+            "requested_resolution": requested_resolution,
             "output": job_output.as_posix(),
             "resolution": resolution,
             "frames": frames,
@@ -215,29 +228,14 @@ def generate_ltx23_keyframes_seed_sweep(
         for seed, job_output in zip(normalized_seeds, outputs, strict=True)
     )
     started = time.monotonic()
-    responses = _run_worker_requests(
-        requests=requests,
-        runtime_root=runtime_root,
-        runtime_python=runtime_python,
-        source_root=source_root,
-        log=log,
-        progress=progress,
-    )
-    total_elapsed_seconds = time.monotonic() - started
-
     results = []
-    for request, response, job_output, config, seed in zip(
-        requests,
-        responses,
-        outputs,
-        configs,
-        normalized_seeds,
-        strict=True,
-    ):
+
+    def completed(index: int, response: dict[str, Any]) -> None:
+        request, job_output, config, seed = requests[index], outputs[index], configs[index], normalized_seeds[index]
         if not job_output.is_file() or job_output.stat().st_size == 0:
             raise Ltx23KeyframesError(f"LTX-2.3 did not create a video: {job_output}")
         elapsed_seconds = (
-            total_elapsed_seconds
+            time.monotonic() - started
             if len(requests) == 1
             else float(response["environment"]["elapsed_seconds"])
         )
@@ -245,6 +243,7 @@ def generate_ltx23_keyframes_seed_sweep(
             "kind": "aigen-ltx23-keyframes-config",
             "runtime": "WanGP",
             "runtime_revision": LTX23_WANGP_REVISION,
+            "installation_provenance": installation.provenance,
             "request": request,
             "effective_settings": response["effective_settings"],
             "phase_metrics": response["phase_metrics"],
@@ -275,26 +274,28 @@ def generate_ltx23_keyframes_seed_sweep(
                 elapsed_seconds=elapsed_seconds,
                 phase_metrics=tuple(response["phase_metrics"]),
                 environment=dict(response["environment"]),
+                keyframe_fit=keyframe_fit,
             )
         )
+        if on_output is not None:
+            on_output(results[-1])
+
+    _run_worker_requests(
+        requests=requests,
+        runtime_root=runtime_root,
+        runtime_python=runtime_python,
+        source_root=source_root,
+        log=log,
+        progress=progress,
+        on_output=completed,
+    )
     progress.phase("LTX-2.3 generation completed")
     return tuple(results)
 
 
 def _validate_request(
-    *,
-    prompt: str,
-    keyframes: Sequence[Ltx23Keyframe],
-    output: Path,
-    resolution: str,
-    frames: int,
-    fps: int,
-    steps: int,
-    phases: int,
-    solver: str,
-    negative_prompt: str,
-    conditioning_strength: float,
-    model: str,
+    *, prompt: str, keyframes: Sequence[Ltx23Keyframe], output: Path,
+    frames: int, negative_prompt: str,
 ) -> tuple[Ltx23Keyframe, ...]:
     if not prompt.strip():
         raise Ltx23KeyframesError("video motion prompt must not be empty")
@@ -302,101 +303,15 @@ def _validate_request(
         raise Ltx23KeyframesError("video negative prompt must not be empty")
     if output.suffix.lower() != ".mp4":
         raise Ltx23KeyframesError("LTX-2.3 output must use the .mp4 extension")
-    if frames < LTX23_MINIMUM_FRAMES or (frames - 1) % LTX23_FRAME_STEP != 0:
-        raise Ltx23KeyframesError(
-            f"LTX-2.3 frames must be {LTX23_MINIMUM_FRAMES} or more in increments of {LTX23_FRAME_STEP}"
-        )
-    if fps <= 0:
-        raise Ltx23KeyframesError("frames per second must be positive")
-    if steps <= 0:
-        raise Ltx23KeyframesError("inference steps must be positive")
-    if phases not in LTX23_PHASES:
-        raise Ltx23KeyframesError(f"unsupported LTX-2.3 phase count: {phases}")
-    if solver not in LTX23_SOLVERS:
-        raise Ltx23KeyframesError(f"unsupported LTX-2.3 solver: {solver}")
-    if model not in LTX23_MODEL_TYPES:
-        raise Ltx23KeyframesError(f"unsupported LTX-2.3 model: {model}")
-    if solver == "distilled_8_steps" and steps != 8:
-        raise Ltx23KeyframesError("distilled_8_steps requires exactly 8 inference steps")
-    if not 0.0 <= conditioning_strength <= 1.0:
-        raise Ltx23KeyframesError("conditioning strength must be between 0 and 1")
-    try:
-        width_text, height_text = resolution.lower().split("x", maxsplit=1)
-        width, height = int(width_text), int(height_text)
-    except ValueError as error:
-        raise Ltx23KeyframesError("resolution must use WIDTHxHEIGHT") from error
-    if width <= 0 or height <= 0:
-        raise Ltx23KeyframesError("resolution dimensions must be positive")
-    if not keyframes:
-        raise Ltx23KeyframesError("LTX-2.3 requires at least one keyframe")
-
-    normalized = tuple(
-        sorted(
-            (
-                Ltx23Keyframe(image=keyframe.image.expanduser().resolve(), frame=keyframe.frame)
-                for keyframe in keyframes
-            ),
-            key=lambda keyframe: keyframe.frame,
-        )
-    )
-    duplicate = next(
-        (
-            current.frame
-            for previous, current in zip(normalized, normalized[1:])
-            if previous.frame == current.frame
-        ),
-        None,
-    )
-    if duplicate is not None:
-        raise Ltx23KeyframesError(f"duplicate keyframe position: {duplicate}")
-    invalid_position = next(
-        (keyframe.frame for keyframe in normalized if not 0 <= keyframe.frame < frames),
-        None,
-    )
-    if invalid_position is not None:
-        raise Ltx23KeyframesError(
-            f"keyframe position {invalid_position} is outside video frame range 0..{frames - 1}"
-        )
-    if len(normalized) == 1 and normalized[0].frame != 0:
-        raise Ltx23KeyframesError("a single LTX-2.3 keyframe must target frame 0")
+    validate_ltx23_positions(tuple(keyframe.frame for keyframe in keyframes), frames)
+    normalized = tuple(sorted(
+        (Ltx23Keyframe(keyframe.image.expanduser().resolve(), keyframe.frame) for keyframe in keyframes),
+        key=lambda keyframe: keyframe.frame,
+    ))
     missing = next((keyframe.image for keyframe in normalized if not keyframe.image.is_file()), None)
     if missing is not None:
         raise Ltx23KeyframesError(f"keyframe image does not exist: {missing}")
     return normalized
-
-
-def _runtime_root() -> Path:
-    configured = os.environ.get("AIGEN_LTX23_ROOT")
-    return (
-        Path(configured).expanduser().resolve()
-        if configured
-        else Path.home() / ".cache/aigen-wangp"
-    )
-
-
-def _validate_runtime(runtime_python: Path, source_root: Path) -> None:
-    required = (
-        runtime_python,
-        source_root / "wgp.py",
-        source_root / "shared/api.py",
-        source_root / "defaults/ltx2_22B_nvfp4.json",
-    )
-    missing = [path for path in required if not path.is_file()]
-    if missing:
-        raise Ltx23KeyframesError(
-            "LTX-2.3 runtime is incomplete; run scripts/install_ltx23.sh: "
-            + ", ".join(path.as_posix() for path in missing)
-        )
-    revision = subprocess.run(
-        ["git", "-C", source_root.as_posix(), "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if revision.returncode != 0 or revision.stdout.strip() != LTX23_WANGP_REVISION:
-        raise Ltx23KeyframesError(
-            f"WanGP source must be pinned to {LTX23_WANGP_REVISION}"
-        )
 
 
 def _run_worker_requests(
@@ -407,6 +322,7 @@ def _run_worker_requests(
     source_root: Path,
     log: Path,
     progress: StatusReporter,
+    on_output: Callable[[int, dict[str, Any]], None],
 ) -> tuple[dict[str, Any], ...]:
     environment = os.environ.copy()
     python_path = environment.get("PYTHONPATH")
@@ -455,6 +371,11 @@ def _run_worker_requests(
                 for line in worker.stdout:
                     response = _apply_worker_event(line, progress)
                     if response is not None:
+                        index = len(responses)
+                        if response.get("status") == "completed":
+                            if index >= len(requests) or response["output"] != requests[index]["output"]:
+                                raise Ltx23KeyframesError("LTX-2.3 worker returned results out of order")
+                            on_output(index, response)
                         responses.append(response)
                 returncode = worker.wait()
             except BaseException:
@@ -477,9 +398,6 @@ def _run_worker_requests(
         raise Ltx23KeyframesError(
             f"LTX-2.3 worker returned {len(responses)} results for {len(requests)} requests"
         )
-    for request, response in zip(requests, responses, strict=True):
-        if response["output"] != request["output"]:
-            raise Ltx23KeyframesError("LTX-2.3 worker returned results out of order")
     return tuple(responses)
 
 

@@ -1,0 +1,9 @@
+test_changed_backend_implementation_invalidates_cache_signature (test_generation_contracts.GenerationContractTests.test_changed_backend_implementation_invalidates_cache_signature) ... ok
+test_duplicate_seeds_are_rejected_before_creating_outputs (test_generation_contracts.GenerationContractTests.test_duplicate_seeds_are_rejected_before_creating_outputs) ... ok
+test_existing_model_replacement_is_visible_in_the_same_process (test_model_artifact_identity.ModelArtifactIdentityTests.test_existing_model_replacement_is_visible_in_the_same_process) ... ok
+test_uso_cache_tracks_all_worker_model_paths_and_processor_files (test_model_artifact_identity.ModelArtifactIdentityTests.test_uso_cache_tracks_all_worker_model_paths_and_processor_files) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.021s
+
+OK

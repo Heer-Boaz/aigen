@@ -1,0 +1,31 @@
+{
+  "audio": null,
+  "frames": 4,
+  "kind": "video-frame-extraction",
+  "manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames/frames.json",
+  "output_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames",
+  "paths": [
+    "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames/frame-000000.png",
+    "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames/frame-000001.png",
+    "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames/frame-000002.png",
+    "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-frames/frame-000003.png"
+  ],
+  "pattern": "frame-%06d.png",
+  "status": "completed",
+  "timeline": {
+    "durations": [
+      640,
+      960,
+      320,
+      1280
+    ],
+    "pts": [
+      0,
+      640,
+      1600,
+      1920
+    ],
+    "time_base": "1/16000"
+  },
+  "video": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-design/vfr-no-b-frames.mp4"
+}

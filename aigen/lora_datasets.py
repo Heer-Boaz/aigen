@@ -87,6 +87,7 @@ def build_lora_dataset(spec_path: Path, *, progress: StatusReporter) -> dict[str
     report = {
         "status": "completed",
         "kind": "lora-dataset-result",
+        "dataset_format": "image-caption-pairs",
         "dataset_id": spec.id,
         "character": spec.character.model_dump(mode="json"),
         "source_count": len(spec.sources),

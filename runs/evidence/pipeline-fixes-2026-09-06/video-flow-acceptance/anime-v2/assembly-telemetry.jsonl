@@ -1,0 +1,2 @@
+{"elapsed_seconds": 1.290567698990344, "swap_used_mib": 772.109375, "swap_in_bytes": 344940544, "swap_out_bytes": 2064625664, "host_available_mib": 88220.78125, "progress": {"phase": "starting", "completed": 0, "total": 0, "elapsed_seconds": 3.451699740253389e-05, "remaining_seconds": null, "final": false, "cpu_percent": 0.0, "gpu_percent": 16, "vram_used_mb": 923, "vram_total_mb": 16303}}
+{"elapsed_seconds": 2.294310545999906, "swap_used_mib": 772.109375, "swap_in_bytes": 344940544, "swap_out_bytes": 2064625664, "host_available_mib": 88225.98828125, "progress": null}

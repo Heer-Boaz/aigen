@@ -1,0 +1,12 @@
+{
+  "elapsed_seconds": 44.36526807298651,
+  "returncode": 0,
+  "statuses": {
+    "edit": "completed",
+    "node-2ab6d3069a7e4470ab35fbf88ca915c4": "completed",
+    "node-adcb928cf30248f4bf0c3675a42dff46": "completed",
+    "ref0": "completed",
+    "ref1": "completed"
+  },
+  "stdout_closed": true
+}

@@ -1,0 +1,124 @@
+{
+  "mode": "candidate",
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "status": "passed",
+  "cases": [
+    {
+      "width": 3072,
+      "dtype": "torch.bfloat16",
+      "case": "scaled_random",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.bfloat16",
+      "case": "rounding_subnormal_signed_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.bfloat16",
+      "case": "all_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.bfloat16",
+      "case": "negative_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.float32",
+      "case": "scaled_random",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.float32",
+      "case": "rounding_subnormal_signed_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.float32",
+      "case": "all_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 3072,
+      "dtype": "torch.float32",
+      "case": "negative_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.bfloat16",
+      "case": "scaled_random",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.bfloat16",
+      "case": "rounding_subnormal_signed_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.bfloat16",
+      "case": "all_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.bfloat16",
+      "case": "negative_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.float32",
+      "case": "scaled_random",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.float32",
+      "case": "rounding_subnormal_signed_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.float32",
+      "case": "all_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    },
+    {
+      "width": 12288,
+      "dtype": "torch.float32",
+      "case": "negative_zero",
+      "quantized_bytes_equal": true,
+      "scale_bytes_equal": true
+    }
+  ],
+  "peak_additional_mib": {
+    "fp32_intermediate": 120.00390625,
+    "direct_fp8": 24.00390625
+  }
+}

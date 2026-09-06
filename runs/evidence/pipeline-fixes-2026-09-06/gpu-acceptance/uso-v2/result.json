@@ -1,0 +1,18 @@
+{
+  "elapsed_seconds": 132.0955597919965,
+  "error": "ImageEditError: USO generation failed: CUDA error: out of memory\nSearch for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.\nCUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.\nFor debugging consider passing CUDA_LAUNCH_BLOCKING=1\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.\n",
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 1201,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "minimum_host_available_mib": 65618.58984375,
+  "nvidia_smi_peak_used_mib": 15868,
+  "process_peak_rss_mib": 545.32421875,
+  "status": "failed",
+  "swap_in_bytes": 2146304,
+  "swap_increase_mib": 4.15234375,
+  "swap_out_bytes": 4513792,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

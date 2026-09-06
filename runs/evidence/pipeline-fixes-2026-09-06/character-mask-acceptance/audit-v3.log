@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit_completion_probe.py", line 92, in <module>
+    {"prepare": prepare, "run": run}[sys.argv[1]]()
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit_completion_probe.py", line 64, in run
+    assert gpu["nvidia_smi_device_total_mb"] - gpu["nvidia_smi_used_mb"] >= request["min_free_mib"], gpu
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'nvidia_smi_used_mb': 5553, 'nvidia_smi_device_total_mb': 16303, 'nvidia_smi_utilization_gpu': 6}

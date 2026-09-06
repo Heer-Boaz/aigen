@@ -1,0 +1,15 @@
+{"gpu_preflight": {"nvidia_smi_used_mb": 2482, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 3}, "free_mib": 13821}
+{"phase": "starting", "completed": 0, "total": 0, "elapsed_seconds": 3.1171992304734886e-05, "remaining_seconds": null, "final": false, "cpu_percent": 0.0, "gpu_percent": 1, "vram_used_mb": 2482, "vram_total_mb": 16303, "process_rss_mib": 515.37109375, "host_available_mib": 86552.8515625, "swap_used_mib": 102.10546875, "swap_in_bytes": 176054272, "swap_out_bytes": 1286402048}
+{"gpu_preflight": {"nvidia_smi_used_mb": 2482, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 1}, "free_mib": 13821}
+{"phase": "completed b", "completed": 2, "total": 4, "elapsed_seconds": 1.0475144359952537, "remaining_seconds": 0.003298096009530127, "final": false, "cpu_percent": 56.943150046598326, "gpu_percent": 4, "vram_used_mb": 2482, "vram_total_mb": 16303, "process_rss_mib": 689.58203125, "host_available_mib": 86435.859375, "swap_used_mib": 102.10546875, "swap_in_bytes": 176054272, "swap_out_bytes": 1286402048}
+Using cache found in /home/boaz/aigen/aigen/models/vosr/CSWRY/VOSR/preset/ckpts/torch_cache/facebookresearch_dinov2_main
+/home/boaz/aigen/aigen/models/vosr/CSWRY/VOSR/preset/ckpts/torch_cache/facebookresearch_dinov2_main/dinov2/layers/swiglu_ffn.py:51: UserWarning: xFormers is not available (SwiGLU)
+  warnings.warn("xFormers is not available (SwiGLU)")
+/home/boaz/aigen/aigen/models/vosr/CSWRY/VOSR/preset/ckpts/torch_cache/facebookresearch_dinov2_main/dinov2/layers/attention.py:33: UserWarning: xFormers is not available (Attention)
+  warnings.warn("xFormers is not available (Attention)")
+/home/boaz/aigen/aigen/models/vosr/CSWRY/VOSR/preset/ckpts/torch_cache/facebookresearch_dinov2_main/dinov2/layers/block.py:40: UserWarning: xFormers is not available (Block)
+  warnings.warn("xFormers is not available (Block)")
+[Tiled Latent]: latent 128x128, tile=64, overlap=8, grid=3x3
+[Tiled Latent]: latent 128x97, tile=64, overlap=8, grid=3x2
+{"phase": "completed", "completed": 4, "total": 4, "elapsed_seconds": 57.448122415997204, "remaining_seconds": null, "final": true, "cpu_percent": 3.31125827814569, "gpu_percent": 8, "vram_used_mb": 3250, "vram_total_mb": 16303, "process_rss_mib": 2857.21875, "host_available_mib": 85034.30859375, "swap_used_mib": 102.09375, "swap_in_bytes": 176070656, "swap_out_bytes": 1286402048}
+{"status": "completed", "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/vosr-together/result.json"}

@@ -1,0 +1,9 @@
+test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed (test_workflow_video_batching.WorkflowVideoBatchingTests.test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed) ... ok
+test_completed_video_survives_later_seed_failure_and_resumes (test_workflow_video_batching.WorkflowVideoBatchingTests.test_completed_video_survives_later_seed_failure_and_resumes) ... ok
+test_different_fit_policies_do_not_share_a_sweep (test_workflow_video_batching.WorkflowVideoBatchingTests.test_different_fit_policies_do_not_share_a_sweep) ... ok
+test_same_seed_nodes_generate_once_and_both_publish (test_workflow_video_batching.WorkflowVideoBatchingTests.test_same_seed_nodes_generate_once_and_both_publish) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.448s
+
+OK

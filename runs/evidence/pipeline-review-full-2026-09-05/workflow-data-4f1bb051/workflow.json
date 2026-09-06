@@ -1,0 +1,241 @@
+{
+  "version": 3,
+  "name": "CPU flow audit",
+  "nodes": [
+    {
+      "id": "source",
+      "title": "Synthetic source",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/source.png"
+      }
+    },
+    {
+      "id": "lora",
+      "title": "Synthetic LoRA",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "lora-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/lora.safetensors",
+        "weight": 1.0
+      }
+    },
+    {
+      "id": "start",
+      "title": "Start",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Keep the image unchanged.",
+        "seed_mode": "fixed",
+        "seed": 11,
+        "aspect_ratio": "",
+        "width": 512,
+        "height": 512,
+        "steps": null,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "end",
+      "title": "End",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Keep the image unchanged.",
+        "seed_mode": "fixed",
+        "seed": 12,
+        "aspect_ratio": "",
+        "width": 512,
+        "height": 512,
+        "steps": null,
+        "guidance": null,
+        "strength": null,
+        "sampler": null,
+        "scheduler": null
+      }
+    },
+    {
+      "id": "video",
+      "title": "Video",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "animegen-i2v",
+      "config": {
+        "prompt": "The camera remains still.",
+        "seed_mode": "fixed",
+        "seed": 0,
+        "frames": 5,
+        "fps": 12,
+        "sampling": "lightning-8",
+        "steps": 8,
+        "precision": "fp8"
+      }
+    },
+    {
+      "id": "sheet",
+      "title": "Contact sheet",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "video-contact-sheet",
+      "config": {}
+    },
+    {
+      "id": "extract",
+      "title": "Extract",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "extract-video-frames",
+      "config": {}
+    },
+    {
+      "id": "frames",
+      "title": "Processed frames",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "frame-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 2.0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire-source-start",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "start",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-source-end",
+      "source": {
+        "node_id": "source",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "end",
+        "port": "references"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-lora-start",
+      "source": {
+        "node_id": "lora",
+        "port": "lora"
+      },
+      "target": {
+        "node_id": "start",
+        "port": "loras"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-lora-end",
+      "source": {
+        "node_id": "lora",
+        "port": "lora"
+      },
+      "target": {
+        "node_id": "end",
+        "port": "loras"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-start-video",
+      "source": {
+        "node_id": "start",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "video",
+        "port": "start"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-end-video",
+      "source": {
+        "node_id": "end",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "video",
+        "port": "end"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-video-sheet",
+      "source": {
+        "node_id": "video",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "sheet",
+        "port": "video"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-video-extract",
+      "source": {
+        "node_id": "video",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "extract",
+        "port": "video"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire-extract-frames",
+      "source": {
+        "node_id": "extract",
+        "port": "images"
+      },
+      "target": {
+        "node_id": "frames",
+        "port": "images"
+      },
+      "order": 0
+    }
+  ]
+}

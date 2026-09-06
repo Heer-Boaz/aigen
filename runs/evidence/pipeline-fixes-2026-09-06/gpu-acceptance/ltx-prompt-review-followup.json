@@ -1,0 +1,16 @@
+{
+  "reviewer": "/root/review_gpu_prompts",
+  "status": "approved",
+  "positive_prompt": "The character gently shifts weight and blinks while holding the standing pose. Static camera, white background, consistent character design and rendering style.",
+  "negative_prompt": "Camera movement.",
+  "sources": [
+    "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+    "/home/boaz/aigen/assets/characters/jillian/views/front.png"
+  ],
+  "keyframes": [
+    0,
+    32
+  ],
+  "frames": 33,
+  "reason": "Explicit static-camera constraint; non-empty value avoids upstream default substitution. Reviewer read docs/prompting.md and viewed both sources."
+}

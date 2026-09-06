@@ -1,0 +1,12 @@
+{
+  "elapsed_seconds": 9.193913238006644,
+  "returncode": 0,
+  "statuses": {
+    "assemble": "completed",
+    "extract": "completed",
+    "generate": "reused",
+    "process": "completed",
+    "selected": "completed"
+  },
+  "stdout_closed": true
+}

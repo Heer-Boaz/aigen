@@ -1,0 +1,245 @@
+{
+  "anime-v1": {
+    "cache_or_assembly": {
+      "elapsed_seconds": 9.193913238006644,
+      "returncode": 0,
+      "statuses": {
+        "assemble": "completed",
+        "extract": "completed",
+        "generate": "reused",
+        "process": "completed",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "generation": {
+      "elapsed_seconds": 318.14723988100013,
+      "returncode": 0,
+      "statuses": {
+        "generate": "completed",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "observed_total_vram_peak_mib": 13775,
+    "outputs": {
+      "assemble": {
+        "audio_streams": 0,
+        "content_sha256": "f2c4458f9aa53f0a43bff0f3d57215699391c128c3985db16deb765dfb3a095d",
+        "duration": "33/16",
+        "fps": "16",
+        "frames": 33,
+        "height": 360,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v1/workflows/cache/nodes/fd/fd586aed29d1bd23f2979d0813f1817e980ebce80bc5c4059803bb790fe2bfa1/outputs/video/000000-video.mp4",
+        "width": 272
+      },
+      "generate": {
+        "audio_streams": 0,
+        "content_sha256": "5c2cb3f4664268352b8d28871e82a6c59daa9b2cf2404017b4272a22f405fbc0",
+        "duration": "33/16",
+        "fps": "16",
+        "frames": 33,
+        "height": 720,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v1/workflows/cache/nodes/e9/e9f5060a65b0e93e18e2894b2f4fa612c827e0ab55bc79cc3b4905ec72c053c4/outputs/video/000000-video.mp4",
+        "width": 544
+      }
+    },
+    "shared_execution": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v1/workflows/runs/workflow-81a1c9d888e24b9a988b3f8222438817/attempt-20260906T050359106851Z-78061f88521e/executions/7015db99abed410cb55747e09f6cf14e",
+    "system_swap_delta_bytes": {
+      "swap_in_bytes": 57344,
+      "swap_out_bytes": 36667392
+    }
+  },
+  "anime-v2": {
+    "cache_or_assembly": {
+      "elapsed_seconds": 2.2944245629914803,
+      "returncode": 0,
+      "statuses": {
+        "assemble": "reused",
+        "extract": "reused",
+        "generate": "reused",
+        "process": "reused",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "generation": {
+      "elapsed_seconds": 397.73634122899966,
+      "returncode": 0,
+      "statuses": {
+        "assemble": "completed",
+        "extract": "completed",
+        "generate": "completed",
+        "generate2": "completed",
+        "process": "completed",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "observed_total_vram_peak_mib": 13894,
+    "outputs": {
+      "assemble": {
+        "audio_streams": 0,
+        "content_sha256": "f2c4458f9aa53f0a43bff0f3d57215699391c128c3985db16deb765dfb3a095d",
+        "duration": "33/16",
+        "fps": "16",
+        "frames": 33,
+        "height": 360,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v2/workflows/cache/nodes/fd/fd586aed29d1bd23f2979d0813f1817e980ebce80bc5c4059803bb790fe2bfa1/outputs/video/000000-video.mp4",
+        "width": 272
+      },
+      "generate": {
+        "audio_streams": 0,
+        "content_sha256": "5c2cb3f4664268352b8d28871e82a6c59daa9b2cf2404017b4272a22f405fbc0",
+        "duration": "33/16",
+        "fps": "16",
+        "frames": 33,
+        "height": 720,
+        "native": {
+          "cuda_memory": {
+            "device_total_mb": 16275,
+            "free_after_run_mb": 960,
+            "max_allocated_mb": 8063,
+            "max_reserved_mb": 12552
+          },
+          "elapsed_seconds": 49.149,
+          "seed": 83
+        },
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v2/workflows/cache/nodes/e9/e9f5060a65b0e93e18e2894b2f4fa612c827e0ab55bc79cc3b4905ec72c053c4/outputs/video/000000-video-seed83.mp4",
+        "width": 544
+      },
+      "generate2": {
+        "audio_streams": 0,
+        "content_sha256": "9d1090d5c12ee36a461c69fcbdbe5008b34fba62c3788b24cf405ff485a5bb2c",
+        "duration": "33/16",
+        "fps": "16",
+        "frames": 33,
+        "height": 720,
+        "native": {
+          "cuda_memory": {
+            "device_total_mb": 16275,
+            "free_after_run_mb": 941,
+            "max_allocated_mb": 8063,
+            "max_reserved_mb": 12672
+          },
+          "elapsed_seconds": 51.173,
+          "seed": 84
+        },
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v2/workflows/cache/nodes/55/55b9166a8afdd58a6851209a081851cabf67d6d3e2c44f626e98c6cea604282f/outputs/video/000000-video-seed84.mp4",
+        "width": 544
+      }
+    },
+    "shared_execution": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/anime-v2/workflows/runs/workflow-902c361f00a443f8ae406b72f3bb6bee/attempt-20260906T052651420836Z-56368b059c3f/executions/f1ba88eb91f74b9891ebaf98cbe62c64",
+    "system_swap_delta_bytes": {
+      "swap_in_bytes": 1040384,
+      "swap_out_bytes": 18558976
+    }
+  },
+  "ltx-v1": {
+    "cache_or_assembly": {
+      "elapsed_seconds": 2.2090957109903684,
+      "returncode": 0,
+      "statuses": {
+        "assemble": "reused",
+        "extract": "reused",
+        "generate": "reused",
+        "keyframe0": "completed",
+        "keyframe1": "completed",
+        "keyframe2": "completed",
+        "process": "reused",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "generation": {
+      "elapsed_seconds": 180.23712041000545,
+      "returncode": 0,
+      "statuses": {
+        "assemble": "completed",
+        "extract": "completed",
+        "generate": "completed",
+        "generate2": "completed",
+        "keyframe0": "completed",
+        "keyframe1": "completed",
+        "keyframe2": "completed",
+        "process": "completed",
+        "selected": "completed"
+      },
+      "stdout_closed": true
+    },
+    "observed_total_vram_peak_mib": 5664,
+    "outputs": {
+      "assemble": {
+        "audio_streams": 0,
+        "content_sha256": "64e0d14e74a81e919f164720ac43c4710eff34c479606b3aadab163864def27c",
+        "duration": "11/8",
+        "fps": "24",
+        "frames": 33,
+        "height": 352,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/e8/e8860461a6c8643d35a09a50b8fd19246d85a4441a8d82f52746653c65149d98/outputs/video/000000-video.mp4",
+        "width": 288
+      },
+      "generate": {
+        "audio_streams": 0,
+        "content_sha256": "02547f4188a97bf4368cb813bb56c932200312a75c48958b3cde1cf57f979d84",
+        "duration": "11/8",
+        "fps": "24",
+        "frames": 33,
+        "height": 704,
+        "native": {
+          "cuda_memory": {
+            "attention": "sdpa",
+            "compute_capability": "12.0",
+            "cuda": "13.0",
+            "elapsed_seconds": 124.988,
+            "engine": "WanGP",
+            "gpu": "NVIDIA GeForce RTX 5070 Ti",
+            "model_type": "ltx2_22B_nvfp4",
+            "peak_allocated_mib": 5118.1,
+            "peak_reserved_mib": 5232.0,
+            "preload_mib": 4000,
+            "runtime_profile": 2,
+            "torch": "2.10.0+cu130"
+          },
+          "elapsed_seconds": 124.988,
+          "seed": 83
+        },
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/3d/3db19dc00ab50a6ad7dc43df4e4b6eaf1aa793ea3300a78ff63a4ee895875a2b/outputs/video/000000-video-seed83.mp4",
+        "width": 576
+      },
+      "generate2": {
+        "audio_streams": 0,
+        "content_sha256": "9fd576600d7becbf108929e1938a30cac8205acbbff4687bc81845adf6827c90",
+        "duration": "11/8",
+        "fps": "24",
+        "frames": 33,
+        "height": 704,
+        "native": {
+          "cuda_memory": {
+            "attention": "sdpa",
+            "compute_capability": "12.0",
+            "cuda": "13.0",
+            "elapsed_seconds": 32.053,
+            "engine": "WanGP",
+            "gpu": "NVIDIA GeForce RTX 5070 Ti",
+            "model_type": "ltx2_22B_nvfp4",
+            "peak_allocated_mib": 4098.3,
+            "peak_reserved_mib": 4158.0,
+            "preload_mib": 4000,
+            "runtime_profile": 2,
+            "torch": "2.10.0+cu130"
+          },
+          "elapsed_seconds": 32.053,
+          "seed": 84
+        },
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/cache/nodes/df/dfced49e4e7f1874f41d21e5b4096329e1366bd1feefde145bcae1c78d265ec3/outputs/video/000000-video-seed84.mp4",
+        "width": 576
+      }
+    },
+    "shared_execution": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/workflows/runs/workflow-0f5909b28c034824921bc6d720ced6d3/attempt-20260906T052121047461Z-bf53d6dfce7f/executions/eeebcdbbe8154a5bbd9f8f0f63caa19e",
+    "system_swap_delta_bytes": {
+      "swap_in_bytes": 1519616,
+      "swap_out_bytes": 118730752
+    }
+  }
+}

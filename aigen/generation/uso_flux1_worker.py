@@ -10,8 +10,11 @@ from typing import Any, TextIO
 
 from aigen.generation.uso_flux1 import (
     USO_CONTENT_REFERENCE_SIZE,
+    USO_IMPLEMENTATION_REVISION,
     USO_MODEL_TYPE,
 )
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 
 def main() -> int:
@@ -73,20 +76,26 @@ def _run_requests(requests: list[dict[str, Any]], stream: TextIO) -> int:
     for index, request in enumerate(requests, start=1):
         started = time.monotonic()
         try:
-            image = pipeline(
-                prompt=request["prompt"],
-                width=request["width"],
-                height=request["height"],
-                guidance=request["guidance"],
-                num_steps=request["steps"],
-                seed=request["seed"],
-                ref_imgs=[content_reference],
-                pe="d",
-                siglip_inputs=style_inputs,
-            )
+            # USO's local generator covers diffusion noise; its VAE samples
+            # reference latents through the global RNG on every call.
+            with torch.random.fork_rng(devices=[device]), torch.cuda.device(device):
+                torch.default_generator.manual_seed(request["seed"])
+                torch.cuda.manual_seed(request["seed"])
+                image = pipeline(
+                    prompt=request["prompt"],
+                    width=request["width"],
+                    height=request["height"],
+                    guidance=request["guidance"],
+                    num_steps=request["steps"],
+                    seed=request["seed"],
+                    ref_imgs=[content_reference],
+                    pe="d",
+                    siglip_inputs=style_inputs,
+                )
             output = Path(request["output"])
             image.save(output)
         except Exception as error:
+            traceback.print_exc()
             _send(
                 stream,
                 "result",
@@ -106,7 +115,9 @@ def _run_requests(requests: list[dict[str, Any]], stream: TextIO) -> int:
                     "cuda": torch.version.cuda,
                     "gpu": torch.cuda.get_device_name(0),
                     "model_type": USO_MODEL_TYPE,
+                    "implementation_revision": USO_IMPLEMENTATION_REVISION,
                     "offload": True,
+                    "cuda_allocator_config": os.environ.get("PYTORCH_ALLOC_CONF", os.environ["PYTORCH_CUDA_ALLOC_CONF"]),
                     "content_reference_size": USO_CONTENT_REFERENCE_SIZE,
                     "peak_allocated_mib": round(
                         torch.cuda.max_memory_allocated() / 1024**2,

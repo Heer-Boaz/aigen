@@ -1,0 +1,16 @@
+{
+  "candidate_identity": "5b30a88096d2d458bca715a5b4d97426277ffa9ef99395e33380455a1cd2f166",
+  "group_id": "missing-background-change",
+  "image_index": 3,
+  "passed": true,
+  "regions": [],
+  "request": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/missing-background-change/request.json",
+  "response": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/audit-v3-probe/missing-background-change/response.json",
+  "selected": {
+    "case_id": "candidate-0",
+    "height": 1024,
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+    "seed": 101,
+    "width": 768
+  }
+}

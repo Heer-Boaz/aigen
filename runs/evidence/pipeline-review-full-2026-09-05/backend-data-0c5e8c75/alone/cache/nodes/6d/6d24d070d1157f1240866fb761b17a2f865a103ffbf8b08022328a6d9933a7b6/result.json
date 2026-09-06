@@ -1,0 +1,39 @@
+{
+  "node_kind": "image-postprocess",
+  "outputs": {
+    "image": {
+      "artifact_type": "image",
+      "files": [
+        {
+          "mtime_ns": 1788645602500854430,
+          "path": "outputs/image/image.png",
+          "sha256": "272e86994c2a5ac63b745689643a5f3b1242e9e6c6a23c3c5f033da4cd0cd822",
+          "size": 1617
+        }
+      ],
+      "identity": "4b89c067e6542d06a590d07cb84ea8201f456bcede7d561d68fde8b89ed3d1e5"
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "image-postprocess-batch",
+      "revision": "1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "3"
+    },
+    "models": [
+      {
+        "name": "VOSR model",
+        "revision": "bf5da48b5eaa4affe063e4b53b3e5d70d532615b"
+      },
+      {
+        "name": "VOSR source",
+        "revision": "25fbf8e6cb9656b8991c24474f408bdce6fcb1b1"
+      }
+    ]
+  },
+  "signature": "6d24d070d1157f1240866fb761b17a2f865a103ffbf8b08022328a6d9933a7b6",
+  "version": 2
+}

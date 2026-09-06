@@ -1,0 +1,26 @@
+test_existing_model_replacement_is_visible_in_the_same_process (test_model_artifact_identity.ModelArtifactIdentityTests.test_existing_model_replacement_is_visible_in_the_same_process) ... ok
+test_klein_inventory_detects_added_conditioner_files (test_model_artifact_identity.ModelArtifactIdentityTests.test_klein_inventory_detects_added_conditioner_files) ... ok
+test_qwen_and_vosr_cache_tracks_active_local_checkpoints (test_model_artifact_identity.ModelArtifactIdentityTests.test_qwen_and_vosr_cache_tracks_active_local_checkpoints) ... ok
+test_uso_cache_tracks_all_worker_model_paths_and_processor_files (test_model_artifact_identity.ModelArtifactIdentityTests.test_uso_cache_tracks_all_worker_model_paths_and_processor_files) ... ok
+test_alpha_only_corruption_fails_exact_pixel_check (test_qwen_masked_canvas.QwenMaskedCanvasTests.test_alpha_only_corruption_fails_exact_pixel_check) ... ok
+test_native_and_capped_canvas_preserves_original_rgba_pixels_outside_mask (test_qwen_masked_canvas.QwenMaskedCanvasTests.test_native_and_capped_canvas_preserves_original_rgba_pixels_outside_mask) ... ok
+test_node_factory_serialization_and_explicit_backend_limits (test_workflow_character_flow.CharacterWorkflowTests.test_node_factory_serialization_and_explicit_backend_limits) ... ok
+test_qwen_uses_original_audit_refs_and_prepared_native_generation_refs (test_workflow_character_flow.CharacterWorkflowTests.test_qwen_uses_original_audit_refs_and_prepared_native_generation_refs) ... ok
+test_rejected_character_never_publishes_successful_cache (test_workflow_character_flow.CharacterWorkflowTests.test_rejected_character_never_publishes_successful_cache) ... ok
+test_scene_and_pose_share_framing_and_audit_image_numbering (test_workflow_character_flow.CharacterWorkflowTests.test_scene_and_pose_share_framing_and_audit_image_numbering) ... ok
+test_selection_metadata_cache_and_audit_configuration (test_workflow_character_flow.CharacterWorkflowTests.test_selection_metadata_cache_and_audit_configuration) ... ok
+test_actual_backend_switch_applies_new_defaults (test_workflow_properties.WorkflowPropertyBufferTests.test_actual_backend_switch_applies_new_defaults) ... ok
+test_same_values_preserve_custom_settings_and_redo (test_workflow_properties.WorkflowPropertyBufferTests.test_same_values_preserve_custom_settings_and_redo) ... ok
+test_cpu_run_cache_status_edits_reopen_and_stop (test_workflow_properties.WorkflowPropertyUITests.test_cpu_run_cache_status_edits_reopen_and_stop) ... ok
+test_implicit_defaults_compile_open_and_round_trip (test_workflow_properties.WorkflowPropertyUITests.test_implicit_defaults_compile_open_and_round_trip) ... Executing <Task pending name="message pump Screen(id='_default')" coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.122 seconds
+ok
+test_open_select_save_undo_redo_preserve_settings (test_workflow_properties.WorkflowPropertyUITests.test_open_select_save_undo_redo_preserve_settings) ... Executing <Task pending name="message pump Screen(id='_default')" coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.139 seconds
+Executing <Task pending name='message pump WorkflowEditor()' coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.107 seconds
+ok
+test_selection_commits_valid_draft_and_rejects_invalid_draft (test_workflow_properties.WorkflowPropertyUITests.test_selection_commits_valid_draft_and_rejects_invalid_draft) ... Executing <Task pending name="message pump Screen(id='_default')" coro=<MessagePump._process_messages() running at /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/message_pump.py:571> wait_for=<Future pending cb=[Task.task_wakeup()] created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:448> created at /home/boaz/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:420> took 0.150 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 10.877s
+
+OK

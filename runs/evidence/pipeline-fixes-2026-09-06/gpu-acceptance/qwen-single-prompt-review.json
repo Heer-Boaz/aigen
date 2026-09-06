@@ -1,0 +1,14 @@
+{
+  "reviewer": "/root/review_gpu_prompts",
+  "status": "approved unchanged",
+  "positive_prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+  "negative_prompt": "",
+  "sources": [
+    "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+  ],
+  "scope": "Qwen Lightning memory and execution acceptance with one original reference; not a style-reference comparison",
+  "documents_read": [
+    "docs/prompting.md (complete)"
+  ],
+  "image_inspected": true
+}

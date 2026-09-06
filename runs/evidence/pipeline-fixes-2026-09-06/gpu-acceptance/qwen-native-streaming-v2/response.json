@@ -1,0 +1,6 @@
+{
+  "status": "error",
+  "error": "RuntimeError",
+  "message": "CUDA driver error: device not ready",
+  "diagnostic_peak_allocated_mib": 10873.29150390625
+}

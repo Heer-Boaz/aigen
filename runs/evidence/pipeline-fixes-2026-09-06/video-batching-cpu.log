@@ -1,0 +1,79 @@
+test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed (test_workflow_video_batching.WorkflowVideoBatchingTests.test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed) ... ERROR
+test_completed_video_survives_later_seed_failure_and_resumes (test_workflow_video_batching.WorkflowVideoBatchingTests.test_completed_video_survives_later_seed_failure_and_resumes) ... ERROR
+test_different_fit_policies_do_not_share_a_sweep (test_workflow_video_batching.WorkflowVideoBatchingTests.test_different_fit_policies_do_not_share_a_sweep) ... ERROR
+test_same_seed_nodes_generate_once_and_both_publish (test_workflow_video_batching.WorkflowVideoBatchingTests.test_same_seed_nodes_generate_once_and_both_publish) ... ERROR
+test_anime_form_fit_and_hunyuan_missing_runtime_preflight (test_workflow_video_contracts.WorkflowVideoContractTests.test_anime_form_fit_and_hunyuan_missing_runtime_preflight) ... ok
+test_fit_policy_changes_only_the_prepared_canvas (test_workflow_video_contracts.WorkflowVideoContractTests.test_fit_policy_changes_only_the_prepared_canvas) ... ok
+test_form_cli_graph_and_adapter_keep_ltx_positions_seeds_and_effective_canvas (test_workflow_video_contracts.WorkflowVideoContractTests.test_form_cli_graph_and_adapter_keep_ltx_positions_seeds_and_effective_canvas) ... ok
+test_missing_checkpoint_shard_is_rejected_before_loading (test_workflow_video_contracts.WorkflowVideoContractTests.test_missing_checkpoint_shard_is_rejected_before_loading) ... ok
+test_batch_failure_keeps_completed_candidate_and_resumes_other_seed (test_workflow_image_flow.ImageFlowTests.test_batch_failure_keeps_completed_candidate_and_resumes_other_seed) ... ok
+test_legacy_identity_roundtrip_undo_and_rename (test_workflow_image_flow.ImageFlowTests.test_legacy_identity_roundtrip_undo_and_rename) ... ok
+test_old_result_without_content_hash_still_resolves_against_immutable_cache (test_workflow_image_flow.ImageFlowTests.test_old_result_without_content_hash_still_resolves_against_immutable_cache) ... ok
+test_random_selection_survives_reload_and_cuts_generator_dependencies (test_workflow_image_flow.ImageFlowTests.test_random_selection_survives_reload_and_cuts_generator_dependencies) ... ok
+test_seed_granularity_history_and_original_metadata (test_workflow_image_flow.ImageFlowTests.test_seed_granularity_history_and_original_metadata) ... ok
+test_unselected_continuation_fails_before_generation (test_workflow_image_flow.ImageFlowTests.test_unselected_continuation_fails_before_generation) ... ok
+
+======================================================================
+ERROR: test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed (test_workflow_video_batching.WorkflowVideoBatchingTests.test_compatible_seeds_share_one_sweep_and_cache_invalidation_is_per_seed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_video_batching.py", line 34, in setUp
+    provenance = NodeExecutionProvenance(executor=RevisionedComponent(name="CPU neural double", revision="1"))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for NodeExecutionProvenance
+backend
+  Field required [type=missing, input_value={'executor': RevisionedCo... double', revision='1')}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+======================================================================
+ERROR: test_completed_video_survives_later_seed_failure_and_resumes (test_workflow_video_batching.WorkflowVideoBatchingTests.test_completed_video_survives_later_seed_failure_and_resumes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_video_batching.py", line 34, in setUp
+    provenance = NodeExecutionProvenance(executor=RevisionedComponent(name="CPU neural double", revision="1"))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for NodeExecutionProvenance
+backend
+  Field required [type=missing, input_value={'executor': RevisionedCo... double', revision='1')}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+======================================================================
+ERROR: test_different_fit_policies_do_not_share_a_sweep (test_workflow_video_batching.WorkflowVideoBatchingTests.test_different_fit_policies_do_not_share_a_sweep)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_video_batching.py", line 34, in setUp
+    provenance = NodeExecutionProvenance(executor=RevisionedComponent(name="CPU neural double", revision="1"))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for NodeExecutionProvenance
+backend
+  Field required [type=missing, input_value={'executor': RevisionedCo... double', revision='1')}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+======================================================================
+ERROR: test_same_seed_nodes_generate_once_and_both_publish (test_workflow_video_batching.WorkflowVideoBatchingTests.test_same_seed_nodes_generate_once_and_both_publish)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/boaz/aigen/tests/test_workflow_video_batching.py", line 34, in setUp
+    provenance = NodeExecutionProvenance(executor=RevisionedComponent(name="CPU neural double", revision="1"))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for NodeExecutionProvenance
+backend
+  Field required [type=missing, input_value={'executor': RevisionedCo... double', revision='1')}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+----------------------------------------------------------------------
+Ran 14 tests in 3.133s
+
+FAILED (errors=4)

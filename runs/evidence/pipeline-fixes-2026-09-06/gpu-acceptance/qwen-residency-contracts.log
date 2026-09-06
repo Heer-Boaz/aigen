@@ -1,0 +1,9 @@
+test_every_clone_is_admitted_before_allocation (test_qwen_residency.QwenResidencyTests.test_every_clone_is_admitted_before_allocation) ... ok
+test_no_clone_or_inference_replacement_when_first_block_does_not_fit (test_qwen_residency.QwenResidencyTests.test_no_clone_or_inference_replacement_when_first_block_does_not_fit) ... ok
+test_reference_and_longest_text_tokens_determine_largest_case (test_qwen_residency.QwenResidencyTests.test_reference_and_longest_text_tokens_determine_largest_case) ... ok
+test_weight_aliases_and_views_share_one_storage_budget (test_qwen_residency.QwenResidencyTests.test_weight_aliases_and_views_share_one_storage_budget) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.070s
+
+OK

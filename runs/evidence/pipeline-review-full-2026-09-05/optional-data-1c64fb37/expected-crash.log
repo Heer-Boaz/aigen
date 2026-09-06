@@ -1,0 +1,60 @@
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/widgets/_select. │
+│ py:629 in _on_mount                                                          │
+│                                                                              │
+│   626 │   def _on_mount(self, _event: events.Mount) -> None:                 │
+│   627 │   │   """Set initial values."""                                      │
+│   628 │   │   self._setup_options_renderables()                              │
+│ ❱ 629 │   │   self._init_selected_option(self._value)                        │
+│   630 │                                                                      │
+│   631 │   def _watch_expanded(self, expanded: bool) -> None:                 │
+│   632 │   │   """Display or hide overlay."""                                 │
+│                                                                              │
+│ ╭───────────────────────────── locals ─────────────────────────────╮         │
+│ │ _event = Mount()                                                 │         │
+│ │   self = PropertySelect(                                         │         │
+│ │          │   classes='-textual-compact workflow-property-editor' │         │
+│ │          )                                                       │         │
+│ ╰──────────────────────────────────────────────────────────────────╯         │
+│                                                                              │
+│ /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/widgets/_select. │
+│ py:557 in _init_selected_option                                              │
+│                                                                              │
+│   554 │   │   """Initialises the selected option for the `Select`."""        │
+│   555 │   │   if hint == self.NULL and not self._allow_blank:                │
+│   556 │   │   │   hint = self._options[0][1]                                 │
+│ ❱ 557 │   │   self.value = hint                                              │
+│   558 │                                                                      │
+│   559 │   def set_options(self, options: Iterable[tuple[RenderableType, Sele │
+│   560 │   │   """Set the options for the Select.                             │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ hint = None                                                              │ │
+│ │ self = PropertySelect(                                                   │ │
+│ │        │   classes='-textual-compact workflow-property-editor'           │ │
+│ │        )                                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/boaz/aigen/.venv/lib/python3.12/site-packages/textual/widgets/_select. │
+│ py:594 in _validate_value                                                    │
+│                                                                              │
+│   591 │   │   │   # so we provide a helpful message to catch this mistake in │
+│   592 │   │   │   # realise we use a special value to flag "no selection".   │
+│   593 │   │   │   help_text = " Did you mean to use Select.clear()?" if valu │
+│ ❱ 594 │   │   │   raise InvalidSelectValueError(                             │
+│   595 │   │   │   │   f"Illegal select value {value!r}." + help_text         │
+│   596 │   │   │   )                                                          │
+│   597                                                                        │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ help_text = ' Did you mean to use Select.clear()?'                       │ │
+│ │      self = PropertySelect(                                              │ │
+│ │             │   classes='-textual-compact workflow-property-editor'      │ │
+│ │             )                                                            │ │
+│ │     value = None                                                         │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+InvalidSelectValueError: Illegal select value None. Did you mean to use 
+Select.clear()?
+
+NOTE: 1 of 2 errors shown. Run with textual run --dev to see all errors.

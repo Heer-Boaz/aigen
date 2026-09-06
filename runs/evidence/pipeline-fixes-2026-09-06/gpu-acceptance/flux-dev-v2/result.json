@@ -1,0 +1,55 @@
+{
+  "elapsed_seconds": 465.98163150400796,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 1428,
+    "nvidia_smi_utilization_gpu": 6
+  },
+  "minimum_host_available_mib": 30064.4921875,
+  "nvidia_smi_peak_used_mib": 9223,
+  "process_peak_rss_mib": 545.71484375,
+  "result": {
+    "backend": "flux2-dev-nvfp4",
+    "kind": "image-edit-result",
+    "output_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/flux-dev-v2/output",
+    "outputs": [
+      {
+        "elapsed_seconds": 465.667,
+        "environment": {
+          "attention": "sdpa",
+          "cuda": "13.0",
+          "gpu": "NVIDIA GeForce RTX 5070 Ti",
+          "peak_allocated_mib": 6247.1,
+          "peak_reserved_mib": 10500.0,
+          "preload_mib": 4000,
+          "runtime_profile": 2,
+          "torch": "2.10.0+cu130"
+        },
+        "guidance": 4.0,
+        "height": 1536,
+        "loras": [],
+        "model_type": "flux2_dev_nvfp4",
+        "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/flux-dev-v2/output/image.png",
+        "output_bytes": 316610,
+        "quantization": "nvfp4-mixed",
+        "runtime": "WanGP",
+        "runtime_revision": "5582327dc25e45fec6cda0f27144d4dcf7ed104b",
+        "seed": 71,
+        "steps": 30,
+        "width": 1152
+      }
+    ],
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift",
+    "seeds": [
+      71
+    ],
+    "status": "completed"
+  },
+  "status": "completed",
+  "swap_in_bytes": 24576,
+  "swap_increase_mib": 270.62890625,
+  "swap_out_bytes": 200798208,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

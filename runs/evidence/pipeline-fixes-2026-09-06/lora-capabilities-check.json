@@ -1,0 +1,5 @@
+{
+  "local_flux1": "local_4bit_flux_transformer",
+  "qwen_rejected": "The local trainer supports FLUX.1 LoRA training; /tmp/tmpxt2xvaul/transformer/config.json declares 'QwenImageTransformer2DModel'",
+  "training_run": false
+}

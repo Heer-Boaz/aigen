@@ -1,0 +1,13 @@
+{
+  "prompt": "Redraw image 1 with the linework and shading of image 2.",
+  "references": [
+    "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+    "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+  ],
+  "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-memory-native/image.png",
+  "width": 768,
+  "height": 1024,
+  "seed": 71,
+  "steps": 25,
+  "guidance": 4.0
+}

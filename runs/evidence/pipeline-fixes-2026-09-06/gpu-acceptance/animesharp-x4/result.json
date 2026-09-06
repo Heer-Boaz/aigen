@@ -1,0 +1,64 @@
+{
+  "elapsed_seconds": 2.2673470779991476,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 2985,
+    "nvidia_smi_utilization_gpu": 9
+  },
+  "minimum_host_available_mib": 86781.0859375,
+  "nvidia_smi_peak_used_mib": 5636,
+  "process_peak_rss_mib": 1376.11328125,
+  "result": {
+    "images": [
+      {
+        "height": 1024,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/animesharp-x4/image-0.png",
+        "sha256": "dde32b4cfbfbbbaa1e7b5c4d23e724c35ef1de0e179bfb51b2fca7885e1a741a",
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "mode": "RGBA",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/animesharp-x4/image-1.png",
+        "sha256": "48c9eeeb7e05a57f273e0b176ee8f19671437d6b9e04bcb15280a2b13778d45b",
+        "width": 1024
+      }
+    ],
+    "model": "animesharp-x4",
+    "outputs": [
+      {
+        "device": "cuda",
+        "elapsed_ms": 577.8314960043645,
+        "natural_size": [
+          1536,
+          1536
+        ],
+        "scale": 4.0,
+        "target_size": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "device": "cuda",
+        "elapsed_ms": 164.0021860075649,
+        "natural_size": [
+          64,
+          64
+        ],
+        "scale": 4.0,
+        "target_size": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "status": "completed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 2425.646484375,
+  "torch_peak_reserved_mib": 3418.0
+}

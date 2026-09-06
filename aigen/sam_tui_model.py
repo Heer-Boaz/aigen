@@ -3,9 +3,8 @@ from __future__ import annotations
 import sys
 
 from aigen.generation.qwen_image_edit_identity import (
-    DEFAULT_QWEN_INPAINT_PROFILE,
+    DEFAULT_QWEN_IDENTITY_PROFILE,
     qwen_image_edit_identity_profile_for_name,
-    qwen_image_edit_inpaint_model_names,
 )
 from aigen.image_tui_model import DropdownOption, FormField
 
@@ -55,15 +54,16 @@ class SamEditForm:
             "region": FormField("region", "Region name", ""),
             "reference_pack": FormField("reference_pack", "Reference pack", "", "reference_pack"),
             "instruction": FormField("instruction", "Edit instruction", ""),
-            "profile": FormField("profile", "Qwen profile", DEFAULT_QWEN_INPAINT_PROFILE),
+            "profile": FormField("profile", "Qwen profile", DEFAULT_QWEN_IDENTITY_PROFILE),
             "max_side": FormField("max_side", "Max source side", ""),
             "steps": FormField("steps", "Steps", ""),
             "true_cfg_scale": FormField("true_cfg_scale", "True CFG", ""),
             "guidance_scale": FormField("guidance_scale", "Guidance", ""),
-            "strength": FormField("strength", "Edit strength", "0.6"),
+            "strength": FormField("strength", "Edit strength", "1.0"),
             "padding_mask_crop": FormField("padding_mask_crop", "Mask crop padding", ""),
             "seed": FormField("seed", "Seed", "0"),
             "candidates": FormField("candidates", "Candidates", "2"),
+            "max_iterations": FormField("max_iterations", "Maximum audit rounds", "2"),
             "max_sequence_length": FormField("max_sequence_length", "Max prompt tokens", "512"),
             "nunchaku_blocks_on_gpu": FormField("nunchaku_blocks_on_gpu", "Nunchaku blocks on GPU", ""),
             "engine": FormField("engine", "Segmenter", "sam2"),
@@ -85,7 +85,7 @@ class SamEditForm:
         }
         self.fields: list[FormField] = []
         self._rebuild_fields()
-        self.set_value(self._fields["profile"], DEFAULT_QWEN_INPAINT_PROFILE)
+        self.set_value(self._fields["profile"], DEFAULT_QWEN_IDENTITY_PROFILE)
 
     def field(self, name: str) -> FormField:
         return self._fields[name]
@@ -124,7 +124,7 @@ class SamEditForm:
         if field.name == "profile":
             return tuple(
                 DropdownOption(profile, profile)
-                for profile in qwen_image_edit_inpaint_model_names()
+                for profile in (DEFAULT_QWEN_IDENTITY_PROFILE,)
             )
         if field.name == "device":
             if self.field("engine").value == "anime":
@@ -195,8 +195,6 @@ class SamEditForm:
                 raise ValueError(f"Unknown edit mask source: {mask_source}")
             pack_path = self.field("reference_pack").value.strip()
             instruction = self.field("instruction").value.strip()
-            if not pack_path:
-                raise ValueError("Reference pack is required for a Qwen masked edit.")
             if not instruction:
                 raise ValueError("Edit instruction is required for a Qwen masked edit.")
             if mask_source == "mask":
@@ -223,8 +221,6 @@ class SamEditForm:
                 "aigen.cli",
                 "characters",
                 "qwen-edit-refine",
-                "--pack",
-                pack_path,
                 "--image",
                 input_path,
                 "--instruction",
@@ -239,11 +235,15 @@ class SamEditForm:
                 self.field("seed").value.strip(),
                 "--candidates",
                 self.field("candidates").value.strip(),
+                "--max-iterations",
+                self.field("max_iterations").value.strip(),
                 "--max-sequence-length",
                 self.field("max_sequence_length").value.strip(),
                 "--overwrite",
             ]
             command.extend(mask_arguments)
+            if pack_path:
+                command.extend(("--pack", pack_path))
             for name, option in (
                 ("max_side", "--max-side"),
                 ("steps", "--steps"),
@@ -332,11 +332,10 @@ class SamEditForm:
                     "true_cfg_scale",
                     "guidance_scale",
                     "strength",
-                    "padding_mask_crop",
                     "seed",
                     "candidates",
+                    "max_iterations",
                     "max_sequence_length",
-                    "nunchaku_blocks_on_gpu",
                 )
             )
         else:

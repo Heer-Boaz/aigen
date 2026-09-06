@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 
 from aigen.model_artifacts import (
@@ -11,7 +10,7 @@ from aigen.runtime_profiles import MODELS_ROOT
 from aigen.runtime_provenance import build_python_runtime_provenance
 
 
-FLUX2_KLEIN_IMPLEMENTATION_REVISION = "1"
+FLUX2_KLEIN_IMPLEMENTATION_REVISION = "2"
 FLUX2_KLEIN_MODEL_ROOT = MODELS_ROOT / "flux2/black-forest-labs/FLUX.2-klein-9B"
 FLUX2_KLEIN_TRANSFORMER = (
     MODELS_ROOT
@@ -33,7 +32,6 @@ FLUX2_KLEIN_RUNTIME_DISTRIBUTIONS = (
 )
 
 
-@lru_cache(maxsize=1)
 def flux2_klein_model_artifacts() -> tuple[ModelArtifactComponent, ...]:
     transformer = FLUX2_KLEIN_TRANSFORMER.resolve()
     vae_scheduler_files = _files_below(

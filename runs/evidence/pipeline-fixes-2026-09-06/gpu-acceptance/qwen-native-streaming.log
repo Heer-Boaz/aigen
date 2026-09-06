@@ -1,0 +1,6 @@
+{"gpu_preflight": {"nvidia_smi_used_mb": 9448, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 2}}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen_streaming_probe.py", line 11, in <module>
+    assert gpu['nvidia_smi_device_total_mb']-gpu['nvidia_smi_used_mb']>=12000
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

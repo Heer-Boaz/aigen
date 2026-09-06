@@ -39,11 +39,15 @@ from aigen.workflow_graph import (
     IllustrationUpscaleConfig,
     ImageEditConfig,
     ImageEditNode,
+    CharacterEditNode,
+    BindMaskNode, SamSegmentNode, CharacterRefineNode,
     ImagePostprocessConfig,
     ImagePostprocessNode,
     ImageSourceNode,
     LoraSourceNode,
     NodeKind,
+    ImageCollectionNode,
+    ImageSelectionNode,
     NodeLayout,
     NodePortRef,
     PixelArtFixerConfig,
@@ -55,7 +59,10 @@ from aigen.workflow_graph import (
     WorkflowNode,
     WuPixelizationConfig,
     node_definition,
+    VideoSourceNode, AudioSourceNode, PositionedKeyframeNode, Ltx23Node, Ltx23Config,
+    HunyuanI2VNode, AssembleVideoNode,
 )
+from aigen.generation.ltx23_settings import LTX23_DEFAULT_NEGATIVE_PROMPT
 
 
 def create_workflow_node(
@@ -72,6 +79,24 @@ def create_workflow_node(
         "layout": NodeLayout(x=x, y=y),
     }
     match kind:
+        case NodeKind.BIND_MASK:
+            return BindMaskNode(**common)
+        case NodeKind.SAM_SEGMENT:
+            return SamSegmentNode(**common)
+        case NodeKind.CHARACTER_REFINE:
+            return CharacterRefineNode(**common)
+        case NodeKind.VIDEO_SOURCE:
+            return VideoSourceNode(**common)
+        case NodeKind.AUDIO_SOURCE:
+            return AudioSourceNode(**common)
+        case NodeKind.POSITIONED_KEYFRAME:
+            return PositionedKeyframeNode(**common)
+        case NodeKind.LTX23:
+            return Ltx23Node(config=Ltx23Config(negative_prompt=LTX23_DEFAULT_NEGATIVE_PROMPT), **common)
+        case NodeKind.HUNYUAN_I2V:
+            return HunyuanI2VNode(**common)
+        case NodeKind.ASSEMBLE_VIDEO:
+            return AssembleVideoNode(**common)
         case NodeKind.IMAGE_SOURCE:
             return ImageSourceNode(**common)
         case NodeKind.REFERENCE_PACK:
@@ -80,6 +105,12 @@ def create_workflow_node(
             return LoraSourceNode(**common)
         case NodeKind.IMAGE_EDIT:
             return ImageEditNode(config=default_image_edit_config(), **common)
+        case NodeKind.CHARACTER_EDIT:
+            return CharacterEditNode(**common)
+        case NodeKind.IMAGE_COLLECTION:
+            return ImageCollectionNode(**common)
+        case NodeKind.IMAGE_SELECTION:
+            return ImageSelectionNode(**common)
         case NodeKind.IMAGE_POSTPROCESS:
             return ImagePostprocessNode(
                 config=default_postprocess_config(),
@@ -208,6 +239,7 @@ def keyframed_video_workflow_template() -> WorkflowGraph:
             layout=NodeLayout(x=202, y=14),
             config=default_postprocess_config(),
         ),
+        AssembleVideoNode(id="assemble-video", title="Assemble processed video", layout=NodeLayout(x=242, y=14)),
     ]
     connections = [
         _connection("references-first", "references", "pack", "first-keyframe", "references"),
@@ -249,11 +281,40 @@ def keyframed_video_workflow_template() -> WorkflowGraph:
             "postprocess-frames",
             "images",
         ),
+        _connection("frames-assemble", "postprocess-frames", "images", "assemble-video", "images"),
     ]
     return WorkflowGraph(
         name="Keyframed video",
         nodes=nodes,
         connections=connections,
+    )
+
+
+def character_workflow_template() -> WorkflowGraph:
+    return WorkflowGraph(
+        name="Character workflow",
+        nodes=(
+            ReferencePackNode(id="references", title="Reference pack", layout=NodeLayout(x=2, y=2)),
+            CharacterEditNode(id="edit", title="Character edit", layout=NodeLayout(x=42, y=2)),
+        ),
+        connections=(_connection("refs-edit", "references", "pack", "edit", "references"),),
+    )
+
+
+def image_style_workflow_template() -> WorkflowGraph:
+    return WorkflowGraph(
+        name="Image style workflow",
+        nodes=(
+            ImageSourceNode(id="reference1", title="Reference 1", layout=NodeLayout(x=2, y=2)),
+            ImageSourceNode(id="reference2", title="Reference 2", layout=NodeLayout(x=2, y=14)),
+            ImageEditNode(id="edit", title="Image edit", layout=NodeLayout(x=42, y=2), config=default_image_edit_config()),
+            ImageEditNode(id="continue", title="Continue editing", layout=NodeLayout(x=82, y=2), config=default_image_edit_config()),
+        ),
+        connections=(
+            _connection("ref1-edit", "reference1", "image", "edit", "references", 0),
+            _connection("ref2-edit", "reference2", "image", "edit", "references", 1),
+            _connection("edit-continue", "edit", "image", "continue", "references"),
+        ),
     )
 
 

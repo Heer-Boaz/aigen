@@ -10,9 +10,9 @@ from aigen.vlm_qwen import (
     DEFAULT_JUDGE_REVISION,
     DEFAULT_MAX_PIXELS,
     DEFAULT_MIN_PIXELS,
+    DEFAULT_QWEN_VLM_MODEL,
     QwenVlmConfig,
 )
-from aigen.runtime_profiles import MODELS_ROOT
 
 
 def add_judge_runtime_args(parser: argparse.ArgumentParser, *, role: str, max_new_tokens: int) -> None:
@@ -20,7 +20,7 @@ def add_judge_runtime_args(parser: argparse.ArgumentParser, *, role: str, max_ne
     parser.add_argument(
         "--model",
         type=Path,
-        default=MODELS_ROOT / "vlm/Qwen/Qwen2.5-VL-7B-Instruct",
+        default=DEFAULT_QWEN_VLM_MODEL,
         help="Local Qwen2.5-VL-7B-Instruct model directory",
     )
     parser.add_argument("--dtype", default="bfloat16", help=f"Torch dtype for {role} model weights")

@@ -1,0 +1,21 @@
+test_best_of_n_is_selected_on_raw_before_one_upscale_batch (tests.test_character_edit_audit.CharacterEditAuditTests.test_best_of_n_is_selected_on_raw_before_one_upscale_batch) ... ok
+test_invalid_vlm_json_or_index_fails_without_generation_retry (tests.test_character_edit_audit.CharacterEditAuditTests.test_invalid_vlm_json_or_index_fails_without_generation_retry) ... ok
+test_missing_audit_model_fails_before_generation (tests.test_character_edit_audit.CharacterEditAuditTests.test_missing_audit_model_fails_before_generation) ... ok
+test_retry_seeds_do_not_depend_on_other_groups_in_the_batch (tests.test_character_edit_audit.CharacterEditAuditTests.test_retry_seeds_do_not_depend_on_other_groups_in_the_batch) ... ok
+test_retry_uses_new_seeds_and_only_rejected_groups (tests.test_character_edit_audit.CharacterEditAuditTests.test_retry_uses_new_seeds_and_only_rejected_groups) ... ok
+test_two_rejected_rounds_fail_with_evidence_and_no_successful_output (tests.test_character_edit_audit.CharacterEditAuditTests.test_two_rejected_rounds_fail_with_evidence_and_no_successful_output) ... ok
+test_node_factory_serialization_and_explicit_backend_limits (tests.test_workflow_character_flow.CharacterWorkflowTests.test_node_factory_serialization_and_explicit_backend_limits) ... ok
+test_qwen_uses_original_audit_refs_and_prepared_native_generation_refs (tests.test_workflow_character_flow.CharacterWorkflowTests.test_qwen_uses_original_audit_refs_and_prepared_native_generation_refs) ... ok
+test_rejected_character_never_publishes_successful_cache (tests.test_workflow_character_flow.CharacterWorkflowTests.test_rejected_character_never_publishes_successful_cache) ... ok
+test_selection_metadata_cache_and_audit_configuration (tests.test_workflow_character_flow.CharacterWorkflowTests.test_selection_metadata_cache_and_audit_configuration) ... ok
+test_batch_failure_keeps_completed_candidate_and_resumes_other_seed (tests.test_workflow_image_flow.ImageFlowTests.test_batch_failure_keeps_completed_candidate_and_resumes_other_seed) ... ok
+test_legacy_identity_roundtrip_undo_and_rename (tests.test_workflow_image_flow.ImageFlowTests.test_legacy_identity_roundtrip_undo_and_rename) ... ok
+test_old_result_without_content_hash_still_resolves_against_immutable_cache (tests.test_workflow_image_flow.ImageFlowTests.test_old_result_without_content_hash_still_resolves_against_immutable_cache) ... ok
+test_random_selection_survives_reload_and_cuts_generator_dependencies (tests.test_workflow_image_flow.ImageFlowTests.test_random_selection_survives_reload_and_cuts_generator_dependencies) ... ok
+test_seed_granularity_history_and_original_metadata (tests.test_workflow_image_flow.ImageFlowTests.test_seed_granularity_history_and_original_metadata) ... ok
+test_unselected_continuation_fails_before_generation (tests.test_workflow_image_flow.ImageFlowTests.test_unselected_continuation_fails_before_generation) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 2.575s
+
+OK

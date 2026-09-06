@@ -1,0 +1,6 @@
+{
+  "status": "error",
+  "error": "RuntimeError",
+  "message": "diagnostic boundary probe",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/boaz/aigen/aigen/generation/qwen_image_edit_lightx2v_worker.py\", line 36, in main\n    response = _run(request, progress_stream)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<stdin>\", line 12, in controlled_failure\nRuntimeError: diagnostic boundary probe\n"
+}

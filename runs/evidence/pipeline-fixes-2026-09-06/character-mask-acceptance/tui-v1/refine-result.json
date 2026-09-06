@@ -1,0 +1,10 @@
+{
+  "elapsed_seconds": 85.753680394002,
+  "returncode": 0,
+  "statuses": {
+    "node-b3dee71e3ab0405da3416d7ecbdd6b51": "completed",
+    "segment": "reused",
+    "source": "completed"
+  },
+  "stdout_closed": true
+}

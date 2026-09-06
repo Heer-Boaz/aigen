@@ -1,0 +1,99 @@
+{
+  "status": "completed",
+  "outputs": [
+    {
+      "name": "image-seed71",
+      "case": "image",
+      "seed": 71,
+      "path": "runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/qwen-native-fp8-direct/image.png",
+      "width": 1152,
+      "height": 1536,
+      "denoise_ms": 470216.70319400437,
+      "vae_decode_ms": 719.0563740005018
+    }
+  ],
+  "timings_ms": {
+    "conditioner_load_ms": 7076.393311988795,
+    "condition_encode_ms": 1804.5448509947164,
+    "vae_encode_ms": 5162.044179000077,
+    "transformer_load_ms": 6416.872611996951,
+    "resident_upload_ms": 0.05578499985858798,
+    "host_pin_ms": 41547.83859300369,
+    "denoise_ms": 470532.0155980007,
+    "vae_decode_ms": 894.6534339920618,
+    "total_ms": 534981.7046759999
+  },
+  "memory": {
+    "peak_vram_mib": {
+      "conditioning": 9889.6376953125,
+      "vae_encode": 8640.02001953125,
+      "denoise": 8376.5498046875,
+      "decode": 7461.849609375
+    },
+    "max_rss_mib": 43195.984375,
+    "read_gib": 35.325050465762615,
+    "mem_available_before_mib": 87389.796875,
+    "mem_available_after_mib": 64640.09375,
+    "swap_free_before_mib": 80317.48046875,
+    "swap_free_after_mib": 80306.15234375,
+    "pswpin_delta": 464,
+    "pswpout_delta": 4527,
+    "timing_valid_no_swap_growth": false
+  },
+  "environment": {
+    "engine": "LightX2V",
+    "torch": "2.8.0+cu128",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "matrix_multiply": "fp8-triton",
+    "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+    "reference_preprocessing": {
+      "policy": "native-vae-upstream-semantic",
+      "semantic_target_pixels": 147456,
+      "cases": {
+        "image": {
+          "input_sizes_wh": [
+            [
+              1086,
+              1448
+            ],
+            [
+              3840,
+              3890
+            ]
+          ],
+          "vae_sizes_hw": [
+            [
+              1440,
+              1072
+            ],
+            [
+              3888,
+              3840
+            ]
+          ],
+          "prompt_seq_lens": [
+            430
+          ]
+        }
+      }
+    },
+    "vae_tiling": {
+      "tile_sample_min_height": 2048,
+      "tile_sample_min_width": 2048,
+      "tile_sample_stride_height": 1536,
+      "tile_sample_stride_width": 1536
+    },
+    "attention": "flash_attn2",
+    "rope": "torch",
+    "sampler": "flowmatch-euler",
+    "scheduler": "flowmatch-dynamic-shift",
+    "host_buffers": "pinned_partial",
+    "pinned_blocks": 41,
+    "pinned_gib": 12.99,
+    "streamed_blocks": 60,
+    "resident_blocks": 0,
+    "phase_order": "conditioner->vae_encode->transformer->vae_decode"
+  },
+  "diagnostic_peak_allocated_mib": 7461.849609375
+}

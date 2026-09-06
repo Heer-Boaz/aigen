@@ -1,0 +1,29 @@
+{
+  "elapsed_seconds": 8.340086666998104,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 781,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "minimum_host_available_mib": 86830.7421875,
+  "nvidia_smi_peak_used_mib": 2056,
+  "process_peak_rss_mib": 1830.828125,
+  "result": {
+    "background_corner_excluded": true,
+    "mask": {
+      "height": 3798,
+      "mode": "L",
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/anime-segmentation/mask.png",
+      "sha256": "8d8ebb65a0b7e6cf8976505be7ef98516a2eb261ce457a28a8090074586ba6e1",
+      "width": 2848
+    },
+    "model": "anime-segmentation",
+    "point_selected": true
+  },
+  "status": "completed",
+  "swap_in_bytes": 1019904,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

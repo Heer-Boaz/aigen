@@ -1,0 +1,65 @@
+{
+  "elapsed_seconds": 49.998959229997126,
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 780,
+    "nvidia_smi_utilization_gpu": 4
+  },
+  "minimum_host_available_mib": 77342.015625,
+  "nvidia_smi_peak_used_mib": 15673,
+  "process_peak_rss_mib": 11571.21484375,
+  "result": {
+    "conditioning_ms": 6798.282414994901,
+    "generation_ms": 37449.40928199503,
+    "images": [
+      {
+        "height": 1024,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-strength-v3/768x1024-seed71.png",
+        "sha256": "e1f7abfae27b3c34e72578efdd8dab419ca1912fdb229a2d0fc2c444a072851a",
+        "width": 768
+      },
+      {
+        "height": 1536,
+        "mode": "RGB",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-strength-v3/1152x1536-seed71.png",
+        "sha256": "18943ecd062056b3c880285cfccd7a7576bac66fdc46ee5a13421b6c66388d25",
+        "width": 1152
+      }
+    ],
+    "implementation_revision": "2",
+    "model_load_ms": 1468.2481959898723,
+    "outputs": [
+      {
+        "case": "768x1024",
+        "decode_ms": 460.27124000829645,
+        "denoise_ms": 3918.6987669963855,
+        "height": 1024,
+        "name": "768x1024-seed71",
+        "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-strength-v3/768x1024-seed71.png",
+        "reference_count": 2,
+        "seed": 71,
+        "width": 768
+      },
+      {
+        "case": "1152x1536",
+        "decode_ms": 862.0688170049107,
+        "denoise_ms": 6652.685150998877,
+        "height": 1536,
+        "name": "1152x1536-seed71",
+        "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-strength-v3/1152x1536-seed71.png",
+        "reference_count": 2,
+        "seed": 71,
+        "width": 1152
+      }
+    ],
+    "peak_vram_mb": 11989,
+    "sampler": "flowmatch-euler"
+  },
+  "status": "completed",
+  "swap_in_bytes": 348160,
+  "swap_increase_mib": 12.29296875,
+  "swap_out_bytes": 12771328,
+  "torch_peak_allocated_mib": 11989.10888671875,
+  "torch_peak_reserved_mib": 14818.0
+}

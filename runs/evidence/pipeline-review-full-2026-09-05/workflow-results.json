@@ -1,0 +1,708 @@
+{
+  "saved_and_reloaded": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231633504562Z-ca11565013bf",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/c3/c3baf9bbb32217ee7fd6045c847d132187b7ae44e14dc3f767a00a87acc4855d/outputs/contact-sheet.png",
+          "identity": "628a5624c472744afafcaa06985fb70a6e7f1ef830b825376f92aa36b47ff97f"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000004.png"
+          ],
+          "identity": "11964705532a0b8467fc449a1be5811a48e53e45c1cf0701e63098383211adab"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "running"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "completed"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "running"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "completed"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "running"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "completed"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "running"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "completed"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start",
+          "end"
+        ]
+      },
+      {
+        "kind": "video",
+        "frames": 5,
+        "fps": 12
+      }
+    ]
+  },
+  "cache_hit": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634201986Z-03bdbc783eb0",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/c3/c3baf9bbb32217ee7fd6045c847d132187b7ae44e14dc3f767a00a87acc4855d/outputs/contact-sheet.png",
+          "identity": "628a5624c472744afafcaa06985fb70a6e7f1ef830b825376f92aa36b47ff97f"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/69e636ed6ab07b776d04eeca3077fdfba3867598b440b24f5462775b37619e08/outputs/frames/frame-000004.png"
+          ],
+          "identity": "11964705532a0b8467fc449a1be5811a48e53e45c1cf0701e63098383211adab"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "reused"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "reused"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "reused"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "reused"
+      }
+    ],
+    "calls": []
+  },
+  "one_seed_changed": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/aaf750c9b7cfce7c9458ae9c3b52ef7aa5c14e605008e67a583dc2dd98a5138f/attempt-20260905T231634229247Z-3d49761bab97",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/66/6648da1ddc46e65fada3d2c1d011ce69db691aaf9f010873593f6a4a0ce7ba42/outputs/contact-sheet.png",
+          "identity": "792e9eb2ee27c543c7858cd3f19832307b4cc5d13be418b1747f7354100ee267"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/17/1722997b1a6edd994b1fcf49ecc2a036c3fefe85aeeeb6ff532de2dc03940635/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/17/1722997b1a6edd994b1fcf49ecc2a036c3fefe85aeeeb6ff532de2dc03940635/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/17/1722997b1a6edd994b1fcf49ecc2a036c3fefe85aeeeb6ff532de2dc03940635/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/17/1722997b1a6edd994b1fcf49ecc2a036c3fefe85aeeeb6ff532de2dc03940635/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/17/1722997b1a6edd994b1fcf49ecc2a036c3fefe85aeeeb6ff532de2dc03940635/outputs/frames/frame-000004.png"
+          ],
+          "identity": "3811d02feab53d34ae544a8608598585caffdc73f3b752d517837365dabbced0"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "running"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "completed"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "running"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "completed"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "running"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "completed"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "running"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "completed"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start"
+        ]
+      },
+      {
+        "kind": "video",
+        "frames": 5,
+        "fps": 12
+      }
+    ]
+  },
+  "lora_bytes_changed": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634541403Z-05d487f14200",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/40/40a39cc3a712ae54debd2ebfd90faf93ac4a94a09fce98b68343fbf09e3c655d/outputs/contact-sheet.png",
+          "identity": "205ff5d4f79ee897e6af1059e19955aaa3cdba586fd1b3cac03f172e51b81ede"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/6b/6be6eb0b61ecc75502c70d90e987fb9f7b76cb9591289e8a82c4495fa10d94d8/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/6b/6be6eb0b61ecc75502c70d90e987fb9f7b76cb9591289e8a82c4495fa10d94d8/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/6b/6be6eb0b61ecc75502c70d90e987fb9f7b76cb9591289e8a82c4495fa10d94d8/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/6b/6be6eb0b61ecc75502c70d90e987fb9f7b76cb9591289e8a82c4495fa10d94d8/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/6b/6be6eb0b61ecc75502c70d90e987fb9f7b76cb9591289e8a82c4495fa10d94d8/outputs/frames/frame-000004.png"
+          ],
+          "identity": "65a5f2ababa845cf5b63ef21782352aad85d3c8979d8c493dd48df73fdca2811"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "running"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "completed"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "running"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "completed"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "running"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "completed"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "running"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "completed"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start",
+          "end"
+        ]
+      },
+      {
+        "kind": "video",
+        "frames": 5,
+        "fps": 12
+      }
+    ]
+  },
+  "source_bytes_changed": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634835906Z-b02a320ff8a3",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/2c/2c820649dd26b9766cd4c7aeeb8029c1edcdec115bea0822458a296031353b74/outputs/contact-sheet.png",
+          "identity": "f0250577e84061b9120f176a62a0ec19c009a2faccc5a8574943258e4c9deb3c"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/41/412d4a5ffefa40050889fb39edfc3248811dee9b4afb6eeb53c0a88b2515e96a/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/41/412d4a5ffefa40050889fb39edfc3248811dee9b4afb6eeb53c0a88b2515e96a/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/41/412d4a5ffefa40050889fb39edfc3248811dee9b4afb6eeb53c0a88b2515e96a/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/41/412d4a5ffefa40050889fb39edfc3248811dee9b4afb6eeb53c0a88b2515e96a/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/41/412d4a5ffefa40050889fb39edfc3248811dee9b4afb6eeb53c0a88b2515e96a/outputs/frames/frame-000004.png"
+          ],
+          "identity": "1cf8ab5df1bc6021d22f85d8ef9ea5c5d6038414f92f7367bf45df25c763c30d"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "running"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "completed"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "running"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "completed"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "running"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "completed"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "running"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "completed"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start",
+          "end"
+        ]
+      },
+      {
+        "kind": "video",
+        "frames": 5,
+        "fps": 12
+      }
+    ]
+  },
+  "backend_failure": {
+    "error": "deliberate CPU backend failure",
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "failed",
+        "message": "deliberate CPU backend failure"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start"
+        ]
+      }
+    ]
+  },
+  "interrupted": {
+    "error": "deliberate CPU interruption",
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "interrupted",
+        "message": "deliberate CPU interruption"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start"
+        ]
+      }
+    ]
+  },
+  "restart": {
+    "run_dir": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635162536Z-9e725b623544",
+    "terminal_outputs": {
+      "sheet": {
+        "image": {
+          "type": "image",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/69/690240c9235f761c9b32cab85aacfd55cf245b29a128d1d51f1290ffb252a6fb/outputs/contact-sheet.png",
+          "identity": "4c6ca9060408d5cc7e0bbb912f56af4a798c7007ab6b51869a7bfbd1e74c13ea"
+        }
+      },
+      "frames": {
+        "images": {
+          "type": "image-sequence",
+          "paths": [
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/d8/d8ad4f7b4810a3165d033e32ac0edbc1851e858c617932bfae83391c8a3ca98d/outputs/frames/frame-000000.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/d8/d8ad4f7b4810a3165d033e32ac0edbc1851e858c617932bfae83391c8a3ca98d/outputs/frames/frame-000001.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/d8/d8ad4f7b4810a3165d033e32ac0edbc1851e858c617932bfae83391c8a3ca98d/outputs/frames/frame-000002.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/d8/d8ad4f7b4810a3165d033e32ac0edbc1851e858c617932bfae83391c8a3ca98d/outputs/frames/frame-000003.png",
+            "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/cache/nodes/d8/d8ad4f7b4810a3165d033e32ac0edbc1851e858c617932bfae83391c8a3ca98d/outputs/frames/frame-000004.png"
+          ],
+          "identity": "a67487db2b783e2d741c43b0c0ef398b88f53704ceea9f5c497c4e81b3a0f6a6"
+        }
+      }
+    },
+    "events": [
+      {
+        "node_id": "source",
+        "node_kind": "image-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "lora",
+        "node_kind": "lora-source",
+        "status": "completed"
+      },
+      {
+        "node_id": "end",
+        "node_kind": "image-edit",
+        "status": "reused"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "running"
+      },
+      {
+        "node_id": "start",
+        "node_kind": "image-edit",
+        "status": "completed"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "running"
+      },
+      {
+        "node_id": "video",
+        "node_kind": "animegen-i2v",
+        "status": "completed"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "running"
+      },
+      {
+        "node_id": "sheet",
+        "node_kind": "video-contact-sheet",
+        "status": "completed"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "running"
+      },
+      {
+        "node_id": "extract",
+        "node_kind": "extract-video-frames",
+        "status": "completed"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "running"
+      },
+      {
+        "node_id": "frames",
+        "node_kind": "frame-postprocess",
+        "status": "completed"
+      }
+    ],
+    "calls": [
+      {
+        "kind": "image-batch",
+        "cases": [
+          "start"
+        ]
+      },
+      {
+        "kind": "video",
+        "frames": 5,
+        "fps": 12
+      }
+    ]
+  },
+  "state_manifests": [
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634201986Z-03bdbc783eb0/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634541403Z-05d487f14200/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231633504562Z-ca11565013bf/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/e3677a8df912fa45a8424ef2d652c5d3a1bced7c0e84eb7a89a2fc416f0e398f/attempt-20260905T231634835906Z-b02a320ff8a3/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/aaf750c9b7cfce7c9458ae9c3b52ef7aa5c14e605008e67a583dc2dd98a5138f/attempt-20260905T231634229247Z-3d49761bab97/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635150181Z-ac28499666d2/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635133910Z-461b48797669/run.json",
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635162536Z-9e725b623544/run.json"
+  ],
+  "failure_manifests": [
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635133910Z-461b48797669/failure.json"
+  ],
+  "interruption_manifests": [
+    "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/workflow-data-4f1bb051/runs/runs/ae758e5c73feec4ab08bc1fddba8423310ff1ccd8ef85c58edf29f77afef3d25/attempt-20260905T231635150181Z-ac28499666d2/interrupted.json"
+  ],
+  "scope": "Real workflow/compiler/cache/FFmpeg/pixel-art-fixer; image and video generators and backend provenance doubled; no CUDA or model quality evidence."
+}

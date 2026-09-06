@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
 from textual import events, on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -16,6 +16,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, Select
 from textual.worker import get_current_worker
 from textual_image.widget import HalfcellImage
+from aigen.image_io import load_thumbnail
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,14 +28,6 @@ class BrowserEntry:
     size: int
     modified_text: str
     size_text: str
-
-
-def _load_scaled_image(path: Path, size: tuple[int, int]) -> Image.Image:
-    with Image.open(path) as source:
-        source.draft("RGB", size)
-        ImageOps.exif_transpose(source, in_place=True)
-        source.thumbnail(size, Image.Resampling.LANCZOS)
-        return source.convert("RGB")
 
 
 class BrowserThumbnail(Widget):
@@ -185,7 +178,7 @@ class BrowserThumbnailGrid(VerticalScroll, can_focus=True):
             if worker.is_cancelled:
                 return
             try:
-                thumbnail = _load_scaled_image(
+                thumbnail = load_thumbnail(
                     entry.path,
                     self.THUMBNAIL_PIXEL_SIZE,
                 )
@@ -797,7 +790,7 @@ class FileBrowser(ModalScreen[Path | None]):
         size: tuple[int, int],
     ) -> None:
         try:
-            image = _load_scaled_image(entry.path, size)
+            image = load_thumbnail(entry.path, size)
         except OSError:
             image = None
         worker = get_current_worker()

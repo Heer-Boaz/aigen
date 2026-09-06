@@ -20,6 +20,15 @@ fi
 run git -C "$source_root" fetch --depth=1 origin "$lightx2v_revision"
 run git -C "$source_root" checkout --detach FETCH_HEAD
 
+fp8_patch="$repo_root/scripts/patches/lightx2v-fp8-direct-output.patch"
+if git -C "$source_root" apply --check "$fp8_patch" 2>/dev/null; then
+  run git -C "$source_root" apply "$fp8_patch"
+elif git -C "$source_root" apply --reverse --check "$fp8_patch" 2>/dev/null; then
+  log "LightX2V direct FP8 output patch is already applied"
+else
+  die "LightX2V source does not match the direct FP8 output patch: $source_root"
+fi
+
 if [[ ! -x "$runtime_python" ]]; then
   run "$python_bootstrap" -m venv "$runtime_venv"
 fi

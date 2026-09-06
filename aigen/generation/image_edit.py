@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 from PIL import Image
 
 from aigen.character_reference_pack import load_character_reference_pack
+from aigen.image_io import oriented_image_size
 from aigen.image_edit_defaults import (
     BOOGU_DEFAULT_GUIDANCE,
     BOOGU_DEFAULT_STEPS,
@@ -78,14 +79,6 @@ IMAGE_EDIT_ASPECT_RATIOS = (
     (9, 16),
     (16, 9),
 )
-IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES = {
-    FLUX2_KLEIN_BACKEND: FLUX2_KLEIN_ARCHITECTURE,
-    FLUX2_DEV_BACKEND: FLUX2_DEV_ARCHITECTURE,
-    QWEN_2511_LIGHTNING_BACKEND: QWEN_IMAGE_ARCHITECTURE,
-    QWEN_2511_BASE_BACKEND: QWEN_IMAGE_ARCHITECTURE,
-}
-
-
 @dataclass(frozen=True)
 class ImageEditBackendSettings:
     steps: int
@@ -98,6 +91,12 @@ class ImageEditBackendSettings:
     supports_strength: bool = False
     supports_empty_prompt: bool = False
     image_slot_labels: tuple[str, ...] = ()
+    max_references: int | None = None
+    lora_architecture: str | None = None
+    dimension_alignment: int = 16
+    min_side: int = 16
+    max_side: int | None = None
+    strength_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +120,8 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         FLUX2_KLEIN_SCHEDULER,
         (FLUX2_KLEIN_SCHEDULER,),
         supports_strength=True,
+        lora_architecture=FLUX2_KLEIN_ARCHITECTURE,
+        strength_description="The first reference supplies the init image; all references remain conditioning inputs.",
     ),
     FLUX2_DEV_BACKEND: ImageEditBackendSettings(
         FLUX2_DEV_STEPS,
@@ -129,6 +130,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         (FLUX2_DEV_SAMPLER,),
         FLUX2_DEV_SCHEDULER,
         (FLUX2_DEV_SCHEDULER,),
+        lora_architecture=FLUX2_DEV_ARCHITECTURE,
     ),
     QWEN_2511_LIGHTNING_BACKEND: ImageEditBackendSettings(
         QWEN_2511_LIGHTNING_DEFAULT_STEPS,
@@ -137,6 +139,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         QWEN_2511_SAMPLERS,
         QWEN_2511_DEFAULT_SCHEDULER,
         QWEN_2511_SCHEDULERS,
+        lora_architecture=QWEN_IMAGE_ARCHITECTURE,
     ),
     QWEN_2511_BASE_BACKEND: ImageEditBackendSettings(
         QWEN_2511_BASE_DEFAULT_STEPS,
@@ -145,6 +148,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         QWEN_2511_SAMPLERS,
         QWEN_2511_DEFAULT_SCHEDULER,
         QWEN_2511_SCHEDULERS,
+        lora_architecture=QWEN_IMAGE_ARCHITECTURE,
     ),
     HIDREAM_O1_BACKEND: ImageEditBackendSettings(
         HIDREAM_DEFAULT_STEPS,
@@ -153,6 +157,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         HIDREAM_SAMPLERS,
         HIDREAM_DEFAULT_SCHEDULER,
         HIDREAM_SCHEDULERS,
+        max_references=10, dimension_alignment=32, min_side=512, max_side=3104,
     ),
     BOOGU_IMAGE_EDIT_BACKEND: ImageEditBackendSettings(
         BOOGU_DEFAULT_STEPS,
@@ -161,6 +166,7 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         (BOOGU_SAMPLER,),
         BOOGU_SCHEDULER,
         (BOOGU_SCHEDULER,),
+        max_references=1,
     ),
     USO_FLUX1_BACKEND: ImageEditBackendSettings(
         USO_FLUX1_DEFAULT_STEPS,
@@ -171,7 +177,13 @@ IMAGE_EDIT_BACKEND_SETTINGS = {
         (USO_FLUX1_SCHEDULER,),
         supports_empty_prompt=True,
         image_slot_labels=("Content image", "Style image 1", "Style image 2"),
+        max_references=3, min_side=512, max_side=1536,
     ),
+}
+
+IMAGE_EDIT_BACKEND_LORA_ARCHITECTURES = {
+    backend: settings.lora_architecture for backend, settings in IMAGE_EDIT_BACKEND_SETTINGS.items()
+    if settings.lora_architecture is not None
 }
 
 
@@ -261,6 +273,18 @@ def image_edit_backend_settings(backend: str) -> ImageEditBackendSettings:
         ) from error
 
 
+def validate_image_edit_inputs(backend: str, reference_count: int, lora_architectures: Sequence[str] = ()) -> None:
+    settings = image_edit_backend_settings(backend)
+    if reference_count < 1 or (settings.max_references is not None and reference_count > settings.max_references):
+        allowed = f"1 to {settings.max_references}" if settings.max_references is not None else "at least 1"
+        raise ImageEditError(f"{backend} requires {allowed} reference images; received {reference_count}")
+    for architecture in lora_architectures:
+        if settings.lora_architecture is None:
+            raise ImageEditError(f"{backend} does not support LoRAs")
+        if architecture != settings.lora_architecture:
+            raise ImageEditError(f"{backend} requires a {settings.lora_architecture} LoRA, received {architecture}")
+
+
 def resolve_image_edit_settings(
     *,
     backend: str,
@@ -282,6 +306,11 @@ def resolve_image_edit_settings(
         )
     if width is not None and (width < 1 or height is None or height < 1):
         raise ImageEditError("--width and --height must be positive")
+    if width is not None:
+        for side in (width, height):
+            if side < settings.min_side or side % settings.dimension_alignment or (settings.max_side is not None and side > settings.max_side):
+                limit = f" to {settings.max_side}" if settings.max_side is not None else " or larger"
+                raise ImageEditError(f"{backend} dimensions must be multiples of {settings.dimension_alignment}, {settings.min_side}{limit}")
 
     resolved_steps = settings.steps if steps is None else steps
     if resolved_steps < 1:
@@ -356,8 +385,11 @@ def resolve_image_edit_request(
     if not prompt and not backend_settings.supports_empty_prompt:
         raise ImageEditError("--prompt must not be empty")
     images = _resolve_images(request.images, request.reference_packs)
+    validate_image_edit_inputs(request.backend, len(images))
     if not request.seeds:
         raise ImageEditError("at least one seed is required")
+    if len(set(request.seeds)) != len(request.seeds):
+        raise ImageEditError("image-edit seed sweep contains duplicate seeds")
     settings = resolve_image_edit_settings(
         backend=request.backend,
         width=request.width,
@@ -898,7 +930,7 @@ def _resolve_loras(
 
 def _image_aspect_ratio(path: Path) -> tuple[int, int]:
     with Image.open(path) as image:
-        return normalized_aspect_ratio(*image.size)
+        return normalized_aspect_ratio(*oriented_image_size(image))
 
 
 def _recommended_canvas_size(

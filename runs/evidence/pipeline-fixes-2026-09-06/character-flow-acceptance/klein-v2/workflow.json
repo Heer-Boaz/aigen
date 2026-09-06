@@ -1,0 +1,63 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-4ad71802101b40b6902307e573228926",
+  "name": "klein audited character flow",
+  "nodes": [
+    {
+      "id": "reference",
+      "title": "Reference",
+      "layout": {
+        "x": 4,
+        "y": 2
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png"
+      }
+    },
+    {
+      "id": "edit",
+      "title": "Character edit",
+      "layout": {
+        "x": 50,
+        "y": 2
+      },
+      "kind": "character-edit",
+      "config": {
+        "backend": "flux2-klein",
+        "prompt": "Turn this character to face forward, keeping the full-body framing, outfit, drawing style, and white background.",
+        "seed_mode": "fixed",
+        "seed": 91,
+        "aspect_ratio": "",
+        "width": 768,
+        "height": 1024,
+        "steps": 4,
+        "guidance": null,
+        "strength": null,
+        "sampler": "flowmatch-euler",
+        "scheduler": "flowmatch-dynamic-shift",
+        "candidates": 2,
+        "max_iterations": 2,
+        "upscale_long_side": 2048,
+        "pose_mode": "native",
+        "structure_control": "depth",
+        "max_sequence_length": null,
+        "guidance_scale": null
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "ref",
+      "source": {
+        "node_id": "reference",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "edit",
+        "port": "references"
+      },
+      "order": 0
+    }
+  ]
+}

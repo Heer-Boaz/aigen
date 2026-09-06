@@ -10,6 +10,7 @@ from typing import Any
 
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT, PROJECT_ROOT
+from aigen.model_artifacts import local_model_files
 
 
 HUNYUANVIDEO15_SOURCE_REVISION = "60783e704160023913bee78f0b47036d393d4dfa"
@@ -19,6 +20,7 @@ HUNYUANVIDEO15_STEPS = frozenset({8, 12})
 HUNYUANVIDEO15_CFG_SCALE = 1.0
 HUNYUANVIDEO15_FLOW_SHIFT = 7.0
 HUNYUANVIDEO15_FPS = 24
+HUNYUANVIDEO15_IMPLEMENTATION_REVISION = "2"
 HUNYUANVIDEO15_RUNTIME_PATCH = (
     PROJECT_ROOT
     / "patches/hunyuanvideo15/0001-release-cuda-cache-after-component-offload.patch"
@@ -27,6 +29,28 @@ HUNYUANVIDEO15_RUNTIME_PATCH = (
 
 class HunyuanVideo15Error(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class HunyuanVideo15Installation:
+    source: Path
+    torchrun: Path
+    model: Path
+
+
+def resolve_hunyuanvideo15_installation() -> HunyuanVideo15Installation:
+    root = _runtime_root()
+    installation = HunyuanVideo15Installation(root / "HunyuanVideo-1.5", root / "venv/bin/torchrun", _model_root())
+    _validate_runtime(installation.source, installation.torchrun, installation.source / "generate.py")
+    _validate_model(installation.model)
+    return installation
+
+
+def validate_hunyuanvideo15_settings(*, steps: int, frames: int) -> None:
+    if steps not in HUNYUANVIDEO15_STEPS:
+        raise HunyuanVideo15Error("step-distilled inference supports exactly 8 or 12 steps")
+    if frames <= 0 or (frames - 1) % 4:
+        raise HunyuanVideo15Error("HunyuanVideo-1.5 frame count must be a positive multiple of 4 plus 1")
 
 
 @dataclass(frozen=True)
@@ -81,11 +105,9 @@ def generate_hunyuanvideo15_i2v(
     seed: int,
     overlap_group_offloading: bool,
     progress: StatusReporter,
+    installation: HunyuanVideo15Installation | None = None,
 ) -> HunyuanVideo15Result:
-    if steps not in HUNYUANVIDEO15_STEPS:
-        raise HunyuanVideo15Error("step-distilled inference supports exactly 8 or 12 steps")
-    if frames <= 0:
-        raise HunyuanVideo15Error("video frame count must be positive")
+    validate_hunyuanvideo15_settings(steps=steps, frames=frames)
     if not prompt.strip():
         raise HunyuanVideo15Error("video motion prompt must not be empty")
 
@@ -102,13 +124,11 @@ def generate_hunyuanvideo15_i2v(
     if existing is not None:
         raise HunyuanVideo15Error(f"output already exists: {existing}")
 
-    runtime_root = _runtime_root()
-    source = runtime_root / "HunyuanVideo-1.5"
-    torchrun = runtime_root / "venv/bin/torchrun"
+    installation = resolve_hunyuanvideo15_installation() if installation is None else installation
+    source = installation.source
+    torchrun = installation.torchrun
     generate_script = source / "generate.py"
-    model = _model_root()
-    _validate_runtime(source, torchrun, generate_script)
-    _validate_model(model)
+    model = installation.model
 
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [
@@ -304,12 +324,10 @@ def _validate_model(model: Path) -> None:
         model / "vision_encoder/siglip/feature_extractor/preprocessor_config.json",
         model / "vision_encoder/siglip/image_encoder/model.safetensors",
     )
-    missing = [path for path in required if not path.is_file()]
-    if missing:
-        raise HunyuanVideo15Error(
-            "HunyuanVideo-1.5 model set is incomplete; run scripts/download_hunyuanvideo15.sh: "
-            + ", ".join(path.as_posix() for path in missing)
-        )
+    try:
+        local_model_files(required)
+    except (OSError, ValueError, KeyError) as error:
+        raise HunyuanVideo15Error(f"HunyuanVideo-1.5 model set is incomplete: {error}") from error
 
 
 def _validate_outputs(

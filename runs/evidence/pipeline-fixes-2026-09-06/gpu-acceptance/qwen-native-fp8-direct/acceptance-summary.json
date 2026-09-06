@@ -1,0 +1,15 @@
+{
+  "status": "completed",
+  "total_denoise_tokens": 71692,
+  "nvidia_smi_peak_used_mib": 14530,
+  "torch_sampled_peak_reserved_mib": 13028.0,
+  "phase_peak_allocated_mib": {
+    "conditioning": 9889.6376953125,
+    "vae_encode": 8640.02001953125,
+    "denoise": 8376.5498046875,
+    "decode": 7461.849609375
+  },
+  "timing_valid_no_swap_growth": false,
+  "mode": "native double-buffer offload, zero extra resident blocks",
+  "quantization_patch": "lightx2v-fp8-direct-output.patch"
+}

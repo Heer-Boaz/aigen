@@ -1,0 +1,120 @@
+{"gpu_preflight": {"nvidia_smi_used_mb": 780, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 5}, "free_mib": 15523}
+{"phase": "starting", "completed": 0, "total": 0, "elapsed_seconds": 3.4509997931309044e-05, "remaining_seconds": null, "final": false, "cpu_percent": 0.0, "gpu_percent": 3, "vram_used_mb": 780, "vram_total_mb": 16303, "process_rss_mib": 514.97265625, "host_available_mib": 88067.80859375, "swap_used_mib": 655.71484375, "swap_in_bytes": 226705408, "swap_out_bytes": 1818238976}
+{"gpu_preflight": {"nvidia_smi_used_mb": 780, "nvidia_smi_device_total_mb": 16303, "nvidia_smi_utilization_gpu": 3}, "free_mib": 15523}
+{"phase": "encode prompts", "completed": 0, "total": 0, "elapsed_seconds": 7.868205070990371, "remaining_seconds": null, "final": false, "cpu_percent": 4.429171439480717, "gpu_percent": 2, "vram_used_mb": 780, "vram_total_mb": 16303, "process_rss_mib": 1042.74609375, "host_available_mib": 87668.0390625, "swap_used_mib": 655.70703125, "swap_in_bytes": 226705408, "swap_out_bytes": 1818238976}
+Loading weights:   0%|          | 0/651 [00:00<?, ?it/s]Loading weights:   0%|          | 1/651 [00:01<11:58,  1.11s/it]Loading weights:   3%|▎         | 18/651 [00:01<00:31, 19.89it/s]Loading weights:   5%|▌         | 35/651 [00:01<00:15, 39.49it/s]Loading weights:   7%|▋         | 47/651 [00:01<00:14, 42.55it/s]Loading weights:   9%|▉         | 58/651 [00:01<00:11, 51.29it/s]Loading weights:  11%|█         | 72/651 [00:01<00:08, 66.12it/s]Loading weights:  13%|█▎        | 83/651 [00:01<00:07, 73.00it/s]Loading weights:  14%|█▍        | 94/651 [00:02<00:06, 80.35it/s]Loading weights:  17%|█▋        | 109/651 [00:02<00:06, 88.29it/s]Loading weights:  18%|█▊        | 120/651 [00:02<00:05, 89.29it/s]Loading weights:  20%|█▉        | 130/651 [00:02<00:05, 87.86it/s]Loading weights:  22%|██▏       | 143/651 [00:02<00:05, 96.06it/s]Loading weights:  24%|██▎       | 154/651 [00:02<00:05, 91.64it/s]Loading weights:  26%|██▌       | 168/651 [00:02<00:04, 100.92it/s]Loading weights:  28%|██▊       | 181/651 [00:02<00:04, 99.76it/s] Loading weights:  29%|██▉       | 192/651 [00:03<00:04, 101.82it/s]Loading weights:  31%|███▏      | 204/651 [00:03<00:04, 96.95it/s] Loading weights:  33%|███▎      | 218/651 [00:03<00:04, 106.52it/s]Loading weights:  35%|███▌      | 229/651 [00:03<00:04, 85.25it/s] Loading weights:  37%|███▋      | 239/651 [00:03<00:04, 85.57it/s]Loading weights:  39%|███▉      | 253/651 [00:03<00:04, 98.14it/s]Loading weights:  41%|████      | 264/651 [00:03<00:04, 94.93it/s]Loading weights:  42%|████▏     | 274/651 [00:03<00:04, 93.92it/s]Loading weights:  44%|████▍     | 289/651 [00:04<00:03, 104.20it/s]Loading weights:  46%|████▌     | 300/651 [00:04<00:03, 99.77it/s] Loading weights:  48%|████▊     | 311/651 [00:04<00:03, 99.56it/s]Loading weights:  50%|████▉     | 325/651 [00:04<00:02, 109.36it/s]Loading weights:  52%|█████▏    | 337/651 [00:04<00:02, 106.39it/s]Loading weights:  53%|█████▎    | 348/651 [00:04<00:03, 97.73it/s] Loading weights:  56%|█████▌    | 364/651 [00:04<00:02, 106.78it/s]Loading weights:  58%|█████▊    | 380/651 [00:04<00:02, 116.92it/s]Loading weights:  60%|██████    | 392/651 [00:04<00:02, 110.13it/s]Loading weights:  62%|██████▏   | 404/651 [00:05<00:02, 88.21it/s] Loading weights:  64%|██████▍   | 418/651 [00:05<00:02, 95.63it/s]Loading weights:  66%|██████▌   | 431/651 [00:05<00:02, 86.86it/s]Loading weights:  69%|██████▊   | 446/651 [00:05<00:02, 99.37it/s]Loading weights:  70%|███████   | 457/651 [00:05<00:02, 84.42it/s]Loading weights:  73%|███████▎  | 474/651 [00:05<00:01, 93.02it/s]Loading weights:  76%|███████▌  | 494/651 [00:06<00:01, 113.26it/s]Loading weights:  79%|███████▊  | 512/651 [00:06<00:01, 123.03it/s]Loading weights:  81%|████████▏ | 530/651 [00:06<00:00, 134.80it/s]Loading weights:  86%|████████▌ | 558/651 [00:06<00:00, 167.41it/s]Loading weights:  88%|████████▊ | 576/651 [00:06<00:00, 169.53it/s]Loading weights:  92%|█████████▏| 598/651 [00:06<00:00, 175.62it/s]Loading weights:  95%|█████████▍| 618/651 [00:06<00:00, 181.11it/s]Loading weights:  98%|█████████▊| 638/651 [00:06<00:00, 178.40it/s]Loading weights: 100%|██████████| 651/651 [00:06<00:00, 95.39it/s] 
+/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/hub_kernels.py:643: UserWarning: Skipping publisher trust check for 'kernels-community/finegrained-fp8' because Hugging Face Hub is in offline mode.
+  return get_kernel_hub(
+{"phase": "failed", "completed": 0, "total": 0, "elapsed_seconds": 15.894090878995485, "remaining_seconds": null, "final": true, "cpu_percent": 5.563282336578579, "gpu_percent": 3, "vram_used_mb": 10123, "vram_total_mb": 16303, "process_rss_mib": 1652.7890625, "host_available_mib": 87098.7421875, "swap_used_mib": 655.70703125, "swap_in_bytes": 226705408, "swap_out_bytes": 1818238976}
+{"status": "failed", "result": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/klein-strength-v2/result.json"}
+Traceback (most recent call last):
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 186, in <module>
+    main()
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 164, in main
+    output["result"] = runner(config, job, directory, progress)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/probe.py", line 66, in run_klein
+    embeddings, conditioning_ms = encode_flux2_klein_prompts(prompts=(prompt,), progress=progress)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/aigen/generation/flux2_klein.py", line 223, in encode_flux2_klein_prompts
+    prompt_embeds=Flux2KleinPipeline._get_qwen3_prompt_embeds(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/diffusers/pipelines/flux2/pipeline_flux2_klein.py", line 248, in _get_qwen3_prompt_embeds
+    output = text_encoder(
+             ^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/utils/generic.py", line 911, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/models/qwen3/modeling_qwen3.py", line 492, in forward
+    outputs: BaseModelOutputWithPast = self.model(
+                                       ^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/utils/generic.py", line 1040, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 262, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/models/qwen3/modeling_qwen3.py", line 424, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/modeling_layers.py", line 110, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1884, in _call_impl
+    return inner()
+           ^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1832, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/models/qwen3/modeling_qwen3.py", line 318, in forward
+    hidden_states, _ = self.self_attn(
+                       ^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1884, in _call_impl
+    return inner()
+           ^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1832, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/models/qwen3/modeling_qwen3.py", line 263, in forward
+    query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/finegrained_fp8.py", line 333, in forward
+    return fp8_linear(
+           ^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/utils/deprecation.py", line 171, in wrapped_func
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/finegrained_fp8.py", line 279, in fp8_linear
+    return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/utils/deprecation.py", line 171, in wrapped_func
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/finegrained_fp8.py", line 196, in finegrained_fp8_linear
+    finegrained_fp8 = load_finegrained_fp8_kernel()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/finegrained_fp8.py", line 144, in load_finegrained_fp8_kernel
+    return _load_finegrained_fp8_kernel()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/finegrained_fp8.py", line 101, in _load_finegrained_fp8_kernel
+    kernel = lazy_load_kernel("finegrained-fp8")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/hub_kernels.py", line 552, in lazy_load_kernel
+    kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/transformers/integrations/hub_kernels.py", line 643, in get_kernel
+    return get_kernel_hub(
+           ^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/kernels/utils.py", line 469, in get_kernel
+    revision = select_revision_or_version(repo_id, revision=revision, version=version)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/kernels/_versions.py", line 104, in select_revision_or_version
+    return resolve_version_spec_as_ref(repo_id, version).target_commit
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/boaz/aigen/.venv/lib/python3.12/site-packages/kernels/_versions.py", line 72, in resolve_version_spec_as_ref
+    raise ValueError(
+ValueError: Version 4 of 'kernels-community/finegrained-fp8' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or pass an explicit `revision=<commit>`.

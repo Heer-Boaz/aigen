@@ -1,0 +1,32 @@
+{
+  "kind": "aigen-uso-flux1-dev-fp8-config",
+  "runtime_revision": "6587514aa3adf8e8f46e5f7e804239651d30b32d",
+  "implementation_revision": "2",
+  "request": {
+    "prompt": "Redraw image 1 with the linework and shading of image 2.",
+    "references": [
+      "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+    ],
+    "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/uso-seed-together/output/image-seed70.png",
+    "width": 768,
+    "height": 1024,
+    "steps": 25,
+    "guidance": 4.0,
+    "seed": 70
+  },
+  "environment": {
+    "torch": "2.12.1+cu130",
+    "cuda": "13.0",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "model_type": "flux-dev-fp8",
+    "implementation_revision": "2",
+    "offload": true,
+    "cuda_allocator_config": "expandable_segments:True",
+    "content_reference_size": 512,
+    "peak_allocated_mib": 14357.4,
+    "peak_reserved_mib": 14518.0
+  },
+  "seed_elapsed_seconds": 53.165,
+  "sweep_elapsed_seconds": 114.532
+}

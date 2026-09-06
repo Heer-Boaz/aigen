@@ -1,0 +1,36 @@
+{
+  "klein": {
+    "backend": "flux2-klein",
+    "references": [
+      "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png",
+      "/home/boaz/aigen/assets/characters/jillian/fullbody-multiview.png"
+    ],
+    "prompt": "Redraw the sprite in image 1 as a smooth anime illustration in the linework and shading style of image 2, keeping the pose, proportions, and white background of image 1.",
+    "width": 768,
+    "height": 1024,
+    "seeds": [
+      71,
+      72
+    ],
+    "steps": 4
+  },
+  "qwen": {
+    "backend": "qwen-image-edit-2511-lightning",
+    "references": [
+      "/home/boaz/aigen/assets/characters/jillian/references/582142a0-f1bd-4a7d-be0a-cf78a3172586.png"
+    ],
+    "prompt": "Redraw this sprite as a smooth anime illustration. Keep the standing pose, proportions, outfit and white background.",
+    "width": 1152,
+    "height": 1536,
+    "seeds": [
+      71,
+      72
+    ],
+    "steps": 8
+  },
+  "continuation": {
+    "prompt": "Change the background to light gray, keeping the subject and illustration style unchanged.",
+    "seed": 73
+  },
+  "min_free_mib": 12000
+}

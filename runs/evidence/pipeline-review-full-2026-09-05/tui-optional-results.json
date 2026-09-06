@@ -1,0 +1,8 @@
+{
+  "compiled": true,
+  "sampler_before": null,
+  "resolved_sampler": "flowmatch-euler",
+  "inspector_error": "Illegal select value None. Did you mean to use Select.clear()?",
+  "scope": "Real compiler and Textual inspector; no model execution.",
+  "log": "/home/boaz/aigen/runs/evidence/pipeline-review-full-2026-09-05/optional-data-1c64fb37/expected-crash.log"
+}

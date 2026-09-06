@@ -11,6 +11,7 @@ import numpy as np
 from PIL import Image
 
 from aigen.image_assets import image_asset_json
+from aigen.image_io import image_alpha, open_image, oriented_image_size
 from aigen.progress import StatusReporter
 from aigen.runtime_profiles import MODELS_ROOT
 
@@ -31,6 +32,7 @@ UPSCALE_MODELS: dict[str, Path] = {
 DEFAULT_UPSCALE_MODEL = "illustrationjanai-dat2"
 UPSCALE_TILE_SIZE = 512
 UPSCALE_TILE_OVERLAP = 32
+IMAGE_UPSCALE_IMPLEMENTATION_REVISION = "2"
 
 
 def upscale_model_names() -> tuple[str, ...]:
@@ -175,18 +177,19 @@ class IllustrationUpscaler:
         prepared_files = []
         for input_path, output_path in files:
             with Image.open(input_path) as image:
+                width, height = oriented_image_size(image)
                 target_size = (
-                    size_for_long_side(*image.size, long_side=long_side)
+                    size_for_long_side(width, height, long_side=long_side)
                     if long_side is not None
                     else (
-                        round(image.width * self.scale),
-                        round(image.height * self.scale),
+                        round(width * self.scale),
+                        round(height * self.scale),
                     )
                 )
                 total_tiles += len(
                     _tile_windows(
-                        width=image.width,
-                        height=image.height,
+                        width=width,
+                        height=height,
                         tile_size=self.tile_size,
                         overlap=self.tile_overlap,
                     )
@@ -199,7 +202,7 @@ class IllustrationUpscaler:
         outputs = []
         try:
             for input_path, output_path, target_size in prepared_files:
-                with Image.open(input_path) as image:
+                with open_image(input_path) as image:
                     result = self._upscale_on_device(
                         image,
                         target_size=target_size,
@@ -267,7 +270,13 @@ class IllustrationUpscaler:
         output = _tensor_to_image(natural, torch=self.torch)
         del natural
         if output.size != target_size:
-            output = output.resize(target_size, Image.Resampling.LANCZOS)
+            resized = output.resize(target_size, Image.Resampling.LANCZOS)
+            output.close()
+            output = resized
+        alpha = image_alpha(image)
+        if alpha is not None:
+            with alpha, alpha.resize(target_size, Image.Resampling.LANCZOS) as resized_alpha:
+                output.putalpha(resized_alpha)
         return UpscaledImage(
             image=output,
             elapsed_ms=(perf_counter() - start) * 1000.0,
@@ -295,20 +304,24 @@ def upscale_image(
     resolved_input = input_path.resolve(strict=True)
     resolved_output = output_path.resolve()
     upscaler = IllustrationUpscaler(model_path=upscale_model_path(model))
-    with Image.open(resolved_input) as image:
+    with open_image(resolved_input) as image:
         result = upscaler.upscale(
             image,
             target_size=size_for_long_side(*image.size, long_side=long_side),
             progress=progress,
         )
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
-    result.image.save(resolved_output)
+    try:
+        result.image.save(resolved_output)
+    finally:
+        result.image.close()
     return {
         "status": "completed",
         "kind": "character-image-postprocess-result",
         "input": image_asset_json(resolved_input),
         "output": image_asset_json(resolved_output),
         "model": result.model_name,
+        "implementation_revision": IMAGE_UPSCALE_IMPLEMENTATION_REVISION,
         "model_path": result.model_path.as_posix(),
         "device": result.device,
         "scale": result.scale,

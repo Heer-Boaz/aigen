@@ -1,0 +1,9 @@
+{
+  "elapsed_seconds": 67.43649406699114,
+  "returncode": 0,
+  "statuses": {
+    "continue": "completed",
+    "node-d9a85f24ab4e4402a9378be3c6503a33": "completed"
+  },
+  "stdout_closed": true
+}

@@ -1,0 +1,192 @@
+{
+  "checked_at": "2026-09-05T22:10:23.096915+00:00",
+  "head": "9a78fb5f06ba71e5b3f006242064002c8e4632a1",
+  "image_backends": [
+    "flux2-klein",
+    "flux2-dev-nvfp4",
+    "qwen-image-edit-2511-lightning",
+    "qwen-image-edit-2511-base",
+    "hidream-o1-full-fp8",
+    "boogu-image-edit-turbo-fp8",
+    "uso-flux1-dev-fp8"
+  ],
+  "video_backends": [
+    "ltx23-keyframes",
+    "animegen-i2v",
+    "hunyuanvideo15-i2v"
+  ],
+  "postprocessors": [
+    "vosr-1.4b-ms-upscale",
+    "animesharp-x4",
+    "illustrationjanai-dat2",
+    "illustrationjanai-esrgan",
+    "wu-pixelization",
+    "pixel-art-fixer"
+  ],
+  "node_kinds": [
+    "image-source",
+    "reference-pack",
+    "lora-source",
+    "image-edit",
+    "image-postprocess",
+    "animegen-i2v",
+    "video-contact-sheet",
+    "extract-video-frames",
+    "frame-postprocess"
+  ],
+  "artifact_types": [
+    "image",
+    "reference-pack",
+    "lora",
+    "video",
+    "image-sequence"
+  ],
+  "cli": {
+    "animegen-i2v": {},
+    "image-postprocess-batch": {},
+    "briefs": {
+      "schema": {},
+      "plan-schema": {},
+      "plan": {},
+      "materialize": {},
+      "run": {}
+    },
+    "characters": {
+      "view-schema": {},
+      "view-bank-schema": {},
+      "view-validate": {},
+      "view-plan": {},
+      "view-run": {},
+      "view-accept": {},
+      "reference-pack": {
+        "build": {}
+      },
+      "qwen-edit-run": {},
+      "postprocess": {},
+      "vosr-upscale": {},
+      "qwen-edit-refine-plan": {},
+      "qwen-edit-refine": {},
+      "region-plan": {}
+    },
+    "flux2-klein": {},
+    "hunyuanvideo15-i2v": {},
+    "image-caption": {},
+    "image-edit": {},
+    "keyframes": {
+      "schema": {},
+      "refine-schema": {},
+      "polish-schema": {},
+      "polish-plan-schema": {},
+      "validate": {},
+      "plan": {},
+      "run": {},
+      "run-audit-variant": {},
+      "extract-example": {},
+      "refine-validate": {},
+      "refine-plan": {},
+      "refine-run": {},
+      "polish-plan": {},
+      "polish-diagnose": {},
+      "polish-validate": {},
+      "polish-preview": {},
+      "polish-run": {},
+      "polish-select": {},
+      "judge": {},
+      "score": {},
+      "score-select": {},
+      "control-audit": {}
+    },
+    "lora": {
+      "dataset-schema": {},
+      "candidate-brief-schema": {},
+      "candidate-brief-plan": {},
+      "dataset-build": {},
+      "canon-init": {},
+      "dataset-audit": {},
+      "candidate-plan": {},
+      "freegen-brief-schema": {},
+      "freegen-plan": {},
+      "candidate-run": {},
+      "candidate-evidence": {},
+      "candidate-judge": {},
+      "candidate-caption": {},
+      "candidate-review": {},
+      "training-preflight": {},
+      "train-plan": {},
+      "train-run": {},
+      "control-audit-plan": {},
+      "control-audit-run": {}
+    },
+    "ltx23-keyframes": {},
+    "models": {
+      "download": {}
+    },
+    "pixel-art-fixer": {},
+    "pix2pix": {
+      "contract": {},
+      "audit": {},
+      "prepare-bilinear-control": {},
+      "train": {},
+      "infer": {},
+      "evaluate": {},
+      "iro-plan": {},
+      "iro-render": {},
+      "iro-select": {},
+      "iro-generate-sources": {},
+      "iro-generate-qwen-sources": {},
+      "iro-generate-flux-source-set": {},
+      "iro-prepare": {},
+      "iro-prepare-qwen": {},
+      "iro-prepare-flux-source-set": {}
+    },
+    "sam-segment": {},
+    "video-postprocess": {
+      "extract-frames": {},
+      "contact-sheet": {}
+    },
+    "workflow": {
+      "new": {},
+      "validate": {},
+      "run": {}
+    },
+    "pixel-art-wu": {}
+  },
+  "runtime_sources": {
+    "WanGP": {
+      "default_source_path": "/home/boaz/.cache/aigen-wangp/Wan2GP",
+      "exists": true,
+      "revision": "5582327dc25e45fec6cda0f27144d4dcf7ed104b",
+      "changes": "M models/ltx2/ltx2.py\n M models/ltx2/ltx_pipelines/ti2vid_two_stages.py"
+    },
+    "LightX2V": {
+      "default_source_path": "/home/boaz/.cache/aigen-lightx2v/LightX2V",
+      "exists": true,
+      "revision": "b96309e82899145aebd8ecf95c387894aba66b1e",
+      "changes": "?? runs/"
+    },
+    "VOSR": {
+      "default_source_path": "/home/boaz/.cache/aigen-vosr/VOSR",
+      "exists": true,
+      "revision": "25fbf8e6cb9656b8991c24474f408bdce6fcb1b1",
+      "changes": "?? preset/ckpts"
+    },
+    "USO": {
+      "default_source_path": "/home/boaz/.local/share/aigen/runtimes/uso/USO",
+      "exists": true,
+      "revision": "6587514aa3adf8e8f46e5f7e804239651d30b32d",
+      "changes": ""
+    },
+    "Boogu": {
+      "default_source_path": "/home/boaz/.cache/aigen-boogu/Boogu-Image",
+      "exists": false
+    },
+    "HiDream-Comfy": {
+      "default_source_path": "/home/boaz/.cache/aigen-comfy-image/ComfyUI",
+      "exists": false
+    },
+    "Hunyuan": {
+      "default_source_path": "/home/boaz/.cache/aigen-hunyuanvideo15/HunyuanVideo-1.5",
+      "exists": false
+    }
+  }
+}

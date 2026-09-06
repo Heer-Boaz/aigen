@@ -1,0 +1,7 @@
+test_changed_backend_implementation_invalidates_cache_signature (test_generation_contracts.GenerationContractTests.test_changed_backend_implementation_invalidates_cache_signature) ... ok
+test_duplicate_seeds_are_rejected_before_creating_outputs (test_generation_contracts.GenerationContractTests.test_duplicate_seeds_are_rejected_before_creating_outputs) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.010s
+
+OK

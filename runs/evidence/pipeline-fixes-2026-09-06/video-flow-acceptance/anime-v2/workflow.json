@@ -1,0 +1,188 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-902c361f00a443f8ae406b72f3bb6bee",
+  "name": "anime video flow acceptance",
+  "nodes": [
+    {
+      "id": "selected",
+      "title": "Saved image choice",
+      "layout": {
+        "x": 4,
+        "y": 6
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": {
+          "manifest_path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/workflows/runs/workflow-ba2690445ae7438ea67b81bfcd9470cc/attempt-20260906T033538130075Z-025880073559/nodes/node-adcb928cf30248f4bf0c3675a42dff46/result.json",
+          "producer_signature": "2e68f076c938029ad61c09618ffe3b70ffa35ab10a56d00b0153e84d20d5562b",
+          "output_port": "image",
+          "artifact_identity": "56a489fa3914e772dc0dd969df78389ef8c58ed8fb8f3f365007ee1df8d4ecba"
+        }
+      }
+    },
+    {
+      "id": "generate",
+      "title": "AnimeGen",
+      "layout": {
+        "x": 50,
+        "y": 2
+      },
+      "kind": "animegen-i2v",
+      "config": {
+        "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+        "seed_mode": "fixed",
+        "seed": 83,
+        "frames": 33,
+        "fps": 16,
+        "sampling": "lightning-4",
+        "steps": 4,
+        "precision": "fp8",
+        "keyframe_fit": "pad"
+      }
+    },
+    {
+      "id": "generate2",
+      "title": "AnimeGen second seed",
+      "layout": {
+        "x": 50,
+        "y": 9
+      },
+      "kind": "animegen-i2v",
+      "config": {
+        "prompt": "The standing character blinks and gently shifts weight, keeping the illustrated style and white background. Static camera.",
+        "seed_mode": "fixed",
+        "seed": 84,
+        "frames": 33,
+        "fps": 16,
+        "sampling": "lightning-4",
+        "steps": 4,
+        "precision": "fp8",
+        "keyframe_fit": "pad"
+      }
+    },
+    {
+      "id": "extract",
+      "title": "Extract frames",
+      "layout": {
+        "x": 96,
+        "y": 2
+      },
+      "kind": "extract-video-frames",
+      "config": {}
+    },
+    {
+      "id": "process",
+      "title": "CPU frame processing",
+      "layout": {
+        "x": 142,
+        "y": 2
+      },
+      "kind": "frame-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 2.0
+      }
+    },
+    {
+      "id": "assemble",
+      "title": "Finished video",
+      "layout": {
+        "x": 188,
+        "y": 2
+      },
+      "kind": "assemble-video",
+      "config": {
+        "audio_policy": "preserve",
+        "background": "black"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "generate",
+        "port": "start"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire1",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "generate",
+        "port": "end"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire2",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "generate2",
+        "port": "start"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire3",
+      "source": {
+        "node_id": "selected",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "generate2",
+        "port": "end"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire4",
+      "source": {
+        "node_id": "generate",
+        "port": "video"
+      },
+      "target": {
+        "node_id": "extract",
+        "port": "video"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire5",
+      "source": {
+        "node_id": "extract",
+        "port": "images"
+      },
+      "target": {
+        "node_id": "process",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire6",
+      "source": {
+        "node_id": "process",
+        "port": "images"
+      },
+      "target": {
+        "node_id": "assemble",
+        "port": "images"
+      },
+      "order": 0
+    }
+  ]
+}

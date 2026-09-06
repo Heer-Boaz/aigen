@@ -1,0 +1,9 @@
+{
+  "elapsed_seconds": 1.3469026850070804,
+  "returncode": 0,
+  "statuses": {
+    "edit": "reused",
+    "reference": "completed"
+  },
+  "stdout_closed": true
+}

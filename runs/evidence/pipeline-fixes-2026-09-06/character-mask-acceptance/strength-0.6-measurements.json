@@ -1,0 +1,424 @@
+{
+  "cached": {
+    "elapsed_seconds": 1.2761186179996002,
+    "returncode": 0,
+    "statuses": {
+      "node-b3dee71e3ab0405da3416d7ecbdd6b51": "reused",
+      "segment": "reused",
+      "source": "completed"
+    },
+    "stdout_closed": true
+  },
+  "cases": [
+    {
+      "case": "candidate-0",
+      "composite": {
+        "case_id": "candidate-0",
+        "height": 1024,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-0.png",
+        "seed": 101,
+        "width": 768
+      },
+      "decoded": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-0.png",
+        "sha256": "f20a882682c943346648932417ab5ee95fed4b1fa8f4aa12e696a35661d5b135"
+      },
+      "denoise_ms": 12294.603935006307,
+      "height": 1024,
+      "masked_edit_revision": "1",
+      "name": "candidate-0",
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-0.png",
+      "preservation": {
+        "outside_change_regions": [],
+        "outside_mask_changed_pixels": 0,
+        "outside_mask_changed_ratio": 0.0,
+        "outside_mask_pixels": 135969,
+        "passed": true
+      },
+      "sampling": {
+        "masked_denoising": true,
+        "packed_mask_shape": [
+          1,
+          3072,
+          64
+        ],
+        "sigmas": [
+          0.8928571939468384,
+          0.8333333730697632,
+          0.7499999403953552,
+          0.625,
+          0.4166666865348816,
+          0.0
+        ],
+        "source_latent_shape": [
+          1,
+          3072,
+          64
+        ],
+        "steps": 5,
+        "strength": 0.6
+      },
+      "seed": 101,
+      "vae_decode_ms": 357.47763999097515,
+      "width": 768
+    },
+    {
+      "case": "candidate-1",
+      "composite": {
+        "case_id": "candidate-1",
+        "height": 1024,
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/raw/candidate-1.png",
+        "seed": 102,
+        "width": 768
+      },
+      "decoded": {
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-1.png",
+        "sha256": "fc0c3788aa98e07dd53f6037355102e4c206f585c7284d141e78e09c0ed18ea8"
+      },
+      "denoise_ms": 7947.788895995473,
+      "height": 1024,
+      "masked_edit_revision": "1",
+      "name": "candidate-1",
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-1.png",
+      "preservation": {
+        "outside_change_regions": [],
+        "outside_mask_changed_pixels": 0,
+        "outside_mask_changed_ratio": 0.0,
+        "outside_mask_pixels": 135969,
+        "passed": true
+      },
+      "sampling": {
+        "masked_denoising": true,
+        "packed_mask_shape": [
+          1,
+          3072,
+          64
+        ],
+        "sigmas": [
+          0.8928571939468384,
+          0.8333333730697632,
+          0.7499999403953552,
+          0.625,
+          0.4166666865348816,
+          0.0
+        ],
+        "source_latent_shape": [
+          1,
+          3072,
+          64
+        ],
+        "steps": 5,
+        "strength": 0.6
+      },
+      "seed": 102,
+      "vae_decode_ms": 339.15392198832706,
+      "width": 768
+    }
+  ],
+  "export": {
+    "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/accepted.png",
+    "sha256": "7a60361a2fce81a2d25211907d34a7b2ae11fa7f76c8c4d7885d0505d970d48a"
+  },
+  "generation": {
+    "elapsed_seconds": 85.753680394002,
+    "returncode": 0,
+    "statuses": {
+      "node-b3dee71e3ab0405da3416d7ecbdd6b51": "completed",
+      "segment": "reused",
+      "source": "completed"
+    },
+    "stdout_closed": true
+  },
+  "native": {
+    "environment": {
+      "attention": "flash_attn2",
+      "conditioner": "qwen25-vl-fp8-w8a8-language-bf16-vision",
+      "cuda": "12.8",
+      "engine": "LightX2V",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti",
+      "host_buffers": "pinned",
+      "matrix_multiply": "fp8-triton",
+      "phase_order": "conditioner->vae_encode->transformer->vae_decode",
+      "pinned_blocks": 24,
+      "pinned_gib": 7.61,
+      "reference_preprocessing": {
+        "cases": {
+          "candidate-0": {
+            "input_sizes_wh": [
+              [
+                768,
+                1024
+              ]
+            ],
+            "prompt_seq_lens": [
+              201
+            ],
+            "vae_sizes_hw": [
+              [
+                1024,
+                768
+              ]
+            ]
+          }
+        },
+        "policy": "native-vae-upstream-semantic",
+        "semantic_target_pixels": 147456
+      },
+      "residency_budget": {
+        "block_bytes": 340292616,
+        "extra_state_bytes": 1572864,
+        "free_bytes": 14962130944,
+        "headroom_bytes": 1073741824,
+        "late_weight_bytes": 81046656,
+        "max_denoise_tokens": 6345,
+        "resident_budget_bytes": 12558291840,
+        "workspace_bytes": 1247477760
+      },
+      "resident_blocks": 36,
+      "rope": "torch",
+      "sampler": "flowmatch-euler",
+      "scheduler": "flowmatch-dynamic-shift",
+      "streamed_blocks": 24,
+      "torch": "2.8.0+cu128",
+      "vae_tiling": {
+        "tile_sample_min_height": 2048,
+        "tile_sample_min_width": 2048,
+        "tile_sample_stride_height": 1536,
+        "tile_sample_stride_width": 1536
+      }
+    },
+    "memory": {
+      "max_rss_mib": 34276.65625,
+      "mem_available_after_mib": 73132.7578125,
+      "mem_available_before_mib": 87162.24609375,
+      "peak_vram_mib": {
+        "conditioning": 9889.6376953125,
+        "decode": 3434.1435546875,
+        "denoise": 13270.5380859375,
+        "vae_encode": 1813.02783203125
+      },
+      "pswpin_delta": 8,
+      "pswpout_delta": 0,
+      "read_gib": 35.48433303833008,
+      "swap_free_after_mib": 80202.0234375,
+      "swap_free_before_mib": 80201.9921875,
+      "timing_valid_no_swap_growth": true
+    },
+    "outputs": [
+      {
+        "case": "candidate-0",
+        "denoise_ms": 12294.603935006307,
+        "height": 1024,
+        "name": "candidate-0",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-0.png",
+        "sampling": {
+          "masked_denoising": true,
+          "packed_mask_shape": [
+            1,
+            3072,
+            64
+          ],
+          "sigmas": [
+            0.8928571939468384,
+            0.8333333730697632,
+            0.7499999403953552,
+            0.625,
+            0.4166666865348816,
+            0.0
+          ],
+          "source_latent_shape": [
+            1,
+            3072,
+            64
+          ],
+          "steps": 5,
+          "strength": 0.6
+        },
+        "seed": 101,
+        "vae_decode_ms": 357.47763999097515,
+        "width": 768
+      },
+      {
+        "case": "candidate-0",
+        "denoise_ms": 7947.788895995473,
+        "height": 1024,
+        "name": "candidate-1",
+        "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071556159722Z-35522ad01d2e/executions/f2bc578af160441a9ef2ffb3c2ea4218/outputs/character/edit/round-1/generation/decoded/candidate-1.png",
+        "sampling": {
+          "masked_denoising": true,
+          "packed_mask_shape": [
+            1,
+            3072,
+            64
+          ],
+          "sigmas": [
+            0.8928571939468384,
+            0.8333333730697632,
+            0.7499999403953552,
+            0.625,
+            0.4166666865348816,
+            0.0
+          ],
+          "source_latent_shape": [
+            1,
+            3072,
+            64
+          ],
+          "steps": 5,
+          "strength": 0.6
+        },
+        "seed": 102,
+        "vae_decode_ms": 339.15392198832706,
+        "width": 768
+      }
+    ],
+    "status": "completed",
+    "timings_ms": {
+      "condition_encode_ms": 1313.3495729998685,
+      "conditioner_load_ms": 7125.780786009273,
+      "denoise_ms": 20588.8572440017,
+      "host_pin_ms": 7612.636290999944,
+      "resident_upload_ms": 3639.011435996508,
+      "total_ms": 49910.44849000173,
+      "transformer_load_ms": 6357.054122010595,
+      "vae_decode_ms": 837.7487980033038,
+      "vae_encode_ms": 665.3571399947396
+    }
+  },
+  "sam": {
+    "elapsed_seconds": 8.40851030300837,
+    "returncode": 0,
+    "statuses": {
+      "segment": "completed",
+      "source": "completed"
+    },
+    "stdout_closed": true
+  },
+  "sam_cache_and_export": {
+    "cache": null,
+    "export": {
+      "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/mask-original.png",
+      "sha256": "4f6ff29676084fc0df0406ffa297c74e8f85f7a8e8b3e88fecf924e3e44c74f5"
+    },
+    "generation": {
+      "elapsed_seconds": 1.2890806470095413,
+      "returncode": 0,
+      "statuses": {
+        "segment": "reused",
+        "source": "completed"
+      },
+      "stdout_closed": true
+    },
+    "result": {
+      "cache_manifest": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/result.json",
+      "details": {
+        "case_record": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071000242302Z-fd93685a8377/executions/9e52b8c94b7549e7b7ad2ec38e1579d6/outputs/backend-result.json",
+        "completed_at": "2026-09-06T07:10:06.608436+00:00",
+        "effective_config": {
+          "box": "238,104,528,914",
+          "device": "cuda",
+          "engine": "sam2",
+          "feather": 0,
+          "fill_holes": true,
+          "grow": 0,
+          "invert": true,
+          "largest_component": true,
+          "mask_candidate": null,
+          "negative_points": "",
+          "positive_points": "",
+          "prompt_mode": "box",
+          "threshold": 28.0
+        },
+        "inputs": {
+          "source": [
+            {
+              "content_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+              "identity": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+              "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/image-flow-acceptance/klein-v2/selected.png",
+              "type": "image"
+            }
+          ]
+        },
+        "measured_outputs": {
+          "cutout": {
+            "height": 1024,
+            "images": 1,
+            "width": 768
+          },
+          "mask": {
+            "height": 1024,
+            "images": 1,
+            "width": 768
+          },
+          "preview": {
+            "height": 1024,
+            "images": 1,
+            "width": 768
+          }
+        },
+        "record_dir": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/runs/workflow-704bcdc6de4249a084f60bc52ad9b3d1/attempt-20260906T071000242302Z-fd93685a8377/executions/9e52b8c94b7549e7b7ad2ec38e1579d6"
+      },
+      "image_origins": {},
+      "node_id": "segment",
+      "node_kind": "sam-segment",
+      "outputs": {
+        "cutout": {
+          "content_sha256": "ab25b3a8e4af87f8bf81b1e17fb56a27a7316e98b30b4a7c7f7263f7e8efd0b5",
+          "identity": "5870917736c128c5953edf36204b902bcb70def7ae489ec1f9ffaecba6a3ac6d",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/cutout/000000-selected-sam2-cutout.png",
+          "type": "image"
+        },
+        "mask": {
+          "content_sha256": "4f6ff29676084fc0df0406ffa297c74e8f85f7a8e8b3e88fecf924e3e44c74f5",
+          "identity": "8c8ac102cf32e9feb422c8acd41298694d2996073f303a9ed3c6318770969b3d",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/mask/000000-selected-sam2-mask.png",
+          "source_sha256": "bd43dd8a830a9c98feeba5672b992e10715ebb95d39c83157c792d345fc59f84",
+          "source_size": [
+            768,
+            1024
+          ],
+          "type": "mask"
+        },
+        "preview": {
+          "content_sha256": "056648afa93244584dd6645d6e32b7ca321a75e9b130f98700565b719c4f381a",
+          "identity": "eb83ff25b77589f3724aac54a0a643b9966b6aee849658367528ee0f802b5d83",
+          "path": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-mask-acceptance/tui-v1/workflows/cache/nodes/c6/c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f/outputs/preview/000000-selected-sam2-preview.png",
+          "type": "image"
+        }
+      },
+      "provenance": {
+        "backend": {
+          "name": "SAM segmentation",
+          "revision": "2"
+        },
+        "executor": {
+          "name": "aigen-workflow-executor",
+          "revision": "4"
+        },
+        "models": [
+          {
+            "name": "sam2",
+            "revision": "ed02bd05fe8dce007e8b3250429e5f7e7121f111ea3f0f027fb640f373ffafcc"
+          },
+          {
+            "name": "segmentation runtime",
+            "revision": "3643dcec3d84a0322ceec28fc14959e72d8dfc6c97e8f5fae3b2a9cab3b2894f"
+          }
+        ]
+      },
+      "signature": "c682efccb0ec2ba5c19e1db8287a9ba69bec5bd4f695292ee27a949f42ee739f",
+      "status": "reused",
+      "title": "SAM selection",
+      "version": 2
+    }
+  },
+  "sampled_total_gpu_peak_mib": 14925,
+  "selected_seed": 101,
+  "swap_in_bytes": 32768,
+  "swap_out_bytes": 0,
+  "visual_review": {
+    "audit_false_positive": true,
+    "finding": "The background remains mostly white; the pale blue change appears mainly around the shadow.",
+    "request_fulfilled": false
+  }
+}

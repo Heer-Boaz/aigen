@@ -1,0 +1,9 @@
+{"label": "generation", "gpu_free_mib": 15379}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Frame 32"}
+{"label": "generation", "phase": "completed LTX"}
+{"label": "generation", "phase": "completed LTX second seed"}
+{"label": "generation", "phase": "completed Extract frames"}
+{"label": "assembly", "gpu_free_mib": 15380}
+{"label": "assembly", "phase": "completed"}
+{"status": "completed", "backend": "ltx", "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/video-flow-acceptance/ltx-v1/export.mp4"}

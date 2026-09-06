@@ -4,7 +4,12 @@ import argparse
 from pathlib import Path
 from typing import Any, TextIO
 
+from pydantic import ValidationError
+
 from aigen.character_reference_models import CharacterReferenceError
+from aigen.character_edit import CharacterEditError, DEFAULT_CHARACTER_AUDIT_ITERATIONS
+from aigen.character_edit_audit import CharacterAuditError
+from aigen.generation.image_edit_batch import ImageEditBatchError
 from aigen.character_reference_pack import (
     build_character_reference_pack,
     parse_character_reference_args,
@@ -62,11 +67,9 @@ from aigen.generation.qwen_image_edit_identity import (
     DEFAULT_QWEN_IDENTITY_MAX_SIDE,
     DEFAULT_QWEN_IDENTITY_PROFILE,
     DEFAULT_QWEN_IDENTITY_SEED,
-    DEFAULT_QWEN_INPAINT_PROFILE,
     DEFAULT_QWEN_UPSCALE_LONG_SIDE,
     QwenImageEditIdentityError,
     qwen_image_edit_identity_profile_for_name,
-    qwen_image_edit_inpaint_model_names,
     qwen_image_edit_identity_model_names,
 )
 from aigen.image_dimensions import parse_aspect_ratio
@@ -179,14 +182,14 @@ def add_character_commands(subparsers: Any) -> None:
         "--model",
         dest="profile",
         default=DEFAULT_QWEN_IDENTITY_PROFILE,
-        choices=qwen_image_edit_identity_model_names(),
-        help="Qwen Image Edit model",
+        choices=(DEFAULT_QWEN_IDENTITY_PROFILE,),
+        help="Explicit active Qwen-2511 FP8 Lightning character route",
     )
     qwen_edit.add_argument(
         "--max-side",
         type=int,
         default=DEFAULT_QWEN_IDENTITY_MAX_SIDE,
-        help="Upper cap for the generated/reference long side",
+        help="Upper cap for the raw generation long side; references retain native resolution",
     )
     qwen_edit.add_argument(
         "--aspect-ratio",
@@ -202,8 +205,8 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--postprocess",
         choices=("none", "vosr"),
-        default="none",
-        help="Postprocess applied to the raw render; defaults to none (upscale separately with 'characters postprocess')",
+        default="vosr",
+        help="VOSR upscale after the raw audit passes; none retains the accepted raw image",
     )
     qwen_edit.add_argument(
         "--steps",
@@ -224,9 +227,11 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--candidates",
         type=int,
-        default=1,
-        help="Number of outputs; defaults to one",
+        default=2,
+        help="Raw candidates per audit round; the audit selects one",
     )
+    qwen_edit.add_argument("--max-iterations", type=int, default=DEFAULT_CHARACTER_AUDIT_ITERATIONS,
+                          help="Maximum raw generation/audit rounds, including the initial round")
     qwen_edit.add_argument(
         "--max-sequence-length",
         type=int,
@@ -236,7 +241,7 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_edit.add_argument(
         "--nunchaku-blocks-on-gpu",
         type=int,
-        help="Explicit slow-fit Nunchaku layer offload; leave unset for direct GPU execution",
+        help=argparse.SUPPRESS,
     )
     qwen_edit.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_edit.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -290,7 +295,7 @@ def add_character_commands(subparsers: Any) -> None:
         "qwen-edit-refine-plan",
         help="Plan a masked Qwen Image Edit repair from a selected candidate and reference pack",
     )
-    qwen_refine_plan.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_refine_plan.add_argument("--pack", type=Path, help="Optional reference_pack.json")
     qwen_refine_plan.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
     qwen_refine_plan.add_argument("--mask", type=Path, help="White-on-black repaint mask")
     qwen_refine_plan.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
@@ -303,7 +308,7 @@ def add_character_commands(subparsers: Any) -> None:
         "qwen-edit-refine",
         help="Run masked Qwen Image Edit repair candidates from a selected image and reference pack",
     )
-    qwen_refine.add_argument("--pack", type=Path, required=True, help="reference_pack.json")
+    qwen_refine.add_argument("--pack", type=Path, help="Optional reference_pack.json")
     qwen_refine.add_argument("--image", type=Path, required=True, help="Selected candidate image to refine")
     qwen_refine.add_argument("--mask", type=Path, help="White-on-black repaint mask")
     qwen_refine.add_argument("--region-plan", type=Path, help="characters region-plan result.json")
@@ -313,8 +318,8 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_refine.add_argument(
         "--model",
         dest="profile",
-        default=DEFAULT_QWEN_INPAINT_PROFILE,
-        choices=qwen_image_edit_inpaint_model_names(),
+        default=DEFAULT_QWEN_IDENTITY_PROFILE,
+        choices=(DEFAULT_QWEN_IDENTITY_PROFILE,),
         help="Qwen Image Edit model",
     )
     qwen_refine.add_argument(
@@ -340,16 +345,17 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_refine.add_argument(
         "--strength",
         type=float,
-        default=0.6,
+        default=1.0,
         help="Inpaint denoise strength; higher changes the masked area more",
     )
     qwen_refine.add_argument(
         "--padding-mask-crop",
         type=int,
-        help="Optional inpaint crop padding around the white mask region",
+        help=argparse.SUPPRESS,
     )
     qwen_refine.add_argument("--seed", type=int, default=DEFAULT_QWEN_IDENTITY_SEED, help="Base seed")
     qwen_refine.add_argument("--candidates", type=int, default=2, help="Candidates to generate")
+    qwen_refine.add_argument("--max-iterations", type=int, default=2, help="Maximum raw generation/audit rounds")
     qwen_refine.add_argument(
         "--max-sequence-length",
         type=int,
@@ -359,7 +365,7 @@ def add_character_commands(subparsers: Any) -> None:
     qwen_refine.add_argument(
         "--nunchaku-blocks-on-gpu",
         type=int,
-        help="Explicit slow-fit Nunchaku layer offload; leave unset for direct GPU execution",
+        help=argparse.SUPPRESS,
     )
     qwen_refine.add_argument("--overwrite", action="store_true", help="Replace an existing output directory")
     qwen_refine.add_argument("--compact", action="store_true", help="Write compact JSON")
@@ -477,6 +483,7 @@ def run_character_command(
                     pose_mode=args.pose_mode,
                     structure_source_path=args.structure_source,
                     structure_control=args.structure_control,
+                    max_iterations=args.max_iterations,
                     progress=progress,
                 ),
                 pretty=not args.compact,
@@ -547,6 +554,7 @@ def run_character_command(
                     true_cfg_scale=args.true_cfg_scale,
                     guidance_scale=args.guidance_scale,
                     strength=args.strength,
+                    max_iterations=args.max_iterations,
                     padding_mask_crop=args.padding_mask_crop,
                     seed=args.seed,
                     max_sequence_length=args.max_sequence_length,
@@ -580,9 +588,13 @@ def run_character_command(
             )
             return 0
     except (
+        ValidationError,
         CharacterReferenceError,
         CharacterRegionPlanError,
         QwenCharacterEditError,
+        CharacterEditError,
+        CharacterAuditError,
+        ImageEditBatchError,
         QwenCharacterRefineError,
         CharacterViewError,
         QwenImageEditIdentityError,

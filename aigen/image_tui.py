@@ -63,6 +63,7 @@ from aigen.workflow_document_io import (
     save_workflow_document,
 )
 from aigen.workflow_edit_buffer import WorkflowEditBuffer
+from aigen.workflow_run_state import WorkflowRunState
 from aigen.workflow_editor import WorkflowEditor
 from aigen.workflow_execution import WORKFLOW_EVENT_PREFIX
 from aigen.workflow_graph import (
@@ -71,7 +72,9 @@ from aigen.workflow_graph import (
     ReferencePackNode,
     WorkflowGraph,
 )
-from aigen.workflow_templates import keyframed_video_workflow_template
+from aigen.workflow_templates import character_workflow_template, image_style_workflow_template, keyframed_video_workflow_template
+from aigen.workflow_form_import import image_form_workflow, video_form_workflow
+from aigen.workflow_sam_import import sam_form_workflow
 
 
 FormModel = ImageEditForm | PostprocessForm | VideoForm | SamEditForm
@@ -463,11 +466,11 @@ class ImageGenerationApp(App[None]):
         self.sam_form = SamEditForm()
         self.postprocess_form = PostprocessForm()
         self.workflow_buffer = WorkflowEditBuffer(
-            keyframed_video_workflow_template()
+            image_style_workflow_template()
         )
         self.workflow_document_paths: list[Path] = []
         self.workflow_editor: WorkflowEditor | None = None
-        self.workflow_runtime_statuses: dict[str, str] = {}
+        self.workflow_run_state = WorkflowRunState()
         self.workflow_request_path: Path | None = None
         self.configuration_path: Path | None = None
         self.sam_selection_path: Path | None = None
@@ -551,6 +554,7 @@ class ImageGenerationApp(App[None]):
 
     def _update_sam_prompt_canvas(self) -> None:
         form = self.sam_form
+        self.query_one("#sam-workflow", Button).disabled = form.field("operation").value == "region-plan"
         active = (
             form.field("operation").value == "segment"
             and form.field("engine").value != "anime"
@@ -895,6 +899,19 @@ class ImageGenerationApp(App[None]):
             self._open_workflow_editor()
         elif action == "workflow-new":
             await self._new_workflow()
+        elif action == "workflow-new-video":
+            await self._new_workflow(keyframed_video_workflow_template())
+        elif action == "workflow-new-character":
+            await self._new_workflow(character_workflow_template())
+        elif action in {"image-workflow", "video-workflow", "sam-workflow"}:
+            try:
+                document = (image_form_workflow(self.form) if action == "image-workflow"
+                            else video_form_workflow(self.video_form) if action == "video-workflow"
+                            else sam_form_workflow(self.sam_form))
+            except ValueError as error:
+                self._show_error("Cannot open workflow", str(error))
+                return
+            await self._new_workflow(document)
         elif action == "workflow-load":
             await self._load_workflow()
         elif action == "quit":
@@ -1158,12 +1175,11 @@ class ImageGenerationApp(App[None]):
     def _open_workflow_editor(self) -> None:
         if self.workflow_editor is not None:
             return
-        editor = WorkflowEditor(self.workflow_buffer)
+        editor = WorkflowEditor(self.workflow_buffer, self.workflow_run_state, DEFAULT_WORKFLOW_RUNS_ROOT)
         self.workflow_editor = editor
         self.push_screen(editor, self._close_workflow_editor)
         self.call_after_refresh(
-            editor.set_runtime_statuses,
-            self.workflow_runtime_statuses,
+            editor.refresh_runtime_statuses,
         )
         self.call_after_refresh(
             editor.set_running,
@@ -1177,12 +1193,14 @@ class ImageGenerationApp(App[None]):
         self.workflow_editor = None
         self._update_workflow_documents()
 
-    async def _new_workflow(self) -> None:
+    async def _new_workflow(self, document: WorkflowGraph | None = None) -> None:
         if self.process is not None:
             self._set_status("Stop the active operation before creating a workflow.")
             return
         if not await self._commit_workflow_draft():
             return
+        if document is None:
+            document = image_style_workflow_template()
         if self.workflow_buffer.dirty:
             self.push_screen(
                 ConfirmationDialog(
@@ -1190,20 +1208,20 @@ class ImageGenerationApp(App[None]):
                     "Create a new workflow and discard the unsaved changes?",
                     confirm_label="Discard and create",
                 ),
-                self._new_workflow_confirmed,
+                lambda discard: self._new_workflow_confirmed(discard, document),
             )
             return
         self._replace_workflow_document(
-            keyframed_video_workflow_template(),
+            document,
             document_path=None,
             status="New workflow",
         )
 
-    def _new_workflow_confirmed(self, discard: bool) -> None:
+    def _new_workflow_confirmed(self, discard: bool, document: WorkflowGraph) -> None:
         if not discard:
             return
         self._replace_workflow_document(
-            keyframed_video_workflow_template(),
+            document,
             document_path=None,
             status="New workflow",
         )
@@ -1294,7 +1312,7 @@ class ImageGenerationApp(App[None]):
         else:
             self._remember_workflow_document(document_path)
             self.workflow_buffer.load_document(document, document_path)
-        self.workflow_runtime_statuses.clear()
+        self.workflow_run_state.clear()
         self._update_workflow_documents()
         if self.workflow_editor is None:
             self._open_workflow_editor()
@@ -1474,14 +1492,9 @@ class ImageGenerationApp(App[None]):
         except OSError as error:
             self._show_error("Cannot start workflow", str(error))
             return
-        self.workflow_runtime_statuses = {
-            node.id: "queued"
-            for node in document.nodes
-        }
+        self.workflow_run_state.start(document, target_node_ids=event.target_node_ids)
         if self.workflow_editor is not None:
-            self.workflow_editor.set_runtime_statuses(
-                self.workflow_runtime_statuses
-            )
+            self.workflow_editor.refresh_runtime_statuses()
         self._start_command(
             [
                 sys.executable,
@@ -1493,6 +1506,7 @@ class ImageGenerationApp(App[None]):
                 request_path.as_posix(),
                 "--runs-root",
                 DEFAULT_WORKFLOW_RUNS_ROOT.as_posix(),
+                *(argument for target in event.target_node_ids or () for argument in ("--target", target)),
             ],
             display_project_path(DEFAULT_WORKFLOW_RUNS_ROOT / "runs"),
             action_button_id="workflow-run",
@@ -1502,9 +1516,9 @@ class ImageGenerationApp(App[None]):
         )
         if self.process is None:
             request_path.unlink(missing_ok=True)
-            self.workflow_runtime_statuses.clear()
+            self.workflow_run_state.clear()
             if self.workflow_editor is not None:
-                self.workflow_editor.set_runtime_statuses({})
+                self.workflow_editor.refresh_runtime_statuses()
             return
         self.workflow_request_path = request_path
         if self.workflow_editor is not None:
@@ -1646,28 +1660,29 @@ class ImageGenerationApp(App[None]):
         assert process.stdout is not None
         output_lines: deque[str] = deque(maxlen=200)
         completed_output_dir = output_dir
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith(WORKFLOW_EVENT_PREFIX):
-                payload = json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
-                if payload.get("kind") == "workflow-run":
-                    completed_output_dir = display_project_path(
-                        Path(payload["run_dir"])
+        with process.stdout:
+            for raw_line in process.stdout:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith(WORKFLOW_EVENT_PREFIX):
+                    payload = json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
+                    if payload.get("kind") == "workflow-run":
+                        completed_output_dir = display_project_path(
+                            Path(payload["run_dir"])
+                        )
+                    else:
+                        self.post_message(WorkflowNodeUpdated(payload))
+                    continue
+                if not line.startswith(JSON_PROGRESS_PREFIX):
+                    output_lines.append(line)
+                    continue
+                payload = json.loads(line[len(JSON_PROGRESS_PREFIX) :])
+                self.post_message(
+                    GenerationUpdated(
+                        _generation_progress_from_payload(payload)
                     )
-                else:
-                    self.post_message(WorkflowNodeUpdated(payload))
-                continue
-            if not line.startswith(JSON_PROGRESS_PREFIX):
-                output_lines.append(line)
-                continue
-            payload = json.loads(line[len(JSON_PROGRESS_PREFIX) :])
-            self.post_message(
-                GenerationUpdated(
-                    _generation_progress_from_payload(payload)
                 )
-            )
         returncode = process.wait()
         if returncode == 0:
             try:
@@ -1701,15 +1716,20 @@ class ImageGenerationApp(App[None]):
                 total=event.progress.total,
                 progress=event.progress.completed,
             )
-        self._set_status(self._progress_text(event.progress))
+        status = self._progress_text(event.progress)
+        if self.active_action_button_id == "workflow-run":
+            # The editor shows node progress; the main screen shows the run.
+            self.query_one("#status", Static).update(status)
+        else:
+            self._set_status(status)
 
     @on(WorkflowNodeUpdated)
     def workflow_node_updated(self, event: WorkflowNodeUpdated) -> None:
         node_id = str(event.payload["node_id"])
         status = str(event.payload["status"])
-        self.workflow_runtime_statuses[node_id] = status
+        self.workflow_run_state.update(node_id, status)
         if self.workflow_editor is not None:
-            self.workflow_editor.set_runtime_status(node_id, status)
+            self.workflow_editor.refresh_runtime_status(node_id)
             node_progress = event.payload.get("progress")
             if isinstance(node_progress, dict):
                 detail = self._progress_text(

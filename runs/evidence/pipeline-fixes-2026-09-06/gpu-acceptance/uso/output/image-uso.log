@@ -1,0 +1,75 @@
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s]Loading weights:  45%|████▍     | 88/196 [00:00<00:00, 859.87it/s]Loading weights: 100%|██████████| 196/196 [00:00<00:00, 1169.57it/s]
+[transformers] [1mCLIPTextModel LOAD REPORT[0m from: /home/boaz/aigen/aigen/models/uso/openai/clip-vit-large-patch14
+Key                                                            | Status     |  | 
+---------------------------------------------------------------+------------+--+-
+vision_model.encoder.layers.{0...23}.layer_norm2.bias          | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.layer_norm1.bias          | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.mlp.fc1.weight            | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.layer_norm2.weight        | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.mlp.fc1.bias              | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.q_proj.weight   | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.out_proj.weight | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.v_proj.weight   | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.mlp.fc2.bias              | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.k_proj.weight   | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.k_proj.bias     | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.q_proj.bias     | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.out_proj.bias   | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.mlp.fc2.weight            | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.self_attn.v_proj.bias     | UNEXPECTED |  | 
+vision_model.embeddings.class_embedding                        | UNEXPECTED |  | 
+vision_model.encoder.layers.{0...23}.layer_norm1.weight        | UNEXPECTED |  | 
+text_projection.weight                                         | UNEXPECTED |  | 
+vision_model.pre_layrnorm.weight                               | UNEXPECTED |  | 
+visual_projection.weight                                       | UNEXPECTED |  | 
+vision_model.post_layernorm.weight                             | UNEXPECTED |  | 
+vision_model.pre_layrnorm.bias                                 | UNEXPECTED |  | 
+vision_model.post_layernorm.bias                               | UNEXPECTED |  | 
+logit_scale                                                    | UNEXPECTED |  | 
+vision_model.embeddings.patch_embedding.weight                 | UNEXPECTED |  | 
+vision_model.embeddings.position_embedding.weight              | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights:   0%|          | 0/219 [00:00<?, ?it/s]Loading weights:   6%|▌         | 13/219 [00:00<00:02, 92.46it/s]Loading weights:  11%|█         | 24/219 [00:00<00:01, 101.11it/s]Loading weights:  17%|█▋        | 37/219 [00:00<00:01, 103.13it/s]Loading weights:  24%|██▍       | 53/219 [00:00<00:01, 119.35it/s]Loading weights:  30%|███       | 66/219 [00:00<00:01, 99.57it/s] Loading weights:  42%|████▏     | 91/219 [00:00<00:00, 136.15it/s]Loading weights:  48%|████▊     | 106/219 [00:00<00:00, 130.97it/s]Loading weights:  56%|█████▌    | 123/219 [00:00<00:00, 139.55it/s]Loading weights:  63%|██████▎   | 138/219 [00:01<00:00, 136.92it/s]Loading weights:  70%|██████▉   | 153/219 [00:01<00:00, 126.28it/s]Loading weights:  76%|███████▌  | 166/219 [00:01<00:00, 103.68it/s]Loading weights:  85%|████████▍ | 186/219 [00:01<00:00, 118.90it/s]Loading weights:  92%|█████████▏| 202/219 [00:01<00:00, 127.19it/s]Loading weights: 100%|██████████| 219/219 [00:01<00:00, 127.00it/s]
+Init AE
+use semantic encoder siglip multi-feat to encode style image
+Loading lora from /home/boaz/aigen/aigen/models/uso/bytedance-research/USO/uso_flux_v1.0/dit_lora.safetensors
+Loading main checkpoint
+####
+We are in fp8 mode right now, since the fp8 checkpoint of XLabs-AI/flux-dev-fp8 seems broken
+we convert the fp8 checkpoint on flight from bf16 checkpoint
+If your storage is constrainedyou can save the fp8 checkpoint and replace the bf16 checkpoint by yourself
+
+Loading weights:   0%|          | 0/448 [00:00<?, ?it/s]Loading weights:   2%|▏         | 10/448 [00:00<00:05, 78.17it/s]Loading weights:   8%|▊         | 34/448 [00:00<00:02, 149.48it/s]Loading weights:  11%|█         | 50/448 [00:00<00:02, 149.47it/s]Loading weights:  15%|█▌        | 69/448 [00:00<00:02, 150.33it/s]Loading weights:  23%|██▎       | 105/448 [00:00<00:01, 204.85it/s]Loading weights:  28%|██▊       | 126/448 [00:00<00:01, 185.55it/s]Loading weights:  33%|███▎      | 148/448 [00:00<00:01, 176.46it/s]Loading weights:  39%|███▊      | 173/448 [00:00<00:01, 190.55it/s]Loading weights:  43%|████▎     | 193/448 [00:01<00:01, 191.59it/s]Loading weights:  50%|█████     | 225/448 [00:01<00:01, 211.03it/s]Loading weights:  55%|█████▌    | 247/448 [00:01<00:01, 171.93it/s]Loading weights:  61%|██████    | 273/448 [00:01<00:00, 179.85it/s]Loading weights:  69%|██████▊   | 307/448 [00:01<00:00, 197.73it/s]Loading weights:  73%|███████▎  | 328/448 [00:01<00:00, 190.04it/s]Loading weights:  78%|███████▊  | 348/448 [00:01<00:00, 173.78it/s]Loading weights:  83%|████████▎ | 374/448 [00:02<00:00, 186.22it/s]Loading weights:  88%|████████▊ | 393/448 [00:02<00:00, 164.43it/s]Loading weights:  94%|█████████▍| 420/448 [00:02<00:00, 186.69it/s]Loading weights: 100%|██████████| 448/448 [00:02<00:00, 192.51it/s]
+[transformers] [1mSiglipVisionModel LOAD REPORT[0m from: /home/boaz/aigen/aigen/models/uso/google/siglip-so400m-patch14-384
+Key                                                          | Status     |  | 
+-------------------------------------------------------------+------------+--+-
+text_model.encoder.layers.{0...26}.mlp.fc2.weight            | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.q_proj.bias     | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.mlp.fc1.weight            | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.q_proj.weight   | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.mlp.fc1.bias              | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.layer_norm2.bias          | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.v_proj.weight   | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.layer_norm2.weight        | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.mlp.fc2.bias              | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.out_proj.weight | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.layer_norm1.weight        | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.out_proj.bias   | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.v_proj.bias     | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.k_proj.bias     | UNEXPECTED |  | 
+text_model.embeddings.position_embedding.weight              | UNEXPECTED |  | 
+logit_bias                                                   | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.layer_norm1.bias          | UNEXPECTED |  | 
+text_model.encoder.layers.{0...26}.self_attn.k_proj.weight   | UNEXPECTED |  | 
+text_model.head.weight                                       | UNEXPECTED |  | 
+text_model.head.bias                                         | UNEXPECTED |  | 
+text_model.final_layer_norm.bias                             | UNEXPECTED |  | 
+text_model.final_layer_norm.weight                           | UNEXPECTED |  | 
+logit_scale                                                  | UNEXPECTED |  | 
+text_model.embeddings.token_embedding.weight                 | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  0%|          | 0/25 [00:00<?, ?it/s]  4%|▍         | 1/25 [00:02<00:48,  2.03s/it]  4%|▍         | 1/25 [00:02<00:49,  2.05s/it]

@@ -58,6 +58,7 @@ _STATUS_STYLES = {
     "running": Style(color="#ffd166", bgcolor="#211a2d", bold=True),
     "completed": Style(color="#86e1a8", bgcolor="#211a2d", bold=True),
     "reused": Style(color="#86e1a8", bgcolor="#211a2d"),
+    "outdated": Style(color="#ffd166", bgcolor="#211a2d", italic=True),
     "failed": Style(color="#ff7f8f", bgcolor="#211a2d", bold=True),
     "skipped": Style(color="#a99bb7", bgcolor="#211a2d"),
 }
@@ -84,11 +85,15 @@ _WIRE_CHARACTERS = {
     _NORTH | _EAST | _SOUTH | _WEST: "┼",
 }
 _ARTIFACT_LABELS = {
+    "mask": "mask",
     "image": "img",
     "reference-pack": "pack",
     "lora": "lora",
     "video": "vid",
     "image-sequence": "frames",
+    "image-collection": "variants",
+    "audio": "audio",
+    "keyframe": "keyframe",
 }
 _ROW_CACHE_SIZE = 1024
 

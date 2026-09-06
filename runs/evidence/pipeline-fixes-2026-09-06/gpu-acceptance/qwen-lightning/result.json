@@ -1,0 +1,18 @@
+{
+  "elapsed_seconds": 24.11486605099344,
+  "error": "ImageEditError: Qwen-Image-Edit-2511 LightX2V failed: CUDA driver error: device not ready",
+  "initial_gpu": {
+    "nvidia_smi_device_total_mb": 16303,
+    "nvidia_smi_used_mb": 973,
+    "nvidia_smi_utilization_gpu": 3
+  },
+  "minimum_host_available_mib": 82846.48828125,
+  "nvidia_smi_peak_used_mib": 15947,
+  "process_peak_rss_mib": 667.85546875,
+  "status": "failed",
+  "swap_in_bytes": 0,
+  "swap_increase_mib": 0.0,
+  "swap_out_bytes": 0,
+  "torch_peak_allocated_mib": 0.0,
+  "torch_peak_reserved_mib": 0.0
+}

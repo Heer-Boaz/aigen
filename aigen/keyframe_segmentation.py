@@ -8,7 +8,10 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
+from aigen.image_io import open_image
 
+
+SEGMENTATION_IMPLEMENTATION_REVISION = "2"
 DEFAULT_MODELS_ROOT = Path(__file__).resolve().parent / "models"
 DEFAULT_SAM_CHECKPOINT = (
     DEFAULT_MODELS_ROOT / "segmentation/ybelkada/segment-anything/checkpoints/sam_vit_b_01ec64.pth"
@@ -345,5 +348,5 @@ def _largest_component(mask: np.ndarray) -> np.ndarray:
 
 
 def _load_rgb(path: Path) -> np.ndarray:
-    with Image.open(path) as image:
+    with open_image(path) as image:
         return np.asarray(image.convert("RGB"), dtype=np.uint8)

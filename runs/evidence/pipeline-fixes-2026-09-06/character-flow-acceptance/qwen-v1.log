@@ -1,0 +1,6 @@
+{"label": "generation", "gpu_free_mib": 15378}
+{"label": "generation", "phase": "starting"}
+{"label": "generation", "phase": "completed Reference"}
+{"label": "generation", "phase": "completed"}
+{"label": "cache", "gpu_free_mib": 15380}
+{"status": "completed", "output": "/home/boaz/aigen/runs/evidence/pipeline-fixes-2026-09-06/character-flow-acceptance/qwen-v1/accepted.png"}
