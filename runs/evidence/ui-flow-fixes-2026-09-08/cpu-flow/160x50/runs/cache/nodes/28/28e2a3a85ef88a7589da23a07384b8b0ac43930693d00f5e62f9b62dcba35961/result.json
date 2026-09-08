@@ -1,0 +1,68 @@
+{
+  "details": {
+    "case_record": null,
+    "completed_at": "2026-09-08T19:29:00.744827+00:00",
+    "effective_config": {
+      "force_step": 4.0,
+      "low_memory": false,
+      "mode": "fast",
+      "model": "pixel-art-fixer"
+    },
+    "inputs": {
+      "image": [
+        {
+          "content_sha256": "691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6",
+          "identity": "691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6",
+          "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/cache/sources/objects/69/691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6.png",
+          "type": "image"
+        }
+      ]
+    },
+    "measured_outputs": {
+      "image": {
+        "height": 20,
+        "images": 1,
+        "width": 16
+      }
+    },
+    "record_dir": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-e6c4e64f4fe8422a9804afc228f0772a/attempt-20260908T192900105550Z-ce5c8fd6d8be/executions/9b8d1577392345a3b387ef0f18eb1e0a"
+  },
+  "node_kind": "image-postprocess",
+  "outputs": {
+    "image": {
+      "artifact_type": "image",
+      "audio": null,
+      "files": [
+        {
+          "mtime_ns": 1788895740663911213,
+          "path": "outputs/image/000000-fix0.png",
+          "sha256": "e55e262bd975633395dd90a5e10b9d5f996533b812fe680f29c4b475ce50491d",
+          "size": 105
+        }
+      ],
+      "identity": "6645060a3416f8bdd13e6c7d2adcaf8fd71fc59901acd553b3acde997c4aa6e2",
+      "mask_source_sha256": null,
+      "mask_source_size": null,
+      "timeline": null,
+      "video_info": null
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "image-postprocess-batch",
+      "revision": "1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "5"
+    },
+    "models": [
+      {
+        "name": "Pixel Art Fixer",
+        "revision": "ef376e57e1c272633ca2dbf5f29ec3fcf6596465"
+      }
+    ]
+  },
+  "signature": "28e2a3a85ef88a7589da23a07384b8b0ac43930693d00f5e62f9b62dcba35961",
+  "version": 4
+}

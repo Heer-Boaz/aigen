@@ -1,0 +1,13 @@
+{
+  "nodes": {
+    "choice": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194124691261Z-c35d171bcea0/nodes/choice/result.json",
+    "next": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194124691261Z-c35d171bcea0/nodes/next/result.json"
+  },
+  "result": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194124691261Z-c35d171bcea0/result.json",
+  "status": "completed",
+  "version": 1,
+  "workflow_digest": "aec8bed0842e23a1eb3ccf5b5b6d8dceb3c205b4e6cb9779b7167c33efbe3c53",
+  "workflow_id": "workflow-eccd9926df894c66ad1f9bc87ba36fbe",
+  "workflow_name": "CPU result flow",
+  "workflow_snapshot": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194124691261Z-c35d171bcea0/snapshots/16e14127c6475395a1be6c2e7427d24f71b779000faeca41149b2a207bc1cd8e.json"
+}

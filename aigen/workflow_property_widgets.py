@@ -5,9 +5,10 @@ from typing import Literal, get_args, get_origin
 
 from textual import events
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Container
-from textual.widgets import Button, Input, Label, Select, TextArea
+from textual.widgets import Button, Input, Label, Select
+
+from aigen.tui_text_editor import MultilineInput
 
 
 PROPERTY_LABEL_MIN_WIDTH = 8
@@ -30,16 +31,10 @@ class PropertyInput(Input):
         self.original_value = value
 
 
-class PropertyTextArea(TextArea):
-    BINDINGS = [Binding("ctrl+shift+z", "redo", show=False)]
-
+class PropertyTextArea(MultilineInput):
     def __init__(self, value: str, *, node_id: str | None, field_name: str) -> None:
         super().__init__(
             value,
-            soft_wrap=True,
-            tab_behavior="focus",
-            compact=True,
-            highlight_cursor_line=False,
             classes="workflow-property-editor",
             tooltip="Enter: new line · Ctrl+Enter: apply · Ctrl+S: save workflow",
         )
@@ -114,20 +109,16 @@ class PropertyRow(Container):
         padding: 0 %(browse_padding)d;
     }
     PropertyRow.multiline {
-        grid-size: 1 2;
-        grid-columns: 1fr;
-        grid-rows: 1 6;
-        height: 7;
+        layout: vertical;
+        height: auto;
         margin: 1 0;
     }
     PropertyRow.multiline .workflow-property-controls {
-        grid-size: 1 1;
-        grid-columns: 1fr;
-        grid-rows: 6;
-        height: 6;
+        layout: vertical;
+        height: auto;
     }
     PropertyRow PropertyTextArea.workflow-property-editor {
-        height: 6;
+        height: 25vh;
         padding: 0 1;
         scrollbar-size-vertical: 1;
     }
@@ -149,6 +140,7 @@ class PropertyRow(Container):
         browse: bool = False,
         multiline: bool = False,
         visible: bool = True,
+        placeholder: str = "",
         options: tuple[tuple[str, object], ...] | None = None,
     ) -> None:
         super().__init__(classes="multiline" if multiline else None)
@@ -170,6 +162,9 @@ class PropertyRow(Container):
             self.editor = widget_type(
                 "" if value is None else str(value), node_id=node_id, field_name=field_name,
             )
+
+        if isinstance(self.editor, PropertyInput):
+            self.editor.placeholder = placeholder
 
     def compose(self) -> ComposeResult:
         yield Label(self.label_text, classes="workflow-property-label")

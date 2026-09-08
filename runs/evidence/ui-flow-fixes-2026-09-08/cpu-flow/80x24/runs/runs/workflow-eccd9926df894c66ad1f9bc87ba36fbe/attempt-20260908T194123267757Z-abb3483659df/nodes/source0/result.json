@@ -1,0 +1,44 @@
+{
+  "cache_manifest": null,
+  "details": {
+    "case_record": null,
+    "completed_at": "2026-09-08T19:41:23.731086+00:00",
+    "effective_config": {
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/source0.png"
+    },
+    "inputs": {},
+    "measured_outputs": {
+      "image": {
+        "height": 80,
+        "width": 64
+      }
+    },
+    "record_dir": null
+  },
+  "image_origins": {},
+  "node_id": "source0",
+  "node_kind": "image-source",
+  "outputs": {
+    "image": {
+      "content_sha256": "691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6",
+      "identity": "691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6",
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/cache/sources/objects/69/691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6.png",
+      "type": "image"
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "workflow-source",
+      "revision": "sha256-v1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "5"
+    },
+    "models": []
+  },
+  "signature": "c19ca8d1024f2cdc4827b592253b2e750cd1e10c74d5dc12dc19eca934188515",
+  "status": "completed",
+  "title": "Input 0",
+  "version": 2
+}

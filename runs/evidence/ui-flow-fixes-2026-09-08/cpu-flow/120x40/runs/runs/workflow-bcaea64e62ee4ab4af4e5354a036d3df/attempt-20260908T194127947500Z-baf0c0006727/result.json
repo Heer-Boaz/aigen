@@ -1,0 +1,21 @@
+{
+  "kind": "workflow-run",
+  "nodes": {
+    "choice": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194127947500Z-baf0c0006727/nodes/choice/result.json",
+    "next": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194127947500Z-baf0c0006727/nodes/next/result.json"
+  },
+  "outputs": {
+    "next": {
+      "image": {
+        "content_sha256": "f2cfd6440194915bb2501139ce89c3605a4af58bc3d456b98cbf9f4dc0ddea27",
+        "identity": "7893b49b06e0ad0adde2953b74357848684f9dfa4fd28e56006ecb70f79c6d73",
+        "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/cache/nodes/f5/f5169618bca5f7b2084759b43d07799afe70c557f8c301cb5a152dba5c33a58f/outputs/image/000000-image.png",
+        "type": "image"
+      }
+    }
+  },
+  "result": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194127947500Z-baf0c0006727/result.json",
+  "run_dir": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194127947500Z-baf0c0006727",
+  "status": "completed",
+  "workflow_digest": "aec8bed0842e23a1eb3ccf5b5b6d8dceb3c205b4e6cb9779b7167c33efbe3c53"
+}

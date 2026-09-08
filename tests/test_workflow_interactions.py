@@ -289,7 +289,7 @@ class WorkflowInteractionTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 panel = editor.query_one("#workflow-inspector-panel")
                 self.assertEqual(panel.region.right, 80)
-                self.assertEqual(panel.region.width, 42)
+                self.assertEqual(panel.region.width, 80)
                 close = editor.query_one("#workflow-inspector-close")
                 self.assertLessEqual(close.region.right, panel.region.right)
                 self.assertTrue(await pilot.click(close))
@@ -393,7 +393,7 @@ class WorkflowInteractionTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.press("enter")
                 await pilot.pause()
                 actions = editor.query("#workflow-inspector-actions Button")
-                self.assertEqual([button.name for button in actions], ["context", "hide-inspector"])
+                self.assertEqual([button.name for button in actions], ["context", "expand-inspector", "hide-inspector"])
                 self.assertTrue(await pilot.click("#workflow-context"))
                 await pilot.pause()
                 menu = app.screen

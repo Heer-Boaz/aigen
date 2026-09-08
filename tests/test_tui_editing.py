@@ -137,3 +137,16 @@ class TUIEditingTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(app.workflow_buffer.document_path, directory / 'saved-flow.json')
                 self.assertEqual(load_workflow_document(directory / 'saved-flow.json'), app.workflow_buffer.document)
+
+    async def test_active_draft_updates_title_without_graph_history(self):
+        with TemporaryDirectory() as directory:
+            async with open_editor(interaction_graph(), Path(directory)) as (app, editor, pilot, _):
+                await select_node(app, editor, pilot, 'edit')
+                text = property_widget(editor, PropertyTextArea, 'prompt')
+                text.focus()
+                await pilot.press('a')
+                self.assertFalse(app.workflow_buffer.dirty)
+                self.assertEqual(app.workflow_buffer.revision, 0)
+                self.assertIn('*', str(editor.query_one('#workflow-editor-title', Label).content))
+                await pilot.press('ctrl+z')
+                self.assertNotIn('*', str(editor.query_one('#workflow-editor-title', Label).content))

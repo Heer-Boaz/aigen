@@ -1,0 +1,197 @@
+[
+  {
+    "draft": "Multiline editing example\n\nSecond paragraph with preserved spacing.",
+    "pane": [
+      107,
+      1,
+      53,
+      48
+    ],
+    "screen": "inspector",
+    "terminal": [
+      160,
+      50
+    ],
+    "text": [
+      109,
+      7,
+      49,
+      12
+    ]
+  },
+  {
+    "draft": "Multiline editing example\n\nSecond paragraph with preserved spacing.",
+    "pane": [
+      81,
+      1,
+      39,
+      38
+    ],
+    "screen": "inspector",
+    "terminal": [
+      120,
+      40
+    ],
+    "text": [
+      83,
+      7,
+      35,
+      10
+    ]
+  },
+  {
+    "draft": "Multiline editing example\n\nSecond paragraph with preserved spacing.",
+    "pane": [
+      0,
+      1,
+      80,
+      22
+    ],
+    "screen": "inspector",
+    "terminal": [
+      80,
+      24
+    ],
+    "text": [
+      2,
+      7,
+      75,
+      6
+    ]
+  },
+  {
+    "actions": [
+      1,
+      23,
+      78,
+      1
+    ],
+    "candidate": [
+      25,
+      16,
+      24,
+      7
+    ],
+    "comparison": [
+      1,
+      4,
+      78,
+      12
+    ],
+    "identity": "Output 2/2 · Candidate 1",
+    "screen": "results",
+    "terminal": [
+      80,
+      24
+    ]
+  },
+  {
+    "chosen": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194123267757Z-abb3483659df/nodes/fix1/result.json",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    },
+    "screen": "execution",
+    "stages": [
+      "Generate choices",
+      "Choose image",
+      "Continue",
+      "View results"
+    ],
+    "terminal": [
+      80,
+      24
+    ]
+  },
+  {
+    "actions": [
+      1,
+      39,
+      118,
+      1
+    ],
+    "candidate": [
+      25,
+      32,
+      24,
+      7
+    ],
+    "comparison": [
+      1,
+      4,
+      118,
+      28
+    ],
+    "identity": "Output 2/2 · Candidate 1",
+    "screen": "results",
+    "terminal": [
+      120,
+      40
+    ]
+  },
+  {
+    "chosen": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/fix1/result.json",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    },
+    "screen": "execution",
+    "stages": [
+      "Generate choices",
+      "Choose image",
+      "Continue",
+      "View results"
+    ],
+    "terminal": [
+      120,
+      40
+    ]
+  },
+  {
+    "actions": [
+      1,
+      49,
+      158,
+      1
+    ],
+    "candidate": [
+      25,
+      42,
+      24,
+      7
+    ],
+    "comparison": [
+      1,
+      4,
+      158,
+      38
+    ],
+    "identity": "Output 2/2 · Candidate 1",
+    "screen": "results",
+    "terminal": [
+      160,
+      50
+    ]
+  },
+  {
+    "chosen": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/fix1/result.json",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    },
+    "screen": "execution",
+    "stages": [
+      "Generate choices",
+      "Choose image",
+      "Continue",
+      "View results"
+    ],
+    "terminal": [
+      160,
+      50
+    ]
+  }
+]

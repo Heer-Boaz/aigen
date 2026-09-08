@@ -1,0 +1,2 @@
+{"phase":"starting","completed":0,"total":0,"elapsed_seconds":1.6700010746717453e-05,"remaining_seconds":null,"final":false,"cpu_percent":0.0,"gpu_percent":2,"vram_used_mb":2814,"vram_total_mb":16303}
+{"phase":"completed","completed":2,"total":2,"elapsed_seconds":0.10384062700904906,"remaining_seconds":null,"final":true,"cpu_percent":36.23188405797102,"gpu_percent":6,"vram_used_mb":2814,"vram_total_mb":16303}

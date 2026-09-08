@@ -1,0 +1,172 @@
+{
+  "version": 4,
+  "workflow_id": "workflow-9cba5cac9ab044388cd70baf8ab15451",
+  "name": "CPU result flow",
+  "nodes": [
+    {
+      "id": "source0",
+      "title": "Input 0",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/source0.png"
+      }
+    },
+    {
+      "id": "fix0",
+      "title": "Candidate 0",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 4.0
+      }
+    },
+    {
+      "id": "source1",
+      "title": "Input 1",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-source",
+      "config": {
+        "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/source1.png"
+      }
+    },
+    {
+      "id": "fix1",
+      "title": "Candidate 1",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 4.0
+      }
+    },
+    {
+      "id": "collection",
+      "title": "Variants",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-collection",
+      "config": {}
+    },
+    {
+      "id": "choice",
+      "title": "Selected",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-selection",
+      "config": {
+        "selected": null
+      }
+    },
+    {
+      "id": "next",
+      "title": "Continue",
+      "layout": {
+        "x": 0,
+        "y": 0
+      },
+      "kind": "image-postprocess",
+      "config": {
+        "model": "pixel-art-fixer",
+        "mode": "fast",
+        "low_memory": false,
+        "force_step": 2.0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "wire0",
+      "source": {
+        "node_id": "source0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "fix0",
+        "port": "image"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire1",
+      "source": {
+        "node_id": "source1",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "fix1",
+        "port": "image"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire2",
+      "source": {
+        "node_id": "fix0",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "collection",
+        "port": "images"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire3",
+      "source": {
+        "node_id": "fix1",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "collection",
+        "port": "images"
+      },
+      "order": 1
+    },
+    {
+      "id": "wire4",
+      "source": {
+        "node_id": "collection",
+        "port": "collection"
+      },
+      "target": {
+        "node_id": "choice",
+        "port": "collection"
+      },
+      "order": 0
+    },
+    {
+      "id": "wire5",
+      "source": {
+        "node_id": "choice",
+        "port": "image"
+      },
+      "target": {
+        "node_id": "next",
+        "port": "image"
+      },
+      "order": 0
+    }
+  ]
+}

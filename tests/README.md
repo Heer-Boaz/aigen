@@ -16,7 +16,9 @@ PYTHONPATH=tests .venv/bin/python -m unittest \
   test_character_edit_audit test_workflow_character_flow \
   test_qwen_masked_canvas test_workflow_mask_flow \
   test_workflow_sources test_workflow_interruptions \
-  test_tui_process test_workflow_result_jobs -v
+  test_tui_process test_tui_editing test_workflow_result_jobs \
+  test_workflow_interactions test_workflow_text_editing \
+  test_workflow_task test_workflow_workspace_layout -v
 ```
 
 Qwen reference and native masked-sampling tests (9 tests, in the installed LightX2V runtime):
@@ -60,6 +62,13 @@ Result-job tests reopen a pinned selection with newer collection history,
 export while opening/closing Results, and change image/frame bytes after their
 initial validation. No changed or partial export may be published; completion
 notifications belong to the application.
+Workspace tests cover nested and parallel choice stages, historical settings,
+primary execution through a saved choice to final results, and retained native
+editing state while panes are resized, expanded, hidden and collapsed. Results
+tests check candidate identity, full-tile interaction and actual viewport
+intersections at 80x24, 120x40 and 160x50. Main-form tests preserve multiline
+text through paste, undo, form refresh and workflow import; they also exercise
+Escape and a combined directory/filename save dialog.
 The export regression counts actual payload bytes read for source images,
 cached images and frame archives: each payload is read once. Same-size cache
 corruption with a restored mtime must still fail during the verified copy.

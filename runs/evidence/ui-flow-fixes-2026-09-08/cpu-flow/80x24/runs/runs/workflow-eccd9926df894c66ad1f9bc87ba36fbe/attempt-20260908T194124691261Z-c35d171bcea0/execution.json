@@ -1,0 +1,24 @@
+{
+  "effective_configs": {
+    "choice": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    },
+    "next": {
+      "force_step": 2.0,
+      "low_memory": false,
+      "mode": "fast",
+      "model": "pixel-art-fixer"
+    }
+  },
+  "execution_order": [
+    "choice",
+    "next"
+  ],
+  "snapshot": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/80x24/runs/runs/workflow-eccd9926df894c66ad1f9bc87ba36fbe/attempt-20260908T194124691261Z-c35d171bcea0/snapshots/16e14127c6475395a1be6c2e7427d24f71b779000faeca41149b2a207bc1cd8e.json",
+  "targets": [
+    "next"
+  ],
+  "workflow_digest": "aec8bed0842e23a1eb3ccf5b5b6d8dceb3c205b4e6cb9779b7167c33efbe3c53"
+}

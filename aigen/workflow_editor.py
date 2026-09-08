@@ -37,7 +37,7 @@ from aigen.workflow_property_widgets import (
     PropertySelect,
     PropertyTextArea,
 )
-from aigen.workflow_layout import NODE_WIDTH
+from aigen.workflow_editor_layout import InspectorDivider, WorkflowEditorBody
 from aigen.workflow_run_state import WorkflowRunState
 from aigen.workflow_results_tui import WorkflowResults
 from aigen.workflow_results import has_viewable_output
@@ -48,31 +48,6 @@ from aigen.workflow_connection_dialog import WorkflowConnectionDialog
 from aigen.tui_choice_menu import ChoiceMenu, MenuChoice
 from aigen.manifest_io import ManifestIOError
 from aigen.workflow_task import next_workflow_step, project_results, read_workflow_runs
-
-
-class WorkflowEditorBody(Container):
-    """Keep one inspector and its drafts across split and drawer layouts."""
-
-    class LayoutChanged(Message):
-        pass
-
-    @property
-    def narrow(self) -> bool:
-        return self.has_class("narrow")
-
-    def show_inspector(self, visible: bool) -> None:
-        self.set_class(visible, "inspector-open")
-        self.post_message(self.LayoutChanged())
-
-    def on_resize(self, event: events.Resize) -> None:
-        inspector = self.query_one(WorkflowInspector)
-        narrow = event.size.width < 2 * NODE_WIDTH + inspector.horizontal_minimum_width + 4
-        self.set_class(narrow, "narrow")
-        panel = self.query_one("#workflow-inspector-panel")
-        width = min(42, event.size.width)
-        panel.styles.width = width
-        panel.styles.offset = (event.size.width - width if narrow else 0, 0)
-        self.post_message(self.LayoutChanged())
 
 
 class WorkflowEditor(ModalScreen[None]):
@@ -138,7 +113,6 @@ class WorkflowEditor(ModalScreen[None]):
     }
 
     WorkflowEditor #workflow-inspector-panel {
-        width: 42;
         height: 1fr;
         background: #1c1724;
     }
@@ -158,16 +132,6 @@ class WorkflowEditor(ModalScreen[None]):
         width: 100%;
         min-width: 0;
         height: 1fr;
-    }
-
-    WorkflowEditor WorkflowEditorBody.narrow > #workflow-inspector-panel {
-        position: absolute;
-        display: none;
-    }
-
-    WorkflowEditor WorkflowEditorBody.narrow.inspector-open > #workflow-inspector-panel {
-        display: block;
-        layer: inspector;
     }
 
     WorkflowEditor #workflow-editor-status {
@@ -220,6 +184,7 @@ class WorkflowEditor(ModalScreen[None]):
         self._run_state = run_state
         self._running = False
         self._runs_root = runs_root
+        self._has_drafts = False
         self._records = ()
         self._history_loaded = False
         self._history_error: str | None = None
@@ -247,11 +212,13 @@ class WorkflowEditor(ModalScreen[None]):
                     connect_ports=self._connect_ports,
                     id="workflow-canvas",
                 )
+                yield InspectorDivider()
                 with Container(id="workflow-inspector-panel"):
                     with Horizontal(id="workflow-inspector-actions"):
                         yield Label("Properties", id="workflow-inspector-title")
                         yield Button("⋯", name="context", id="workflow-context", compact=True,
                                      tooltip="Selection actions · Shift+F10")
+                        yield ActionButton("Expand", name="expand-inspector", id="workflow-inspector-expand", compact=True)
                         yield Button("×", name="hide-inspector", id="workflow-inspector-close", compact=True,
                                      tooltip="Close properties · Escape")
                     yield WorkflowInspector(self._edit_buffer.document, None, None, id="workflow-inspector")
@@ -430,6 +397,11 @@ class WorkflowEditor(ModalScreen[None]):
     async def action_commit_properties(self) -> None:
         await self.commit_pending_property()
 
+    @on(WorkflowInspector.DraftsChanged)
+    def drafts_changed(self, event: WorkflowInspector.DraftsChanged) -> None:
+        self._has_drafts = event.modified
+        self.query_one("#workflow-editor-title", Label).update(self._title_text())
+
     @on(Select.Changed)
     async def property_selected(self, event: Select.Changed) -> None:
         editor = event.select
@@ -484,7 +456,7 @@ class WorkflowEditor(ModalScreen[None]):
     async def action_command(self, command: str) -> None:
         if not self._command_enabled(command):
             return
-        if command not in {"menu", "context", "inspect", "hide-inspector", "stop", "load", "quit"}:
+        if command not in {"menu", "context", "inspect", "hide-inspector", "expand-inspector", "stop", "load", "quit"}:
             if not await self.commit_pending_property():
                 return
         canvas = self.query_one(WorkflowCanvas)
@@ -502,8 +474,12 @@ class WorkflowEditor(ModalScreen[None]):
                 self._choose_node()
             case "inspect":
                 self._show_inspector()
+            case "expand-inspector":
+                body = self.query_one(WorkflowEditorBody)
+                body.expand_inspector(not body.expanded)
             case "hide-inspector":
-                self.action_close_inspector()
+                self.query_one(WorkflowEditorBody).show_inspector(False)
+                canvas.focus()
             case "delete":
                 await self._delete_selection()
             case "undo":
@@ -550,8 +526,7 @@ class WorkflowEditor(ModalScreen[None]):
                 return False
             return self._command_enabled(command)
         if action == "close_inspector":
-            body = self.query_one(WorkflowEditorBody)
-            return body.narrow and body.has_class("inspector-open")
+            return True
         return super().check_action(action, parameters)
 
     def _command_enabled(self, command: str) -> bool:
@@ -563,7 +538,7 @@ class WorkflowEditor(ModalScreen[None]):
             return command == "refresh-results" or bool(self._result_nodes)
         if command == "results":
             return node_id is not None and has_viewable_output(self._edit_buffer.document.node(node_id))
-        if command in {"menu", "context", "inspect", "hide-inspector", "quit"}:
+        if command in {"menu", "context", "inspect", "hide-inspector", "expand-inspector", "quit"}:
             return True
         if self._running:
             return False
@@ -830,9 +805,15 @@ class WorkflowEditor(ModalScreen[None]):
         self.query_one(WorkflowEditorBody).show_inspector(True)
         self.call_after_refresh(self.query_one(WorkflowInspector).focus)
 
-    def action_close_inspector(self) -> None:
-        self.query_one(WorkflowEditorBody).show_inspector(False)
-        self.query_one(WorkflowCanvas).focus()
+    async def action_close_inspector(self) -> None:
+        body = self.query_one(WorkflowEditorBody)
+        if body.expanded:
+            body.expand_inspector(False)
+        elif body.has_class("inspector-open"):
+            body.show_inspector(False)
+            self.query_one(WorkflowCanvas).focus()
+        else:
+            await self.action_command("close")
 
     def _update_actions(self) -> None:
         self._project_task()
@@ -847,8 +828,10 @@ class WorkflowEditor(ModalScreen[None]):
         if not self._running:
             self._set_status(self._selection_hint())
         self.query_one("#workflow-add-node", Button).disabled = self._running
-        self.query_one("#workflow-inspect").display = body.narrow
-        self.query_one("#workflow-inspector-close").display = body.narrow
+        canvas = self.query_one(WorkflowCanvas)
+        body.set_context(canvas.selected_node_id is not None or canvas.selected_connection_id is not None)
+        self.query_one("#workflow-inspect").display = not body.has_class("inspector-open")
+        self.query_one("#workflow-inspector-expand", Button).label = "Restore" if body.expanded else "Expand"
         self.refresh_bindings()
 
     def _set_status(self, message: str) -> None:
@@ -867,5 +850,5 @@ class WorkflowEditor(ModalScreen[None]):
         return self._next_step.description if self._history_loaded else "Reading recorded results…"
 
     def _title_text(self) -> str:
-        dirty = " *" if self._edit_buffer.dirty else ""
+        dirty = " *" if self._edit_buffer.dirty or self._has_drafts else ""
         return f"{self._edit_buffer.document.name}{dirty}"

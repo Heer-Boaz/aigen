@@ -1,0 +1,35 @@
+{
+  "effective_configs": {
+    "collection": {},
+    "fix0": {
+      "force_step": 4.0,
+      "low_memory": false,
+      "mode": "fast",
+      "model": "pixel-art-fixer"
+    },
+    "fix1": {
+      "force_step": 4.0,
+      "low_memory": false,
+      "mode": "fast",
+      "model": "pixel-art-fixer"
+    },
+    "source0": {
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/source0.png"
+    },
+    "source1": {
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/source1.png"
+    }
+  },
+  "execution_order": [
+    "source0",
+    "source1",
+    "fix0",
+    "fix1",
+    "collection"
+  ],
+  "snapshot": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/snapshots/3ab81ca28cad45ccdba1404961d7067166c5255b944486f9e3f720d741e97ded.json",
+  "targets": [
+    "collection"
+  ],
+  "workflow_digest": "c7972b117cd3d0b4c0bc1a3d44c4f2f1664cb472449b90dfecfa0cf3ab848ee1"
+}

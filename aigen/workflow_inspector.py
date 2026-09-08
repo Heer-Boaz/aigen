@@ -3,7 +3,8 @@ from __future__ import annotations
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
-from textual.widgets import Input, Label, Select, Static, TextArea
+from textual.message import Message
+from textual.widgets import Collapsible, Input, Label, Select, Static, TextArea
 
 from aigen.generation.animegen_i2v import (
     ANIMEGEN_PRECISIONS,
@@ -17,6 +18,7 @@ from aigen.generation.image_edit import (
     image_edit_backend_settings,
 )
 from aigen.workflow_edit_buffer import WorkflowPropertyEdit
+from aigen.workflow_property_schema import primary_fields
 from aigen.workflow_graph import (
     AnimeGenI2VNode,
     FramePostprocessNode,
@@ -29,7 +31,6 @@ from aigen.workflow_graph import (
     VosrPostprocessConfig,
     WorkflowGraph,
     WorkflowNode,
-    node_definition,
     Ltx23Node, HunyuanI2VNode, PositionedKeyframeNode, AudioSourceNode, AssembleVideoNode,
 )
 from aigen.generation.ltx23_settings import LTX23_MODEL_TYPES, LTX23_SOLVERS, LTX23_PHASES
@@ -56,6 +57,11 @@ class ConnectionOrderSelect(Select[int]):
 
 
 class WorkflowInspector(VerticalScroll):
+    class DraftsChanged(Message):
+        def __init__(self, modified: bool) -> None:
+            super().__init__()
+            self.modified = modified
+
     DEFAULT_CSS = """
     WorkflowInspector {
         width: 2fr;
@@ -66,6 +72,9 @@ class WorkflowInspector(VerticalScroll):
         padding: 0 1;
         scrollbar-size-vertical: 1;
     }
+
+    WorkflowInspector Collapsible { padding: 0; border: none; margin: 1 0 0 0; }
+    WorkflowInspector Collapsible Contents { padding: 0 0 0 1; }
 
     WorkflowInspector .workflow-inspector-heading {
         height: 1;
@@ -97,6 +106,7 @@ class WorkflowInspector(VerticalScroll):
         self.document = document
         self._node_id = selected_node_id
         self._connection_id = selected_connection_id
+        self._draft_editors: set[PropertyInput | PropertyTextArea] = set()
 
     @property
     def horizontal_minimum_width(self) -> int:
@@ -106,80 +116,47 @@ class WorkflowInspector(VerticalScroll):
         )
 
     def compose(self) -> ComposeResult:
-        yield Label("Workflow", classes="workflow-inspector-heading")
-        yield PropertyRow(
-            node_id=None,
-            field_name="name",
-            label="Name",
-            value=self.document.name,
-            annotation=str,
-        )
         if self._node_id is None:
             if self._connection_id is not None:
-                connection = next(
-                    connection
-                    for connection in self.document.connections
-                    if connection.id == self._connection_id
-                )
+                connection = next(wire for wire in self.document.connections if wire.id == self._connection_id)
                 source = self.document.node(connection.source.node_id)
                 target = self.document.node(connection.target.node_id)
-                yield Label(
-                    "Connection",
-                    classes="workflow-inspector-heading",
-                )
-                yield Static(
-                    f"{source.title}.{connection.source.port}\n"
-                    f"→ {target.title}.{connection.target.port}",
-                    markup=False,
-                    classes="workflow-inspector-empty",
-                )
+                yield Label("Connection", classes="workflow-inspector-heading")
+                yield Static(f"{source.title}.{connection.source.port}\n→ {target.title}.{connection.target.port}",
+                             markup=False, classes="workflow-inspector-empty")
                 siblings = self.document.incoming_connections()[target.id][connection.target.port]
                 if len(siblings) > 1:
                     yield Label("Input order", classes="workflow-inspector-heading")
                     yield ConnectionOrderSelect(connection.id, siblings.index(connection), len(siblings))
-                    yield Static("\n".join(
-                        f"{index + 1}. {self.document.node(sibling.source.node_id).title}.{sibling.source.port}"
-                        for index, sibling in enumerate(siblings)
-                    ), markup=False, classes="workflow-inspector-empty")
-                return
-            yield Static(
-                "Select a node to edit its properties.",
-                classes="workflow-inspector-empty",
-            )
+                    yield Static("\n".join(f"{index + 1}. {self.document.node(wire.source.node_id).title}.{wire.source.port}"
+                                           for index, wire in enumerate(siblings)), markup=False,
+                                 classes="workflow-inspector-empty")
+            else:
+                yield Label("Workflow", classes="workflow-inspector-heading")
+                yield PropertyRow(node_id=None, field_name="name", label="Name", value=self.document.name, annotation=str)
             return
 
         node = self.document.node(self._node_id)
-        yield Label(node.title, id="workflow-node-title", classes="workflow-inspector-heading")
-        yield Label(
-            node_definition(node.kind).label,
-            classes="workflow-inspector-kind",
-        )
-        yield PropertyRow(
-            node_id=node.id,
-            field_name="title",
-            label="Title",
-            value=node.title,
-            annotation=str,
-        )
-        visible_fields = _visible_config_fields(node)
-        for field_name in _config_fields(node):
-            field = type(node.config).model_fields[field_name]
-            yield PropertyRow(
-                node_id=node.id,
-                field_name=field_name,
-                label=_field_label(field_name),
-                value=getattr(node.config, field_name),
-                annotation=field.annotation,
-                multiline=field_name in {"prompt", "negative_prompt"},
-                visible=field_name in visible_fields,
-                browse=field_name == "path",
-                options=_node_property_options(node, field_name),
-            )
-
+        yield Label(node.title, id="workflow-node-title", classes="workflow-inspector-heading", markup=False)
+        visible = _visible_config_fields(node)
+        fields = _config_fields(node)
+        primary = primary_fields(node, fields)
+        rows = {
+            name: PropertyRow(node_id=node.id, field_name=name, label=_field_label(name),
+                              value=getattr(node.config, name), annotation=type(node.config).model_fields[name].annotation,
+                              multiline=name in {"prompt", "negative_prompt"}, visible=name in visible,
+                              browse=name == "path", options=_node_property_options(node, name),
+                              placeholder=_field_placeholder(node, name))
+            for name in fields
+        }
+        yield from (rows[name] for name in primary)
+        with Collapsible(title="Advanced", collapsed=True, id="workflow-advanced"):
+            yield PropertyRow(node_id=node.id, field_name="title", label="Title", value=node.title, annotation=str)
+            yield from (rows[name] for name in fields if name not in primary)
         text = _node_description(node)
-        description = Static(text, id="workflow-node-description", markup=False)
-        description.display = bool(text)
-        yield description
+        with Collapsible(title="Node details", collapsed=not isinstance(node, ImageSelectionNode), id="workflow-node-help") as help_group:
+            help_group.display = bool(text)
+            yield Static(text, id="workflow-node-description", markup=False)
 
     @on(Input.Changed)
     @on(TextArea.Changed)
@@ -187,6 +164,14 @@ class WorkflowInspector(VerticalScroll):
         editor = event.control
         if isinstance(editor, (PropertyInput, PropertyTextArea)):
             editor.remove_class("-invalid")
+            was_modified = bool(self._draft_editors)
+            value = editor.text if isinstance(editor, PropertyTextArea) else editor.value
+            if editor.is_mounted and value != editor.original_value:
+                self._draft_editors.add(editor)
+            else:
+                self._draft_editors.discard(editor)
+            if bool(self._draft_editors) != was_modified:
+                self.post_message(self.DraftsChanged(bool(self._draft_editors)))
 
     def property_drafts(self) -> tuple[WorkflowPropertyEdit, ...]:
         drafts: list[WorkflowPropertyEdit] = []
@@ -209,14 +194,20 @@ class WorkflowInspector(VerticalScroll):
                 editor.history.checkpoint()
             elif isinstance(editor, PropertyInput):
                 editor.original_value = editor.value
+        if self._draft_editors:
+            self._draft_editors.clear()
+            self.post_message(self.DraftsChanged(False))
 
     def focus_invalid_draft(self, edit: WorkflowPropertyEdit) -> None:
         row = next(
             row for row in self.query(PropertyRow)
             if row.node_id == edit.node_id and row.field_name == edit.field_name
         )
+        for ancestor in row.ancestors:
+            if isinstance(ancestor, Collapsible):
+                ancestor.collapsed = False
         row.editor.add_class("-invalid")
-        row.editor.focus()
+        self.call_after_refresh(row.editor.focus)
 
     async def show(
         self,
@@ -232,6 +223,9 @@ class WorkflowInspector(VerticalScroll):
         if (document.workflow_id, self._projection()) == previous_projection:
             return
         if self._binding() != previous_binding or self._connection_id is not None:
+            if self._draft_editors:
+                self._draft_editors.clear()
+                self.post_message(self.DraftsChanged(False))
             await self.recompose()
             return
         node = document.node(self._node_id) if self._node_id is not None else None
@@ -247,12 +241,14 @@ class WorkflowInspector(VerticalScroll):
                     options=_node_property_options(node, row.field_name),
                 )
                 row.display = row.field_name in visible_fields
+                if isinstance(row.editor, PropertyInput):
+                    row.editor.placeholder = _field_placeholder(node, row.field_name)
         if node is not None:
             self.query_one("#workflow-node-title", Label).update(node.title)
             description = self.query_one("#workflow-node-description", Static)
             text = _node_description(node)
             description.update(text)
-            description.display = bool(text)
+            self.query_one("#workflow-node-help").display = bool(text)
 
     def _binding(self) -> tuple[object, ...]:
         node = self.document.node(self._node_id) if self._node_id is not None else None
@@ -267,7 +263,6 @@ class WorkflowInspector(VerticalScroll):
         if self._node_id is not None:
             node = self.document.node(self._node_id)
             return (
-                self.document.name,
                 self._node_id,
                 node.kind,
                 node.title,
@@ -280,7 +275,6 @@ class WorkflowInspector(VerticalScroll):
                 if connection.id == self._connection_id
             )
             return (
-                self.document.name,
                 self._connection_id,
                 connection.source,
                 connection.target,
@@ -295,6 +289,18 @@ class WorkflowInspector(VerticalScroll):
 
 def _field_label(field_name: str) -> str:
     return field_name.replace("_", " ").capitalize()
+
+
+def _field_placeholder(node: WorkflowNode, field_name: str) -> str:
+    if isinstance(node, (ImageEditNode, CharacterEditNode)):
+        if field_name in {"steps", "guidance", "strength"}:
+            value = getattr(image_edit_backend_settings(node.config.backend), field_name)
+            return f"Default: {value}" if value is not None else "Backend default"
+        if field_name in {"width", "height", "aspect_ratio"}:
+            return "Auto"
+    if isinstance(node, CharacterRefineNode) and field_name == "max_side":
+        return "Native source size"
+    return ""
 
 
 def _node_property_options(

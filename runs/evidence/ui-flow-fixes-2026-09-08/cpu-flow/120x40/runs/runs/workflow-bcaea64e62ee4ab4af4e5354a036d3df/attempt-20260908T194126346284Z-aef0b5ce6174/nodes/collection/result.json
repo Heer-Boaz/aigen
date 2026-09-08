@@ -1,0 +1,90 @@
+{
+  "cache_manifest": null,
+  "details": {
+    "case_record": null,
+    "completed_at": "2026-09-08T19:41:26.830215+00:00",
+    "effective_config": {},
+    "inputs": {
+      "images": [
+        {
+          "content_sha256": "e55e262bd975633395dd90a5e10b9d5f996533b812fe680f29c4b475ce50491d",
+          "identity": "6645060a3416f8bdd13e6c7d2adcaf8fd71fc59901acd553b3acde997c4aa6e2",
+          "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/cache/nodes/28/28e2a3a85ef88a7589da23a07384b8b0ac43930693d00f5e62f9b62dcba35961/outputs/image/000000-fix0.png",
+          "type": "image"
+        },
+        {
+          "content_sha256": "bf87630f79e23a467b1469e83cff2da6ffb613f0fcf3f44ec9646ebbdeea453f",
+          "identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+          "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/cache/nodes/a2/a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6/outputs/image/000000-fix1.png",
+          "type": "image"
+        }
+      ]
+    },
+    "measured_outputs": {
+      "collection": {
+        "candidates": 2
+      }
+    },
+    "record_dir": null
+  },
+  "image_origins": {},
+  "node_id": "collection",
+  "node_kind": "image-collection",
+  "outputs": {
+    "collection": {
+      "candidates": [
+        {
+          "image": {
+            "content_sha256": "e55e262bd975633395dd90a5e10b9d5f996533b812fe680f29c4b475ce50491d",
+            "identity": "6645060a3416f8bdd13e6c7d2adcaf8fd71fc59901acd553b3acde997c4aa6e2",
+            "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/cache/nodes/28/28e2a3a85ef88a7589da23a07384b8b0ac43930693d00f5e62f9b62dcba35961/outputs/image/000000-fix0.png",
+            "type": "image"
+          },
+          "node_id": "fix0",
+          "reference": {
+            "artifact_identity": "6645060a3416f8bdd13e6c7d2adcaf8fd71fc59901acd553b3acde997c4aa6e2",
+            "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/fix0/result.json",
+            "output_port": "image",
+            "producer_signature": "28e2a3a85ef88a7589da23a07384b8b0ac43930693d00f5e62f9b62dcba35961"
+          },
+          "seed": null,
+          "title": "Candidate 0"
+        },
+        {
+          "image": {
+            "content_sha256": "bf87630f79e23a467b1469e83cff2da6ffb613f0fcf3f44ec9646ebbdeea453f",
+            "identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+            "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/cache/nodes/a2/a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6/outputs/image/000000-fix1.png",
+            "type": "image"
+          },
+          "node_id": "fix1",
+          "reference": {
+            "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+            "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/fix1/result.json",
+            "output_port": "image",
+            "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+          },
+          "seed": null,
+          "title": "Candidate 1"
+        }
+      ],
+      "identity": "3bef4f638d490fca5f90d0dbda4a9c41bbc7371fc7b0713e4b91fa19bdbca112",
+      "type": "image-collection"
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "workflow-source",
+      "revision": "sha256-v1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "5"
+    },
+    "models": []
+  },
+  "signature": "da27beb08cde806250266fa6902276e1982e650f8e387ba7ea94d9ec1869f7fe",
+  "status": "completed",
+  "title": "Variants",
+  "version": 2
+}

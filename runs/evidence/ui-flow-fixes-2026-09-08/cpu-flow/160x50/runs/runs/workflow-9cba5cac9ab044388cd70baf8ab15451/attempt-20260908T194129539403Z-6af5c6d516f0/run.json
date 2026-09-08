@@ -1,0 +1,16 @@
+{
+  "nodes": {
+    "collection": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/collection/result.json",
+    "fix0": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/fix0/result.json",
+    "fix1": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/fix1/result.json",
+    "source0": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/source0/result.json",
+    "source1": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/source1/result.json"
+  },
+  "result": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/result.json",
+  "status": "completed",
+  "version": 1,
+  "workflow_digest": "7e43eaaeb079a09596c269a2d984346ebf9aae7c0675d568b8668a3d4a903c28",
+  "workflow_id": "workflow-9cba5cac9ab044388cd70baf8ab15451",
+  "workflow_name": "CPU result flow",
+  "workflow_snapshot": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/snapshots/b46e163d34ffc0cdd514e5d4432f6877da98e7a098f18d819bd864a1fa90c947.json"
+}

@@ -1,0 +1,29 @@
+Base commit: 1125c7bc (main)
+Scope: open points from ui-flow-review-2026-09-08/review.md
+
+Application, TUI and workflow regression suite:
+PYTHONPATH=tests .venv/bin/python -m unittest -q test_workflow_properties test_workflow_run_state test_workflow_task test_workflow_workspace_layout test_workflow_interactions test_workflow_text_editing test_tui_editing test_tui_process test_workflow_image_flow test_workflow_results_tui test_workflow_result_contracts test_workflow_result_jobs test_workflow_video_flow test_workflow_video_tui test_workflow_video_contracts test_workflow_video_batching test_workflow_sources test_workflow_interruptions test_workflow_character_flow test_workflow_mask_flow test_generation_contracts test_video_timing
+Ran 109 tests in 110.931s
+OK
+
+Focused follow-up after making JSON details load on request:
+PYTHONPATH=tests .venv/bin/python -m unittest -q test_workflow_workspace_layout test_workflow_results_tui test_workflow_result_jobs test_workflow_video_tui
+Ran 12 tests in 27.962s
+OK
+
+Real Textual -> CLI -> CPU processing -> choice -> continuation:
+env -u NO_COLOR COLORTERM=truecolor TERM=xterm-256color PYTHONPATH=tests .venv/bin/python runs/evidence/ui-flow-fixes-2026-09-08/capture.py
+Exit 0
+80x24: Generate choices -> Choose image -> Continue -> View results
+120x40: Generate choices -> Choose image -> Continue -> View results
+160x50: Generate choices -> Choose image -> Continue -> View results
+Explicitly chose the second candidate in each case. See metrics.json and cpu-flow/.
+Results screenshots were also reopened from these saved workflows after label cleanup.
+
+Static validation:
+.venv/bin/python -m compileall -q aigen tests
+Exit 0
+git diff --check
+Exit 0
+
+No model weights loaded or downloaded. UI input/resize/mouse events used Textual Pilot.

@@ -1,0 +1,16 @@
+{
+  "nodes": {
+    "collection": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/collection/result.json",
+    "fix0": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/fix0/result.json",
+    "fix1": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/fix1/result.json",
+    "source0": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/source0/result.json",
+    "source1": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/nodes/source1/result.json"
+  },
+  "result": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/result.json",
+  "status": "completed",
+  "version": 1,
+  "workflow_digest": "c7972b117cd3d0b4c0bc1a3d44c4f2f1664cb472449b90dfecfa0cf3ab848ee1",
+  "workflow_id": "workflow-bcaea64e62ee4ab4af4e5354a036d3df",
+  "workflow_name": "CPU result flow",
+  "workflow_snapshot": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/120x40/runs/runs/workflow-bcaea64e62ee4ab4af4e5354a036d3df/attempt-20260908T194126346284Z-aef0b5ce6174/snapshots/3ab81ca28cad45ccdba1404961d7067166c5255b944486f9e3f720d741e97ded.json"
+}

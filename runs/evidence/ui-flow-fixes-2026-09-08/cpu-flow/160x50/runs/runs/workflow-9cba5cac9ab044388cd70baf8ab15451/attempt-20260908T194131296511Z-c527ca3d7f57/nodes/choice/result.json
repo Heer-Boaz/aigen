@@ -1,0 +1,53 @@
+{
+  "cache_manifest": null,
+  "details": {
+    "case_record": null,
+    "completed_at": "2026-09-08T19:41:31.792820+00:00",
+    "effective_config": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    },
+    "inputs": {},
+    "measured_outputs": {
+      "image": {
+        "height": 20,
+        "width": 16
+      }
+    },
+    "record_dir": null
+  },
+  "image_origins": {
+    "image": {
+      "artifact_identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "manifest_path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-9cba5cac9ab044388cd70baf8ab15451/attempt-20260908T194129539403Z-6af5c6d516f0/nodes/fix1/result.json",
+      "output_port": "image",
+      "producer_signature": "a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6"
+    }
+  },
+  "node_id": "choice",
+  "node_kind": "image-selection",
+  "outputs": {
+    "image": {
+      "content_sha256": "bf87630f79e23a467b1469e83cff2da6ffb613f0fcf3f44ec9646ebbdeea453f",
+      "identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/cache/nodes/a2/a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6/outputs/image/000000-fix1.png",
+      "type": "image"
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "workflow-source",
+      "revision": "sha256-v1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "5"
+    },
+    "models": []
+  },
+  "signature": "d2c00f48dafdb1f0b0212ef213eb350225182e8c8459d199261c98cc4de59b6b",
+  "status": "completed",
+  "title": "Selected",
+  "version": 2
+}

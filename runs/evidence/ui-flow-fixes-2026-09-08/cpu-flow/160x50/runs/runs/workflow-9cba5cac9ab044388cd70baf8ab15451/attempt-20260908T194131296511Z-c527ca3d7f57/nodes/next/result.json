@@ -1,0 +1,62 @@
+{
+  "cache_manifest": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/cache/nodes/f5/f5169618bca5f7b2084759b43d07799afe70c557f8c301cb5a152dba5c33a58f/result.json",
+  "details": {
+    "case_record": null,
+    "completed_at": "2026-09-08T19:29:02.654187+00:00",
+    "effective_config": {
+      "force_step": 2.0,
+      "low_memory": false,
+      "mode": "fast",
+      "model": "pixel-art-fixer"
+    },
+    "inputs": {
+      "image": [
+        {
+          "content_sha256": "bf87630f79e23a467b1469e83cff2da6ffb613f0fcf3f44ec9646ebbdeea453f",
+          "identity": "f069eaad75ed4c0693df9082b426824ce6ceed2da037f79190c49dbce9102f5f",
+          "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/cache/nodes/a2/a2c25fd836ad77684bda6b78ae5a8907c930cfeed493b9a0cb4a7f257f3fcea6/outputs/image/000000-fix1.png",
+          "type": "image"
+        }
+      ]
+    },
+    "measured_outputs": {
+      "image": {
+        "height": 10,
+        "images": 1,
+        "width": 8
+      }
+    },
+    "record_dir": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/runs/workflow-e6c4e64f4fe8422a9804afc228f0772a/attempt-20260908T192902029134Z-93c6d76a93dd/executions/9b7e7329c1cf49aaab5e1936f033b2e7"
+  },
+  "image_origins": {},
+  "node_id": "next",
+  "node_kind": "image-postprocess",
+  "outputs": {
+    "image": {
+      "content_sha256": "f2cfd6440194915bb2501139ce89c3605a4af58bc3d456b98cbf9f4dc0ddea27",
+      "identity": "7893b49b06e0ad0adde2953b74357848684f9dfa4fd28e56006ecb70f79c6d73",
+      "path": "/home/boaz/aigen/runs/evidence/ui-flow-fixes-2026-09-08/cpu-flow/160x50/runs/cache/nodes/f5/f5169618bca5f7b2084759b43d07799afe70c557f8c301cb5a152dba5c33a58f/outputs/image/000000-image.png",
+      "type": "image"
+    }
+  },
+  "provenance": {
+    "backend": {
+      "name": "image-postprocess-batch",
+      "revision": "1"
+    },
+    "executor": {
+      "name": "aigen-workflow-executor",
+      "revision": "5"
+    },
+    "models": [
+      {
+        "name": "Pixel Art Fixer",
+        "revision": "ef376e57e1c272633ca2dbf5f29ec3fcf6596465"
+      }
+    ]
+  },
+  "signature": "f5169618bca5f7b2084759b43d07799afe70c557f8c301cb5a152dba5c33a58f",
+  "status": "reused",
+  "title": "Continue",
+  "version": 2
+}
