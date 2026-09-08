@@ -108,7 +108,7 @@ def audio_streams(container) -> tuple[AudioStreamInfo, ...]:
     ) for stream in container.streams.audio)
 
 
-def load_audio_track(path: Path, *, stream_index: int | None = None) -> AudioTrack:
+def load_audio_track(path: Path, *, stream_index: int | None = None, content_sha256: str | None = None) -> AudioTrack:
     path = path.expanduser().resolve()
     try:
         with av.open(str(path)) as container:
@@ -116,7 +116,7 @@ def load_audio_track(path: Path, *, stream_index: int | None = None) -> AudioTra
             selected = next((track for track in tracks if stream_index is None or track.index == stream_index), None)
             if selected is None:
                 raise MediaError(f"media has no selected audio stream ({stream_index}): {path}")
-            return AudioTrack(path=path.as_posix(), file_sha256=sha256_file(path),
+            return AudioTrack(path=path.as_posix(), file_sha256=sha256_file(path) if content_sha256 is None else content_sha256,
                               stream_index=selected.index, timeline_origin=selected.start_time)
     except (av.FFmpegError, OSError) as error:
         raise MediaError(f"cannot read audio from {path}: {error}") from error

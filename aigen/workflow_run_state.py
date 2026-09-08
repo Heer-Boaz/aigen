@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from collections.abc import Sequence
 
 from aigen.workflow_graph import NodePortRef, WorkflowGraph
@@ -29,6 +31,11 @@ class WorkflowRunState:
 
     def update(self, node_id: str, status: str) -> None:
         self._statuses[node_id] = status
+
+    def finish(self, status: Literal["failed", "interrupted"]) -> None:
+        for node_id, current in self._statuses.items():
+            if current in ("queued", "running"):
+                self._statuses[node_id] = status
 
     def status(self, node_id: str) -> str:
         return "outdated" if node_id in self._outdated else self._statuses[node_id]

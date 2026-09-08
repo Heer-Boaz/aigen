@@ -2,7 +2,7 @@
 
 Run from the repository root. The application and LightX2V deliberately use separate Python environments.
 
-Application tests (73 tests, including real Textual → CLI → Pixel Art Fixer → cache execution, video assembly, character audit/publication and process cancellation):
+Application tests (including real Textual → CLI → Pixel Art Fixer → cache execution, video assembly, character audit/publication and process cancellation):
 
 ```bash
 PYTHONPATH=tests .venv/bin/python -m unittest \
@@ -14,7 +14,9 @@ PYTHONPATH=tests .venv/bin/python -m unittest \
   test_video_timing test_workflow_video_flow test_workflow_video_tui \
   test_workflow_video_contracts test_workflow_video_batching \
   test_character_edit_audit test_workflow_character_flow \
-  test_qwen_masked_canvas test_workflow_mask_flow -v
+  test_qwen_masked_canvas test_workflow_mask_flow \
+  test_workflow_sources test_workflow_interruptions \
+  test_tui_process test_workflow_result_jobs -v
 ```
 
 Qwen reference and native masked-sampling tests (9 tests, in the installed LightX2V runtime):
@@ -36,6 +38,31 @@ quantization equivalence probe and its measured outputs are in
 `runs/evidence/pipeline-fixes-2026-09-06/gpu-acceptance/fp8_quantization_probe.py`.
 
 These tests establish dataflow and state contracts. GPU memory use and neural image quality require separate model runs with reviewed prompts.
+
+Source tests replace files between intake and generation, preserve mtimes across
+changes, corrupt stored snapshots, and reload a captured reference pack after
+removing its originals. Unchanged source files must not be copied again. The
+LoRA tests replace valid SafeTensors headers with another architecture after
+compilation, including same-size changes with a restored mtime. The
+workflow executor revision was advanced to 5: automatic cache reuse cannot
+accept results made under the earlier mutable-source execution contract.
+
+Process tests use real subprocess groups, including a descendant that ignores
+SIGTERM, cancellation during spawn, immediate Stop, malformed progress, large
+stdout records and UTF-8 across read boundaries. A real FFmpeg/contact-sheet
+flow and an event-loop heartbeat during Quit cover the TUI lifecycle. Signal
+tests raise SIGINT and SIGTERM and inspect persisted terminal run states.
+Publication-window tests interrupt between atomic node publication and in-memory
+registration. A real SIGKILL test checks both on-disk history and the TUI's
+completed status for a result whose completion event was never delivered.
+
+Result-job tests reopen a pinned selection with newer collection history,
+export while opening/closing Results, and change image/frame bytes after their
+initial validation. No changed or partial export may be published; completion
+notifications belong to the application.
+The export regression counts actual payload bytes read for source images,
+cached images and frame archives: each payload is read once. Same-size cache
+corruption with a restored mtime must still fail during the verified copy.
 
 Model artifact identity tests replace local weights and processor configurations
 within one process and verify that subsequent workflow cache signatures change.

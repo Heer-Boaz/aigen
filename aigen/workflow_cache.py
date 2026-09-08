@@ -263,10 +263,10 @@ class WorkflowNodeCache:
         return _cache_hit(entry_dir, manifest)
 
     @staticmethod
-    def read_result(manifest_path: Path) -> NodeCacheHit:
-        """Resolve a pinned historical result without consulting current models."""
+    def read_result(manifest_path: Path, *, verify_contents: bool = True) -> NodeCacheHit:
+        """Resolve a historical result; streaming exporters verify copied contents."""
         manifest = _read_cache_manifest(manifest_path)
-        return _cache_hit(manifest_path.parent, manifest)
+        return _cache_hit(manifest_path.parent, manifest, verify_contents=verify_contents)
 
     def begin(
         self,
@@ -446,6 +446,8 @@ def _capture_file(resolved_staging: Path, path: Path) -> _CachedFile:
 def _cache_hit(
     entry_dir: Path,
     manifest: _NodeCacheManifest,
+    *,
+    verify_contents: bool = True,
 ) -> NodeCacheHit:
     outputs: dict[str, ImageArtifact | MaskArtifact | VideoArtifact | ImageSequenceArtifact] = {}
     resolved_entry_dir = entry_dir.resolve(strict=True)
@@ -454,6 +456,7 @@ def _cache_hit(
             _resolve_cached_file(
                 resolved_entry_dir,
                 file,
+                verify_contents=verify_contents,
             )
             for file in artifact.files
         )
@@ -484,6 +487,8 @@ def _cache_hit(
 def _resolve_cached_file(
     resolved_entry_dir: Path,
     cached_file: _CachedFile,
+    *,
+    verify_contents: bool,
 ) -> Path:
     relative = Path(cached_file.path)
     if relative.is_absolute():
@@ -510,7 +515,7 @@ def _resolve_cached_file(
         raise WorkflowCacheCorruptionError(
             f"workflow cache output modification time changed: {path}"
         )
-    if sha256_file(path) != cached_file.sha256:
+    if verify_contents and sha256_file(path) != cached_file.sha256:
         raise WorkflowCacheCorruptionError(
             f"workflow cache output content changed: {path}"
         )

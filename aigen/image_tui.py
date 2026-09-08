@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import signal
-import subprocess
 import sys
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
@@ -26,12 +26,11 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
+from textual.worker import Worker, WorkerCancelled
 
 from aigen.character_reference_models import CharacterReferenceError
-from aigen.generation.video_postprocess import (
-    VideoPostprocessError,
-    create_video_contact_sheet,
-)
+from aigen.generation.video_postprocess import contact_sheet_path
+from aigen.tui_process import command_lines, command_process
 from aigen.image_tui_footer import ImageTUIFooter
 from aigen.image_tui_model import (
     DropdownOption,
@@ -64,12 +63,15 @@ from aigen.workflow_document_io import (
 )
 from aigen.workflow_edit_buffer import WorkflowEditBuffer
 from aigen.workflow_run_state import WorkflowRunState
+from aigen.workflow_run_records import finalize_terminated_workflow, new_workflow_run_id, workflow_run_path
 from aigen.workflow_editor import WorkflowEditor
 from aigen.workflow_execution import WORKFLOW_EVENT_PREFIX
 from aigen.workflow_graph import (
+    AudioSourceNode,
     ImageSourceNode,
     LoraSourceNode,
     ReferencePackNode,
+    VideoSourceNode,
     WorkflowGraph,
 )
 from aigen.workflow_templates import character_workflow_template, image_style_workflow_template, keyframed_video_workflow_template
@@ -94,6 +96,7 @@ CONFIG_ROOT = (
 STATE_PATH = CONFIG_ROOT / "aigen" / "image-tui.json"
 IMAGE_EXTENSIONS = frozenset({".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"})
 VIDEO_EXTENSIONS = frozenset({".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"})
+AUDIO_EXTENSIONS = VIDEO_EXTENSIONS | frozenset({".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".wma"})
 CONFIG_EXTENSIONS = frozenset({".json"})
 SAM_SELECTION_EXTENSIONS = frozenset({".json"})
 LORA_EXTENSIONS = frozenset({".safetensors"})
@@ -254,26 +257,24 @@ class GenerationFinished(Message):
 
 
 class GenerationFailed(Message):
-    def __init__(self, error: str) -> None:
+    def __init__(self, error: str, title: str = "Generation failed") -> None:
         super().__init__()
         self.error = error
+        self.title = title
 
 
 class GenerationCancelled(Message):
     pass
 
 
-class ContactSheetFailed(Message):
-    def __init__(self, output_dir: str, error: str) -> None:
-        super().__init__()
-        self.output_dir = output_dir
-        self.error = error
-
-
 class WorkflowNodeUpdated(Message):
     def __init__(self, payload: dict[str, object]) -> None:
         super().__init__()
         self.payload = payload
+        self.node_id = str(payload["node_id"])
+        self.status = str(payload["status"])
+        progress = payload.get("progress")
+        self.progress = _generation_progress_from_payload(progress) if progress is not None else None
 
 
 class ImageGenerationApp(App[None]):
@@ -472,11 +473,13 @@ class ImageGenerationApp(App[None]):
         self.workflow_editor: WorkflowEditor | None = None
         self.workflow_run_state = WorkflowRunState()
         self.workflow_request_path: Path | None = None
+        self.workflow_run_dir: Path | None = None
         self.configuration_path: Path | None = None
         self.sam_selection_path: Path | None = None
         self.sam_prompt_dialog: SAMPromptDialog | None = None
         self.selected_field: FieldSelection | None = None
-        self.process: subprocess.Popen[str] | None = None
+        self.process: asyncio.subprocess.Process | None = None
+        self.generation_worker: Worker[None] | None = None
         self.cancel_requested = False
         self.active_action_button_id: str | None = None
         self.active_action_idle_label = ""
@@ -843,22 +846,22 @@ class ImageGenerationApp(App[None]):
         elif action == "load-config":
             self._load_configuration()
         elif action == "generate":
-            if self.process is None:
+            if self.generation_worker is None:
                 self._start_generation()
             else:
                 self._cancel_generation()
         elif action == "postprocess":
-            if self.process is None:
+            if self.generation_worker is None:
                 self._start_postprocess()
             else:
                 self._cancel_generation()
         elif action == "video-generate":
-            if self.process is None:
+            if self.generation_worker is None:
                 self._start_video()
             else:
                 self._cancel_generation()
         elif action == "sam-segment":
-            if self.process is None:
+            if self.generation_worker is None:
                 self._start_sam()
             else:
                 self._cancel_generation()
@@ -1132,7 +1135,7 @@ class ImageGenerationApp(App[None]):
         self._set_status(f"Saved configuration: {display_project_path(output)}")
 
     def _load_configuration(self) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Stop generation before loading a configuration.")
             return
         start = self.configuration_path or PROJECT_ROOT
@@ -1194,7 +1197,7 @@ class ImageGenerationApp(App[None]):
         self._update_workflow_documents()
 
     async def _new_workflow(self, document: WorkflowGraph | None = None) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Stop the active operation before creating a workflow.")
             return
         if not await self._commit_workflow_draft():
@@ -1242,7 +1245,7 @@ class ImageGenerationApp(App[None]):
         )
 
     async def _prepare_workflow_load(self) -> bool:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Stop the active operation before loading a workflow.")
             return False
         if not await self._commit_workflow_draft():
@@ -1432,6 +1435,12 @@ class ImageGenerationApp(App[None]):
         if isinstance(node, ImageSourceNode):
             title = "Select image"
             extensions = IMAGE_EXTENSIONS
+        elif isinstance(node, VideoSourceNode):
+            title = "Select video"
+            extensions = VIDEO_EXTENSIONS
+        elif isinstance(node, AudioSourceNode):
+            title = "Select audio or a video containing audio"
+            extensions = AUDIO_EXTENSIONS
         elif isinstance(node, ReferencePackNode):
             title = "Select reference pack"
             extensions = CONFIG_EXTENSIONS
@@ -1478,10 +1487,11 @@ class ImageGenerationApp(App[None]):
         self,
         event: WorkflowEditor.RunRequested,
     ) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("An operation is already running.")
             return
         document = event.document
+        run_id = new_workflow_run_id()
         request_path = (
             DEFAULT_WORKFLOW_RUNS_ROOT
             / "requests"
@@ -1506,6 +1516,7 @@ class ImageGenerationApp(App[None]):
                 request_path.as_posix(),
                 "--runs-root",
                 DEFAULT_WORKFLOW_RUNS_ROOT.as_posix(),
+                "--run-id", run_id,
                 *(argument for target in event.target_node_ids or () for argument in ("--target", target)),
             ],
             display_project_path(DEFAULT_WORKFLOW_RUNS_ROOT / "runs"),
@@ -1514,13 +1525,8 @@ class ImageGenerationApp(App[None]):
             error_title="Cannot start workflow",
             running_label=None,
         )
-        if self.process is None:
-            request_path.unlink(missing_ok=True)
-            self.workflow_run_state.clear()
-            if self.workflow_editor is not None:
-                self.workflow_editor.refresh_runtime_statuses()
-            return
         self.workflow_request_path = request_path
+        self.workflow_run_dir = workflow_run_path(DEFAULT_WORKFLOW_RUNS_ROOT, document.workflow_id, run_id)
         if self.workflow_editor is not None:
             self.workflow_editor.set_running(True)
 
@@ -1533,7 +1539,7 @@ class ImageGenerationApp(App[None]):
         await self.action_quit()
 
     def _start_generation(self) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Generation is already running.")
             return
         try:
@@ -1550,7 +1556,7 @@ class ImageGenerationApp(App[None]):
         )
 
     def _start_postprocess(self) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Processing is already running.")
             return
         try:
@@ -1567,7 +1573,7 @@ class ImageGenerationApp(App[None]):
         )
 
     def _start_video(self) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("Video generation is already running.")
             return
         try:
@@ -1585,7 +1591,7 @@ class ImageGenerationApp(App[None]):
         )
 
     def _start_sam(self) -> None:
-        if self.process is not None:
+        if self.generation_worker is not None:
             self._set_status("SAM operation is already running.")
             return
         try:
@@ -1612,26 +1618,8 @@ class ImageGenerationApp(App[None]):
         contact_sheet_videos: tuple[Path, ...] = (),
         running_label: str | None = "Stop",
     ) -> None:
-        environment = os.environ.copy()
-        environment["AIGEN_PROGRESS"] = "json"
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=PROJECT_ROOT,
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                start_new_session=True,
-            )
-        except OSError as error:
-            self._show_error(error_title, str(error))
-            return
-        self.process = process
         self.cancel_requested = False
+        self.workflow_run_dir = None
         self.active_action_button_id = action_button_id
         self.active_action_idle_label = idle_label
         self.generation_progress = None
@@ -1640,31 +1628,64 @@ class ImageGenerationApp(App[None]):
             if button.id == action_button_id and running_label is not None:
                 button.label = running_label
             button.disabled = button.id != action_button_id
-        self.run_worker(
-            lambda: self._watch_generation(
-                process,
-                output_dir,
-                contact_sheet_videos,
-            ),
-            thread=True,
+        self.generation_worker = self.run_worker(
+            partial(self._watch_generation, command, output_dir, contact_sheet_videos, error_title),
             name="image-generation",
-            exit_on_error=False,
         )
 
-    def _watch_generation(
+    async def _watch_generation(
         self,
-        process: subprocess.Popen[str],
+        command: list[str],
         output_dir: str,
         contact_sheet_videos: tuple[Path, ...],
+        error_title: str,
     ) -> None:
+        environment = {**os.environ, "AIGEN_PROGRESS": "json"}
+        try:
+            if self.cancel_requested:
+                raise asyncio.CancelledError
+            async with command_process(command, cwd=PROJECT_ROOT, env=environment) as process:
+                self.process = process
+                if self.cancel_requested:
+                    raise asyncio.CancelledError
+                error_title = "Generation failed"
+                completed_output_dir = await self._read_generation_output(process, output_dir)
+            contact_sheets = []
+            for video in contact_sheet_videos:
+                error_title = "Contact sheet failed"
+                output = contact_sheet_path(video).resolve()
+                sheet_command = [sys.executable, "-m", "aigen.cli", "video-postprocess", "contact-sheet",
+                                 "--input", str(video), "--output", str(output)]
+                async with command_process(sheet_command, cwd=PROJECT_ROOT, env=environment) as process:
+                    self.process = process
+                    await self._read_generation_output(process, output_dir)
+                contact_sheets.append(output)
+        except asyncio.CancelledError:
+            outcome = GenerationCancelled()
+        except Exception as error:
+            message = f"Video output: {output_dir}\n{error}" if error_title == "Contact sheet failed" else str(error)
+            outcome = GenerationFailed(message, error_title)
+        else:
+            outcome = GenerationFinished(completed_output_dir, tuple(contact_sheets))
+        if self.workflow_run_dir is not None and not isinstance(outcome, GenerationFinished):
+            message = outcome.error if isinstance(outcome, GenerationFailed) else "Stopped by the user"
+            try:
+                published = await asyncio.to_thread(finalize_terminated_workflow, self.workflow_run_dir, message)
+                for result in published:
+                    self.workflow_run_state.update(result.node_id, result.status)
+            except Exception as error:
+                outcome = GenerationFailed(f"{message}\nCannot finalize {self.workflow_run_dir}: {error}")
+        self.post_message(outcome)
+
+    async def _read_generation_output(self, process: asyncio.subprocess.Process, output_dir: str) -> str:
         assert process.stdout is not None
         output_lines: deque[str] = deque(maxlen=200)
         completed_output_dir = output_dir
-        with process.stdout:
-            for raw_line in process.stdout:
-                line = raw_line.strip()
-                if not line:
-                    continue
+        async for raw_line in command_lines(process.stdout):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
                 if line.startswith(WORKFLOW_EVENT_PREFIX):
                     payload = json.loads(line[len(WORKFLOW_EVENT_PREFIX) :])
                     if payload.get("kind") == "workflow-run":
@@ -1674,37 +1695,17 @@ class ImageGenerationApp(App[None]):
                     else:
                         self.post_message(WorkflowNodeUpdated(payload))
                     continue
-                if not line.startswith(JSON_PROGRESS_PREFIX):
+                if line.startswith(JSON_PROGRESS_PREFIX):
+                    payload = json.loads(line[len(JSON_PROGRESS_PREFIX) :])
+                    self.post_message(GenerationUpdated(_generation_progress_from_payload(payload)))
+                else:
                     output_lines.append(line)
-                    continue
-                payload = json.loads(line[len(JSON_PROGRESS_PREFIX) :])
-                self.post_message(
-                    GenerationUpdated(
-                        _generation_progress_from_payload(payload)
-                    )
-                )
-        returncode = process.wait()
-        if returncode == 0:
-            try:
-                contact_sheets = tuple(
-                    create_video_contact_sheet(video)
-                    for video in contact_sheet_videos
-                )
-            except VideoPostprocessError as error:
-                self.post_message(ContactSheetFailed(output_dir, str(error)))
-                return
-            self.post_message(
-                GenerationFinished(completed_output_dir, contact_sheets)
-            )
-        else:
-            if self.cancel_requested:
-                self.post_message(GenerationCancelled())
-            else:
-                self.post_message(
-                    GenerationFailed(
-                        self._error_message("\n".join(output_lines), returncode)
-                    )
-                )
+            except (ValueError, KeyError, TypeError, AttributeError) as error:
+                raise ValueError(f"Invalid generation event: {error}\n{line}") from error
+        returncode = await process.wait()
+        if returncode:
+            raise RuntimeError(self._error_message("\n".join(output_lines), returncode))
+        return completed_output_dir
 
     @on(GenerationUpdated)
     def generation_updated(self, event: GenerationUpdated) -> None:
@@ -1725,16 +1726,13 @@ class ImageGenerationApp(App[None]):
 
     @on(WorkflowNodeUpdated)
     def workflow_node_updated(self, event: WorkflowNodeUpdated) -> None:
-        node_id = str(event.payload["node_id"])
-        status = str(event.payload["status"])
+        node_id = event.node_id
+        status = event.status
         self.workflow_run_state.update(node_id, status)
         if self.workflow_editor is not None:
             self.workflow_editor.refresh_runtime_status(node_id)
-            node_progress = event.payload.get("progress")
-            if isinstance(node_progress, dict):
-                detail = self._progress_text(
-                    _generation_progress_from_payload(node_progress)
-                )
+            if event.progress is not None:
+                detail = self._progress_text(event.progress)
             else:
                 detail = str(event.payload.get("message") or status)
             self.workflow_editor.set_status(f"{node_id}: {detail}")
@@ -1751,27 +1749,23 @@ class ImageGenerationApp(App[None]):
             status += f" | Contact sheet: {sheets}"
         self._set_status(status)
 
-    @on(ContactSheetFailed)
-    def contact_sheet_failed(self, event: ContactSheetFailed) -> None:
-        self._generation_stopped()
-        self._show_error(
-            "Contact sheet failed",
-            f"Video output: {event.output_dir}\n{event.error}",
-        )
-
     @on(GenerationFailed)
     def generation_failed(self, event: GenerationFailed) -> None:
+        self.workflow_run_state.finish("failed")
         self._generation_stopped()
-        self._show_error("Generation failed", event.error)
+        self._show_error(event.title, event.error)
 
     @on(GenerationCancelled)
     def generation_cancelled(self) -> None:
+        self.workflow_run_state.finish("interrupted")
         self._generation_stopped()
         self._set_status("Stopped.")
 
     def _generation_stopped(self) -> None:
         self._discard_workflow_request()
         self.process = None
+        self.generation_worker = None
+        self.workflow_run_dir = None
         self.cancel_requested = False
         self.generation_progress = None
         self.query_one("#generation-progress", ProgressBar).display = False
@@ -1783,6 +1777,7 @@ class ImageGenerationApp(App[None]):
             button.disabled = False
         if self.workflow_editor is not None:
             self.workflow_editor.set_running(False)
+            self.workflow_editor.refresh_runtime_statuses()
         self.active_action_button_id = None
         self.active_action_idle_label = ""
 
@@ -1795,32 +1790,15 @@ class ImageGenerationApp(App[None]):
         )
 
     def _cancel_generation(self) -> None:
-        if self.process is None:
+        if self.generation_worker is None:
             self._set_status("No generation is running.")
             return
+        if self.cancel_requested:
+            return
         self.cancel_requested = True
-        try:
-            os.killpg(self.process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        if self.process is not None:
+            self.generation_worker.cancel()
         self._set_status("Stopping generation...")
-
-    def _stop_generation(self) -> None:
-        process = self.process
-        if process is None or process.poll() is not None:
-            return
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait()
 
     async def action_quit(self) -> None:
         if not await self._commit_workflow_draft():
@@ -1835,19 +1813,29 @@ class ImageGenerationApp(App[None]):
                 self._quit_confirmed,
             )
             return
-        self._quit()
+        await self._quit()
 
-    def _quit_confirmed(self, discard: bool) -> None:
+    async def _quit_confirmed(self, discard: bool) -> None:
         if discard:
-            self._quit()
+            await self._quit()
 
-    def _quit(self) -> None:
+    async def _quit(self) -> None:
         try:
             self.form.save(STATE_PATH)
         except OSError as error:
             self._show_error("Cannot save form", str(error))
             return
-        self._stop_generation()
+        worker = self.generation_worker
+        if worker is not None:
+            self._cancel_generation()
+            try:
+                await worker.wait()
+            except WorkerCancelled:
+                pass
+        exports = tuple(worker for worker in self.workers if worker.group == "artifact-export")
+        if exports:
+            self._set_status("Finishing exports before quitting…")
+            await self.workers.wait_for_complete(exports)
         self._discard_workflow_request()
         self.exit()
 
@@ -1881,7 +1869,7 @@ class ImageGenerationApp(App[None]):
                 payload = json.loads(output)
             except json.JSONDecodeError:
                 return output
-            message = payload.get("message")
+            message = payload.get("message") if isinstance(payload, dict) else None
             return message if isinstance(message, str) else output
         return f"Image generation exited with code {returncode}."
 

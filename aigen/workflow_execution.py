@@ -32,7 +32,7 @@ from aigen.generation.image_edit_batch import (
     ImageEditBatchOutput,
     run_image_edit_batch,
 )
-from aigen.manifest_io import atomic_write_json, read_json, sha256_file
+from aigen.manifest_io import atomic_write_json, read_json
 from aigen.progress import (
     DEFAULT_PROGRESS_INTERVAL_SECONDS,
     SILENT_STATUS,
@@ -108,6 +108,12 @@ from aigen.workflow_video_execution import (
     VIDEO_EXECUTION_NODES, VIDEO_SEED_SWEEP_NODES, execute_video_node, execute_video_seed_sweep,
 )
 from aigen.media_timing import load_audio_track, video_audio_track
+from aigen.lora_weights import inspect_lora_weights
+from aigen.character_reference_models import load_character_reference_pack_payload
+from aigen.workflow_sources import WorkflowSourceStore
+from aigen.workflow_run_records import (
+    new_workflow_run_id, published_workflow_nodes, workflow_run_path, write_workflow_interruption,
+)
 
 
 WORKFLOW_EVENT_PREFIX = "AIGEN_WORKFLOW "
@@ -118,7 +124,7 @@ class WorkflowExecutionError(RuntimeError):
     pass
 
 
-class WorkflowInterrupted(WorkflowExecutionError):
+class WorkflowInterrupted(KeyboardInterrupt):
     pass
 
 
@@ -194,13 +200,15 @@ def execute_workflow(
     progress: StatusReporter,
     event_sink: WorkflowEventSink | None = None,
     node_progress_sink: NodeProgressSink | None = None,
+    run_id: str | None = None,
 ) -> WorkflowRunResult:
     graph = workflow.document
     execution_order = workflow.execution_order
     workflow_digest = workflow.digest
     workflow_root = runs_root.expanduser().resolve()
-    run_dir = _create_run_dir(workflow_root, graph.workflow_id)
+    run_dir = _create_run_dir(workflow_root, graph.workflow_id, run_id)
     node_cache = WorkflowNodeCache(workflow_root / "cache")
+    source_store = WorkflowSourceStore(node_cache.root / "sources")
     snapshot_path = _save_snapshot(graph, run_dir)
     atomic_write_json(run_dir / "execution.json", {
         "workflow_digest": workflow_digest,
@@ -250,7 +258,7 @@ def execute_workflow(
                         compiled_node.incoming,
                         outputs_by_node,
                     )
-                    source_outputs = _source_outputs(compiled_node, node_cache)
+                    source_outputs = _source_outputs(compiled_node, node_cache, source_store)
                     if isinstance(node, ImageCollectionNode):
                         candidates = tuple(
                             load_node_result(node_manifests[wire.source.node_id]).candidate(
@@ -419,7 +427,10 @@ def execute_workflow(
                 node_manifests=node_manifests,
             )
             ready = tuple(sorter.get_ready())
-    except WorkflowInterrupted as error:
+    except KeyboardInterrupt as error:
+        message = str(error) or "workflow interrupted"
+        node_manifests = {result.node_id: path for path, result in published_workflow_nodes(run_dir).items()}
+        active_node_ids = tuple(node_id for node_id in active_node_ids if node_id not in node_manifests)
         for node_id in active_node_ids:
             node = workflow.node(node_id).node
             _emit(
@@ -427,19 +438,11 @@ def execute_workflow(
                 node_id=node_id,
                 node_kind=node.kind,
                 status="interrupted",
-                message=str(error),
+                message=message,
             )
-        interruption_path = run_dir / "interrupted.json"
-        atomic_write_json(
-            interruption_path,
-            {
-                "status": "interrupted",
-                "workflow_digest": workflow_digest,
-                "node_ids": list(active_node_ids),
-                "message": str(error),
-                "completed_nodes": sorted(node_manifests),
-            },
-        )
+        interruption_path = write_workflow_interruption(
+            run_dir, workflow_digest=workflow_digest, node_ids=active_node_ids,
+            node_manifests=node_manifests, message=message)
         _write_run_state(
             run_dir,
             graph,
@@ -451,6 +454,8 @@ def execute_workflow(
         )
         raise
     except Exception as error:
+        node_manifests = {result.node_id: path for path, result in published_workflow_nodes(run_dir).items()}
+        active_node_ids = tuple(node_id for node_id in active_node_ids if node_id not in node_manifests)
         for node_id in active_node_ids:
             node = workflow.node(node_id).node
             _emit(
@@ -728,11 +733,9 @@ def _execute_video_group(
         raise WorkflowExecutionError("video seed sweep did not publish every requested output")
 
 
-def _create_run_dir(workflow_root: Path, workflow_id: str) -> Path:
-    attempts_root = workflow_root / "runs" / workflow_id
-    attempts_root.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    run_dir = attempts_root / f"attempt-{timestamp}-{uuid4().hex[:12]}"
+def _create_run_dir(workflow_root: Path, workflow_id: str, run_id: str | None) -> Path:
+    run_dir = workflow_run_path(workflow_root, workflow_id, new_workflow_run_id() if run_id is None else run_id)
+    run_dir.parent.mkdir(parents=True, exist_ok=True)
     run_dir.mkdir()
     return run_dir
 
@@ -801,22 +804,29 @@ def _resolve_inputs(
 def _source_outputs(
     compiled_node: CompiledNode,
     node_cache: WorkflowNodeCache,
+    source_store: WorkflowSourceStore,
 ) -> dict[str, WorkflowArtifact] | None:
     node = compiled_node.node
     if isinstance(node, VideoSourceNode):
-        path = cast(CompiledVideoSourceConfig, compiled_node.config).path
-        identity = sha256_file(path)
+        snapshot = source_store.capture(cast(CompiledVideoSourceConfig, compiled_node.config).path)
+        path, identity = snapshot.path, snapshot.sha256
         return {"video": VideoArtifact(path=path.as_posix(), identity=identity, content_sha256=identity,
                                        info=node_cache.video_info(path, identity))}
     if isinstance(node, AudioSourceNode):
         config = cast(CompiledAudioSourceConfig, compiled_node.config)
-        track = load_audio_track(config.path, stream_index=config.stream_index)
+        snapshot = source_store.capture(config.path)
+        track = load_audio_track(snapshot.path, stream_index=config.stream_index, content_sha256=snapshot.sha256)
         return {"audio": AudioArtifact(track=track, identity=_digest(track.model_dump(mode="json", exclude={"path"})))}
     if isinstance(node, ImageSelectionNode):
-        return {"image": cast(CompiledImageSelectionConfig, compiled_node.config).image}
+        config = cast(CompiledImageSelectionConfig, compiled_node.config)
+        image = config.image
+        if load_node_result(Path(config.reference.manifest_path)).cache_manifest is None:
+            snapshot = source_store.capture(Path(image.path), expected_sha256=image.content_sha256)
+            image = image.model_copy(update={"path": str(snapshot.path), "content_sha256": snapshot.sha256})
+        return {"image": image}
     if isinstance(node, ImageSourceNode):
-        path = cast(CompiledImageSourceConfig, compiled_node.config).path
-        identity = sha256_file(path)
+        snapshot = source_store.capture(cast(CompiledImageSourceConfig, compiled_node.config).path)
+        path, identity = snapshot.path, snapshot.sha256
         return {
             "image": ImageArtifact(
                 path=path.as_posix(),
@@ -829,33 +839,45 @@ def _source_outputs(
             CompiledReferencePackConfig,
             compiled_node.config,
         ).pack
-        references = tuple(pack.references.values())
+        pack_snapshot = source_store.capture(pack.path)
+        captured_spec = load_character_reference_pack_payload(
+            read_json(pack_snapshot.path, label="reference pack snapshot"), path_label=str(pack.path))
+        if captured_spec != pack.spec or tuple(captured_spec.references.items()) != tuple(pack.spec.references.items()):
+            raise WorkflowExecutionError(f"reference pack changed after compilation; run again: {pack.path}")
+        references = {name: source_store.capture(path) for name, path in pack.references.items()}
         identity_payload = {
-            "pack": sha256_file(pack.path),
+            "pack": pack_snapshot.sha256,
             "references": [
                 {
                     "name": name,
-                    "path": reference.as_posix(),
-                    "sha256": sha256_file(reference),
+                    "path": pack.references[name].as_posix(),
+                    "sha256": reference.sha256,
                 }
-                for name, reference in pack.references.items()
+                for name, reference in references.items()
             ],
         }
         identity = _digest(identity_payload)
+        saved_pack = source_store.root / "packs" / f"{identity}.json"
+        atomic_write_json(saved_pack, pack.spec.model_copy(update={
+            "references": {name: str(snapshot.path) for name, snapshot in references.items()},
+        }).model_dump(mode="json"), sort_keys=False)
         return {
             "pack": ReferencePackArtifact(
-                path=pack.path.as_posix(),
-                references=tuple(path.as_posix() for path in references),
+                path=saved_pack.as_posix(),
+                references=tuple(str(snapshot.path) for snapshot in references.values()),
                 identity=identity,
                 reference_sha256s=tuple(item["sha256"] for item in identity_payload["references"]),
             )
         }
     if isinstance(node, LoraSourceNode):
         config = cast(CompiledLoraSourceConfig, compiled_node.config)
-        path = config.path
+        snapshot = source_store.capture(config.path)
+        path = snapshot.path
+        if inspect_lora_weights(path).architecture != config.architecture:
+            raise WorkflowExecutionError(f"LoRA architecture changed after compilation; run again: {config.path}")
         identity = _digest(
             {
-                "sha256": sha256_file(path),
+                "sha256": snapshot.sha256,
                 "weight": config.weight,
             }
         )

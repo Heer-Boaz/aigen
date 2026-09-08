@@ -106,7 +106,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     async def wait_finished():
                         for _ in range(600):
                             await pilot.pause(0.1)
-                            if app.process is None:
+                            if app.generation_worker is None:
                                 return
                         self.fail("CPU subprocess did not finish within 60 seconds")
 
@@ -118,7 +118,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                         process = app.process
                         self.assertTrue(editor.query_one("#workflow-run", Button).disabled)
                         await wait_finished()
-                        self.assertTrue(process.stdout.closed)
+                        self.assertTrue(process.stdout.at_eof())
                         self.assertEqual(canvas.runtime_statuses["fix"], expected)
 
                     await select_node(app, editor, pilot, "source")
@@ -142,12 +142,13 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                         action_button_id="workflow-run", idle_label="Run", error_title="CPU stop test", running_label=None,
                     )
                     editor.set_running(True)
+                    await pilot.pause()
                     process = app.process
                     self.assertEqual(os.getpgid(process.pid), process.pid)
                     self.assertTrue(await pilot.click("#workflow-stop"))
                     await wait_finished()
                     self.assertEqual(process.returncode, -15)
-                    self.assertTrue(process.stdout.closed)
+                    self.assertTrue(process.stdout.at_eof())
 
     async def test_open_select_save_undo_redo_preserve_settings(self):
         graph = WorkflowGraph(name="Properties", nodes=custom_nodes(), connections=())

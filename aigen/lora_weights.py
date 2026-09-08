@@ -77,13 +77,14 @@ def inspect_lora_weights(path: Path) -> LoraWeightsInfo:
     if not resolved.is_file():
         raise LoraWeightsError(f"LoRA weights do not exist: {resolved}")
     stat = resolved.stat()
-    return _inspect_lora_weights(resolved, stat.st_mtime_ns, stat.st_size)
+    return _inspect_lora_weights(resolved, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
 
 
 @lru_cache(maxsize=16)
 def _inspect_lora_weights(
     path: Path,
     _modified_ns: int,
+    _changed_ns: int,
     _size: int,
 ) -> LoraWeightsInfo:
     try:

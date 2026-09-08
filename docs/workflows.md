@@ -27,6 +27,8 @@ choices. A missing runtime or model is an error for the selected route.
 6. Choose **Select image**. The editor saves the producer signature, output
    port, artifact identity, and result-manifest location in the selection node.
    Selection requires the original artifact to pass its integrity check.
+   Opening Results on that selection starts at **Saved selection**, even when
+   its collection has newer runs. Those runs remain available in the history.
 7. Configure the following edit and use **Run**, or target a later node with
    **Run to here**. The saved choice is an input boundary: its generating nodes
    are not rerun. Changing an earlier seed or prompt does not change the choice.
@@ -34,14 +36,36 @@ choices. A missing runtime or model is an error for the selected route.
 
 **Open original** launches the operating system's file viewer. **Export** copies
 the original file bytes to a new path with the same extension; it does not
-overwrite an existing destination. A later edit can also connect directly to
-an image-producing node when no human selection is desired.
+overwrite an existing destination. Export verifies the bytes during the same
+read that copies them, including each frame and audio file in a frame archive.
+It continues when you inspect another result or close Results, and reports
+completion or failure with an application notification. Quitting waits for
+active exports to finish. A later edit can also connect directly to an
+image-producing node when no human selection is desired.
 
 Running a continuation without a saved choice fails during compilation with a
 concrete selection instruction. Merely highlighting a candidate does not save
 it. A missing or modified historical input is displayed as unavailable, while
 the already-generated output remains inspectable. Older records without input
 file checksums cannot supply verified input previews.
+
+New workflow runs capture source images, reference packs, LoRAs, video and audio
+in `cache/sources`. Generators and result comparisons read these captured bytes,
+so editing or removing an original file later does not change a saved result's
+inputs. Capture preserves image resolution and reference order. The original
+source location remains in the source node's effective settings. Unchanged
+files reuse their stored copy; modified files receive a new content identity.
+This storage consumes disk space alongside the generated-output cache.
+
+**Stop** and quitting terminate the active command's process group without
+blocking the interface. A process that has not stopped after five seconds is
+killed, including descendants. Contact-sheet generation uses this same lifecycle.
+Malformed progress events fail visibly and release the controls. Ctrl-C and
+SIGTERM record an interrupted workflow and retain already completed outputs.
+The TUI assigns the run ID before starting the command. After the process group
+has exited, it finalizes that run's interrupted state if needed and restores
+completed node statuses from the published results. This also preserves results
+whose completion event was lost during a forced kill.
 
 ## Documents and results
 
@@ -101,8 +125,10 @@ The chosen policy is applied on the effective generation canvas and recorded
 with the result. Source files remain the original references. Older AnimeGen
 documents retain their existing stretch policy.
 
-For an existing recording, use a **Video source** node. Connect a generated or
-imported video to **Extract video frames**, optionally through frame
+For an existing recording, use a **Video source** node and choose the file with
+the inspector's **Browse** button. **Audio source** also supports browsing,
+including video containers that hold the desired audio track. Connect a generated
+or imported video to **Extract video frames**, optionally through frame
 postprocessing, and then to **Assemble video**. The frame sequence carries
 ordered file identities, rational timestamps and per-frame durations. Variable
 frame timing survives extraction and assembly. The final decoded frame's

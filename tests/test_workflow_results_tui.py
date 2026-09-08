@@ -50,9 +50,9 @@ async def finish_process(app, pilot):
     process = app.process
     for _ in range(600):
         await pilot.pause(0.1)
-        if app.process is None:
+        if app.generation_worker is None:
             assert process.returncode == 0
-            assert process.stdout.closed
+            assert process.stdout.at_eof()
             return
     raise AssertionError("CPU workflow did not finish")
 

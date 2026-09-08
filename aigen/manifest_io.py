@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 
 class ManifestIOError(RuntimeError):
@@ -94,6 +94,18 @@ def sha256_bytes(data: bytes) -> str:
 def sha256_file(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def copy_sha256(source: BinaryIO, destination: BinaryIO) -> str:
+    """Copy and hash the same bytes in one pass, with bounded working memory."""
+    digest = hashlib.sha256()
+    buffer = bytearray(256 * 1024)
+    view = memoryview(buffer)
+    while size := source.readinto(buffer):
+        chunk = view[:size]
+        destination.write(chunk)
+        digest.update(chunk)
+    return digest.hexdigest()
 
 
 def file_manifest(path: Path) -> dict[str, str]:

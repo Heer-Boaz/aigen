@@ -60,6 +60,7 @@ _STATUS_STYLES = {
     "reused": Style(color="#86e1a8", bgcolor="#211a2d"),
     "outdated": Style(color="#ffd166", bgcolor="#211a2d", italic=True),
     "failed": Style(color="#ff7f8f", bgcolor="#211a2d", bold=True),
+    "interrupted": Style(color="#e6b66c", bgcolor="#211a2d"),
     "skipped": Style(color="#a99bb7", bgcolor="#211a2d"),
 }
 

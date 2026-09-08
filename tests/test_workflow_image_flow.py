@@ -1,5 +1,6 @@
 """Real document/compiler/executor/cache with an explicit CPU generation double."""
 import json
+import shutil
 from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -81,6 +82,38 @@ class ImageFlowTests(unittest.TestCase):
         self.buffer.update_node_config("edit", "seed", "73")
         self.run_collection()
         self.assertEqual(self.calls, [71, 72, 73])
+
+    def test_edit_reads_captured_bytes_even_when_source_changes_after_intake(self):
+        original = self.source.read_bytes()
+
+        def generate(request, *, progress, record_dir, on_output):
+            outputs = []
+            for case in request.cases:
+                self.calls.append(case.seed)
+                case.output_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(case.image_paths[0], case.output_path)
+                output = ImageEditBatchOutput(case_id=case.id, path=case.output_path,
+                                              width=32, height=48, seed=case.seed)
+                outputs.append(output)
+                on_output(output)
+            return ImageEditBatchResult(backend=request.backend, outputs=tuple(outputs))
+
+        def replace_source(event):
+            if event.get("status") == "running":
+                Image.new("RGB", (32, 48), (0, 255, 0)).save(self.source)
+
+        with patch("aigen.workflow_execution.run_image_edit_batch", side_effect=generate):
+            first = execute_workflow(compile_workflow_run(self.buffer.document, target_node_ids=(self.collection,)),
+                                     runs_root=self.root, progress=SILENT_STATUS, event_sink=replace_source)
+        image = load_node_result(first.node_manifests["edit"]).outputs["image"]
+        self.assertEqual(Path(image.path).read_bytes(), original)
+        self.source.write_bytes(original)
+        resumed = self.run_collection()
+        self.assertEqual(self.calls, [71, 72])
+        self.assertEqual(load_node_result(resumed.node_manifests["edit"]).status, "reused")
+        self.source.unlink()
+        saved = load_node_result(first.node_manifests["edit"]).details.inputs["references"][0]
+        self.assertEqual(Path(saved.path).read_bytes(), original)
 
     def test_random_selection_survives_reload_and_cuts_generator_dependencies(self):
         self.buffer.update_node_config("edit", "seed_mode", "random")

@@ -5,22 +5,52 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from textual.widgets import Button, Input
+from textual.widgets import Button, DataTable, Input
 
 from aigen import image_tui
 from aigen.manifest_io import sha256_file
 from aigen.media_timing import probe_video, verify_video
 from aigen.workflow_graph import (
-    AssembleVideoNode, ExtractVideoFramesNode, NodePortRef, VideoSourceConfig,
+    AssembleVideoNode, AudioSourceConfig, AudioSourceNode, ExtractVideoFramesNode, NodePortRef, VideoSourceConfig,
     VideoSourceNode, WorkflowConnection, WorkflowGraph,
 )
 from aigen.workflow_media_results import MediaCandidate, resolve_media_result
 from aigen.workflow_results_tui import WorkflowResults
+from aigen.tui_file_browser import FileBrowser
 from test_workflow_properties import open_editor, select_node
 from test_workflow_results_tui import finish_process
 
 
 class WorkflowVideoUITests(unittest.IsolatedAsyncioTestCase):
+    async def test_video_and_audio_source_browse_updates_and_saves_inspector(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "video.mp4"
+            audio = root / "audio.wav"
+            video.write_bytes(b"browser selection fixture")
+            audio.write_bytes(b"browser selection fixture")
+            graph = WorkflowGraph(name="Media inputs", nodes=(
+                VideoSourceNode(id="video", title="Video", config=VideoSourceConfig(path=str(root / "old.mp4"))),
+                AudioSourceNode(id="audio", title="Audio", config=AudioSourceConfig(path=str(root / "old.wav"))),
+            ), connections=())
+            async with open_editor(graph, root) as (app, editor, pilot, document):
+                for node_id, chosen in (("video", video), ("audio", audio)):
+                    await select_node(app, editor, pilot, node_id)
+                    self.assertTrue(await pilot.click(".workflow-property-browse"))
+                    await pilot.pause()
+                    browser = app.screen
+                    self.assertIsInstance(browser, FileBrowser)
+                    self.assertIn(chosen.suffix, browser.extensions)
+                    index = next(index for index, entry in enumerate(browser.visible_entries) if entry.path == chosen)
+                    browser.query_one("#browser-list", DataTable).move_cursor(row=index)
+                    self.assertTrue(await pilot.click("#browser-select"))
+                    await pilot.pause()
+                    self.assertEqual(app.workflow_buffer.document.node(node_id).config.path, str(chosen))
+                self.assertTrue(await pilot.click("#workflow-save"))
+                await pilot.pause()
+                from aigen.workflow_document_io import load_workflow_document
+                self.assertEqual(load_workflow_document(document), app.workflow_buffer.document)
+
     async def test_cli_video_history_open_export_and_portable_frame_archive(self):
         with TemporaryDirectory() as directory:
             directory = Path(directory)

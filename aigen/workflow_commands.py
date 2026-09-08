@@ -61,6 +61,7 @@ def add_workflow_commands(subparsers: Any) -> None:
     )
     run.add_argument("--input", type=Path, required=True)
     run.add_argument("--target", action="append", dest="targets", help="Execute only this node and its dependencies; repeat for multiple targets")
+    run.add_argument("--run-id", help="Preassigned execution ID for a supervising caller")
     run.add_argument(
         "--runs-root",
         type=Path,
@@ -128,7 +129,7 @@ def run_workflow_command(
                     }
                 )
 
-            previous_sigterm = signal.getsignal(signal.SIGTERM)
+            previous_handlers = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
 
             def interrupt_workflow(
                 _signum: int,
@@ -136,14 +137,16 @@ def run_workflow_command(
             ) -> None:
                 raise WorkflowInterrupted("workflow interrupted")
 
-            signal.signal(signal.SIGTERM, interrupt_workflow)
             try:
+                for signum in previous_handlers:
+                    signal.signal(signum, interrupt_workflow)
                 run_result = execute_workflow(
                     workflow,
                     runs_root=args.runs_root,
                     progress=progress,
                     event_sink=emit_event,
                     node_progress_sink=emit_node_progress,
+                    run_id=args.run_id,
                 )
                 payload = run_result.to_json()
                 emit_event(
@@ -155,11 +158,12 @@ def run_workflow_command(
                     }
                 )
             finally:
-                signal.signal(signal.SIGTERM, previous_sigterm)
+                for signum, handler in previous_handlers.items():
+                    signal.signal(signum, handler)
         else:
             raise RuntimeError("unsupported workflow operation")
-    except WorkflowInterrupted as error:
-        dump_json(stderr, command_error_payload(error), pretty=True)
+    except KeyboardInterrupt as error:
+        dump_json(stderr, command_error_payload(WorkflowInterrupted(str(error) or "workflow interrupted")), pretty=True)
         return 130
     except (OSError, ValueError, ManifestIOError, WorkflowCacheError, WorkflowExecutionError) as error:
         dump_json(stderr, command_error_payload(error), pretty=True)

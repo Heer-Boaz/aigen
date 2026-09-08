@@ -60,8 +60,8 @@ def load_node_result(path: Path) -> NodeResultManifest:
     return result
 
 
-def resolve_image_result(reference: ImageResultReference) -> ImageArtifact:
-    """Validate the saved artifact once at the compile/open/export boundary."""
+def resolve_image_result(reference: ImageResultReference, *, verify_contents: bool = True) -> ImageArtifact:
+    """Resolve saved identity; exporters verify content while copying the stream."""
     result = load_node_result(Path(reference.manifest_path))
     if result.signature != reference.producer_signature:
         raise ValueError("selected image producer signature no longer matches its result")
@@ -71,14 +71,14 @@ def resolve_image_result(reference: ImageResultReference) -> ImageArtifact:
     if not isinstance(image, ImageArtifact) or image.identity != reference.artifact_identity:
         raise ValueError("selected image identity no longer matches its result")
     if result.cache_manifest is not None:
-        cached = WorkflowNodeCache.read_result(Path(result.cache_manifest))
+        cached = WorkflowNodeCache.read_result(Path(result.cache_manifest), verify_contents=verify_contents)
         cached_image = cached.outputs.get(reference.output_port)
         if (cached.signature != result.signature or not isinstance(cached_image, ImageArtifact)
                 or cached_image.path != image.path or cached_image.identity != image.identity
                 or (image.content_sha256 is not None and cached_image.content_sha256 != image.content_sha256)):
             raise ValueError("selected image no longer matches its immutable cache entry")
         return cached_image
-    if sha256_file(Path(image.path)) != image.identity:
+    if verify_contents and sha256_file(Path(image.path)) != image.identity:
         raise ValueError(f"selected source image changed: {image.path}")
     return image.model_copy(update={"content_sha256": image.identity})
 

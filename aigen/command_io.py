@@ -22,7 +22,7 @@ def write_json(path: Path, payload: object, *, pretty: bool) -> None:
         dump_json(handle, payload, pretty=pretty)
 
 
-def command_error_payload(error: Exception) -> dict[str, object]:
+def command_error_payload(error: BaseException) -> dict[str, object]:
     return {
         "status": "error",
         "error": error.__class__.__name__,

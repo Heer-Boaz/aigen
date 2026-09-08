@@ -84,7 +84,8 @@ class CharacterWorkflowTests(unittest.TestCase):
         self.assertEqual(manifest.candidate(first.node_manifests["edit"], "image").seed, 72)
         self.assertEqual(manifest.details.effective_config["seed"], 71)
         self.assertTrue(Path(manifest.details.case_record).is_file())
-        self.assertEqual(self.audit_inputs[0][0], self.reference)
+        self.assertEqual(self.audit_inputs[0][0].read_bytes(), self.reference.read_bytes())
+        self.assertNotEqual(self.audit_inputs[0][0], self.reference)
         cached = self.run_graph()
         self.assertEqual(load_node_result(cached.node_manifests["edit"]).status, "reused")
         self.assertEqual(len(self.calls), 1)
@@ -123,7 +124,8 @@ class CharacterWorkflowTests(unittest.TestCase):
         with Image.open(prepared_path) as prepared, Image.open(self.reference) as original:
             self.assertEqual(prepared.size, (640, 960))
             self.assertEqual(prepared.tobytes(), original.tobytes())
-        self.assertEqual(self.audit_inputs[0][0], self.reference)
+        self.assertEqual(self.audit_inputs[0][0].read_bytes(), self.reference.read_bytes())
+        self.assertNotEqual(self.audit_inputs[0][0], self.reference)
         self.ordinary.assert_not_called()
 
     def test_node_factory_serialization_and_explicit_backend_limits(self):
@@ -171,7 +173,8 @@ class CharacterWorkflowTests(unittest.TestCase):
                     self.assertEqual(scene.size, (1792, 896))
                     self.assertEqual(scene.getextrema(), ((255,255),) * 3)
                 expected = [self.reference, pose_path, scene_path] if mode == "native" else [self.reference, scene_path, pose_path]
-                self.assertEqual(self.audit_inputs[-1][:3], expected)
+                self.assertEqual([path.read_bytes() for path in self.audit_inputs[-1][:3]],
+                                 [path.read_bytes() for path in expected])
 
 
 if __name__ == "__main__":

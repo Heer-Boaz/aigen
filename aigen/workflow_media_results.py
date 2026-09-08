@@ -13,7 +13,7 @@ from PIL import Image
 
 from aigen.artifact_actions import export_artifact
 from aigen.image_io import load_thumbnail
-from aigen.manifest_io import sha256_file
+from aigen.manifest_io import copy_sha256, sha256_file
 from aigen.workflow_artifacts import AudioArtifact, ImageSequenceArtifact, VideoArtifact, MaskArtifact
 from aigen.workflow_cache import WorkflowNodeCache
 from aigen.workflow_results import load_node_result
@@ -36,13 +36,13 @@ class MediaCandidate:
         return f"{self.producer_signature}:{self.port}:{self.artifact.identity}"
 
 
-def resolve_media_result(candidate: MediaCandidate) -> MediaArtifact:
+def resolve_media_result(candidate: MediaCandidate, *, verify_contents: bool = True) -> MediaArtifact:
     result = load_node_result(candidate.manifest_path)
     artifact = result.outputs[candidate.port]
     if result.signature != candidate.producer_signature or artifact != candidate.artifact:
         raise ValueError("media output no longer matches its saved result")
     if result.cache_manifest is not None:
-        cached = WorkflowNodeCache.read_result(Path(result.cache_manifest))
+        cached = WorkflowNodeCache.read_result(Path(result.cache_manifest), verify_contents=verify_contents)
         output = cached.outputs[candidate.port]
         if isinstance(artifact, ImageSequenceArtifact):
             valid = (isinstance(output, ImageSequenceArtifact) and artifact.paths == output.paths
@@ -58,7 +58,7 @@ def resolve_media_result(candidate: MediaCandidate) -> MediaArtifact:
             valid = artifact == output
         if cached.signature != result.signature or not valid:
             raise ValueError("media output no longer matches its immutable cache entry")
-    elif isinstance(artifact, (VideoArtifact, MaskArtifact)):
+    elif verify_contents and isinstance(artifact, (VideoArtifact, MaskArtifact)):
         if sha256_file(Path(artifact.path)) != artifact.content_sha256:
             raise ValueError(f"source video changed: {artifact.path}")
     if isinstance(artifact, AudioArtifact):
@@ -67,7 +67,7 @@ def resolve_media_result(candidate: MediaCandidate) -> MediaArtifact:
         audio = artifact.audio
     else:
         audio = None
-    if audio is not None and sha256_file(Path(audio.path)) != audio.file_sha256:
+    if verify_contents and audio is not None and sha256_file(Path(audio.path)) != audio.file_sha256:
         raise ValueError(f"audio source changed: {audio.path}")
     return artifact
 
@@ -119,7 +119,12 @@ def media_label(artifact: MediaArtifact) -> str:
 
 def export_media(artifact: MediaArtifact, destination: Path) -> Path:
     if not isinstance(artifact, ImageSequenceArtifact):
-        return export_artifact(media_path(artifact), destination)
+        checksum = artifact.track.file_sha256 if isinstance(artifact, AudioArtifact) else artifact.content_sha256
+        if checksum is None:
+            raise ValueError("media result has no recorded checksum")
+        return export_artifact(media_path(artifact), destination, expected_sha256=checksum)
+    if artifact.frame_sha256s is None:
+        raise ValueError("frame sequence has no recorded checksums")
     destination = destination.expanduser().resolve()
     if destination.suffix.lower() != ".zip":
         raise ValueError("export frame sequences as a .zip archive")
@@ -127,14 +132,18 @@ def export_media(artifact: MediaArtifact, destination: Path) -> Path:
     with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".aigen-export-") as temporary:
         with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as archive:
             names = []
-            for index, source in enumerate(artifact.paths):
+            for index, (source, checksum) in enumerate(zip(artifact.paths, artifact.frame_sha256s, strict=True)):
                 name = f"frame-{index:06d}{Path(source).suffix}"
-                archive.write(source, name)
+                with Path(source).open("rb") as stream, archive.open(name, "w", force_zip64=True) as output:
+                    if copy_sha256(stream, output) != checksum:
+                        raise ValueError(f"frame changed since this result was recorded: {source}")
                 names.append(name)
             audio = artifact.audio
             if audio is not None:
                 name = f"audio-source{Path(audio.path).suffix}"
-                archive.write(audio.path, name)
+                with Path(audio.path).open("rb") as stream, archive.open(name, "w", force_zip64=True) as output:
+                    if copy_sha256(stream, output) != audio.file_sha256:
+                        raise ValueError(f"audio changed since this result was recorded: {audio.path}")
                 audio = audio.model_copy(update={"path": name})
             archive.writestr("frames.json", json.dumps({
                 "paths": names,

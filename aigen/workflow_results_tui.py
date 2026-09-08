@@ -4,10 +4,11 @@ import asyncio
 import json
 from pathlib import Path
 import subprocess
+from functools import partial
 
 from PIL import Image
 from textual import on, work
-from textual.app import ComposeResult
+from textual.app import App, ComposeResult
 from textual.containers import Container, ItemGrid, VerticalScroll
 from textual.message import Message
 from textual.screen import ModalScreen
@@ -86,6 +87,7 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         self.runs_root = runs_root
         self.history_node_id = node_id
         node = document.node(node_id)
+        self.saved_selection = node.config.selected if isinstance(node, ImageSelectionNode) else None
         self.targets: tuple[ImageSelectionNode, ...]
         if isinstance(node, ImageSelectionNode):
             self.targets = (node,)
@@ -129,15 +131,15 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         except (OSError, ValueError, ManifestIOError) as error:
             self._status(str(error))
             return
+        saved_path = Path(self.saved_selection.manifest_path) if self.saved_selection is not None else None
+        if saved_path is not None:
+            paths = tuple(dict.fromkeys((saved_path, *paths)))
         if not paths:
-            node = self.document.node(self.node_id)
-            if isinstance(node, ImageSelectionNode) and node.config.selected is not None:
-                paths = (Path(node.config.selected.manifest_path),)
-            else:
-                self._status("No saved results. Use Run to here on this node or its image collection.")
-                return
+            self._status("No saved results. Use Run to here on this node or its image collection.")
+            return
         history = self.query_one("#result-history", Select)
-        history.set_options((path.parents[2].name.removeprefix("attempt-"), str(path)) for path in paths)
+        history.set_options((("Saved selection · " if path == saved_path else "")
+                             + path.parents[2].name.removeprefix("attempt-"), str(path)) for path in paths)
         history.value = str(paths[0])
 
     @on(Select.Changed, "#result-history")
@@ -175,6 +177,7 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
             pinned = self.targets[0].config.selected if len(self.targets) == 1 else None
             index = next((index for index, candidate in enumerate(candidates)
                           if isinstance(candidate, ImageCandidate) and pinned is not None and candidate.reference.producer_signature == pinned.producer_signature
+                          and candidate.reference.output_port == pinned.output_port
                           and candidate.image.identity == pinned.artifact_identity), 0)
             self.inspect_candidate(candidates[index], index, view_id)
         else:
@@ -182,6 +185,12 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
 
     def _read_view(self, path: Path):
         result = load_node_result(path)
+        if self.saved_selection is not None and path == Path(self.saved_selection.manifest_path):
+            selected = self.saved_selection
+            image = result.outputs.get(selected.output_port)
+            if (result.signature != selected.producer_signature or not isinstance(image, ImageArtifact)
+                    or image.identity != selected.artifact_identity):
+                raise ValueError("Saved selection no longer matches its recorded result")
         candidates = []
         for port, output in result.outputs.items():
             if isinstance(output, ImageCollectionArtifact):
@@ -292,10 +301,35 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
 
     def _export_destination(self, candidate: ImageCandidate | MediaCandidate, path: str | None) -> None:
         if path is not None:
-            self.apply_action("result-export", candidate, Path(path))
+            self._status(f"Exporting original result to {path}…")
+            self.app.run_worker(partial(self._export_result, self.app, candidate, Path(path)),
+                                name="Export original result", group="artifact-export")
+
+    async def _export_result(self, app: App, candidate: ImageCandidate | MediaCandidate, destination: Path) -> None:
+        def export() -> Path:
+            if isinstance(candidate, MediaCandidate):
+                return export_media(resolve_media_result(candidate, verify_contents=False), destination)
+            image = resolve_image_result(candidate.reference, verify_contents=False)
+            return export_artifact(Path(image.path), destination, expected_sha256=image.content_sha256)
+
+        operation = asyncio.create_task(asyncio.to_thread(export))
+        try:
+            try:
+                exported = await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                # Filesystem work cannot be cancelled by cancelling its awaiter.
+                exported = await operation
+        except (OSError, ValueError, ManifestIOError, WorkflowCacheError) as error:
+            if self.is_attached:
+                self._status(f"Export failed: {error}")
+            app.notify(str(error), title="Export failed", severity="error", timeout=15)
+        else:
+            if self.is_attached:
+                self._status(f"Exported original result: {exported}")
+            app.notify(f"Saved original result: {exported}", title="Export completed", timeout=10)
 
     @work(group="result-action", exclusive=True)
-    async def apply_action(self, action: str, candidate: ImageCandidate | MediaCandidate, destination: Path | None = None) -> None:
+    async def apply_action(self, action: str, candidate: ImageCandidate | MediaCandidate) -> None:
         try:
             if action == "result-log":
                 result = await asyncio.to_thread(load_node_result, candidate.manifest_path)
@@ -306,18 +340,10 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
                 artifact = await asyncio.to_thread(resolve_media_result, candidate)
                 if action == "result-open":
                     await asyncio.to_thread(open_artifact, media_path(artifact))
-                elif action == "result-export":
-                    assert destination is not None
-                    exported = await asyncio.to_thread(export_media, artifact, destination)
-                    self._status(f"Exported original result: {exported}")
                 return
             image = await asyncio.to_thread(resolve_image_result, candidate.reference)
             if action == "result-open":
                 await asyncio.to_thread(open_artifact, Path(image.path))
-            elif action == "result-export":
-                assert destination is not None
-                exported = await asyncio.to_thread(export_artifact, Path(image.path), destination)
-                self._status(f"Exported original image: {exported}")
             elif action == "result-select":
                 target = self.query_one("#result-target", Select).value
                 if isinstance(target, str):

@@ -75,7 +75,8 @@ class WorkflowVideoTests(unittest.TestCase):
         self.assertEqual(load_node_result(third.node_manifests["process"]).status, "reused")
         frames = load_node_result(third.node_manifests["process"]).outputs["images"]
         self.assertEqual(frames.timeline.fps, 50)
-        self.assertEqual(frames.audio.path, str(different_timing))
+        self.assertEqual(sha256_file(Path(frames.audio.path)), sha256_file(different_timing))
+        self.assertNotEqual(frames.audio.path, str(different_timing))
         verify_video(third.terminal_outputs["assemble"]["video"].info, frames=4, fps=Fraction(50), audio=True)
         buffer.update_node_config("assemble", "audio_policy", "remove")
         fourth = self.execute(buffer)
@@ -94,7 +95,8 @@ class WorkflowVideoTests(unittest.TestCase):
         for node in ("extract", "process"):
             manifest = load_node_result(second.node_manifests[node])
             self.assertEqual(manifest.status, "reused")
-            self.assertEqual(manifest.outputs["images"].audio.path, str(moved))
+            self.assertEqual(sha256_file(Path(manifest.outputs["images"].audio.path)), sha256_file(moved))
+            self.assertNotEqual(manifest.outputs["images"].audio.path, str(moved))
             self.assertEqual(manifest.details, load_node_result(first.node_manifests[node]).details)
         verify_video(second.terminal_outputs["assemble"]["video"].info, frames=4, audio=True)
 

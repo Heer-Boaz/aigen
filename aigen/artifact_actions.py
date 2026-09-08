@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tempfile
 
+from aigen.manifest_io import copy_sha256
+
 
 def open_artifact(path: Path) -> None:
     path = path.expanduser().resolve(strict=True)
@@ -30,7 +32,7 @@ def open_artifact(path: Path) -> None:
     subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, check=True)
 
 
-def export_artifact(source: Path, destination: Path) -> Path:
+def export_artifact(source: Path, destination: Path, *, expected_sha256: str | None = None) -> Path:
     """Publish original file bytes atomically, without replacing existing exports."""
     source = source.expanduser().resolve(strict=True)
     destination = destination.expanduser().resolve()
@@ -39,7 +41,10 @@ def export_artifact(source: Path, destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".aigen-export-") as temporary:
         with source.open("rb") as stream:
-            shutil.copyfileobj(stream, temporary)
+            if expected_sha256 is None:
+                shutil.copyfileobj(stream, temporary)
+            elif copy_sha256(stream, temporary) != expected_sha256:
+                raise ValueError(f"artifact changed since this result was recorded: {source}")
         temporary.flush()
         os.fsync(temporary.fileno())
         os.link(temporary.name, destination)

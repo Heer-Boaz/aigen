@@ -100,7 +100,9 @@ class WorkflowMaskFlowTests(unittest.TestCase):
         self.assertEqual(mask.source_size, (67, 101))
         refine = load_node_result(result.node_manifests["refine"])
         self.assertEqual(refine.candidate(result.node_manifests["refine"], "image").seed, 31)
-        self.assertEqual(tuple(self.audit_images[0][:2]), (self.source, Path(mask.path)))
+        self.assertEqual(self.audit_images[0][0].read_bytes(), self.source.read_bytes())
+        self.assertNotEqual(self.audit_images[0][0], self.source)
+        self.assertEqual(self.audit_images[0][1], Path(mask.path))
         with Image.open(self.source) as original, Image.open(mask.path) as repaint, Image.open(refine.outputs["image"].path) as edited:
             source_pixels, result_pixels = np.asarray(original), np.asarray(edited)
             mask_pixels = np.asarray(repaint)
@@ -154,7 +156,8 @@ class WorkflowMaskFlowTests(unittest.TestCase):
         self.assertEqual((settings.guidance, settings.guidance_scale), (1.0, 1.0))
         result = self.run_graph()
         self.assertEqual(load_node_result(result.node_manifests["refine"]).status, "completed")
-        self.assertEqual(self.audit_images[0][:2], [self.source, mask])
+        self.assertEqual([path.read_bytes() for path in self.audit_images[0][:2]],
+                         [self.source.read_bytes(), mask.read_bytes()])
 
     def test_region_plan_import_pins_original_source_and_mask_after_reload(self):
         mask = self.root / "mask.png"
