@@ -8,7 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from aigen.manifest_io import read_json, sha256_file
 from aigen.workflow_artifacts import ImageArtifact, ImageCandidate, WorkflowArtifact
 from aigen.workflow_cache import NodeExecutionDetails, NodeExecutionProvenance, WorkflowNodeCache
-from aigen.workflow_graph import ImageResultReference, NodeKind
+from aigen.workflow_graph import ArtifactType, ImageResultReference, NodeKind, WorkflowNode, node_definition
+
+
+RESULT_DISPLAY_TYPES = frozenset((
+    ArtifactType.IMAGE, ArtifactType.IMAGE_COLLECTION, ArtifactType.MASK,
+    ArtifactType.VIDEO, ArtifactType.AUDIO, ArtifactType.IMAGE_SEQUENCE,
+))
+
+
+def has_viewable_output(node: WorkflowNode) -> bool:
+    return any(kind in RESULT_DISPLAY_TYPES for port in node_definition(node.kind).outputs for kind in port.artifact_types)
 
 
 class NodeResultManifest(BaseModel):

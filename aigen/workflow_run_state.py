@@ -1,10 +1,43 @@
 from __future__ import annotations
 
 from typing import Literal
+from dataclasses import dataclass
 
 from collections.abc import Sequence
 
-from aigen.workflow_graph import NodePortRef, WorkflowGraph
+from aigen.workflow_graph import NodePortRef, WorkflowGraph, WorkflowNode
+
+
+@dataclass(frozen=True)
+class WorkflowExecutionSnapshot:
+    """Execution-relevant graph state; visual layout and titles never invalidate results."""
+
+    nodes: dict[str, WorkflowNode]
+    inputs: dict[str, dict[str, tuple[NodePortRef, ...]]]
+
+    @classmethod
+    def capture(cls, document: WorkflowGraph) -> WorkflowExecutionSnapshot:
+        return cls({node.id: node for node in document.nodes}, _input_routes(document))
+
+    def outdated_from(self, previous: WorkflowExecutionSnapshot) -> set[str]:
+        outdated = {
+            node_id for node_id, node in self.nodes.items()
+            if node_id not in previous.nodes or node.kind != previous.nodes[node_id].kind
+            or node.config != previous.nodes[node_id].config
+            or self.inputs[node_id] != previous.inputs[node_id]
+        }
+        children: dict[str, list[str]] = {node_id: [] for node_id in self.nodes}
+        for target, ports in self.inputs.items():
+            for sources in ports.values():
+                for source in sources:
+                    children[source.node_id].append(target)
+        work = list(outdated)
+        while work:
+            for child in children[work.pop()]:
+                if child not in outdated:
+                    outdated.add(child)
+                    work.append(child)
+        return outdated
 
 
 class WorkflowRunState:
@@ -15,19 +48,17 @@ class WorkflowRunState:
 
     def clear(self) -> None:
         self._statuses: dict[str, str] = {}
-        self._executed: WorkflowGraph | None = None
+        self._executed: WorkflowExecutionSnapshot | None = None
         self._document: WorkflowGraph | None = None
         self._node_ids: set[str] = set()
         self._outdated: set[str] = set()
-        self._executed_inputs: dict[str, dict[str, tuple[NodePortRef, ...]]] = {}
 
     def start(self, document: WorkflowGraph, *, target_node_ids: Sequence[str] | None = None) -> None:
-        self._executed = document
+        self._executed = WorkflowExecutionSnapshot.capture(document)
         self._document = document
         self._node_ids = set(document.execution_scope(target_node_ids))
         self._statuses = {node_id: "queued" for node_id in self._node_ids}
         self._outdated = set()
-        self._executed_inputs = _input_routes(document)
 
     def update(self, node_id: str, status: str) -> None:
         self._statuses[node_id] = status
@@ -54,29 +85,7 @@ class WorkflowRunState:
         self._node_ids = {node.id for node in document.nodes}
         if self._executed is None:
             return
-        executed_nodes = {node.id: node for node in self._executed.nodes}
-        inputs = _input_routes(document)
-        outdated = {
-            node.id for node in document.nodes
-            if (
-                node.id not in executed_nodes
-                or node.kind != executed_nodes[node.id].kind
-                or node.config != executed_nodes[node.id].config
-                or inputs[node.id] != self._executed_inputs[node.id]
-            )
-        }
-        children: dict[str, list[str]] = {node.id: [] for node in document.nodes}
-        for ports in document.execution_inputs().values():
-            for connections in ports.values():
-                for connection in connections:
-                    children[connection.source.node_id].append(connection.target.node_id)
-        work = list(outdated)
-        while work:
-            for child in children[work.pop()]:
-                if child not in outdated:
-                    outdated.add(child)
-                    work.append(child)
-        self._outdated = outdated
+        self._outdated = WorkflowExecutionSnapshot.capture(document).outdated_from(self._executed)
 
 
 def _input_routes(document: WorkflowGraph) -> dict[str, dict[str, tuple[NodePortRef, ...]]]:

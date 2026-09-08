@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 
 from pydantic import ValidationError
-from textual import events, on
+from textual import events, on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
@@ -19,6 +20,7 @@ from aigen.workflow_edit_buffer import (
 )
 from aigen.workflow_graph import (
     ImageEditNode,
+    ImageSelectionNode,
     ImageResultReference,
     NodeKind,
     NodePortRef,
@@ -38,10 +40,14 @@ from aigen.workflow_property_widgets import (
 from aigen.workflow_layout import NODE_WIDTH
 from aigen.workflow_run_state import WorkflowRunState
 from aigen.workflow_results_tui import WorkflowResults
+from aigen.workflow_results import has_viewable_output
 from aigen.tui_dialogs import PromptDialog
+from aigen.tui_action_button import ActionButton
 from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
 from aigen.workflow_connection_dialog import WorkflowConnectionDialog
 from aigen.tui_choice_menu import ChoiceMenu, MenuChoice
+from aigen.manifest_io import ManifestIOError
+from aigen.workflow_task import next_workflow_step, project_results, read_workflow_runs
 
 
 class WorkflowEditorBody(Container):
@@ -214,6 +220,14 @@ class WorkflowEditor(ModalScreen[None]):
         self._run_state = run_state
         self._running = False
         self._runs_root = runs_root
+        self._records = ()
+        self._history_loaded = False
+        self._history_error: str | None = None
+        self._task_document: WorkflowGraph | None = None
+        self._latest_results: dict[str, Path] = {}
+        self._applicable_results: dict[str, Path] = {}
+        self._result_nodes: tuple[str, ...] = ()
+        self._next_step = next_workflow_step(edit_buffer.document, {})
 
     def compose(self) -> ComposeResult:
         with Container(id="workflow-editor-shell"):
@@ -222,7 +236,8 @@ class WorkflowEditor(ModalScreen[None]):
                 yield Label(self._title_text(), id="workflow-editor-title", markup=False)
                 yield Button("+ Node", name="add", id="workflow-add-node", compact=True, tooltip="Find a node · Insert")
                 yield Button("Inspect", name="inspect", id="workflow-inspect", compact=True, tooltip="Show properties · Enter")
-                yield Button("Run", name="run", id="workflow-run", variant="primary", compact=True, tooltip="Run workflow · F5")
+                yield Button("Results", name="view-results", id="workflow-results", compact=True)
+                yield ActionButton("Run", name="run", id="workflow-run", variant="primary", compact=True, tooltip="Run workflow · F5")
             with WorkflowEditorBody(id="workflow-editor-body"):
                 yield WorkflowCanvas(
                     self._edit_buffer.document,
@@ -246,13 +261,43 @@ class WorkflowEditor(ModalScreen[None]):
         self._update_actions()
         self._set_status(self._selection_hint())
         self.query_one(WorkflowCanvas).focus()
+        self.refresh_result_history()
 
     def set_running(self, running: bool) -> None:
+        finished = self._running and not running
         self._running = running
         self.query_one(WorkflowInspector).disabled = running
         self.query_one(WorkflowCanvas).set_editable(not running)
         self._update_actions()
         self._set_status("Workflow running · Shift+F5: stop" if running else self._selection_hint())
+        if finished:
+            self.refresh_result_history()
+
+    @work(exclusive=True, group="workflow-result-history")
+    async def refresh_result_history(self) -> None:
+        workflow_id = self._edit_buffer.document.workflow_id
+        self._history_loaded = False
+        self._history_error = None
+        self._update_actions()
+        try:
+            records = await asyncio.to_thread(read_workflow_runs, self._runs_root, workflow_id)
+        except (OSError, ValueError, KeyError, ManifestIOError) as error:
+            self._history_error = str(error)
+        else:
+            self._records = records
+            self._history_loaded = True
+            self._task_document = None
+            self._project_task()
+        self._update_actions()
+
+    def _project_task(self) -> None:
+        document = self._edit_buffer.document
+        if document is not self._task_document:
+            self._latest_results, self._applicable_results = project_results(document, self._records)
+            self._result_nodes = tuple(node.id for node in document.nodes if has_viewable_output(node) and (
+                node.id in self._latest_results or isinstance(node, ImageSelectionNode) and node.config.selected is not None))
+            self._next_step = next_workflow_step(document, self._applicable_results)
+            self._task_document = document
 
     def refresh_runtime_statuses(self) -> None:
         self.query_one(WorkflowCanvas).set_runtime_statuses(
@@ -268,11 +313,17 @@ class WorkflowEditor(ModalScreen[None]):
         self._set_status(message)
 
     async def show_replaced_document(self, status: str) -> None:
+        self._records = ()
+        self._latest_results = {}
+        self._applicable_results = {}
+        self._result_nodes = ()
+        self._history_loaded = False
         canvas = self.query_one(WorkflowCanvas)
         canvas.set_runtime_statuses({})
         canvas.set_selection(None, None)
         await self._show_document()
         self._set_status(status)
+        self.refresh_result_history()
 
     def document_saved(self) -> None:
         path = self._edit_buffer.document_path
@@ -466,16 +517,19 @@ class WorkflowEditor(ModalScreen[None]):
             case "load":
                 self.post_message(self.LoadRequested())
             case "run":
-                self._run()
+                await self._run()
             case "run-target":
                 self.post_message(self.RunRequested(self._edit_buffer.document, (canvas.selected_node_id,)))
+            case "run-again":
+                self.post_message(self.RunRequested(self._edit_buffer.document))
             case "variants":
                 self._variants()
             case "results":
-                self.app.push_screen(
-                    WorkflowResults(self._edit_buffer.document, canvas.selected_node_id, self._runs_root),
-                    self._image_selected,
-                )
+                self._open_node_results(canvas.selected_node_id)
+            case "view-results":
+                self._view_results()
+            case "refresh-results":
+                self.refresh_result_history()
             case "connect":
                 self._choose_connection()
             case "stop":
@@ -505,12 +559,10 @@ class WorkflowEditor(ModalScreen[None]):
         node_id = canvas.selected_node_id
         if command == "stop":
             return self._running
+        if command in {"view-results", "refresh-results"}:
+            return command == "refresh-results" or bool(self._result_nodes)
         if command == "results":
-            return node_id is not None and any(
-                artifact in WorkflowResults.DISPLAY_TYPES
-                for port in node_definition(self._edit_buffer.document.node(node_id).kind).outputs
-                for artifact in port.artifact_types
-            )
+            return node_id is not None and has_viewable_output(self._edit_buffer.document.node(node_id))
         if command in {"menu", "context", "inspect", "hide-inspector", "quit"}:
             return True
         if self._running:
@@ -527,7 +579,11 @@ class WorkflowEditor(ModalScreen[None]):
             return node_id is not None and isinstance(self._edit_buffer.document.node(node_id), ImageEditNode)
         if command == "run-target":
             return node_id is not None
-        if command in {"run", "layout"}:
+        if command == "run":
+            return bool(self._edit_buffer.document.nodes) and (self._history_loaded or self._history_error is not None)
+        if command == "run-again":
+            return self._history_loaded and self._next_step.action == "results"
+        if command == "layout":
             return bool(self._edit_buffer.document.nodes)
         return True
 
@@ -541,6 +597,9 @@ class WorkflowEditor(ModalScreen[None]):
                 ("redo", "Redo", "Ctrl+Y"),
                 ("layout", "Arrange nodes", ""),
                 ("inspect", "Properties", "Enter"),
+                ("view-results", "Browse result history", ""),
+                ("run-again", "Run again", ""),
+                ("refresh-results", "Refresh results", ""),
                 ("close", "Close editor", ""),
                 ("quit", "Quit application", "Ctrl+C"),
             )
@@ -655,8 +714,43 @@ class WorkflowEditor(ModalScreen[None]):
     def _save(self) -> None:
         self.post_message(self.SaveRequested())
 
-    def _run(self) -> None:
-        self.post_message(self.RunRequested(self._edit_buffer.document))
+    async def _run(self) -> None:
+        if self._history_error is not None:
+            self.refresh_result_history()
+            return
+        self._project_task()
+        step = self._next_step
+        if step.action == "choose":
+            self._open_node_results(step.selection_id, step.result_path)
+        elif step.action == "results":
+            self._view_results(step.targets)
+        elif step.action == "connect":
+            self.query_one(WorkflowCanvas).set_selected_node(step.selection_id)
+            await self._selection_changed(step.selection_id, None)
+            self._show_inspector()
+        else:
+            self.post_message(self.RunRequested(self._edit_buffer.document, step.targets))
+
+    def _open_node_results(self, node_id: str, initial_path: Path | None = None) -> None:
+        self.app.push_screen(WorkflowResults(self._edit_buffer.document, node_id, self._runs_root,
+                                            initial_path=initial_path), self._image_selected)
+
+    def _view_results(self, completed: tuple[str, ...] | None = None) -> None:
+        document = self._edit_buffer.document
+        candidates = tuple(document.node(node_id) for node_id in (completed if completed is not None else self._result_nodes))
+        def open_result(node_id: str | None) -> None:
+            if node_id is not None:
+                self._open_node_results(node_id, self._applicable_results[node_id] if completed is not None else None)
+
+        selected = self.query_one(WorkflowCanvas).selected_node_id
+        if selected in {node.id for node in candidates}:
+            open_result(selected)
+        elif len(candidates) == 1:
+            open_result(candidates[0].id)
+        else:
+            choices = tuple(MenuChoice(node.id, node.title + (" · earlier settings" if node.id not in self._applicable_results
+                                and not isinstance(node, ImageSelectionNode) else "")) for node in candidates)
+            self.app.push_screen(ChoiceMenu("View results", choices), open_result)
 
     def _variants(self) -> None:
         node_id = self.query_one(WorkflowCanvas).selected_node_id
@@ -679,7 +773,7 @@ class WorkflowEditor(ModalScreen[None]):
             return
         self.query_one(WorkflowCanvas).set_selected_node(collection_id)
         self.run_worker(self._show_document())
-        self._set_status("Variants created. Save, then Run to here; inspect Results to choose an image.")
+        self._set_status("Variants created. Generate choices to compare and choose an output.")
 
     def _image_selected(self, selection: tuple[str, ImageResultReference] | None) -> None:
         if selection is None:
@@ -741,12 +835,17 @@ class WorkflowEditor(ModalScreen[None]):
         self.query_one(WorkflowCanvas).focus()
 
     def _update_actions(self) -> None:
+        self._project_task()
         body = self.query_one(WorkflowEditorBody)
         run = self.query_one("#workflow-run", Button)
-        run.label = "Stop" if self._running else "Run"
+        run.label = "Stop" if self._running else "Refresh results" if self._history_error else self._next_step.label
         run.variant = "error" if self._running else "primary"
         run.disabled = not self._command_enabled("stop" if self._running else "run")
-        run.tooltip = "Stop workflow · Shift+F5" if self._running else "Run workflow · F5"
+        run.tooltip = "Stop workflow · Shift+F5" if self._running else self._next_step.description + " · F5"
+        self.query_one("#workflow-results", Button).disabled = not self._command_enabled("view-results")
+        self.query_one("#workflow-results").display = self._running or self._next_step.action != "results"
+        if not self._running:
+            self._set_status(self._selection_hint())
         self.query_one("#workflow-add-node", Button).disabled = self._running
         self.query_one("#workflow-inspect").display = body.narrow
         self.query_one("#workflow-inspector-close").display = body.narrow
@@ -756,14 +855,16 @@ class WorkflowEditor(ModalScreen[None]):
         self.query_one("#workflow-editor-status", Label).update(message)
 
     def _selection_hint(self) -> str:
+        if self._history_error:
+            return f"Cannot read results: {self._history_error}"
         if isinstance(self.focused, PropertyTextArea):
             return "Enter: new line · Ctrl+Enter: apply · Ctrl+S: save · Tab: next field"
         canvas = self.query_one(WorkflowCanvas)
         if canvas.selected_connection_id is not None:
             return "Enter: input properties · Right-click / Shift+F10: reconnect or disconnect"
         if canvas.selected_node_id is not None:
-            return "Drag to move · Enter: properties · Right-click / Shift+F10: node actions"
-        return "Drag nodes · Drag ports to connect · Right-click / Shift+F10: actions"
+            return self._next_step.description + " · Enter: properties · Shift+F10: actions"
+        return self._next_step.description if self._history_loaded else "Reading recorded results…"
 
     def _title_text(self) -> str:
         dirty = " *" if self._edit_buffer.dirty else ""

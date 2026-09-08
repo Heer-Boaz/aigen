@@ -651,7 +651,7 @@ class WorkflowGraph(WorkflowModel):
                 incoming[node.id].pop("audio", None)
         return incoming
 
-    def execution_scope(self, targets: Sequence[str] | None = None) -> tuple[str, ...]:
+    def execution_targets(self, targets: Sequence[str] | None = None) -> tuple[str, ...]:
         nodes = {node.id for node in self.nodes}
         if targets is None:
             connected = {wire.source.node_id for wire in self.connections}
@@ -659,9 +659,12 @@ class WorkflowGraph(WorkflowModel):
         unknown = set(targets) - nodes
         if unknown:
             raise ValueError(f"unknown workflow targets: {', '.join(sorted(unknown))}")
+        return tuple(targets)
+
+    def execution_scope(self, targets: Sequence[str] | None = None) -> tuple[str, ...]:
         incoming = self.execution_inputs()
         scope: set[str] = set()
-        work = list(targets)
+        work = list(self.execution_targets(targets))
         while work:
             node_id = work.pop()
             if node_id in scope:

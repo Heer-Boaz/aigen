@@ -6,90 +6,57 @@ from pathlib import Path
 import subprocess
 from functools import partial
 
-from PIL import Image
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, ItemGrid, VerticalScroll
-from textual.message import Message
+from textual.binding import Binding
+from textual.containers import Container, Horizontal, ItemGrid, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Select, TextArea
-from textual_image.widget import HalfcellImage
 
 from aigen.artifact_actions import export_artifact, open_artifact
 from aigen.image_io import load_thumbnail
 from aigen.manifest_io import ManifestIOError
 from aigen.tui_dialogs import PromptDialog
+from aigen.tui_action_button import ActionButton
 from aigen.tui_result_records import ResultRecords
+from aigen.workflow_result_widgets import ResultComparison, ResultPreview
 from aigen.workflow_artifacts import (AudioArtifact, ImageArtifact, ImageCandidate, ImageCollectionArtifact, MaskArtifact,
     ImageSequenceArtifact, KeyframeArtifact, ReferencePackArtifact, VideoArtifact)
 from aigen.workflow_media_results import (MediaCandidate, export_media, media_label, media_path,
     media_preview, resolve_media_result)
-from aigen.workflow_graph import ArtifactType, ImageResultReference, ImageSelectionNode, WorkflowGraph
-from aigen.workflow_results import load_node_result, node_result_history, resolve_image_result
+from aigen.workflow_graph import ImageResultReference, ImageSelectionNode, WorkflowGraph
+from aigen.workflow_results import NodeResultManifest, load_node_result, node_result_history, resolve_image_result
 from aigen.workflow_cache import WorkflowCacheError
-
-
-class ResultPreview(Container):
-    class Highlighted(Message):
-        def __init__(self, candidate: ImageCandidate | MediaCandidate, index: int, view_id: int) -> None:
-            super().__init__()
-            self.candidate = candidate
-            self.index = index
-            self.view_id = view_id
-
-    def __init__(self, label: str, preview: Image.Image | None, index: int | None,
-                 candidate: ImageCandidate | MediaCandidate | None = None, view_id: int = 0) -> None:
-        super().__init__(classes="result-preview")
-        self.label = label
-        self.preview = preview
-        self.index = index
-        self.candidate = candidate
-        self.view_id = view_id
-
-    def compose(self) -> ComposeResult:
-        with Container(classes="result-preview-image"):
-            if self.preview is not None:
-                yield HalfcellImage(self.preview)
-        yield Label(self.label, markup=False)
-        if self.index is not None:
-            yield Button("Inspect", id=f"candidate-{self.index}", compact=True)
-
-    @on(Button.Pressed)
-    def inspect(self, event: Button.Pressed) -> None:
-        event.stop()
-        if self.candidate is not None:
-            assert self.index is not None
-            self.post_message(self.Highlighted(self.candidate, self.index, self.view_id))
 
 
 class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
     """One saved result history and original-image comparison, without generation."""
 
-    DISPLAY_TYPES = frozenset((
-        ArtifactType.IMAGE, ArtifactType.IMAGE_COLLECTION, ArtifactType.MASK,
-        ArtifactType.VIDEO, ArtifactType.AUDIO, ArtifactType.IMAGE_SEQUENCE,
-    ))
-
+    BINDINGS = [
+        Binding("escape", "dismiss(None)", show=False),
+        Binding("left", "move_candidate(-1)", show=False),
+        Binding("right", "move_candidate(1)", show=False),
+    ]
     DEFAULT_CSS = """
     WorkflowResults { width: 100%; height: 100%; }
     WorkflowResults > Container { width: 100%; height: 100%; padding: 0 1; background: #100d16; }
-    WorkflowResults #result-gallery-scroll { height: 2fr; }
-    WorkflowResults #result-gallery, WorkflowResults #result-inputs { height: auto; grid-gutter: 1; }
-    WorkflowResults .result-preview { height: 24; padding: 0 1; border: solid #352944; }
-    WorkflowResults .result-preview.-highlighted { border: solid #b791dd; }
-    WorkflowResults .result-preview-image { height: 17; width: 1fr; align: center middle; }
-    WorkflowResults HalfcellImage { width: auto; height: auto; }
-    WorkflowResults .result-preview Label { height: 2; text-overflow: ellipsis; }
-    WorkflowResults #result-details { height: 1fr; min-height: 5; }
-    WorkflowResults #result-actions { height: auto; }
+    WorkflowResults #result-gallery-scroll { height: 7; }
+    WorkflowResults #result-gallery { height: auto; grid-gutter: 0 1; }
+    WorkflowResults #result-selected { height: 1; text-overflow: ellipsis; color: #d8c5eb; }
+    WorkflowResults #result-details { display: none; height: 1fr; }
+    WorkflowResults.details-open ResultComparison { display: none; }
+    WorkflowResults.details-open #result-details { display: block; }
+    WorkflowResults #result-actions { height: 1; }
+    WorkflowResults #result-actions Button { width: auto; min-width: 0; padding: 0 1; margin-right: 1; }
     WorkflowResults #result-target { height: auto; }
     """
 
-    def __init__(self, document: WorkflowGraph, node_id: str, runs_root: Path) -> None:
+    def __init__(self, document: WorkflowGraph, node_id: str, runs_root: Path, *, initial_path: Path | None = None) -> None:
         super().__init__()
         self.document = document
         self.node_id = node_id
         self.runs_root = runs_root
+        self._initial_path = initial_path
         self.history_node_id = node_id
         node = document.node(node_id)
         self.saved_selection = node.config.selected if isinstance(node, ImageSelectionNode) else None
@@ -107,28 +74,34 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         self.manifest_path: Path | None = None
         self._shown_inputs = None
         self._view_id = 0
+        self._previews = ()
+        self._requested_index = 0
+        self._inspected_result: NodeResultManifest | None = None
 
     def compose(self) -> ComposeResult:
         with Container():
             yield Label(f"Results · {self.document.node(self.node_id).title}", markup=False)
             yield Select([], id="result-history", prompt="Run history", compact=True)
             yield Label("Loading saved results…", id="result-status", markup=False)
-            with VerticalScroll(id="result-gallery-scroll"):
-                yield ItemGrid(min_column_width=28, max_column_width=48, regular=True, stretch_height=False, id="result-inputs")
-                yield ItemGrid(min_column_width=28, max_column_width=48, regular=True, stretch_height=False, id="result-gallery")
+            yield Label("No candidate selected", id="result-selected", markup=False)
+            yield ResultComparison()
             yield TextArea(read_only=True, id="result-details")
+            with VerticalScroll(id="result-gallery-scroll"):
+                yield ItemGrid(min_column_width=16, max_column_width=24, regular=True,
+                               stretch_height=False, id="result-gallery")
             if self.targets:
-                yield Select(((node.title, node.id) for node in self.targets), value=self.targets[0].id, id="result-target", allow_blank=False, compact=True)
-            yield ItemGrid(
-                Button("Select image", id="result-select", disabled=True, compact=True),
-                Button("Open original", id="result-open", disabled=True, compact=True),
-                Button("Export", id="result-export", disabled=True, compact=True),
-                Button("Records / log", id="result-log", disabled=True, compact=True),
-                Button("Close", id="result-close", compact=True),
-                min_column_width=14, stretch_height=False, regular=False, id="result-actions",
-            )
+                yield Select(((node.title, node.id) for node in self.targets), value=self.targets[0].id,
+                             id="result-target", allow_blank=False, compact=True)
+            with Horizontal(id="result-actions"):
+                yield Button("Use output", id="result-select", disabled=True, variant="primary", compact=True)
+                yield Button("Open original", id="result-open", disabled=True, compact=True)
+                yield Button("Export", id="result-export", disabled=True, compact=True)
+                yield ActionButton("Details", id="result-info", disabled=True, compact=True)
+                yield Button("Records", id="result-log", disabled=True, compact=True)
+                yield Button("Close", id="result-close", compact=True)
 
     async def on_mount(self) -> None:
+        self.query_one("#result-select").display = bool(self.targets)
         if self.targets:
             self.query_one("#result-target").display = len(self.targets) > 1
         try:
@@ -145,7 +118,7 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         history = self.query_one("#result-history", Select)
         history.set_options((("Saved selection · " if path == saved_path else "")
                              + path.parents[2].name.removeprefix("attempt-"), str(path)) for path in paths)
-        history.value = str(paths[0])
+        history.value = str(self._initial_path if self._initial_path in paths else paths[0])
 
     @on(Select.Changed, "#result-history")
     def history_selected(self, event: Select.Changed) -> None:
@@ -161,12 +134,15 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         self.manifest_path = None
         self.highlighted_index = None
         self._shown_inputs = None
+        self._inspected_result = None
         self._enable_actions(False)
         self.query_one(TextArea).load_text("")
+        self.query_one(ResultComparison).clear()
+        self.query_one("#result-gallery-scroll").display = False
+        self.query_one("#result-selected", Label).update("No candidate selected")
         gallery = self.query_one("#result-gallery", ItemGrid)
         gallery.disabled = True
         await gallery.remove_children()
-        await self.query_one("#result-inputs", ItemGrid).remove_children()
         try:
             result, candidates, previews = await asyncio.to_thread(self._read_view, path)
         except (OSError, ValueError, ManifestIOError, WorkflowCacheError) as error:
@@ -176,8 +152,11 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
                               for label, image, index in previews))
         self.manifest_path = path
         self.candidates = candidates
+        self._previews = tuple(previews)
+        self.query_one("#result-gallery-scroll").display = len(candidates) > 1
         gallery.disabled = False
-        self._status(f"{result.status} · {len(candidates)} outputs · originals retain their full resolution")
+        count = len(candidates)
+        self._status(f"{result.status} · {count} output{'s' if count != 1 else ''} · originals retain their full resolution")
         if candidates:
             pinned = self.targets[0].config.selected if len(self.targets) == 1 else None
             index = next((index for index, candidate in enumerate(candidates)
@@ -214,12 +193,12 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
                 if ((isinstance(artifact, VideoArtifact) and artifact.content_sha256 is None)
                         or (isinstance(artifact, ImageSequenceArtifact) and artifact.frame_sha256s is None)):
                     artifact = resolve_media_result(candidate)
-                previews.append((f"{label}\n{media_label(artifact)}", media_preview(artifact, (80, 64)), index))
+                previews.append((f"{label}\n{media_label(artifact)}", media_preview(artifact, (160, 128)), index))
                 continue
             image = candidate.image
             if image.content_sha256 is None:
                 image = resolve_image_result(candidate.reference)
-            previews.append((label, load_thumbnail(Path(image.path), (80, 64), expected_sha256=image.content_sha256), index))
+            previews.append((label, load_thumbnail(Path(image.path), (160, 128), expected_sha256=image.content_sha256), index))
         return result, tuple(candidates), previews
 
     @staticmethod
@@ -231,7 +210,7 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
                     artifact = artifact.image
                 if isinstance(artifact, (VideoArtifact, ImageSequenceArtifact, AudioArtifact)):
                     try:
-                        previews.append((f"Original input · {port} · {media_label(artifact)}", media_preview(artifact, (80, 64))))
+                        previews.append((f"{port.replace('_', ' ').capitalize()} · {media_label(artifact)}", media_preview(artifact, (160, 128))))
                     except (OSError, ValueError) as error:
                         previews.append((f"Input unavailable: {error}", None))
                     continue
@@ -241,13 +220,15 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
                     files = zip(artifact.references, artifact.reference_sha256s or (None,) * len(artifact.references), strict=True)
                 else:
                     continue
-                for input_path, expected_sha256 in files:
-                    label = f"Original input · {port} · {Path(input_path).name}"
+                for file_index, (input_path, expected_sha256) in enumerate(files):
+                    label = port.replace("_", " ").capitalize()
+                    if isinstance(artifact, ReferencePackArtifact):
+                        label += f" · image {file_index + 1}"
                     if expected_sha256 is None:
                         previews.append((f"Original input unavailable: legacy record has no file checksum · {input_path}", None))
                         continue
                     try:
-                        preview = load_thumbnail(Path(input_path), (80, 64), expected_sha256=expected_sha256)
+                        preview = load_thumbnail(Path(input_path), (160, 128), expected_sha256=expected_sha256)
                     except (OSError, ValueError) as error:
                         # Missing historical inputs do not make an existing output unreadable.
                         previews.append((f"Input unavailable: {input_path}: {error}", None))
@@ -263,6 +244,7 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
     @work(exclusive=True, group="result-candidate-load")
     async def inspect_candidate(self, candidate: ImageCandidate | MediaCandidate, index: int, view_id: int) -> None:
         self.highlighted_index = None
+        self._requested_index = index
         self._enable_actions(False)
         try:
             result = await asyncio.to_thread(load_node_result, candidate.manifest_path)
@@ -272,16 +254,37 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         inputs = result.details.inputs if result.details else {}
         if inputs != self._shown_inputs:
             previews = await asyncio.to_thread(self._input_previews, inputs)
-            input_gallery = self.query_one("#result-inputs", ItemGrid)
-            await input_gallery.remove_children()
-            await input_gallery.mount(*(ResultPreview(label, image, None) for label, image in previews))
+            if view_id != self._view_id:
+                return
+            self.query_one(ResultComparison).set_inputs(previews)
             self._shown_inputs = inputs
         if view_id != self._view_id:
             return
         self.highlighted_index = index
+        self._inspected_result = result
         self._enable_actions(True)
+        label, preview, _ = self._previews[index]
+        self.query_one(ResultComparison).set_output(preview, label)
+        backend = result.details.effective_config.get("backend", "") if result.details else ""
+        target = next((node for node in self.targets if node.config.selected == getattr(candidate, "reference", None)), None)
+        summary = f"Output {index + 1}/{len(self.candidates)} · {label.replace(chr(10), ' · ')}"
+        if backend:
+            summary += f" · {backend}"
+        if target is not None:
+            summary += f" · Chosen for {target.title}"
+        self.query_one("#result-selected", Label).update(summary)
+        self.query_one("#result-select", Button).tooltip = f"Use output {index + 1}: {candidate.title}"
         for tile in self.query(ResultPreview):
             tile.set_class(tile.index == index, "-highlighted")
+            if tile.index == index:
+                tile.scroll_visible(animate=False)
+        if self.has_class("details-open"):
+            self._render_details()
+
+    def _render_details(self) -> None:
+        assert self.highlighted_index is not None and self._inspected_result is not None
+        candidate = self.candidates[self.highlighted_index]
+        result = self._inspected_result
         self.query_one(TextArea).load_text(json.dumps({
             "output": candidate.image.path if isinstance(candidate, ImageCandidate) else candidate.artifact.model_dump(mode="json"),
             "output_id": candidate.output_id,
@@ -294,6 +297,11 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
         action = event.button.id
         if action == "result-close":
             self.dismiss(None)
+        elif action == "result-info":
+            self.toggle_class("details-open")
+            event.button.label = "Preview" if self.has_class("details-open") else "Details"
+            if self.has_class("details-open"):
+                self._render_details()
         elif self.highlighted_index is not None:
             if action == "result-export":
                 candidate = self.candidates[self.highlighted_index]
@@ -357,10 +365,15 @@ class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
             self._status(str(error))
 
     def _enable_actions(self, enabled: bool) -> None:
-        for name in ("open", "export", "log"):
+        for name in ("open", "export", "log", "info"):
             self.query_one(f"#result-{name}", Button).disabled = not enabled
         image_selected = self.highlighted_index is not None and isinstance(self.candidates[self.highlighted_index], ImageCandidate)
         self.query_one("#result-select", Button).disabled = not (enabled and self.targets and image_selected)
+
+    def action_move_candidate(self, direction: int) -> None:
+        if self.candidates:
+            index = (self._requested_index + direction) % len(self.candidates)
+            self.inspect_candidate(self.candidates[index], index, self._view_id)
 
     def _status(self, text: str) -> None:
         self.query_one("#result-status", Label).update(text)

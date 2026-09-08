@@ -139,7 +139,12 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
 
                     canvas = editor.query_one(WorkflowCanvas)
                     for expected in ("completed", "reused"):
-                        self.assertTrue(await pilot.click("#workflow-run"))
+                        if expected == "reused":
+                            await editor.workers.wait_for_complete()
+                            self.assertEqual(str(editor.query_one("#workflow-run", Button).label), "View results")
+                            await menu_command(app, pilot, "run-again")
+                        else:
+                            self.assertTrue(await pilot.click("#workflow-run"))
                         await pilot.pause()
                         self.assertIsNotNone(app.process)
                         process = app.process

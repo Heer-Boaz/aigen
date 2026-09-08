@@ -372,7 +372,7 @@ def _node_description(node: WorkflowNode) -> str:
     if isinstance(node, ImageSelectionNode):
         selected = node.config.selected
         paragraphs.append(
-            f"Saved image: {selected.artifact_identity[:16]}\nResults changes this choice; Run continues from the saved image."
+            f"Chosen image: {selected.artifact_identity[:16]}\nResults changes this choice; Continue uses this recorded image."
             if selected else "Run the connected collection, then choose an image in Results.",
         )
     if isinstance(node, LoraSourceNode):
