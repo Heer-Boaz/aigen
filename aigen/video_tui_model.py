@@ -233,10 +233,10 @@ class VideoForm:
 
     def generation_command(self) -> tuple[list[str], str, tuple[Path, ...]]:
         backend = self.field("backend").value
-        prompt = self.field("prompt").value.strip()
+        prompt = self.field("prompt").value
         output_dir = self.field("output_dir").value.strip()
         filename = self.field("filename").value.strip()
-        if not prompt:
+        if not prompt.strip():
             raise ValueError("Prompt is required.")
         if not output_dir:
             raise ValueError("Output directory is required.")
@@ -267,7 +267,7 @@ class VideoForm:
             command.extend(
                 (
                     "--negative-prompt",
-                    self.field("negative_prompt").value.strip(),
+                    self.field("negative_prompt").value,
                     "--resolution",
                     self.field("resolution").value.strip(),
                     "--frames",

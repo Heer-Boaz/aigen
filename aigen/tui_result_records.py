@@ -5,6 +5,7 @@ from pathlib import Path
 
 from textual import on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Select, TextArea
@@ -12,6 +13,8 @@ from textual.widgets import Button, Label, Select, TextArea
 
 class ResultRecords(ModalScreen[None]):
     """Inspect original manifests and logs, including unsuccessful batch records."""
+
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
 
     DEFAULT_CSS = """
     ResultRecords { width: 100%; height: 100%; }

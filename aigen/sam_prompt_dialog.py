@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, ItemGrid
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label
@@ -9,6 +10,8 @@ from aigen.sam_prompt_canvas import SAMPromptCanvas
 
 
 class SAMPromptDialog(ModalScreen[None]):
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
+
     def __init__(
         self,
         *,
@@ -29,7 +32,7 @@ class SAMPromptDialog(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Container(classes="sam-prompt-dialog"):
-            yield Label("SAM prompt editor", classes="dialog-title")
+            yield Label("Select region", classes="dialog-title")
             yield SAMPromptCanvas(id="sam-dialog-canvas")
             yield ItemGrid(
                 Button("Clear", name="sam-prompt-clear", id="sam-prompt-clear", compact=True),

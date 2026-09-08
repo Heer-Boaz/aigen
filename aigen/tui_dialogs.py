@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
 
 class MessageDialog(ModalScreen[None]):
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
+
     def __init__(self, title: str, message: str) -> None:
         super().__init__()
         self.title = title
@@ -30,6 +33,8 @@ class MessageDialog(ModalScreen[None]):
 
 
 class PromptDialog(ModalScreen[str | None]):
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
+
     def __init__(
         self,
         title: str,
@@ -73,6 +78,8 @@ class PromptDialog(ModalScreen[str | None]):
 
 
 class ConfirmationDialog(ModalScreen[bool]):
+    BINDINGS = [Binding("escape", "dismiss(False)", show=False)]
+
     def __init__(
         self,
         title: str,

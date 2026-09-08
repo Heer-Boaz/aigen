@@ -15,7 +15,6 @@ from aigen.generation.image_edit import (
 from aigen.lora_weights import inspect_lora_weights
 from aigen.runtime_profiles import (
     PROJECT_ROOT,
-    display_project_path,
     resolve_project_path,
 )
 
@@ -31,6 +30,18 @@ class FormField:
     value: str
     slot_kind: str | None = None
     slot_id: int | None = None
+
+    @property
+    def path_kind(self) -> str | None:
+        if self.name == "output_dir":
+            return "directory"
+        if self.slot_kind == "keyframe":
+            return "image" if self.name == "keyframe" else None
+        if self.slot_kind == "lora":
+            return "lora" if self.name == "lora" else None
+        if self.slot_kind in {"image", "video", "reference_pack", "config"}:
+            return self.slot_kind
+        return None
 
 
 @dataclass(frozen=True)
@@ -338,13 +349,13 @@ class ImageEditForm:
         temporary_path.replace(path)
 
     def generation_command(self) -> tuple[list[str], str]:
-        prompt = self.field("prompt").value.strip()
+        prompt = self.field("prompt").value
         model = self.field("model").value.strip()
         output_dir = self.field("output_dir").value.strip()
         if not model:
             raise ValueError("Model is required.")
         settings = IMAGE_EDIT_BACKEND_SETTINGS[model]
-        if not prompt and not settings.supports_empty_prompt:
+        if not prompt.strip() and not settings.supports_empty_prompt:
             raise ValueError("Prompt is required.")
         if not output_dir:
             raise ValueError("Output directory is required.")

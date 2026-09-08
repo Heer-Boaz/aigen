@@ -290,6 +290,8 @@ class BrowserThumbnailGrid(VerticalScroll, can_focus=True):
 
 
 class FileBrowser(ModalScreen[Path | None]):
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
+
     DEFAULT_CSS = """
     FileBrowser {
         align: center middle;
@@ -297,9 +299,9 @@ class FileBrowser(ModalScreen[Path | None]):
     }
 
     FileBrowser .browser-dialog {
-        width: 90%;
-        height: 85%;
-        padding: 1 2;
+        width: 100%;
+        height: 100%;
+        padding: 0 1;
         background: #211a2d;
         border: solid #8c72aa;
     }
@@ -311,6 +313,21 @@ class FileBrowser(ModalScreen[Path | None]):
 
     FileBrowser #browser-path {
         height: 1;
+        text-overflow: ellipsis;
+    }
+
+    FileBrowser #browser-save-name {
+        height: 1;
+        border: none;
+        padding: 0;
+    }
+
+    FileBrowser #browser-filename-row {
+        height: 1;
+    }
+
+    FileBrowser #browser-filename-row Label {
+        width: 10;
     }
 
     FileBrowser .browser-controls {
@@ -490,6 +507,7 @@ class FileBrowser(ModalScreen[Path | None]):
         directories_only: bool,
         extensions: frozenset[str],
         select_label: str,
+        save_name: str | None = None,
     ) -> None:
         super().__init__()
         self.directory = start
@@ -497,6 +515,7 @@ class FileBrowser(ModalScreen[Path | None]):
         self.directories_only = directories_only
         self.extensions = extensions
         self.select_label = select_label
+        self.save_name = save_name
         self.sort_key = "name"
         self.sort_descending = False
         self.view_mode = "preview"
@@ -565,6 +584,10 @@ class FileBrowser(ModalScreen[Path | None]):
                 classes="browser-view-hidden",
             )
             yield Label("", id="browser-meta")
+            if self.save_name is not None:
+                with Horizontal(id="browser-filename-row"):
+                    yield Label("Filename")
+                    yield Input(self.save_name, id="browser-save-name", compact=True)
             with Horizontal(classes="browser-actions"):
                 yield Button("Up", id="browser-up", compact=True)
                 yield Button(
@@ -578,7 +601,7 @@ class FileBrowser(ModalScreen[Path | None]):
     async def on_mount(self) -> None:
         self.query_one("#browser-list", DataTable).add_column("Name")
         await self._load_directory(self.directory)
-        self.query_one("#browser-list", DataTable).focus()
+        self.query_one("#browser-list" if self.save_name is None else "#browser-save-name").focus()
 
     async def _load_directory(self, directory: Path) -> None:
         try:
@@ -900,6 +923,8 @@ class FileBrowser(ModalScreen[Path | None]):
         entry = self.visible_entries[index]
         if entry.is_directory:
             await self._load_directory(entry.path)
+        elif self.save_name is not None:
+            self.query_one("#browser-save-name", Input).value = entry.path.name
         else:
             self.dismiss(entry.path)
 
@@ -910,9 +935,24 @@ class FileBrowser(ModalScreen[Path | None]):
             await self._load_directory(parent)
 
     @on(Button.Pressed, "#browser-select")
+    @on(Input.Submitted, "#browser-save-name")
     async def select_current(self) -> None:
         entry = self._current_entry()
-        if self.directories_only:
+        if self.save_name is not None:
+            filename = self.query_one("#browser-save-name", Input).value.strip()
+            if not filename or filename in {".", ".."} or Path(filename).name != filename:
+                self.query_one("#browser-meta", Label).update("Enter a filename without a directory path.")
+                self.query_one("#browser-save-name").focus()
+                return
+            path = self.directory / filename
+            if not path.suffix and len(self.extensions) == 1:
+                path = path.with_suffix(next(iter(self.extensions)))
+            if path.suffix.casefold() not in self.extensions:
+                self.query_one("#browser-meta", Label).update("Use file extension: " + ", ".join(sorted(self.extensions)))
+                self.query_one("#browser-save-name").focus()
+                return
+            self.dismiss(path)
+        elif self.directories_only:
             self.dismiss(
                 entry.path
                 if entry is not None and entry.is_directory

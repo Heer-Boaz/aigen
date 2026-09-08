@@ -11,20 +11,19 @@ from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
-from textual import events, on
+from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, VerticalScroll
 from textual.message import Message
 from textual.widgets import (
     Button,
     Input,
-    Label,
     ProgressBar,
     Select,
     Static,
     TabbedContent,
     TabPane,
+    TextArea,
 )
 from textual.worker import Worker, WorkerCancelled
 
@@ -33,7 +32,6 @@ from aigen.generation.video_postprocess import contact_sheet_path
 from aigen.tui_process import command_lines, command_process
 from aigen.image_tui_footer import ImageTUIFooter
 from aigen.image_tui_model import (
-    DropdownOption,
     FormField,
     ImageEditForm,
 )
@@ -79,7 +77,7 @@ from aigen.workflow_form_import import image_form_workflow, video_form_workflow
 from aigen.workflow_sam_import import sam_form_workflow
 
 
-FormModel = ImageEditForm | PostprocessForm | VideoForm | SamEditForm
+from aigen.tui_form_fields import FieldRow, FormFields, FormModel, PathInput
 
 
 @dataclass(frozen=True)
@@ -144,99 +142,6 @@ def _generation_progress_from_payload(
     )
 
 
-class PathInput(Input):
-    class BrowseRequested(Message):
-        def __init__(self, form: FormModel, field: FormField) -> None:
-            super().__init__()
-            self.form = form
-            self.field = field
-
-    def __init__(self, form: FormModel, field: FormField) -> None:
-        super().__init__(field.value, compact=True, classes="field-editor")
-        self.form = form
-        self.field = field
-
-    def on_click(self, event: events.Click) -> None:
-        if event.chain == 2:
-            event.stop()
-            self.post_message(self.BrowseRequested(self.form, self.field))
-
-
-class FieldRow(Horizontal):
-    class Selected(Message):
-        def __init__(self, form: FormModel, field: FormField) -> None:
-            super().__init__()
-            self.form = form
-            self.field = field
-
-    def __init__(self, form: FormModel, field: FormField) -> None:
-        movable = field.slot_id in form.slot_move_states and field.name != "lora_weight"
-        super().__init__(classes="field-row movable" if movable else "field-row")
-        self.form = form
-        self.field = field
-        self.movable = movable
-
-    def compose(self) -> ComposeResult:
-        yield Label(self.field.label, classes="field-label")
-        options = self.form.dropdown_options(self.field)
-        if options is None:
-            if self.field.slot_kind in {
-                "image",
-                "keyframe",
-                "reference_pack",
-                "config",
-                "video",
-            } or self.field.name == "output_dir":
-                yield PathInput(self.form, self.field)
-            else:
-                yield Input(self.field.value, compact=True, classes="field-editor")
-        else:
-            option_values = {option.value for option in options}
-            if self.field.value not in option_values:
-                options = (*options, DropdownOption(self.field.value, self.field.value))
-            yield Select(
-                ((option.label, option.value) for option in options),
-                allow_blank=False,
-                value=self.field.value,
-                compact=True,
-                classes="field-editor",
-            )
-        if self.movable:
-            can_move_up, can_move_down = self.form.slot_move_states[self.field.slot_id]
-            yield Button(
-                "↑",
-                name="move-up",
-                compact=True,
-                flat=True,
-                disabled=not can_move_up,
-                classes="move-control",
-            )
-            yield Button(
-                "↓",
-                name="move-down",
-                compact=True,
-                flat=True,
-                disabled=not can_move_down,
-                classes="move-control",
-            )
-
-    def on_click(self) -> None:
-        self.post_message(self.Selected(self.form, self.field))
-
-    def on_enter(self) -> None:
-        self.add_class("hovered")
-
-    def on_leave(self) -> None:
-        self.set_class(self.is_mouse_over, "hovered")
-
-
-class FormFields(VerticalScroll):
-    def __init__(self, form: FormModel, *, id: str) -> None:
-        super().__init__(id=id, classes="form-fields")
-        self.form = form
-
-    def compose(self) -> ComposeResult:
-        yield from (FieldRow(self.form, field) for field in self.form.fields)
 
 
 class GenerationUpdated(Message):
@@ -317,6 +222,19 @@ class ImageGenerationApp(App[None]):
         grid-columns: 18 1fr 0 0;
         grid-rows: 1;
         height: 1;
+    }
+
+    .field-row.multiline {
+        grid-size: 1 2;
+        grid-columns: 1fr;
+        grid-rows: 1 auto;
+        height: auto;
+    }
+
+    .field-row MultilineInput.field-editor {
+        height: 25vh;
+        min-height: 4;
+        max-height: 12;
     }
 
     .field-row.movable {
@@ -519,6 +437,7 @@ class ImageGenerationApp(App[None]):
         if self.startup_error is not None:
             self._show_error("Cannot load saved form", self.startup_error)
         self._update_sam_prompt_canvas()
+        self._update_video_actions()
 
     async def _rebuild_fields(self) -> None:
         await self._rebuild_form(self.form)
@@ -532,13 +451,11 @@ class ImageGenerationApp(App[None]):
             fields_id = "#sam-fields"
         else:
             fields_id = "#postprocess-fields"
-        if (
-            self.selected_field is not None
-            and self.selected_field.form is form
-            and not any(field is self.selected_field.field for field in form.fields)
-        ):
-            self._select_field(None)
-        await self.query_one(fields_id, FormFields).recompose()
+        if self.selected_field is not None and self.selected_field.form is form:
+            selected = self.selected_field.field
+            replacement = next((field for field in form.fields if (field.name, field.slot_id) == (selected.name, selected.slot_id)), None)
+            self.selected_field = FieldSelection(form, replacement) if replacement is not None else None
+        await self.query_one(fields_id, FormFields).refresh_fields()
         self._refresh_selected_field()
         if form is self.video_form:
             self._update_video_actions()
@@ -546,15 +463,9 @@ class ImageGenerationApp(App[None]):
             self._update_sam_prompt_canvas()
 
     def _update_video_actions(self) -> None:
-        self.query_one("#video-add-keyframe", Button).disabled = (
-            not self.video_form.can_add_slot("keyframe")
-        )
-        self.query_one("#video-add-seed", Button).disabled = (
-            not self.video_form.can_add_slot("seed")
-        )
-        self.query_one("#video-add-image", Button).disabled = (
-            not self.video_form.can_add_slot("image")
-        )
+        footer = self.query_one(ImageTUIFooter)
+        for kind, command in (("keyframe", "add-keyframe"), ("seed", "add-video-seed"), ("image", "add-video-image")):
+            footer.set_action_enabled(command, self.video_form.can_add_slot(kind))
 
     def _update_sam_prompt_canvas(self) -> None:
         form = self.sam_form
@@ -603,52 +514,19 @@ class ImageGenerationApp(App[None]):
         )
 
     def _choose_sam_selection_directory(self) -> None:
-        start = self.sam_selection_path.parent if self.sam_selection_path else PROJECT_ROOT
+        path = self.sam_selection_path
         self.push_screen(
             FileBrowser(
-                start,
-                title="Save SAM selection",
-                directories_only=True,
-                extensions=SAM_SELECTION_EXTENSIONS,
-                select_label="Select folder",
+                path.parent if path is not None else PROJECT_ROOT,
+                title='Save SAM selection', directories_only=False,
+                extensions=SAM_SELECTION_EXTENSIONS, select_label="Save",
+                save_name=path.name if path is not None else 'sam-selection.json',
             ),
-            self._choose_sam_selection_name,
+            self._save_sam_prompt_selection,
         )
 
-    def _choose_sam_selection_name(self, directory: Path | None) -> None:
-        if directory is None:
-            return
-        name = self.sam_selection_path.name if self.sam_selection_path else "sam-selection.json"
-        self.push_screen(
-            PromptDialog("Save SAM selection", "Selection filename", name),
-            lambda filename: self._save_sam_prompt_selection(directory, filename),
-        )
-
-    def _save_sam_prompt_selection(
-        self,
-        directory: Path | None = None,
-        filename: str | None = None,
-    ) -> None:
-        if directory is None:
-            self._choose_sam_selection_directory()
-            return
-        if filename is None:
-            return
-        filename = filename.strip()
-        if not filename or Path(filename).name != filename:
-            self._show_error(
-                "Cannot save SAM selection",
-                "Selection filename must be a non-empty filename without a path.",
-            )
-            return
-        output = directory / filename
-        if output.suffix == "":
-            output = output.with_suffix(".json")
-        elif output.suffix.casefold() != ".json":
-            self._show_error(
-                "Cannot save SAM selection",
-                "Selection filename must use the .json extension.",
-            )
+    def _save_sam_prompt_selection(self, output: Path | None) -> None:
+        if output is None:
             return
         if output.exists() and output != self.sam_selection_path:
             self._show_error("Cannot save SAM selection", f"Selection already exists: {output}")
@@ -715,6 +593,14 @@ class ImageGenerationApp(App[None]):
                 and selected.field is row.field,
                 "selected",
             )
+        footer = self.query_one(ImageTUIFooter)
+        selection = self.selected_field
+        for form, browse, remove in ((self.form, "browse", "remove"), (self.video_form, "browse-video", "remove-video"),
+                                     (self.sam_form, "browse-sam", None)):
+            field = selection.field if selection is not None and selection.form is form else None
+            footer.set_action_enabled(browse, field is not None and field.path_kind is not None)
+            if remove is not None:
+                footer.set_action_enabled(remove, field is not None and field.slot_id is not None)
 
     def _hovered_row(self) -> FieldRow | None:
         return next(
@@ -726,7 +612,7 @@ class ImageGenerationApp(App[None]):
         if action == "stop_generation":
             return self.generation_worker is not None
         if action in {"remove_hovered_slot", "remove_selected_slot", "clear_selected_field"}:
-            if self.screen is not self.screen_stack[0]:
+            if self.screen is not self.screen_stack[0] or isinstance(self.focused, (Input, TextArea)):
                 return False
         if action == "remove_hovered_slot":
             hovered = self._hovered_row()
@@ -736,12 +622,15 @@ class ImageGenerationApp(App[None]):
         return super().check_action(action, parameters)
 
     @on(Input.Changed)
-    def input_changed(self, event: Input.Changed) -> None:
-        row = event.input.parent
+    @on(TextArea.Changed)
+    def input_changed(self, event: Input.Changed | TextArea.Changed) -> None:
+        control = event.control
+        value = control.text if isinstance(control, TextArea) else control.value
+        row = control.parent
         if isinstance(row, FieldRow):
-            if row.field.value == event.value:
+            if row.field.value == value:
                 return
-            row.form.set_value(row.field, event.value)
+            row.form.set_value(row.field, value)
             self._select_field(FieldSelection(row.form, row.field))
             if row.form is self.sam_form and row.field.name in {
                 "input",
@@ -787,6 +676,7 @@ class ImageGenerationApp(App[None]):
     @on(TabbedContent.TabActivated)
     def tab_activated(self, event: TabbedContent.TabActivated) -> None:
         self.query_one(ImageTUIFooter).show_tab(event.pane.id)
+        self._refresh_selected_field()
 
     @on(Button.Pressed)
     async def button_pressed(self, event: Button.Pressed) -> None:
@@ -802,9 +692,14 @@ class ImageGenerationApp(App[None]):
             await self._rebuild_form(row.form)
             return
 
-        action = button.name
-        if action is None:
-            return
+        if button.name is not None:
+            await self._perform_action(button.name)
+
+    @on(ImageTUIFooter.CommandRequested)
+    async def footer_command_requested(self, event: ImageTUIFooter.CommandRequested) -> None:
+        await self._perform_action(event.command)
+
+    async def _perform_action(self, action: str) -> None:
         if action.startswith("add-"):
             if action == "add-video-seed":
                 slot_kind = "seed"
@@ -892,7 +787,7 @@ class ImageGenerationApp(App[None]):
             assert self.sam_prompt_dialog is not None
             self.sam_prompt_dialog.clear_prompts()
         elif action == "sam-prompt-save":
-            self._save_sam_prompt_selection()
+            self._choose_sam_selection_directory()
         elif action == "sam-prompt-load":
             self._load_sam_prompt_selection()
         elif action == "sam-prompt-close":
@@ -963,27 +858,32 @@ class ImageGenerationApp(App[None]):
         await self._rebuild_form(form)
 
     def _browse_field(self, form: FormModel, field: FormField) -> None:
-        if field.slot_kind in {"image", "keyframe"}:
+        if field.path_kind == "image":
             directories_only = False
             title = field.label
             select_label = "Select image"
             extensions = IMAGE_EXTENSIONS
-        elif field.slot_kind == "video":
+        elif field.path_kind == "video":
             directories_only = False
             title = field.label
             select_label = "Select video"
             extensions = VIDEO_EXTENSIONS
-        elif field.slot_kind == "reference_pack":
+        elif field.path_kind == "reference_pack":
             directories_only = False
             title = field.label
             select_label = "Select pack"
             extensions = CONFIG_EXTENSIONS
-        elif field.slot_kind == "config":
+        elif field.path_kind == "config":
             directories_only = False
             title = field.label
             select_label = "Select JSON"
             extensions = CONFIG_EXTENSIONS
-        elif field.name == "output_dir":
+        elif field.path_kind == "lora":
+            directories_only = False
+            title = field.label
+            select_label = "Select LoRA"
+            extensions = LORA_EXTENSIONS
+        elif field.path_kind == "directory":
             directories_only = True
             title = field.label
             select_label = "Select folder"
@@ -1083,49 +983,19 @@ class ImageGenerationApp(App[None]):
         self.run_worker(self._rebuild_fields(), group="fields", exclusive=True)
 
     def _choose_configuration_directory(self) -> None:
-        start = (
-            self.configuration_path.parent
-            if self.configuration_path is not None
-            else PROJECT_ROOT
-        )
+        path = self.configuration_path
         self.push_screen(
             FileBrowser(
-                start,
-                title="Save configuration",
-                directories_only=True,
-                extensions=CONFIG_EXTENSIONS,
-                select_label="Select folder",
+                path.parent if path is not None else PROJECT_ROOT,
+                title='Save configuration', directories_only=False,
+                extensions=CONFIG_EXTENSIONS, select_label="Save",
+                save_name=path.name if path is not None else 'image-edit.json',
             ),
-            self._choose_configuration_name,
+            self._save_configuration,
         )
 
-    def _choose_configuration_name(self, directory: Path | None) -> None:
-        if directory is None:
-            return
-        name = self.configuration_path.name if self.configuration_path else "image-edit.json"
-        self.push_screen(
-            PromptDialog("Save configuration", "Configuration filename", name),
-            lambda filename: self._save_configuration(directory, filename),
-        )
-
-    def _save_configuration(self, directory: Path, filename: str | None) -> None:
-        if filename is None:
-            return
-        filename = filename.strip()
-        if not filename or Path(filename).name != filename:
-            self._show_error(
-                "Cannot save configuration",
-                "Configuration filename must be a non-empty filename without a path.",
-            )
-            return
-        output = directory / filename
-        if output.suffix == "":
-            output = output.with_suffix(".json")
-        elif output.suffix.casefold() != ".json":
-            self._show_error(
-                "Cannot save configuration",
-                "Configuration filename must use the .json extension.",
-            )
+    def _save_configuration(self, output: Path | None) -> None:
+        if output is None:
             return
         if output.exists() and output != self.configuration_path:
             self._show_error(
@@ -1351,53 +1221,18 @@ class ImageGenerationApp(App[None]):
 
     def _choose_workflow_directory(self) -> None:
         path = self.workflow_buffer.document_path
-        start = path.parent if path is not None else PROJECT_ROOT
         self.push_screen(
             FileBrowser(
-                start,
-                title="Save workflow",
-                directories_only=True,
-                extensions=WORKFLOW_EXTENSIONS,
-                select_label="Select folder",
+                path.parent if path is not None else PROJECT_ROOT,
+                title='Save workflow', directories_only=False,
+                extensions=WORKFLOW_EXTENSIONS, select_label="Save",
+                save_name=path.name if path is not None else 'workflow.json',
             ),
-            self._choose_workflow_name,
+            self._save_workflow,
         )
 
-    def _choose_workflow_name(
-        self,
-        directory: Path | None,
-    ) -> None:
-        if directory is None:
-            return
-        path = self.workflow_buffer.document_path
-        name = path.name if path is not None else "workflow.json"
-        self.push_screen(
-            PromptDialog("Save workflow", "Workflow filename", name),
-            lambda filename: self._save_workflow(directory, filename),
-        )
-
-    def _save_workflow(
-        self,
-        directory: Path,
-        filename: str | None,
-    ) -> None:
-        if filename is None:
-            return
-        filename = filename.strip()
-        if not filename or Path(filename).name != filename:
-            self._show_error(
-                "Cannot save workflow",
-                "Workflow filename must be a non-empty filename without a path.",
-            )
-            return
-        output = directory / filename
-        if output.suffix == "":
-            output = output.with_suffix(".json")
-        elif output.suffix.casefold() != ".json":
-            self._show_error(
-                "Cannot save workflow",
-                "Workflow filename must use the .json extension.",
-            )
+    def _save_workflow(self, output: Path | None) -> None:
+        if output is None:
             return
         if (
             output.exists()

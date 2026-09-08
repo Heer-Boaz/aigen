@@ -18,10 +18,11 @@ if TYPE_CHECKING:
 
 def image_form_workflow(form: ImageEditForm) -> WorkflowGraph:
     """Import the form's settings into the same authored graph used by the editor."""
-    values = {field.name: field.value.strip() for field in form.fields if field.slot_kind is None}
+    values = {field.name: field.value if field.name == "prompt" else field.value.strip()
+              for field in form.fields if field.slot_kind is None}
     config = ImageEditConfig.model_validate({
         "backend": values["model"],
-        **{name: value for name, value in values.items() if name in ImageEditConfig.model_fields and value.strip()},
+        **{name: value for name, value in values.items() if name in ImageEditConfig.model_fields and (name == "prompt" or value)},
     })
     edit = ImageEditNode(id="edit", title="Image edit", config=config, layout=NodeLayout(x=42, y=2))
     nodes = [edit]
@@ -55,13 +56,15 @@ def image_form_workflow(form: ImageEditForm) -> WorkflowGraph:
 def video_form_workflow(form: VideoForm) -> WorkflowGraph:
     from aigen.video_tui_model import ANIMEGEN_BACKEND, HUNYUANVIDEO15_BACKEND, LTX23_BACKEND
 
-    values = {field.name: field.value.strip() for field in form.fields if field.slot_kind is None}
+    values = {field.name: field.value if field.name in {"prompt", "negative_prompt"} else field.value.strip()
+              for field in form.fields if field.slot_kind is None}
     config_type, node_type = {
         ANIMEGEN_BACKEND: (AnimeGenI2VConfig, AnimeGenI2VNode),
         LTX23_BACKEND: (Ltx23Config, Ltx23Node),
         HUNYUANVIDEO15_BACKEND: (HunyuanI2VConfig, HunyuanI2VNode),
     }[values["backend"]]
-    settings = {name: value for name, value in values.items() if name in config_type.model_fields and value}
+    settings = {name: value for name, value in values.items()
+                if name in config_type.model_fields and (name in {"prompt", "negative_prompt"} or value)}
     seeds = (int(values["seed"]),) if values["backend"] == HUNYUANVIDEO15_BACKEND else tuple(
         int(field.value) for field in form.fields if field.slot_kind == "seed" and field.value.strip())
     if not seeds:
