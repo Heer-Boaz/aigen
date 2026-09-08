@@ -24,7 +24,7 @@ from aigen.workflow_artifacts import (AudioArtifact, ImageArtifact, ImageCandida
     ImageSequenceArtifact, KeyframeArtifact, ReferencePackArtifact, VideoArtifact)
 from aigen.workflow_media_results import (MediaCandidate, export_media, media_label, media_path,
     media_preview, resolve_media_result)
-from aigen.workflow_graph import ImageResultReference, ImageSelectionNode, WorkflowGraph
+from aigen.workflow_graph import ArtifactType, ImageResultReference, ImageSelectionNode, WorkflowGraph
 from aigen.workflow_results import load_node_result, node_result_history, resolve_image_result
 from aigen.workflow_cache import WorkflowCacheError
 
@@ -64,6 +64,11 @@ class ResultPreview(Container):
 
 class WorkflowResults(ModalScreen[tuple[str, ImageResultReference] | None]):
     """One saved result history and original-image comparison, without generation."""
+
+    DISPLAY_TYPES = frozenset((
+        ArtifactType.IMAGE, ArtifactType.IMAGE_COLLECTION, ArtifactType.MASK,
+        ArtifactType.VIDEO, ArtifactType.AUDIO, ArtifactType.IMAGE_SEQUENCE,
+    ))
 
     DEFAULT_CSS = """
     WorkflowResults { width: 100%; height: 100%; }

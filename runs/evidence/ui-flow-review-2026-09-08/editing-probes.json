@@ -1,0 +1,18 @@
+{
+  "images": {
+    "widget": "Input",
+    "input_text": "First line",
+    "form_text": "First line"
+  },
+  "videos": {
+    "widget": "Input",
+    "input_text": "First line",
+    "form_text": "First line"
+  },
+  "workflow_draft": {
+    "text": "First line\nSecond line",
+    "buffer_dirty": false,
+    "title": "Interactions",
+    "number_of_drafts": 1
+  }
+}

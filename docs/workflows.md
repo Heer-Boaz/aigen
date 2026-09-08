@@ -4,6 +4,47 @@ The Workflows tab and `aigen workflow` commands use the same document,
 compiler, executor, and cache. Klein and Qwen are separate, explicit backend
 choices. A missing runtime or model is an error for the selected route.
 
+## Work on the canvas
+
+Click a node to select it and drag its body to move it. Drag a port to a
+compatible port to connect nodes. Select a connection before dragging its
+endpoint to reconnect it. A completed drag is one undo step; Escape cancels
+the preview. The background and middle mouse button pan the canvas. The wheel
+scrolls vertically; Shift+wheel scrolls horizontally.
+
+Right-click or Shift+F10 opens actions for the current node, connection, or
+empty canvas. Node actions include **Run to here**, **Results** for viewable
+outputs, and **Seed variants** for image edits. The inspector's **⋯** menu
+exposes the same actions. **+ Node** or Insert opens a searchable node picker.
+Adding from the canvas context menu places the new node near the clicked
+location.
+
+The single top bar keeps document commands in **Menu** (F10). Ctrl+S saves,
+Ctrl+O opens a workflow, and Ctrl+Z/Ctrl+Y undo and redo graph edits. Text fields
+retain their editing keys. Arrow keys select nodes; Shift+arrow moves them.
+**Run** (F5) changes to **Stop** while executing. Shift+F5 reaches the running
+process even when a menu or results dialog is open.
+
+On a wide terminal the inspector sits beside the canvas. On a narrow terminal,
+**Inspect** or Enter opens it as a side drawer; Escape or **×** closes it.
+Resizing and closing the drawer preserve unfinished input. Before changing the
+document or selection, the editor commits valid input or focuses the invalid
+field. A property edit and the following node drag have separate undo steps.
+
+Prompts and negative prompts use a multiline editor. Enter inserts a line;
+Tab and Shift+Tab move between fields. Ctrl+Enter applies the current property
+edits; Ctrl+S applies them and saves the workflow. Pasting retains all lines,
+including blank lines. The active text editor keeps its selection and local
+undo history across saves, backend changes, and drawer resizes. Ctrl+Z/Ctrl+Y
+operate on that text while it has focus; focus the canvas to undo graph edits.
+F7 selects all text. Backend details follow the editable properties.
+
+For ports that accept multiple inputs, select a connection and choose its
+**Input order** position in the inspector. The ordered source list shows the
+result. Moving from position 1 to 3 inserts the connection after the other two
+in one undo step. This orders connections: a reference-pack connection may
+contain several images.
+
 ## Generate, compare, choose, continue
 
 1. Choose **New image flow**, or **Open as workflow** on the Images form.
@@ -14,7 +55,8 @@ choices. A missing runtime or model is an error for the selected route.
    Incoming reference connections have an explicit order. The inspector shows
    the backend's reference roles, canvas alignment, LoRA compatibility, and
    strength meaning.
-3. Select the edit and choose **Seed variants**. Enter distinct integer seeds.
+3. Select the edit and choose **Seed variants** from its context menu or
+   **⋯** menu in the inspector. Enter distinct integer seeds.
    This creates one edit per seed, a collection, and a selection node. Existing
    consumers of the edit are reconnected to the selection. This is one undo
    operation. Importing the Images form already creates this structure.

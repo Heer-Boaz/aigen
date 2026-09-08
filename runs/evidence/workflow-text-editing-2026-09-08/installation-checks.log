@@ -1,0 +1,5 @@
+Installed pinned commit: skips reinstall
+Package-index 8.2.8: installs the pinned source
+Different source revision: installs the pinned source
+Source archive without VCS identity: installs the pinned source
+Fresh environment: installs the pinned source once, before project dependency resolution

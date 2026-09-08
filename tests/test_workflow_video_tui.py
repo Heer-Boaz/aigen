@@ -17,7 +17,7 @@ from aigen.workflow_graph import (
 from aigen.workflow_media_results import MediaCandidate, resolve_media_result
 from aigen.workflow_results_tui import WorkflowResults
 from aigen.tui_file_browser import FileBrowser
-from test_workflow_properties import open_editor, select_node
+from test_workflow_properties import menu_command, open_editor, select_node
 from test_workflow_results_tui import finish_process
 
 
@@ -46,7 +46,7 @@ class WorkflowVideoUITests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(await pilot.click("#browser-select"))
                     await pilot.pause()
                     self.assertEqual(app.workflow_buffer.document.node(node_id).config.path, str(chosen))
-                self.assertTrue(await pilot.click("#workflow-save"))
+                await pilot.press("ctrl+s")
                 await pilot.pause()
                 from aigen.workflow_document_io import load_workflow_document
                 self.assertEqual(load_workflow_document(document), app.workflow_buffer.document)
@@ -68,10 +68,10 @@ class WorkflowVideoUITests(unittest.IsolatedAsyncioTestCase):
             with patch.object(image_tui, "DEFAULT_WORKFLOW_RUNS_ROOT", directory / "runs"):
                 async with open_editor(graph, directory) as (app, editor, pilot, _):
                     await select_node(app, editor, pilot, "assemble")
-                    self.assertTrue(await pilot.click("#workflow-run-target"))
+                    await menu_command(app, pilot, "run-target", context=True)
                     await pilot.pause()
                     await finish_process(app, pilot)
-                    self.assertTrue(await pilot.click("#workflow-results"))
+                    await menu_command(app, pilot, "results", context=True)
                     await pilot.pause()
                     results = app.screen
                     self.assertIsInstance(results, WorkflowResults)
@@ -91,7 +91,7 @@ class WorkflowVideoUITests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(await pilot.click("#result-close"))
                     await pilot.pause()
                     await select_node(app, editor, pilot, "extract")
-                    self.assertTrue(await pilot.click("#workflow-results"))
+                    await menu_command(app, pilot, "results", context=True)
                     await pilot.pause()
                     frames = app.screen
                     await frames.workers.wait_for_complete()

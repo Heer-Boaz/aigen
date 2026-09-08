@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from typing import Mapping
 
 from textual import events
 from textual.binding import Binding
-from textual.geometry import Offset, Region, Size
+from textual.geometry import Offset, Region
 from textual.message import Message
 from textual.scroll_view import ScrollView
 from textual.strip import Strip
@@ -35,6 +36,7 @@ class _ConnectionGesture:
 class WorkflowCanvas(ScrollView, can_focus=True):
     """Retained, scrollable ASCII projection of a workflow document."""
 
+    ALLOW_SELECT = False
     BINDINGS = [
         Binding("left", "select_left", show=False),
         Binding("right", "select_right", show=False),
@@ -49,7 +51,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
 
     DEFAULT_CSS = """
     WorkflowCanvas {
-        width: 3fr;
+        width: 1fr;
         height: 1fr;
         background: #15111d;
         border: solid #5b496d;
@@ -61,47 +63,29 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     }
     """
 
-    class SelectionChanged(Message):
-        def __init__(
-            self,
-            node_id: str | None,
-            connection_id: str | None,
-            previous_node_id: str | None,
-            previous_connection_id: str | None,
-        ) -> None:
+    class ContextRequested(Message):
+        def __init__(self, anchor: Offset, position: Offset) -> None:
             super().__init__()
-            self.node_id = node_id
-            self.connection_id = connection_id
-            self.previous_node_id = previous_node_id
-            self.previous_connection_id = previous_connection_id
-
-    class NodeMoved(Message):
-        def __init__(self, node_id: str, x: int, y: int) -> None:
-            super().__init__()
-            self.node_id = node_id
-            self.x = x
-            self.y = y
-
-    class ConnectionRequested(Message):
-        def __init__(
-            self,
-            source: NodePortRef,
-            target: NodePortRef,
-            connection_id: str | None,
-        ) -> None:
-            super().__init__()
-            self.source = source
-            self.target = target
-            self.connection_id = connection_id
+            self.anchor = anchor
+            self.position = position
 
     def __init__(
         self,
         document: WorkflowGraph,
         *,
+        prepare_interaction: Callable[[], Awaitable[bool]],
+        selection_changed: Callable[[str | None, str | None], Awaitable[None]],
+        move_node: Callable[[str, int, int], Awaitable[None]],
+        connect_ports: Callable[[NodePortRef, NodePortRef, str | None], Awaitable[None]],
         id: str | None = None,
     ) -> None:
         super().__init__(id=id)
         self._scene = WorkflowScene(document)
+        # Finish owner updates before accepting the next gesture or repeated key.
+        self._prepare_interaction = prepare_interaction
+        self._selection_changed = selection_changed
+        self._commit_node_move = move_node
+        self._connect_ports = connect_ports
         self._drag_node_id: str | None = None
         self._drag_node_origin = Offset(0, 0)
         self._drag_pointer_origin = Offset(0, 0)
@@ -143,7 +127,9 @@ class WorkflowCanvas(ScrollView, can_focus=True):
         self._clear_gesture()
 
     def on_mouse_release(self, event: events.MouseRelease) -> None:
-        self._cancel_gesture()
+        # A release notification may arrive after the next gesture recaptures.
+        if self.app.mouse_captured is not self:
+            self._cancel_gesture()
 
     def set_document(self, document: WorkflowGraph) -> None:
         self._cancel_gesture()
@@ -200,32 +186,55 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     def node_geometry(self, node_id: str) -> NodeGeometry:
         return self._scene.node_geometry(node_id)
 
-    def action_select_left(self) -> None:
-        self._select_in_direction(-1, 0)
+    async def action_select_left(self) -> None:
+        await self._select_in_direction(-1, 0)
 
-    def action_select_right(self) -> None:
-        self._select_in_direction(1, 0)
+    async def action_select_right(self) -> None:
+        await self._select_in_direction(1, 0)
 
-    def action_select_up(self) -> None:
-        self._select_in_direction(0, -1)
+    async def action_select_up(self) -> None:
+        await self._select_in_direction(0, -1)
 
-    def action_select_down(self) -> None:
-        self._select_in_direction(0, 1)
+    async def action_select_down(self) -> None:
+        await self._select_in_direction(0, 1)
 
-    def action_move_left(self) -> None:
-        self._move_selected_node(-2, 0)
+    async def action_move_left(self) -> None:
+        await self._move_selected_node(-2, 0)
 
-    def action_move_right(self) -> None:
-        self._move_selected_node(2, 0)
+    async def action_move_right(self) -> None:
+        await self._move_selected_node(2, 0)
 
-    def action_move_up(self) -> None:
-        self._move_selected_node(0, -1)
+    async def action_move_up(self) -> None:
+        await self._move_selected_node(0, -1)
 
-    def action_move_down(self) -> None:
-        self._move_selected_node(0, 1)
+    async def action_move_down(self) -> None:
+        await self._move_selected_node(0, 1)
+
+    def can_connect_selection(self) -> bool:
+        if self.selected_connection_id is not None:
+            return True
+        if self.selected_node_id is None:
+            return False
+        selected = self.node_geometry(self.selected_node_id)
+        return any(
+            self._scene.ports_compatible(source, target)
+            for other in self._scene.node_geometries.values()
+            if other.node_id != selected.node_id
+            for sources, targets in ((selected.outputs, other.inputs), (other.outputs, selected.inputs))
+            for source in sources for target in targets
+        )
 
     def action_cancel_gesture(self) -> None:
         self._cancel_gesture()
+
+    async def action_context_menu(self, anchor: Offset | None = None) -> None:
+        if not await self._prepare_interaction():
+            return
+        geometry = self._scene.node_geometries.get(self.selected_node_id)
+        position = Offset(geometry.x, geometry.y) if geometry is not None else self.scroll_offset
+        if anchor is None:
+            anchor = self.content_region.offset + position - self.scroll_offset
+        self.post_message(self.ContextRequested(anchor, position))
 
     def check_action(
         self,
@@ -247,8 +256,14 @@ class WorkflowCanvas(ScrollView, can_focus=True):
     def on_resize(self, event: events.Resize) -> None:
         self._sync_virtual_size()
 
-    def on_mouse_down(self, event: events.MouseDown) -> None:
-        if event.button not in {1, 2}:
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+
+    async def on_mouse_down(self, event: events.MouseDown) -> None:
+        if event.button not in {1, 2, 3}:
+            return
+        event.stop()
+        if event.button in {1, 3} and not await self._prepare_interaction():
             return
         self.focus()
         if event.button == 2 and self._gesture_active():
@@ -256,6 +271,12 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             event.stop()
             return
         point = self._virtual_pointer(event)
+        if event.button == 3:
+            geometry = self._scene.node_at(point)
+            await self._select(geometry.node_id if geometry is not None else None,
+                               None if geometry is not None else self._scene.wire_at(point))
+            self.post_message(self.ContextRequested(event.screen_offset, point))
+            return
         if event.button == 1:
             if self._editable and (input_port := self._scene.input_near(point)):
                 connection_id = self._scene.reconnectable_input_connection(
@@ -302,25 +323,22 @@ class WorkflowCanvas(ScrollView, can_focus=True):
                 return
 
             if geometry := self._scene.node_at(point):
-                self._select(geometry.node_id, None)
-                if self._editable and point.y == geometry.y:
+                await self._select(geometry.node_id, None)
+                if self._editable:
                     self._drag_node_id = geometry.node_id
                     self._drag_node_origin = Offset(geometry.x, geometry.y)
-                    self._drag_pointer_origin = Offset(
-                        event.screen_x,
-                        event.screen_y,
-                    )
+                    self._drag_pointer_origin = point
                     self._drag_layout = self._drag_node_origin
                     self.capture_mouse()
                 event.stop()
                 return
 
             if connection_id := self._scene.wire_at(point):
-                self._select(None, connection_id)
+                await self._select(None, connection_id)
                 event.stop()
                 return
 
-            self._select(None, None)
+            await self._select(None, None)
 
         self._panning = True
         self._pan_pointer_origin = Offset(event.screen_x, event.screen_y)
@@ -330,10 +348,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
         if self._drag_node_id is not None:
-            delta = Offset(
-                event.screen_x - self._drag_pointer_origin.x,
-                event.screen_y - self._drag_pointer_origin.y,
-            )
+            delta = self._virtual_pointer(event) - self._drag_pointer_origin
             self._drag_layout = Offset(
                 max(0, self._drag_node_origin.x + delta.x),
                 max(0, self._drag_node_origin.y + delta.y),
@@ -367,25 +382,21 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             )
             event.stop()
 
-    def on_mouse_up(self, event: events.MouseUp) -> None:
+    async def on_mouse_up(self, event: events.MouseUp) -> None:
         if event.button not in {1, 2}:
             return
         if event.button == 1 and self._drag_node_id is not None:
             assert self._drag_layout is not None
             node_id = self._drag_node_id
             layout = self._drag_layout
-            settled_span = self._scene.finish_node_move()
+            moved = layout != self._drag_node_origin
+            settled_span = self._scene.finish_node_move() if moved else None
             self._clear_gesture()
             self.release_mouse()
             self._sync_virtual_size()
             self._refresh_row_span(settled_span)
-            self.post_message(
-                self.NodeMoved(
-                    node_id,
-                    layout.x,
-                    layout.y,
-                )
-            )
+            if moved:
+                await self._commit_node_move(node_id, layout.x, layout.y)
             event.stop()
             return
 
@@ -410,12 +421,10 @@ class WorkflowCanvas(ScrollView, can_focus=True):
                     if gesture.moving_source
                     else target_port
                 )
-                self.post_message(
-                    self.ConnectionRequested(
-                        NodePortRef(node_id=source.node_id, port=source.port),
-                        NodePortRef(node_id=target.node_id, port=target.port),
-                        gesture.connection_id,
-                    )
+                await self._connect_ports(
+                    NodePortRef(node_id=source.node_id, port=source.port),
+                    NodePortRef(node_id=target.node_id, port=target.port),
+                    gesture.connection_id,
                 )
             event.stop()
             return
@@ -455,7 +464,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             )
         event.stop()
 
-    def _select(
+    async def _select(
         self,
         node_id: str | None,
         connection_id: str | None,
@@ -465,20 +474,13 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             and connection_id == self.selected_connection_id
         ):
             return
-        previous_node_id = self.selected_node_id
-        previous_connection_id = self.selected_connection_id
         self._scene.set_selection(node_id, connection_id)
-        self.post_message(
-            self.SelectionChanged(
-                node_id,
-                connection_id,
-                previous_node_id,
-                previous_connection_id,
-            )
-        )
+        await self._selection_changed(node_id, connection_id)
         self.refresh()
 
-    def _select_in_direction(self, delta_x: int, delta_y: int) -> None:
+    async def _select_in_direction(self, delta_x: int, delta_y: int) -> None:
+        if not await self._prepare_interaction():
+            return
         geometries = self._scene.node_geometries
         if not geometries:
             return
@@ -527,7 +529,7 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             if not candidates:
                 return
             selected = geometries[min(candidates)[-1]]
-        self._select(selected.node_id, None)
+        await self._select(selected.node_id, None)
         self.scroll_to_region(
             Region(
                 selected.x,
@@ -539,24 +541,20 @@ class WorkflowCanvas(ScrollView, can_focus=True):
             immediate=True,
         )
 
-    def _move_selected_node(self, delta_x: int, delta_y: int) -> None:
+    async def _move_selected_node(self, delta_x: int, delta_y: int) -> None:
         if not self._editable or self.selected_node_id is None:
             return
+        if not await self._prepare_interaction():
+            return
         geometry = self._scene.node_geometry(self.selected_node_id)
-        self.post_message(
-            self.NodeMoved(
-                geometry.node_id,
-                max(0, geometry.x + delta_x),
-                max(0, geometry.y + delta_y),
-            )
+        await self._commit_node_move(
+            geometry.node_id,
+            max(0, geometry.x + delta_x),
+            max(0, geometry.y + delta_y),
         )
 
     def _sync_virtual_size(self) -> None:
-        content_size = self._scene.content_size
-        virtual_size = Size(
-            max(self.size.width, content_size.width),
-            max(self.size.height, content_size.height),
-        )
+        virtual_size = self._scene.content_size
         if virtual_size != self.virtual_size:
             self.virtual_size = virtual_size
 

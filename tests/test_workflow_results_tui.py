@@ -22,7 +22,7 @@ from aigen.workflow_graph import (
 )
 from aigen.workflow_results import node_result_history, load_node_result, resolve_image_result
 from aigen.workflow_results_tui import ResultPreview, WorkflowResults
-from test_workflow_properties import open_editor, select_node
+from test_workflow_properties import menu_command, open_editor, select_node
 
 
 def cpu_graph(directory):
@@ -87,13 +87,13 @@ class WorkflowResultsUITests(unittest.IsolatedAsyncioTestCase):
             with patch.object(image_tui, "DEFAULT_WORKFLOW_RUNS_ROOT", root):
                 async with open_editor(graph, directory) as (app, editor, pilot, document_path):
                     await select_node(app, editor, pilot, "collection")
-                    self.assertTrue(await pilot.click("#workflow-run-target"))
+                    await menu_command(app, pilot, "run-target", context=True)
                     await pilot.pause()
                     await finish_process(app, pilot)
                     statuses = editor.query_one(WorkflowCanvas).runtime_statuses
                     self.assertNotIn("choice", statuses)
                     self.assertEqual(statuses["collection"], "completed")
-                    self.assertTrue(await pilot.click("#workflow-results"))
+                    await menu_command(app, pilot, "results", context=True)
                     await pilot.pause()
                     results = app.screen
                     self.assertIsInstance(results, WorkflowResults)
@@ -140,7 +140,7 @@ class WorkflowResultsUITests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(set(editor.query_one(WorkflowCanvas).runtime_statuses), {"choice", "next"})
                     self.assertTrue(node_result_history(root, saved.workflow_id, "next"))
                     await select_node(app, editor, pilot, "collection")
-                    self.assertTrue(await pilot.click("#workflow-results"))
+                    await menu_command(app, pilot, "results", context=True)
                     await pilot.pause()
                     await app.screen.workers.wait_for_complete()
                     self.assertEqual(app.screen.highlighted_index, 1)
@@ -197,14 +197,14 @@ class WorkflowResultsUITests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             async with open_editor(graph, Path(directory)) as (app, editor, pilot, _):
                 await select_node(app, editor, pilot, "edit")
-                self.assertTrue(await pilot.click("#workflow-variants"))
+                await menu_command(app, pilot, "variants", context=True)
                 await pilot.pause()
                 app.screen.query_one(Input).value = "10, 20, 30"
                 self.assertTrue(await pilot.click("#dialog-ok"))
                 await pilot.pause()
                 await editor.workers.wait_for_complete()
                 self.assertEqual(len(app.workflow_buffer.document.nodes), 5)
-                self.assertTrue(await pilot.click("#workflow-undo"))
+                await menu_command(app, pilot, "undo")
                 await pilot.pause()
                 self.assertEqual(app.workflow_buffer.document, graph)
 

@@ -1,0 +1,796 @@
+[
+  {
+    "name": "full-run-before-choice-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "error": "choose and save an image for 'Selected' before continuing; run its collection to make variants"
+  },
+  {
+    "message_escape_dismissed": false
+  },
+  {
+    "name": "finished-stage-80x24",
+    "screen": [
+      80,
+      24
+    ]
+  },
+  {
+    "name": "results-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "#result-gallery-scroll": {
+      "region": [
+        1,
+        3,
+        78,
+        13
+      ],
+      "virtual": [
+        76,
+        66
+      ]
+    },
+    "#result-gallery": {
+      "region": [
+        1,
+        24,
+        76,
+        45
+      ],
+      "virtual": [
+        76,
+        45
+      ]
+    },
+    "#result-inputs": {
+      "region": [
+        1,
+        3,
+        76,
+        21
+      ],
+      "virtual": [
+        76,
+        21
+      ]
+    },
+    "#result-details": {
+      "region": [
+        1,
+        16,
+        78,
+        7
+      ],
+      "virtual": [
+        0,
+        61
+      ]
+    },
+    "#result-actions": {
+      "region": [
+        1,
+        23,
+        78,
+        1
+      ],
+      "virtual": [
+        78,
+        1
+      ]
+    },
+    "tiles": [
+      {
+        "label": "Original input · image · 691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6.png",
+        "region": [
+          1,
+          3,
+          48,
+          21
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 0",
+        "region": [
+          1,
+          24,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": false,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 1",
+        "region": [
+          1,
+          47,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": false,
+        "framework_is_on_screen": true
+      }
+    ],
+    "buttons": [
+      {
+        "id": "candidate-0",
+        "label": "Inspect",
+        "region": [
+          3,
+          44,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "candidate-1",
+        "label": "Inspect",
+        "region": [
+          3,
+          67,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-select",
+        "label": "Select image",
+        "region": [
+          1,
+          23,
+          15,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-open",
+        "label": "Open original",
+        "region": [
+          16,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-export",
+        "label": "Export",
+        "region": [
+          32,
+          23,
+          15,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-log",
+        "label": "Records / log",
+        "region": [
+          47,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-close",
+        "label": "Close",
+        "region": [
+          63,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      }
+    ]
+  },
+  {
+    "name": "results-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "#result-gallery-scroll": {
+      "region": [
+        1,
+        3,
+        118,
+        24
+      ],
+      "virtual": [
+        116,
+        43
+      ]
+    },
+    "#result-gallery": {
+      "region": [
+        1,
+        24,
+        116,
+        22
+      ],
+      "virtual": [
+        116,
+        22
+      ]
+    },
+    "#result-inputs": {
+      "region": [
+        1,
+        3,
+        116,
+        21
+      ],
+      "virtual": [
+        116,
+        21
+      ]
+    },
+    "#result-details": {
+      "region": [
+        1,
+        27,
+        118,
+        12
+      ],
+      "virtual": [
+        0,
+        56
+      ]
+    },
+    "#result-actions": {
+      "region": [
+        1,
+        39,
+        118,
+        1
+      ],
+      "virtual": [
+        118,
+        1
+      ]
+    },
+    "tiles": [
+      {
+        "label": "Original input · image · 691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6.png",
+        "region": [
+          1,
+          3,
+          48,
+          21
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 0",
+        "region": [
+          1,
+          24,
+          47,
+          22
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 1",
+        "region": [
+          49,
+          24,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      }
+    ],
+    "buttons": [
+      {
+        "id": "candidate-0",
+        "label": "Inspect",
+        "region": [
+          3,
+          44,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "candidate-1",
+        "label": "Inspect",
+        "region": [
+          51,
+          44,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-select",
+        "label": "Select image",
+        "region": [
+          1,
+          39,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-open",
+        "label": "Open original",
+        "region": [
+          24,
+          39,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-export",
+        "label": "Export",
+        "region": [
+          48,
+          39,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-log",
+        "label": "Records / log",
+        "region": [
+          71,
+          39,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-close",
+        "label": "Close",
+        "region": [
+          95,
+          39,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      }
+    ]
+  },
+  {
+    "name": "results-160x50",
+    "screen": [
+      160,
+      50
+    ],
+    "#result-gallery-scroll": {
+      "region": [
+        1,
+        3,
+        158,
+        30
+      ],
+      "virtual": [
+        156,
+        43
+      ]
+    },
+    "#result-gallery": {
+      "region": [
+        1,
+        24,
+        156,
+        22
+      ],
+      "virtual": [
+        156,
+        22
+      ]
+    },
+    "#result-inputs": {
+      "region": [
+        1,
+        3,
+        156,
+        21
+      ],
+      "virtual": [
+        156,
+        21
+      ]
+    },
+    "#result-details": {
+      "region": [
+        1,
+        33,
+        158,
+        16
+      ],
+      "virtual": [
+        0,
+        55
+      ]
+    },
+    "#result-actions": {
+      "region": [
+        1,
+        49,
+        158,
+        1
+      ],
+      "virtual": [
+        158,
+        1
+      ]
+    },
+    "tiles": [
+      {
+        "label": "Original input · image · 691229d1b533b509d81913bd92be07ecc7187587901de586b2ed0611dc9df7f6.png",
+        "region": [
+          1,
+          3,
+          48,
+          21
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 0",
+        "region": [
+          1,
+          24,
+          47,
+          22
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 1",
+        "region": [
+          49,
+          24,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      }
+    ],
+    "buttons": [
+      {
+        "id": "candidate-0",
+        "label": "Inspect",
+        "region": [
+          3,
+          44,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "candidate-1",
+        "label": "Inspect",
+        "region": [
+          51,
+          44,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-select",
+        "label": "Select image",
+        "region": [
+          1,
+          49,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-open",
+        "label": "Open original",
+        "region": [
+          32,
+          49,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-export",
+        "label": "Export",
+        "region": [
+          64,
+          49,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-log",
+        "label": "Records / log",
+        "region": [
+          95,
+          49,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-close",
+        "label": "Close",
+        "region": [
+          127,
+          49,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      }
+    ]
+  },
+  {
+    "candidate_before_image_click": 0,
+    "candidate_after_image_click": 0
+  },
+  {
+    "results_escape_dismissed": false
+  },
+  {
+    "name": "results-candidate-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "#result-gallery-scroll": {
+      "region": [
+        1,
+        3,
+        78,
+        13
+      ],
+      "virtual": [
+        76,
+        66
+      ]
+    },
+    "#result-gallery": {
+      "region": [
+        1,
+        -28,
+        76,
+        45
+      ],
+      "virtual": [
+        76,
+        45
+      ]
+    },
+    "#result-inputs": {
+      "region": [
+        1,
+        -49,
+        76,
+        21
+      ],
+      "virtual": [
+        76,
+        21
+      ]
+    },
+    "#result-details": {
+      "region": [
+        1,
+        16,
+        78,
+        7
+      ],
+      "virtual": [
+        0,
+        61
+      ]
+    },
+    "#result-actions": {
+      "region": [
+        1,
+        23,
+        78,
+        1
+      ],
+      "virtual": [
+        78,
+        1
+      ]
+    },
+    "tiles": [
+      {
+        "label": "Original input · image · 40d515fed9fadde3424ca593ccf0e41e68b17c834298187d1ac15b31e911f00f.png",
+        "region": [
+          1,
+          -49,
+          48,
+          21
+        ],
+        "intersects_gallery_viewport": false,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 0",
+        "region": [
+          1,
+          -28,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": false,
+        "framework_is_on_screen": true
+      },
+      {
+        "label": "Candidate 1",
+        "region": [
+          1,
+          -5,
+          48,
+          22
+        ],
+        "intersects_gallery_viewport": true,
+        "framework_is_on_screen": true
+      }
+    ],
+    "buttons": [
+      {
+        "id": "candidate-0",
+        "label": "Inspect",
+        "region": [
+          3,
+          -8,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "candidate-1",
+        "label": "Inspect",
+        "region": [
+          3,
+          15,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-select",
+        "label": "Select image",
+        "region": [
+          1,
+          23,
+          15,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-open",
+        "label": "Open original",
+        "region": [
+          16,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-export",
+        "label": "Export",
+        "region": [
+          32,
+          23,
+          15,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-log",
+        "label": "Records / log",
+        "region": [
+          47,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      },
+      {
+        "id": "result-close",
+        "label": "Close",
+        "region": [
+          63,
+          23,
+          16,
+          1
+        ],
+        "disabled": false,
+        "visible": true
+      }
+    ]
+  },
+  {
+    "name": "selected-continue-80x24",
+    "screen": [
+      80,
+      24
+    ]
+  },
+  {
+    "prompt_escape_dismissed": false
+  },
+  {
+    "name": "filename-dialog-80x24",
+    "screen": [
+      80,
+      24
+    ]
+  }
+]

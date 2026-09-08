@@ -13,6 +13,18 @@ python -m venv .venv
 .venv/bin/python -m pip install -e ".[generation]"
 ```
 
+Textual is pinned to the upstream fix for [multiline undo crashes](https://github.com/Textualize/textual/pull/6687),
+which is not yet in a release. When updating an existing environment, pip needs
+an explicit reinstall because the fixed source still reports version 8.2.8:
+
+```bash
+textual_requirement=$(.venv/bin/python -c 'from importlib.metadata import requires; print(next(req for req in requires("aigen") if req.startswith("textual @ ")))')
+.venv/bin/python -m pip install --force-reinstall --no-deps "$textual_requirement"
+```
+
+`scripts/setup_venv.sh` includes this step. Fresh environments install the pinned
+source directly.
+
 Models live under `aigen/models`. Hub repo IDs and revisions are pinned in model
 source manifests and recorded in run metadata.
 
@@ -255,11 +267,17 @@ backend workers, so a cancelled run cannot leave a worker holding GPU memory.
 The Workflows tab lists the current and session-opened workflow documents with
 mouse and keyboard selection, and opens a fullscreen ASCII node editor. Drag
 from an output to an input to connect them; dragging again from a selected
-connection's output relinks it atomically. Nodes can be moved on a scrollable
-canvas, reordered where an input accepts multiple values, and edited through
-the responsive inspector. Workflow nodes can also be selected with the arrow
-keys and moved with Shift+arrow. Seeded nodes expose fixed and per-run random
-seed modes.
+connection's output relinks it atomically. Click anywhere inside a node to
+select it, or drag its body to move it. Right-click or Shift+F10 opens actions
+for that node, connection, or empty canvas. **+ Node** opens a searchable node
+picker. **Menu** holds document commands; Ctrl+S saves and Ctrl+Z/Ctrl+Y undo
+and redo canvas edits. Arrow keys select nodes; Shift+arrow moves them.
+On narrow terminals, **Inspect** or Enter opens properties in a side drawer;
+Escape closes it. Resizing preserves unfinished property input. For an input
+with multiple connections, select a wire and change its **Input order** in
+the inspector. **Run** becomes **Stop** during execution; Shift+F5 also stops
+through open menus and result dialogs. Seeded nodes expose fixed and per-run
+random seed modes.
 Workflow documents are ordinary JSON files. `New image flow` starts with two
 ordered references and two image-edit steps. The Images form can also open its
 current settings as a workflow. `Seed variants` creates independently cached

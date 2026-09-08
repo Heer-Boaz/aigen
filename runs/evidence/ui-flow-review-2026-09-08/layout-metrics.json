@@ -1,0 +1,2695 @@
+[
+  {
+    "name": "images-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          113,
+          13,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          116,
+          13,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          113,
+          14,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          116,
+          14,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "+ Seed",
+        "name": "add-seed",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "+ Image",
+        "name": "add-image",
+        "id": null,
+        "disabled": false,
+        "region": [
+          13,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "+ Pack",
+        "name": "add-reference-pack",
+        "id": null,
+        "disabled": false,
+        "region": [
+          25,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "+ LoRA",
+        "name": "add-lora",
+        "id": null,
+        "disabled": false,
+        "region": [
+          37,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Remove",
+        "name": "remove",
+        "id": null,
+        "disabled": false,
+        "region": [
+          49,
+          36,
+          13,
+          1
+        ],
+        "content_width": 11
+      },
+      {
+        "label": "Browse",
+        "name": "browse",
+        "id": null,
+        "disabled": false,
+        "region": [
+          62,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Use Result",
+        "name": "use-result",
+        "id": null,
+        "disabled": false,
+        "region": [
+          74,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Save Pack",
+        "name": "save-pack",
+        "id": null,
+        "disabled": false,
+        "region": [
+          86,
+          36,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Save Config",
+        "name": "save-config",
+        "id": null,
+        "disabled": false,
+        "region": [
+          98,
+          36,
+          13,
+          1
+        ],
+        "content_width": 11
+      },
+      {
+        "label": "Load Config",
+        "name": "load-config",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          38,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Open as workflow",
+        "name": "image-workflow",
+        "id": null,
+        "disabled": false,
+        "region": [
+          13,
+          38,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Generate",
+        "name": "generate",
+        "id": "generation-action",
+        "disabled": false,
+        "region": [
+          25,
+          38,
+          12,
+          1
+        ],
+        "content_width": 10
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          111,
+          36,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        36,
+        120,
+        3
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        2,
+        120,
+        34
+      ],
+      "visible": true
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Prompt",
+      "Model",
+      "Sampler",
+      "Scheduler",
+      "Aspect ratio",
+      "Width",
+      "Height",
+      "Steps",
+      "Guidance",
+      "Strength",
+      "Output directory",
+      "Seed 1",
+      "Image 1"
+    ],
+    "properties": []
+  },
+  {
+    "name": "videos-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          113,
+          16,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": false,
+        "region": [
+          116,
+          16,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          113,
+          17,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": false,
+        "region": [
+          116,
+          17,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": false,
+        "region": [
+          113,
+          18,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          116,
+          18,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": false,
+        "region": [
+          113,
+          19,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          116,
+          19,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          113,
+          20,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          116,
+          20,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "+ Keyframe",
+        "name": "add-keyframe",
+        "id": "video-add-keyframe",
+        "disabled": false,
+        "region": [
+          1,
+          38,
+          15,
+          1
+        ],
+        "content_width": 13
+      },
+      {
+        "label": "+ Seed",
+        "name": "add-video-seed",
+        "id": "video-add-seed",
+        "disabled": false,
+        "region": [
+          16,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "+ Image",
+        "name": "add-video-image",
+        "id": "video-add-image",
+        "disabled": false,
+        "region": [
+          32,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Remove",
+        "name": "remove-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          48,
+          38,
+          15,
+          1
+        ],
+        "content_width": 13
+      },
+      {
+        "label": "Browse",
+        "name": "browse-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          63,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Open as workflow",
+        "name": "video-workflow",
+        "id": null,
+        "disabled": false,
+        "region": [
+          79,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Generate",
+        "name": "video-generate",
+        "id": "video-action",
+        "disabled": false,
+        "region": [
+          95,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          111,
+          38,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        38,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        2,
+        120,
+        36
+      ],
+      "visible": true
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Backend",
+      "Prompt",
+      "Negative prompt",
+      "Resolution",
+      "Keyframe fit",
+      "Frames",
+      "FPS",
+      "Steps",
+      "Phases",
+      "Solver",
+      "Conditioning strength",
+      "Model",
+      "Output directory",
+      "Filename",
+      "Keyframe 1",
+      "Keyframe 1 frame",
+      "Keyframe 2",
+      "Keyframe 2 frame",
+      "Seed 1"
+    ],
+    "properties": []
+  },
+  {
+    "name": "sam-edit-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "Browse",
+        "name": "browse-sam",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Edit prompts",
+        "name": "sam-edit",
+        "id": "sam-edit-prompts",
+        "disabled": true,
+        "region": [
+          23,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Clear prompts",
+        "name": "sam-clear",
+        "id": null,
+        "disabled": false,
+        "region": [
+          45,
+          38,
+          17,
+          1
+        ],
+        "content_width": 15
+      },
+      {
+        "label": "Open as workflow",
+        "name": "sam-workflow",
+        "id": "sam-workflow",
+        "disabled": false,
+        "region": [
+          67,
+          38,
+          20,
+          1
+        ],
+        "content_width": 18
+      },
+      {
+        "label": "Run",
+        "name": "sam-segment",
+        "id": "sam-action",
+        "disabled": false,
+        "region": [
+          89,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          111,
+          38,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        38,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        2,
+        120,
+        36
+      ],
+      "visible": true
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Input image",
+      "Operation",
+      "Segmenter",
+      "Device",
+      "Prompt mode",
+      "Mask candidate",
+      "Auto-box threshold",
+      "Mask grow/shrink",
+      "Mask feather",
+      "Fill holes",
+      "Keep largest component",
+      "Invert mask",
+      "Output",
+      "Output directory"
+    ],
+    "properties": []
+  },
+  {
+    "name": "postprocessing-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "Process",
+        "name": "postprocess",
+        "id": "postprocess-action",
+        "disabled": false,
+        "region": [
+          1,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          111,
+          38,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        38,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        2,
+        120,
+        36
+      ],
+      "visible": true
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Operation",
+      "Model",
+      "Input image",
+      "Output directory",
+      "Long side"
+    ],
+    "properties": []
+  },
+  {
+    "name": "workflows-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "Open Editor",
+        "name": "workflow-open",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "New image flow",
+        "name": "workflow-new",
+        "id": null,
+        "disabled": false,
+        "region": [
+          23,
+          38,
+          18,
+          1
+        ],
+        "content_width": 16
+      },
+      {
+        "label": "New character flow",
+        "name": "workflow-new-character",
+        "id": null,
+        "disabled": false,
+        "region": [
+          45,
+          38,
+          22,
+          1
+        ],
+        "content_width": 20
+      },
+      {
+        "label": "New video flow",
+        "name": "workflow-new-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          67,
+          38,
+          18,
+          1
+        ],
+        "content_width": 16
+      },
+      {
+        "label": "Load",
+        "name": "workflow-load",
+        "id": null,
+        "disabled": false,
+        "region": [
+          89,
+          38,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          111,
+          38,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        38,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        2,
+        120,
+        36
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": []
+  },
+  {
+    "name": "images-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          73,
+          13,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          76,
+          13,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          73,
+          14,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          76,
+          14,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "+ Seed",
+        "name": "add-seed",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          19,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "+ Image",
+        "name": "add-image",
+        "id": null,
+        "disabled": false,
+        "region": [
+          15,
+          19,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "+ Pack",
+        "name": "add-reference-pack",
+        "id": null,
+        "disabled": false,
+        "region": [
+          29,
+          19,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "+ LoRA",
+        "name": "add-lora",
+        "id": null,
+        "disabled": false,
+        "region": [
+          43,
+          19,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Remove",
+        "name": "remove",
+        "id": null,
+        "disabled": false,
+        "region": [
+          57,
+          19,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Browse",
+        "name": "browse",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          20,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Use Result",
+        "name": "use-result",
+        "id": null,
+        "disabled": false,
+        "region": [
+          15,
+          20,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Save Pack",
+        "name": "save-pack",
+        "id": null,
+        "disabled": false,
+        "region": [
+          29,
+          20,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Save Config",
+        "name": "save-config",
+        "id": null,
+        "disabled": false,
+        "region": [
+          43,
+          20,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Load Config",
+        "name": "load-config",
+        "id": null,
+        "disabled": false,
+        "region": [
+          57,
+          20,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Open as workflow",
+        "name": "image-workflow",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Generate",
+        "name": "generate",
+        "id": "generation-action",
+        "disabled": false,
+        "region": [
+          15,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          71,
+          19,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        19,
+        80,
+        4
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        2,
+        80,
+        17
+      ],
+      "visible": true
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Prompt",
+      "Model",
+      "Sampler",
+      "Scheduler",
+      "Aspect ratio",
+      "Width",
+      "Height",
+      "Steps",
+      "Guidance",
+      "Strength",
+      "Output directory",
+      "Seed 1",
+      "Image 1"
+    ],
+    "properties": []
+  },
+  {
+    "name": "videos-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          73,
+          16,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": false,
+        "region": [
+          76,
+          16,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          73,
+          17,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": false,
+        "region": [
+          76,
+          17,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": false,
+        "region": [
+          73,
+          18,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          76,
+          18,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": false,
+        "region": [
+          73,
+          19,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          76,
+          19,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↑",
+        "name": "move-up",
+        "id": null,
+        "disabled": true,
+        "region": [
+          73,
+          20,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "↓",
+        "name": "move-down",
+        "id": null,
+        "disabled": true,
+        "region": [
+          76,
+          20,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "+ Keyframe",
+        "name": "add-keyframe",
+        "id": "video-add-keyframe",
+        "disabled": false,
+        "region": [
+          1,
+          21,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "+ Seed",
+        "name": "add-video-seed",
+        "id": "video-add-seed",
+        "disabled": false,
+        "region": [
+          15,
+          21,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "+ Image",
+        "name": "add-video-image",
+        "id": "video-add-image",
+        "disabled": false,
+        "region": [
+          29,
+          21,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Remove",
+        "name": "remove-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          43,
+          21,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Browse",
+        "name": "browse-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          57,
+          21,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Open as workflow",
+        "name": "video-workflow",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Generate",
+        "name": "video-generate",
+        "id": "video-action",
+        "disabled": false,
+        "region": [
+          15,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          71,
+          21,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        21,
+        80,
+        2
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        2,
+        80,
+        19
+      ],
+      "visible": true
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Backend",
+      "Prompt",
+      "Negative prompt",
+      "Resolution",
+      "Keyframe fit",
+      "Frames",
+      "FPS",
+      "Steps",
+      "Phases",
+      "Solver",
+      "Conditioning strength",
+      "Model",
+      "Output directory",
+      "Filename",
+      "Keyframe 1",
+      "Keyframe 1 frame",
+      "Keyframe 2",
+      "Keyframe 2 frame",
+      "Seed 1"
+    ],
+    "properties": []
+  },
+  {
+    "name": "sam-edit-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Browse",
+        "name": "browse-sam",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Edit prompts",
+        "name": "sam-edit",
+        "id": "sam-edit-prompts",
+        "disabled": true,
+        "region": [
+          15,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Clear prompts",
+        "name": "sam-clear",
+        "id": null,
+        "disabled": false,
+        "region": [
+          29,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Open as workflow",
+        "name": "sam-workflow",
+        "id": "sam-workflow",
+        "disabled": false,
+        "region": [
+          43,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Run",
+        "name": "sam-segment",
+        "id": "sam-action",
+        "disabled": false,
+        "region": [
+          57,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          71,
+          22,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        22,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        2,
+        80,
+        20
+      ],
+      "visible": true
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Input image",
+      "Operation",
+      "Segmenter",
+      "Device",
+      "Prompt mode",
+      "Mask candidate",
+      "Auto-box threshold",
+      "Mask grow/shrink",
+      "Mask feather",
+      "Fill holes",
+      "Keep largest component",
+      "Invert mask",
+      "Output",
+      "Output directory"
+    ],
+    "properties": []
+  },
+  {
+    "name": "postprocessing-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Process",
+        "name": "postprocess",
+        "id": "postprocess-action",
+        "disabled": false,
+        "region": [
+          1,
+          22,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          71,
+          22,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        22,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        2,
+        80,
+        20
+      ],
+      "visible": true
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "visible_form_fields": [
+      "Operation",
+      "Model",
+      "Input image",
+      "Output directory",
+      "Long side"
+    ],
+    "properties": []
+  },
+  {
+    "name": "workflows-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Open Editor",
+        "name": "workflow-open",
+        "id": null,
+        "disabled": false,
+        "region": [
+          1,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "New image flow",
+        "name": "workflow-new",
+        "id": null,
+        "disabled": false,
+        "region": [
+          15,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "New character flow",
+        "name": "workflow-new-character",
+        "id": null,
+        "disabled": false,
+        "region": [
+          29,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "New video flow",
+        "name": "workflow-new-video",
+        "id": null,
+        "disabled": false,
+        "region": [
+          43,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Load",
+        "name": "workflow-load",
+        "id": null,
+        "disabled": false,
+        "region": [
+          57,
+          22,
+          14,
+          1
+        ],
+        "content_width": 12
+      },
+      {
+        "label": "Quit",
+        "name": "quit",
+        "id": null,
+        "disabled": false,
+        "region": [
+          71,
+          22,
+          8,
+          1
+        ],
+        "content_width": 6
+      }
+    ],
+    "#action-footer": {
+      "region": [
+        0,
+        22,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "#image-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#video-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#sam-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#postprocess-fields": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-documents": {
+      "region": [
+        0,
+        2,
+        80,
+        20
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": []
+  },
+  {
+    "name": "canvas-default-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Menu",
+        "name": "menu",
+        "id": "workflow-menu",
+        "disabled": false,
+        "region": [
+          1,
+          0,
+          6,
+          1
+        ],
+        "content_width": 6
+      },
+      {
+        "label": "+ Node",
+        "name": "add",
+        "id": "workflow-add-node",
+        "disabled": false,
+        "region": [
+          57,
+          0,
+          8,
+          1
+        ],
+        "content_width": 8
+      },
+      {
+        "label": "Inspect",
+        "name": "inspect",
+        "id": "workflow-inspect",
+        "disabled": false,
+        "region": [
+          65,
+          0,
+          9,
+          1
+        ],
+        "content_width": 9
+      },
+      {
+        "label": "Run",
+        "name": "run",
+        "id": "workflow-run",
+        "disabled": false,
+        "region": [
+          74,
+          0,
+          5,
+          1
+        ],
+        "content_width": 5
+      }
+    ],
+    "#workflow-command-bar": {
+      "region": [
+        0,
+        0,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "#workflow-inspector-panel": {
+      "region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false
+    },
+    "#workflow-editor-status": {
+      "region": [
+        0,
+        23,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": [
+      {
+        "field": "name",
+        "visible": false,
+        "region": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "canvas": [
+      1,
+      2,
+      78,
+      20
+    ],
+    "selected_node": null,
+    "narrow": true
+  },
+  {
+    "name": "canvas-default-120x40",
+    "screen": [
+      120,
+      40
+    ],
+    "buttons": [
+      {
+        "label": "Menu",
+        "name": "menu",
+        "id": "workflow-menu",
+        "disabled": false,
+        "region": [
+          1,
+          0,
+          6,
+          1
+        ],
+        "content_width": 6
+      },
+      {
+        "label": "+ Node",
+        "name": "add",
+        "id": "workflow-add-node",
+        "disabled": false,
+        "region": [
+          106,
+          0,
+          8,
+          1
+        ],
+        "content_width": 8
+      },
+      {
+        "label": "Run",
+        "name": "run",
+        "id": "workflow-run",
+        "disabled": false,
+        "region": [
+          114,
+          0,
+          5,
+          1
+        ],
+        "content_width": 5
+      },
+      {
+        "label": "⋯",
+        "name": "context",
+        "id": "workflow-context",
+        "disabled": false,
+        "region": [
+          116,
+          1,
+          3,
+          1
+        ],
+        "content_width": 3
+      }
+    ],
+    "#workflow-command-bar": {
+      "region": [
+        0,
+        0,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "#workflow-inspector-panel": {
+      "region": [
+        78,
+        1,
+        42,
+        38
+      ],
+      "visible": true
+    },
+    "#workflow-editor-status": {
+      "region": [
+        0,
+        39,
+        120,
+        1
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": [
+      {
+        "field": "name",
+        "visible": true,
+        "region": [
+          80,
+          4,
+          38,
+          1
+        ]
+      }
+    ],
+    "canvas": [
+      1,
+      2,
+      76,
+      36
+    ],
+    "selected_node": null,
+    "narrow": false
+  },
+  {
+    "name": "canvas-default-160x50",
+    "screen": [
+      160,
+      50
+    ],
+    "buttons": [
+      {
+        "label": "Menu",
+        "name": "menu",
+        "id": "workflow-menu",
+        "disabled": false,
+        "region": [
+          1,
+          0,
+          6,
+          1
+        ],
+        "content_width": 6
+      },
+      {
+        "label": "+ Node",
+        "name": "add",
+        "id": "workflow-add-node",
+        "disabled": false,
+        "region": [
+          146,
+          0,
+          8,
+          1
+        ],
+        "content_width": 8
+      },
+      {
+        "label": "Run",
+        "name": "run",
+        "id": "workflow-run",
+        "disabled": false,
+        "region": [
+          154,
+          0,
+          5,
+          1
+        ],
+        "content_width": 5
+      },
+      {
+        "label": "⋯",
+        "name": "context",
+        "id": "workflow-context",
+        "disabled": false,
+        "region": [
+          156,
+          1,
+          3,
+          1
+        ],
+        "content_width": 3
+      }
+    ],
+    "#workflow-command-bar": {
+      "region": [
+        0,
+        0,
+        160,
+        1
+      ],
+      "visible": true
+    },
+    "#workflow-inspector-panel": {
+      "region": [
+        118,
+        1,
+        42,
+        48
+      ],
+      "visible": true
+    },
+    "#workflow-editor-status": {
+      "region": [
+        0,
+        49,
+        160,
+        1
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": [
+      {
+        "field": "name",
+        "visible": true,
+        "region": [
+          120,
+          4,
+          38,
+          1
+        ]
+      }
+    ],
+    "canvas": [
+      1,
+      2,
+      116,
+      46
+    ],
+    "selected_node": null,
+    "narrow": false
+  },
+  {
+    "name": "inspector-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Menu",
+        "name": "menu",
+        "id": "workflow-menu",
+        "disabled": false,
+        "region": [
+          1,
+          0,
+          6,
+          1
+        ],
+        "content_width": 6
+      },
+      {
+        "label": "+ Node",
+        "name": "add",
+        "id": "workflow-add-node",
+        "disabled": false,
+        "region": [
+          57,
+          0,
+          8,
+          1
+        ],
+        "content_width": 8
+      },
+      {
+        "label": "Inspect",
+        "name": "inspect",
+        "id": "workflow-inspect",
+        "disabled": false,
+        "region": [
+          65,
+          0,
+          9,
+          1
+        ],
+        "content_width": 9
+      },
+      {
+        "label": "Run",
+        "name": "run",
+        "id": "workflow-run",
+        "disabled": false,
+        "region": [
+          74,
+          0,
+          5,
+          1
+        ],
+        "content_width": 5
+      },
+      {
+        "label": "⋯",
+        "name": "context",
+        "id": "workflow-context",
+        "disabled": false,
+        "region": [
+          73,
+          1,
+          3,
+          1
+        ],
+        "content_width": 3
+      },
+      {
+        "label": "×",
+        "name": "hide-inspector",
+        "id": "workflow-inspector-close",
+        "disabled": false,
+        "region": [
+          76,
+          1,
+          3,
+          1
+        ],
+        "content_width": 3
+      }
+    ],
+    "#workflow-command-bar": {
+      "region": [
+        0,
+        0,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "#workflow-inspector-panel": {
+      "region": [
+        38,
+        1,
+        42,
+        22
+      ],
+      "visible": true
+    },
+    "#workflow-editor-status": {
+      "region": [
+        0,
+        23,
+        80,
+        1
+      ],
+      "visible": true
+    },
+    "visible_form_fields": [],
+    "properties": [
+      {
+        "field": "name",
+        "visible": true,
+        "region": [
+          40,
+          4,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "title",
+        "visible": true,
+        "region": [
+          40,
+          8,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "backend",
+        "visible": true,
+        "region": [
+          40,
+          9,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "prompt",
+        "visible": true,
+        "region": [
+          40,
+          11,
+          37,
+          7
+        ]
+      },
+      {
+        "field": "seed_mode",
+        "visible": true,
+        "region": [
+          40,
+          19,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "seed",
+        "visible": true,
+        "region": [
+          40,
+          20,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "aspect_ratio",
+        "visible": true,
+        "region": [
+          40,
+          21,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "width",
+        "visible": true,
+        "region": [
+          40,
+          22,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "height",
+        "visible": true,
+        "region": [
+          40,
+          23,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "steps",
+        "visible": true,
+        "region": [
+          40,
+          24,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "guidance",
+        "visible": true,
+        "region": [
+          40,
+          25,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "strength",
+        "visible": true,
+        "region": [
+          40,
+          26,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "sampler",
+        "visible": true,
+        "region": [
+          40,
+          27,
+          37,
+          1
+        ]
+      },
+      {
+        "field": "scheduler",
+        "visible": true,
+        "region": [
+          40,
+          28,
+          37,
+          1
+        ]
+      }
+    ],
+    "canvas": [
+      1,
+      2,
+      78,
+      20
+    ],
+    "selected_node": "edit",
+    "narrow": true
+  },
+  {
+    "name": "document-menu-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [],
+    "visible_form_fields": [],
+    "properties": []
+  },
+  {
+    "name": "node-menu-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [],
+    "visible_form_fields": [],
+    "properties": []
+  },
+  {
+    "name": "connect-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [
+      {
+        "label": "Cancel",
+        "name": null,
+        "id": "workflow-connect-cancel",
+        "disabled": false,
+        "region": [
+          41,
+          13,
+          16,
+          1
+        ],
+        "content_width": 14
+      },
+      {
+        "label": "Connect",
+        "name": null,
+        "id": "workflow-connect-confirm",
+        "disabled": false,
+        "region": [
+          57,
+          13,
+          16,
+          1
+        ],
+        "content_width": 14
+      }
+    ],
+    "visible_form_fields": [],
+    "properties": []
+  },
+  {
+    "name": "node-picker-80x24",
+    "screen": [
+      80,
+      24
+    ],
+    "buttons": [],
+    "visible_form_fields": [],
+    "properties": []
+  }
+]

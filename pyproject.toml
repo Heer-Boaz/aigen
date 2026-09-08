@@ -17,7 +17,8 @@ dependencies = [
   "Pillow>=10",
   "pydantic>=2.10",
   "scipy>=1.18",
-  "textual>=8.2,<9",
+  # Textual #6687 fixes multiline undo across scrollbar changes; based on v8.2.8.
+  "textual @ git+https://github.com/Textualize/textual.git@aff7b76b5157c38a87ccf0aec1f57df63f398ac5",
   "textual-image>=0.13,<0.14",
 ]
 

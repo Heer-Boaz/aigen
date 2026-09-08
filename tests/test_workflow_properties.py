@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from PIL import Image
-from textual.widgets import Button
+from textual.widgets import Button, OptionList
 
 from aigen import image_tui
 from aigen.generation.image_edit import image_edit_backend_settings
@@ -16,11 +16,12 @@ from aigen.workflow_compilation import compile_workflow
 from aigen.workflow_document_io import load_workflow_document, save_workflow_document
 from aigen.workflow_edit_buffer import WorkflowEditBuffer
 from aigen.workflow_graph import (
-    AnimeGenI2VNode, ImageEditConfig, ImageEditNode, ImagePostprocessNode,
+    AnimeGenI2VNode, CharacterEditConfig, CharacterEditNode, ImageEditConfig, ImageEditNode, ImagePostprocessNode,
     ImageSourceConfig, ImageSourceNode, NodePortRef, PixelArtFixerConfig,
     WorkflowConnection, WorkflowGraph,
 )
-from aigen.workflow_inspector import PropertyInput, PropertySelect, WorkflowInspector
+from aigen.workflow_inspector import WorkflowInspector
+from aigen.workflow_property_widgets import PropertyInput, PropertySelect
 from aigen.workflow_templates import default_animegen_config
 
 
@@ -39,14 +40,14 @@ def custom_nodes():
 
 
 @asynccontextmanager
-async def open_editor(graph, directory):
+async def open_editor(graph, directory, *, size=(120, 40)):
     document_path = directory / "workflow.json"
     save_workflow_document(graph, document_path)
     with patch.object(image_tui, "STATE_PATH", directory / "form.json"):
         app = image_tui.ImageGenerationApp()
         app.workflow_buffer = WorkflowEditBuffer(load_workflow_document(document_path), document_path=document_path)
         app.workflow_document_paths = [document_path]
-        async with app.run_test(size=(120, 40)) as pilot:
+        async with app.run_test(size=size) as pilot:
             app._open_workflow_editor()
             await pilot.pause()
             yield app, app.workflow_editor, pilot, document_path
@@ -55,6 +56,18 @@ async def open_editor(graph, directory):
 async def select_node(app, editor, pilot, node_id):
     editor.query_one(WorkflowCanvas).set_selected_node(node_id)
     await editor.query_one(WorkflowInspector).show(app.workflow_buffer.document, node_id, None)
+    editor._update_actions()
+    editor.query_one(WorkflowCanvas).focus()
+    await pilot.pause()
+
+
+async def menu_command(app, pilot, command, *, context=False):
+    await pilot.press("shift+f10" if context else "f10")
+    await pilot.pause()
+    options = app.screen.query_one(OptionList)
+    options.highlighted = options.get_option_index(command)
+    options.focus()
+    await pilot.press("enter")
     await pilot.pause()
 
 
@@ -87,6 +100,20 @@ class WorkflowPropertyBufferTests(unittest.TestCase):
         buffer.undo()
         self.assertEqual(buffer.document.node("edit").config, custom_nodes()[0].config)
 
+    def test_klein_backend_switch_resets_pose_mode_and_undo_restores_qwen_settings(self):
+        node = CharacterEditNode(id="edit", title="Edit", config=CharacterEditConfig(
+            backend="qwen-image-edit-2511-lightning", pose_mode="keypoint",
+            max_sequence_length=512, guidance_scale=3,
+        ))
+        buffer = WorkflowEditBuffer(WorkflowGraph(name="Backend defaults", nodes=(node,)))
+        buffer.update_node_config(node.id, "backend", "flux2-klein")
+        config = buffer.document.node(node.id).config
+        self.assertEqual(config.pose_mode, "native")
+        self.assertIsNone(config.max_sequence_length)
+        self.assertIsNone(config.guidance_scale)
+        buffer.undo()
+        self.assertEqual(buffer.document.node(node.id).config, node.config)
+
 
 class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
     async def test_cpu_run_cache_status_edits_reopen_and_stop(self):
@@ -116,7 +143,8 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                         await pilot.pause()
                         self.assertIsNotNone(app.process)
                         process = app.process
-                        self.assertTrue(editor.query_one("#workflow-run", Button).disabled)
+                        self.assertFalse(editor.query_one("#workflow-run", Button).disabled)
+                        self.assertEqual(str(editor.query_one("#workflow-run", Button).label), "Stop")
                         await wait_finished()
                         self.assertTrue(process.stdout.at_eof())
                         self.assertEqual(canvas.runtime_statuses["fix"], expected)
@@ -125,7 +153,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     property_widget(editor, PropertyInput, "path").value = str(directory / "replacement.png")
                     self.assertTrue(await editor.commit_pending_property())
                     self.assertEqual(canvas.runtime_statuses, {"source": "outdated", "fix": "outdated"})
-                    self.assertTrue(await pilot.click("#workflow-close"))
+                    await menu_command(app, pilot, "close")
                     await pilot.pause()
                     self.assertIsNone(app.workflow_editor)
                     app._open_workflow_editor()
@@ -133,7 +161,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     editor = app.workflow_editor
                     canvas = editor.query_one(WorkflowCanvas)
                     self.assertEqual(canvas.runtime_statuses["fix"], "outdated")
-                    self.assertTrue(await pilot.click("#workflow-undo"))
+                    await menu_command(app, pilot, "undo")
                     await pilot.pause()
                     self.assertEqual(canvas.runtime_statuses["fix"], "reused")
 
@@ -145,7 +173,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     await pilot.pause()
                     process = app.process
                     self.assertEqual(os.getpgid(process.pid), process.pid)
-                    self.assertTrue(await pilot.click("#workflow-stop"))
+                    self.assertTrue(await pilot.click("#workflow-run"))
                     await wait_finished()
                     self.assertEqual(process.returncode, -15)
                     self.assertTrue(process.stdout.at_eof())
@@ -160,22 +188,22 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(app.workflow_buffer.document, graph)
                     self.assertFalse(app.workflow_buffer.dirty)
                     self.assertFalse(app.workflow_buffer.can_undo)
-                self.assertTrue(await pilot.click("#workflow-save"))
+                await pilot.press("ctrl+s")
                 await pilot.pause(0.4)
                 self.assertEqual(path.read_bytes(), original_bytes)
 
                 force = property_widget(editor, PropertyInput, "force_step")
                 force.value = "2"
-                self.assertTrue(await pilot.click("#workflow-save"))
+                await pilot.press("ctrl+s")
                 await pilot.pause()
                 self.assertEqual(load_workflow_document(path), app.workflow_buffer.document)
                 self.assertEqual(app.workflow_buffer.document.node("fix").config.force_step, 2.0)
                 self.assertFalse(app.workflow_buffer.dirty)
-                self.assertTrue(await pilot.click("#workflow-undo"))
+                await menu_command(app, pilot, "undo")
                 await pilot.pause()
                 self.assertEqual(app.workflow_buffer.document, graph)
                 self.assertTrue(app.workflow_buffer.can_redo)
-                self.assertTrue(await pilot.click("#workflow-redo"))
+                await menu_command(app, pilot, "redo")
                 await pilot.pause()
                 self.assertEqual(load_workflow_document(path), app.workflow_buffer.document)
                 self.assertFalse(app.workflow_buffer.dirty)
@@ -204,7 +232,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                     property_widget(editor, PropertySelect, field).value = None
                     await pilot.pause()
                     self.assertIsNone(getattr(app.workflow_buffer.document.node("edit").config, field))
-                self.assertTrue(await pilot.click("#workflow-save"))
+                await pilot.press("ctrl+s")
                 await pilot.pause()
                 self.assertEqual(load_workflow_document(path), graph)
 
@@ -223,7 +251,7 @@ class WorkflowPropertyUITests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(app.workflow_buffer.document.node("edit").config.backend, "flux2-klein")
                 self.assertEqual(app.workflow_buffer.document.node("edit").config.steps, 4)
-                self.assertTrue(await pilot.click("#workflow-undo"))
+                await menu_command(app, pilot, "undo")
                 await pilot.pause()
                 self.assertEqual(app.workflow_buffer.document.node("edit").config.steps, 31)
 

@@ -281,6 +281,7 @@ class ImageGenerationApp(App[None]):
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
         Binding("ctrl+c", "quit", show=False),
+        Binding("shift+f5", "stop_generation", show=False, priority=True),
         Binding(
             "backspace",
             "remove_hovered_slot",
@@ -722,11 +723,16 @@ class ImageGenerationApp(App[None]):
         )
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        hovered = self._hovered_row()
+        if action == "stop_generation":
+            return self.generation_worker is not None
+        if action in {"remove_hovered_slot", "remove_selected_slot", "clear_selected_field"}:
+            if self.screen is not self.screen_stack[0]:
+                return False
         if action == "remove_hovered_slot":
+            hovered = self._hovered_row()
             return hovered is not None and hovered.field.slot_id is not None
         if action == "remove_selected_slot":
-            return hovered is None
+            return self._hovered_row() is None
         return super().check_action(action, parameters)
 
     @on(Input.Changed)
@@ -1531,7 +1537,7 @@ class ImageGenerationApp(App[None]):
             self.workflow_editor.set_running(True)
 
     @on(WorkflowEditor.StopRequested)
-    def workflow_stop_requested(self) -> None:
+    def action_stop_generation(self) -> None:
         self._cancel_generation()
 
     @on(WorkflowEditor.QuitRequested)

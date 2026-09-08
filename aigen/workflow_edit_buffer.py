@@ -397,22 +397,10 @@ class WorkflowEditBuffer:
         )
         return _connection_by_id(self._document, connection_id)
 
-    def connection_move_capabilities(
+    def reorder_connection(
         self,
         connection_id: str,
-    ) -> tuple[bool, bool]:
-        selected = _connection_by_id(self._document, connection_id)
-        siblings = _ordered_connection_siblings(
-            self._document,
-            selected,
-        )
-        index = siblings.index(selected)
-        return index > 0, index < len(siblings) - 1
-
-    def move_connection(
-        self,
-        connection_id: str,
-        direction: int,
+        position: int,
     ) -> bool:
         selected = _connection_by_id(self._document, connection_id)
         siblings = _ordered_connection_siblings(
@@ -420,19 +408,15 @@ class WorkflowEditBuffer:
             selected,
         )
         source_index = siblings.index(selected)
-        target_index = source_index + direction
-        if not 0 <= target_index < len(siblings):
+        if not 0 <= position < len(siblings):
+            raise ValueError(f"Input position must be between 1 and {len(siblings)}")
+        if source_index == position:
             return False
-
-        other = siblings[target_index]
+        siblings.insert(position, siblings.pop(source_index))
+        orders = {connection.id: index for index, connection in enumerate(siblings)}
         connections = [
-            _connection_with_order(connection, other.order)
-            if connection.id == selected.id
-            else (
-                _connection_with_order(connection, selected.order)
-                if connection.id == other.id
-                else connection
-            )
+            _connection_with_order(connection, orders[connection.id])
+            if connection.id in orders else connection
             for connection in self._document.connections
         ]
         return self._commit(
@@ -440,9 +424,7 @@ class WorkflowEditBuffer:
                 self._document,
                 connections=connections,
             ),
-            "Move connection earlier"
-            if direction < 0
-            else "Move connection later",
+            "Reorder input connections",
         )
 
     def move_node(
@@ -800,7 +782,7 @@ def _apply_backend_defaults(
             scheduler=settings.scheduler,
         )
         if isinstance(node, CharacterEditNode) and value == "flux2-klein":
-            config_payload.update(max_sequence_length=None, guidance_scale=None)
+            config_payload.update(pose_mode="native", max_sequence_length=None, guidance_scale=None)
     elif (
         isinstance(node, AnimeGenI2VNode)
         and field_name == "sampling"

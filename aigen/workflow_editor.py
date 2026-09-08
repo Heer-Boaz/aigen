@@ -5,10 +5,12 @@ from pathlib import Path
 from pydantic import ValidationError
 from textual import events, on
 from textual.app import ComposeResult
-from textual.containers import Container, ItemGrid
+from textual.binding import Binding
+from textual.containers import Container, Horizontal
+from textual.geometry import Offset
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select
+from textual.widgets import Button, Input, Label, Select, TextArea
 
 from aigen.workflow_canvas import WorkflowCanvas
 from aigen.workflow_edit_buffer import (
@@ -17,7 +19,6 @@ from aigen.workflow_edit_buffer import (
 )
 from aigen.workflow_graph import (
     ImageEditNode,
-    ImageSelectionNode,
     ImageResultReference,
     NodeKind,
     NodePortRef,
@@ -25,38 +26,66 @@ from aigen.workflow_graph import (
     node_definition,
 )
 from aigen.workflow_inspector import (
+    ConnectionOrderSelect,
+    WorkflowInspector,
+)
+from aigen.workflow_property_widgets import (
     PropertyInput,
     PropertyRow,
     PropertySelect,
-    WorkflowInspector,
+    PropertyTextArea,
 )
 from aigen.workflow_layout import NODE_WIDTH
 from aigen.workflow_run_state import WorkflowRunState
 from aigen.workflow_results_tui import WorkflowResults
 from aigen.tui_dialogs import PromptDialog
 from aigen.workflow_commands import DEFAULT_WORKFLOW_RUNS_ROOT
+from aigen.workflow_connection_dialog import WorkflowConnectionDialog
+from aigen.tui_choice_menu import ChoiceMenu, MenuChoice
 
 
 class WorkflowEditorBody(Container):
-    """Owns the responsive canvas and inspector split."""
+    """Keep one inspector and its drafts across split and drawer layouts."""
+
+    class LayoutChanged(Message):
+        pass
+
+    @property
+    def narrow(self) -> bool:
+        return self.has_class("narrow")
+
+    def show_inspector(self, visible: bool) -> None:
+        self.set_class(visible, "inspector-open")
+        self.post_message(self.LayoutChanged())
 
     def on_resize(self, event: events.Resize) -> None:
-        canvas = self.query_one(WorkflowCanvas)
         inspector = self.query_one(WorkflowInspector)
-        horizontal_minimum = (
-            self.styles.gutter.width
-            + NODE_WIDTH
-            + canvas.styles.gutter.width
-            + inspector.horizontal_minimum_width
-        )
-        self.set_class(
-            event.size.width < horizontal_minimum,
-            "stacked",
-        )
+        narrow = event.size.width < 2 * NODE_WIDTH + inspector.horizontal_minimum_width + 4
+        self.set_class(narrow, "narrow")
+        panel = self.query_one("#workflow-inspector-panel")
+        width = min(42, event.size.width)
+        panel.styles.width = width
+        panel.styles.offset = (event.size.width - width if narrow else 0, 0)
+        self.post_message(self.LayoutChanged())
 
 
 class WorkflowEditor(ModalScreen[None]):
     """Fullscreen visual editor for the persisted workflow graph."""
+
+    BINDINGS = [
+        Binding("ctrl+s", "command('save')", show=False),
+        Binding("ctrl+enter", "commit_properties", show=False),
+        Binding("ctrl+o", "command('load')", show=False),
+        Binding("ctrl+z", "command('undo')", show=False),
+        Binding("ctrl+y,ctrl+shift+z", "command('redo')", show=False),
+        Binding("insert", "command('add')", show=False),
+        Binding("delete,backspace", "command('delete')", show=False),
+        Binding("f5", "command('run')", show=False),
+        Binding("f10", "command('menu')", show=False),
+        Binding("shift+f10", "command('context')", show=False),
+        Binding("enter", "command('inspect')", show=False),
+        Binding("escape", "close_inspector", show=False),
+    ]
 
     DEFAULT_CSS = """
     WorkflowEditor {
@@ -71,56 +100,68 @@ class WorkflowEditor(ModalScreen[None]):
         background: #100d16;
     }
 
+    WorkflowEditor #workflow-command-bar {
+        height: 1;
+        padding: 0 1;
+        background: #211a2d;
+    }
+
     WorkflowEditor #workflow-editor-title {
-        width: 100%;
+        width: 1fr;
         height: 1;
         padding: 0 1;
         color: #d8c5eb;
         text-style: bold;
-    }
-
-    WorkflowEditor #workflow-node-toolbar,
-    WorkflowEditor #workflow-document-toolbar {
-        width: 100%;
-        height: auto;
-        grid-gutter: 0;
-        padding: 0 1;
-    }
-
-    WorkflowEditor #workflow-node-kind {
-        height: 1;
-        min-width: 20;
-        border: none;
-        padding: 0;
+        text-overflow: ellipsis;
     }
 
     WorkflowEditor Button {
+        width: auto;
+        min-width: 3;
         height: 1;
         min-height: 1;
         border: none;
-        padding: 0 1;
+        padding: 0;
     }
 
     WorkflowEditor WorkflowEditorBody {
         layout: horizontal;
         width: 100%;
         height: 1fr;
+        padding: 0;
+    }
+
+    WorkflowEditor #workflow-inspector-panel {
+        width: 42;
+        height: 1fr;
+        background: #1c1724;
+    }
+
+    WorkflowEditor #workflow-inspector-actions {
+        height: 1;
         padding: 0 1;
     }
 
-    WorkflowEditor WorkflowEditorBody.stacked {
-        layout: vertical;
+    WorkflowEditor #workflow-inspector-title {
+        width: 1fr;
+        height: 1;
+        color: #d8c5eb;
     }
 
-    WorkflowEditor WorkflowEditorBody.stacked > WorkflowCanvas {
-        width: 100%;
-        height: 3fr;
-    }
-
-    WorkflowEditor WorkflowEditorBody.stacked > WorkflowInspector {
+    WorkflowEditor WorkflowInspector {
         width: 100%;
         min-width: 0;
-        height: 2fr;
+        height: 1fr;
+    }
+
+    WorkflowEditor WorkflowEditorBody.narrow > #workflow-inspector-panel {
+        position: absolute;
+        display: none;
+    }
+
+    WorkflowEditor WorkflowEditorBody.narrow.inspector-open > #workflow-inspector-panel {
+        display: block;
+        layer: inspector;
     }
 
     WorkflowEditor #workflow-editor-status {
@@ -176,140 +217,42 @@ class WorkflowEditor(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Container(id="workflow-editor-shell"):
-            yield Label(self._title_text(), id="workflow-editor-title")
-            yield ItemGrid(
-                Select(
-                    (
-                        (node_definition(kind).label, kind.value)
-                        for kind in NodeKind
-                    ),
-                    value=NodeKind.IMAGE_SOURCE.value,
-                    allow_blank=False,
-                    compact=True,
-                    id="workflow-node-kind",
-                    classes="workflow-edit-control",
-                ),
-                Button(
-                    "+ Node",
-                    id="workflow-add-node",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Delete",
-                    id="workflow-delete-node",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Earlier",
-                    id="workflow-connection-earlier",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Later",
-                    id="workflow-connection-later",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Undo",
-                    id="workflow-undo",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Redo",
-                    id="workflow-redo",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Auto layout",
-                    id="workflow-auto-layout",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button("Seed variants", id="workflow-variants", classes="workflow-edit-control", compact=True),
-                min_column_width=10,
-                stretch_height=False,
-                regular=False,
-                id="workflow-node-toolbar",
-            )
+            with Horizontal(id="workflow-command-bar"):
+                yield Button("Menu", name="menu", id="workflow-menu", compact=True, tooltip="Workflow commands · F10")
+                yield Label(self._title_text(), id="workflow-editor-title", markup=False)
+                yield Button("+ Node", name="add", id="workflow-add-node", compact=True, tooltip="Find a node · Insert")
+                yield Button("Inspect", name="inspect", id="workflow-inspect", compact=True, tooltip="Show properties · Enter")
+                yield Button("Run", name="run", id="workflow-run", variant="primary", compact=True, tooltip="Run workflow · F5")
             with WorkflowEditorBody(id="workflow-editor-body"):
                 yield WorkflowCanvas(
                     self._edit_buffer.document,
+                    prepare_interaction=self.commit_pending_property,
+                    selection_changed=self._selection_changed,
+                    move_node=self._move_node,
+                    connect_ports=self._connect_ports,
                     id="workflow-canvas",
                 )
-                yield WorkflowInspector(
-                    self._edit_buffer.document,
-                    None,
-                    None,
-                    id="workflow-inspector",
-                )
-            yield ItemGrid(
-                Button(
-                    "Save",
-                    id="workflow-save",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Load",
-                    id="workflow-load",
-                    classes="workflow-edit-control",
-                    compact=True,
-                ),
-                Button(
-                    "Run",
-                    id="workflow-run",
-                    variant="primary",
-                    compact=True,
-                ),
-                Button("Run to here", id="workflow-run-target", classes="workflow-edit-control", compact=True),
-                Button("Results", id="workflow-results", classes="workflow-edit-control", compact=True),
-                Button(
-                    "Stop",
-                    id="workflow-stop",
-                    compact=True,
-                    disabled=True,
-                ),
-                Button(
-                    "Close",
-                    id="workflow-close",
-                    classes="workflow-run-locked-control",
-                    compact=True,
-                ),
-                Button(
-                    "Quit",
-                    id="workflow-quit",
-                    classes="workflow-run-locked-control",
-                    compact=True,
-                ),
-                min_column_width=9,
-                stretch_height=False,
-                regular=False,
-                id="workflow-document-toolbar",
-            )
+                with Container(id="workflow-inspector-panel"):
+                    with Horizontal(id="workflow-inspector-actions"):
+                        yield Label("Properties", id="workflow-inspector-title")
+                        yield Button("⋯", name="context", id="workflow-context", compact=True,
+                                     tooltip="Selection actions · Shift+F10")
+                        yield Button("×", name="hide-inspector", id="workflow-inspector-close", compact=True,
+                                     tooltip="Close properties · Escape")
+                    yield WorkflowInspector(self._edit_buffer.document, None, None, id="workflow-inspector")
             yield Label("Ready", id="workflow-editor-status")
 
     def on_mount(self) -> None:
-        self._update_history_actions()
+        self._update_actions()
+        self._set_status(self._selection_hint())
         self.query_one(WorkflowCanvas).focus()
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        for control in self.query(
-            ".workflow-edit-control, .workflow-run-locked-control"
-        ):
-            control.disabled = running
-        self.query_one("#workflow-run", Button).disabled = running
-        self.query_one("#workflow-stop", Button).disabled = not running
         self.query_one(WorkflowInspector).disabled = running
         self.query_one(WorkflowCanvas).set_editable(not running)
-        self._update_history_actions()
-        self._set_status("Workflow running" if running else "Ready")
+        self._update_actions()
+        self._set_status("Workflow running · Shift+F5: stop" if running else self._selection_hint())
 
     def refresh_runtime_statuses(self) -> None:
         self.query_one(WorkflowCanvas).set_runtime_statuses(
@@ -351,53 +294,32 @@ class WorkflowEditor(ModalScreen[None]):
             path.as_posix(),
         )
 
-    @on(WorkflowCanvas.SelectionChanged)
-    async def canvas_selection_changed(
+    async def _selection_changed(
         self,
-        event: WorkflowCanvas.SelectionChanged,
+        node_id: str | None,
+        connection_id: str | None,
     ) -> None:
-        if not await self.commit_pending_property():
-            self.query_one(WorkflowCanvas).set_selection(
-                event.previous_node_id,
-                event.previous_connection_id,
-            )
-            return
         await self.query_one(WorkflowInspector).show(
             self._edit_buffer.document,
-            event.node_id,
-            event.connection_id,
+            node_id,
+            connection_id,
         )
-        self._update_history_actions()
+        self._update_actions()
+        if not self._running:
+            self._set_status(self._selection_hint())
 
-    @on(WorkflowCanvas.NodeMoved)
-    async def canvas_node_moved(
+    async def _move_node(
         self,
-        event: WorkflowCanvas.NodeMoved,
+        node_id: str,
+        x: int,
+        y: int,
     ) -> None:
-        if not await self.commit_pending_property():
-            self.query_one(WorkflowCanvas).set_document(
-                self._edit_buffer.document
-            )
-            return
         if self._edit_buffer.move_node(
-            event.node_id,
-            x=event.x,
-            y=event.y,
+            node_id,
+            x=x,
+            y=y,
         ):
             await self._show_document()
-
-    @on(WorkflowCanvas.ConnectionRequested)
-    async def canvas_connection_requested(
-        self,
-        event: WorkflowCanvas.ConnectionRequested,
-    ) -> None:
-        if not await self.commit_pending_property():
-            return
-        await self._connect_ports(
-            event.source,
-            event.target,
-            event.connection_id,
-        )
 
     async def _connect_ports(
         self,
@@ -429,7 +351,7 @@ class WorkflowEditor(ModalScreen[None]):
                 None,
                 connection.id,
             )
-            self._update_history_actions()
+            self._update_actions()
 
     @on(Input.Submitted)
     async def property_submitted(self, event: Input.Submitted) -> None:
@@ -446,16 +368,29 @@ class WorkflowEditor(ModalScreen[None]):
         try:
             self._edit_buffer.update_properties(drafts)
         except WorkflowPropertyEditError as error:
+            self.query_one(WorkflowEditorBody).show_inspector(True)
             inspector.focus_invalid_draft(error.edit)
             self.notify(str(error), severity="error")
             return False
-        inspector.clear_drafts()
+        inspector.accept_properties()
         await self._show_document()
         return True
+
+    async def action_commit_properties(self) -> None:
+        await self.commit_pending_property()
 
     @on(Select.Changed)
     async def property_selected(self, event: Select.Changed) -> None:
         editor = event.select
+        if isinstance(editor, ConnectionOrderSelect):
+            if not editor.is_mounted or event.value == editor.position:
+                return
+            if not await self.commit_pending_property():
+                editor.value = editor.position
+                return
+            if self._edit_buffer.reorder_connection(editor.connection_id, int(event.value)):
+                await self._show_document()
+            return
         if not isinstance(editor, PropertySelect) or not editor.is_mounted:
             return
         if event.value == editor.original_value:
@@ -474,97 +409,216 @@ class WorkflowEditor(ModalScreen[None]):
 
     @on(Button.Pressed)
     async def button_pressed(self, event: Button.Pressed) -> None:
-        button_id = event.button.id
-        browse_request: tuple[str, str, str] | None = None
-        if (
-            event.button.name is not None
-            and event.button.has_class("workflow-property-browse")
-        ):
+        event.stop()
+        if event.button.has_class("workflow-property-browse"):
             row = event.button.query_ancestor(PropertyRow)
             assert isinstance(row, PropertyRow)
             assert row.node_id is not None
-            browse_request = (
-                row.node_id,
-                row.field_name,
-                row.query_one(PropertyInput).value,
-            )
-
-        if (
-            button_id
-            not in {
-                "workflow-stop",
-                "workflow-load",
-                "workflow-quit",
-            }
-            and not await self.commit_pending_property()
-        ):
+            node_id, field_name = row.node_id, row.field_name
+            value = row.query_one(PropertyInput).value
+            if await self.commit_pending_property():
+                self.post_message(self.BrowseRequested(node_id, field_name, value))
             return
+        command = event.button.name
+        if command == "context":
+            await self.query_one(WorkflowCanvas).action_context_menu(
+                Offset(event.button.region.x, event.button.region.bottom),
+            )
+            return
+        if command == "run" and self._running:
+            command = "stop"
+        if command is not None:
+            await self.action_command(command)
 
-        match button_id:
-            case "workflow-add-node":
-                await self._add_node()
-            case "workflow-delete-node":
-                await self._delete_selection()
-            case "workflow-connection-earlier":
-                await self._move_connection(-1)
-            case "workflow-connection-later":
-                await self._move_connection(1)
-            case "workflow-undo":
-                await self._undo()
-            case "workflow-redo":
-                await self._redo()
-            case "workflow-auto-layout":
-                await self._auto_layout()
-            case "workflow-save":
-                self._save()
-            case "workflow-load":
-                self.post_message(self.LoadRequested())
-            case "workflow-run":
-                self._run()
-            case "workflow-run-target":
-                node_id = self.query_one(WorkflowCanvas).selected_node_id
-                if node_id is not None:
-                    self.post_message(self.RunRequested(self._edit_buffer.document, (node_id,)))
-                else:
-                    self.notify("Select the result node to run to.")
-            case "workflow-variants":
-                self._variants()
-            case "workflow-results":
-                node_id = self.query_one(WorkflowCanvas).selected_node_id
-                if node_id is not None:
-                    self.app.push_screen(WorkflowResults(self._edit_buffer.document, node_id, self._runs_root), self._image_selected)
-                else:
-                    self.notify("Select a node to inspect its results.")
-            case "workflow-stop":
-                self.post_message(self.StopRequested())
-            case "workflow-close":
-                self.dismiss(None)
-            case "workflow-quit":
-                self.post_message(self.QuitRequested())
-            case _:
-                if browse_request is not None:
-                    node_id, field_name, current_value = browse_request
-                    self.post_message(
-                        self.BrowseRequested(
-                            node_id,
-                            field_name,
-                            current_value,
-                        )
-                    )
-
-    async def _add_node(self) -> None:
-        value = self.query_one("#workflow-node-kind", Select).value
-        assert isinstance(value, str)
+    async def action_command(self, command: str) -> None:
+        if not self._command_enabled(command):
+            return
+        if command not in {"menu", "context", "inspect", "hide-inspector", "stop", "load", "quit"}:
+            if not await self.commit_pending_property():
+                return
         canvas = self.query_one(WorkflowCanvas)
-        x = int(canvas.scroll_offset.x + max(2, canvas.size.width // 2))
-        y = int(canvas.scroll_offset.y + max(2, canvas.size.height // 2))
+        match command:
+            case "menu":
+                button = self.query_one("#workflow-menu")
+                self.app.push_screen(
+                    ChoiceMenu("Workflow", self._document_choices(),
+                               anchor=Offset(button.region.x, button.region.bottom)),
+                    self._menu_chosen,
+                )
+            case "context":
+                await canvas.action_context_menu()
+            case "add":
+                self._choose_node()
+            case "inspect":
+                self._show_inspector()
+            case "hide-inspector":
+                self.action_close_inspector()
+            case "delete":
+                await self._delete_selection()
+            case "undo":
+                await self._undo()
+            case "redo":
+                await self._redo()
+            case "layout":
+                await self._auto_layout()
+            case "save":
+                self._save()
+            case "load":
+                self.post_message(self.LoadRequested())
+            case "run":
+                self._run()
+            case "run-target":
+                self.post_message(self.RunRequested(self._edit_buffer.document, (canvas.selected_node_id,)))
+            case "variants":
+                self._variants()
+            case "results":
+                self.app.push_screen(
+                    WorkflowResults(self._edit_buffer.document, canvas.selected_node_id, self._runs_root),
+                    self._image_selected,
+                )
+            case "connect":
+                self._choose_connection()
+            case "stop":
+                self.post_message(self.StopRequested())
+            case "close":
+                self.dismiss(None)
+            case "quit":
+                self.post_message(self.QuitRequested())
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "commit_properties":
+            return isinstance(self.focused, PropertyTextArea)
+        if action == "command":
+            command = str(parameters[0])
+            if command in {"undo", "redo"} and isinstance(self.focused, (Input, TextArea)):
+                return False
+            if command in {"delete", "inspect", "add"} and not self.query_one(WorkflowCanvas).has_focus:
+                return False
+            return self._command_enabled(command)
+        if action == "close_inspector":
+            body = self.query_one(WorkflowEditorBody)
+            return body.narrow and body.has_class("inspector-open")
+        return super().check_action(action, parameters)
+
+    def _command_enabled(self, command: str) -> bool:
+        canvas = self.query_one(WorkflowCanvas)
+        node_id = canvas.selected_node_id
+        if command == "stop":
+            return self._running
+        if command == "results":
+            return node_id is not None and any(
+                artifact in WorkflowResults.DISPLAY_TYPES
+                for port in node_definition(self._edit_buffer.document.node(node_id).kind).outputs
+                for artifact in port.artifact_types
+            )
+        if command in {"menu", "context", "inspect", "hide-inspector", "quit"}:
+            return True
+        if self._running:
+            return False
+        if command == "undo":
+            return self._edit_buffer.can_undo
+        if command == "redo":
+            return self._edit_buffer.can_redo
+        if command == "delete":
+            return node_id is not None or canvas.selected_connection_id is not None
+        if command == "connect":
+            return canvas.can_connect_selection()
+        if command == "variants":
+            return node_id is not None and isinstance(self._edit_buffer.document.node(node_id), ImageEditNode)
+        if command == "run-target":
+            return node_id is not None
+        if command in {"run", "layout"}:
+            return bool(self._edit_buffer.document.nodes)
+        return True
+
+    def _document_choices(self) -> tuple[MenuChoice, ...]:
+        return tuple(
+            MenuChoice(command, label, shortcut, not self._command_enabled(command))
+            for command, label, shortcut in (
+                ("save", "Save workflow", "Ctrl+S"),
+                ("load", "Open workflow…", "Ctrl+O"),
+                ("undo", "Undo", "Ctrl+Z"),
+                ("redo", "Redo", "Ctrl+Y"),
+                ("layout", "Arrange nodes", ""),
+                ("inspect", "Properties", "Enter"),
+                ("close", "Close editor", ""),
+                ("quit", "Quit application", "Ctrl+C"),
+            )
+        )
+
+    def _context_choices(self) -> tuple[MenuChoice, ...]:
+        canvas = self.query_one(WorkflowCanvas)
+        if canvas.selected_node_id is not None:
+            choices = [("inspect", "Properties", "Enter"), ("run-target", "Run to here", "")]
+            if self._command_enabled("results"):
+                choices.append(("results", "Results", ""))
+            if isinstance(self._edit_buffer.document.node(canvas.selected_node_id), ImageEditNode):
+                choices.append(("variants", "Seed variants…", ""))
+            choices.extend((("connect", "Connect…", ""), ("delete", "Delete node", "Delete")))
+        elif canvas.selected_connection_id is not None:
+            choices = [("inspect", "Connection properties", "Enter"), ("connect", "Reconnect…", ""),
+                       ("delete", "Disconnect", "Delete")]
+        else:
+            choices = [("add", "Add node…", "Insert"), ("layout", "Arrange nodes", ""),
+                       ("inspect", "Workflow properties", "Enter")]
+        return tuple(
+            MenuChoice(command, label, shortcut, not self._command_enabled(command))
+            for command, label, shortcut in choices
+        )
+
+    @on(WorkflowCanvas.ContextRequested)
+    def context_requested(self, event: WorkflowCanvas.ContextRequested) -> None:
+        canvas = self.query_one(WorkflowCanvas)
+        if canvas.selected_node_id is not None:
+            title = self._edit_buffer.document.node(canvas.selected_node_id).title
+        else:
+            title = "Connection" if canvas.selected_connection_id is not None else "Canvas"
+
+        async def chosen(command: str | None) -> None:
+            if command == "add":
+                self._choose_node(event.position)
+            elif command is not None:
+                await self.action_command(command)
+        self.app.push_screen(ChoiceMenu(title, self._context_choices(), anchor=event.anchor), chosen)
+
+    async def _menu_chosen(self, command: str | None) -> None:
+        if command is not None:
+            await self.action_command(command)
+
+    def _choose_node(self, position: Offset | None = None) -> None:
+        async def chosen(value: str | None) -> None:
+            if value is not None:
+                await self._add_node(NodeKind(value), position)
+        self.app.push_screen(
+            ChoiceMenu("Add node", tuple(MenuChoice(kind.value, node_definition(kind).label) for kind in NodeKind),
+                       searchable=True),
+            chosen,
+        )
+
+    async def _add_node(self, kind: NodeKind, position: Offset | None) -> None:
+        canvas = self.query_one(WorkflowCanvas)
+        if position is None:
+            position = canvas.scroll_offset + Offset(
+                max(2, (canvas.size.width - NODE_WIDTH) // 2), max(2, canvas.size.height // 2),
+            )
         node = self._edit_buffer.add_node(
-            NodeKind(value),
-            x=x,
-            y=y,
+            kind, x=max(0, position.x), y=max(0, position.y),
         )
         canvas.set_selected_node(node.id)
         await self._show_document()
+
+    def _choose_connection(self) -> None:
+        canvas = self.query_one(WorkflowCanvas)
+        connection_id = canvas.selected_connection_id
+        connection = next((wire for wire in self._edit_buffer.document.connections if wire.id == connection_id), None)
+        dialog = WorkflowConnectionDialog(self._edit_buffer.document, canvas.selected_node_id, connection=connection)
+        if not dialog.can_connect:
+            self.notify("Add a node with a compatible input before connecting.")
+            return
+        async def chosen(endpoints: tuple[NodePortRef, NodePortRef] | None) -> None:
+            if endpoints is not None:
+                await self._connect_ports(*endpoints, connection_id=connection_id)
+        self.app.push_screen(dialog, chosen)
 
     async def _delete_selection(self) -> None:
         canvas = self.query_one(WorkflowCanvas)
@@ -580,15 +634,6 @@ class WorkflowEditor(ModalScreen[None]):
             return
         if changed:
             canvas.set_selection(None, None)
-            await self._show_document()
-
-    async def _move_connection(self, direction: int) -> None:
-        connection_id = self.query_one(
-            WorkflowCanvas
-        ).selected_connection_id
-        if connection_id is None:
-            return
-        if self._edit_buffer.move_connection(connection_id, direction):
             await self._show_document()
 
     async def _undo(self) -> None:
@@ -676,54 +721,50 @@ class WorkflowEditor(ModalScreen[None]):
         self.query_one("#workflow-editor-title", Label).update(
             self._title_text()
         )
-        self._update_history_actions()
+        self._update_actions()
 
-    def _update_history_actions(self) -> None:
-        self.query_one("#workflow-undo", Button).disabled = (
-            self._running or not self._edit_buffer.can_undo
-        )
-        self.query_one("#workflow-redo", Button).disabled = (
-            self._running or not self._edit_buffer.can_redo
-        )
-        canvas = self.query_one(WorkflowCanvas)
-        self.query_one("#workflow-delete-node", Button).disabled = (
-            self._running
-            or (
-                canvas.selected_node_id is None
-                and canvas.selected_connection_id is None
-            )
-        )
-        can_move_earlier, can_move_later = self._connection_move_states()
-        self.query_one(
-            "#workflow-connection-earlier",
-            Button,
-        ).disabled = self._running or not can_move_earlier
-        self.query_one(
-            "#workflow-connection-later",
-            Button,
-        ).disabled = self._running or not can_move_later
+    @on(WorkflowEditorBody.LayoutChanged)
+    def layout_changed(self) -> None:
+        self._update_actions()
 
-    def _connection_move_states(self) -> tuple[bool, bool]:
-        connection_id = self.query_one(
-            WorkflowCanvas
-        ).selected_connection_id
-        if connection_id is None:
-            return False, False
-        return self._edit_buffer.connection_move_capabilities(
-            connection_id
-        )
+    @on(events.DescendantFocus)
+    def property_focused(self, event: events.DescendantFocus) -> None:
+        if not self._running and isinstance(event.widget, (WorkflowCanvas, PropertyInput, PropertySelect, PropertyTextArea)):
+            self._set_status(self._selection_hint())
+
+    def _show_inspector(self) -> None:
+        self.query_one(WorkflowEditorBody).show_inspector(True)
+        self.call_after_refresh(self.query_one(WorkflowInspector).focus)
+
+    def action_close_inspector(self) -> None:
+        self.query_one(WorkflowEditorBody).show_inspector(False)
+        self.query_one(WorkflowCanvas).focus()
+
+    def _update_actions(self) -> None:
+        body = self.query_one(WorkflowEditorBody)
+        run = self.query_one("#workflow-run", Button)
+        run.label = "Stop" if self._running else "Run"
+        run.variant = "error" if self._running else "primary"
+        run.disabled = not self._command_enabled("stop" if self._running else "run")
+        run.tooltip = "Stop workflow · Shift+F5" if self._running else "Run workflow · F5"
+        self.query_one("#workflow-add-node", Button).disabled = self._running
+        self.query_one("#workflow-inspect").display = body.narrow
+        self.query_one("#workflow-inspector-close").display = body.narrow
+        self.refresh_bindings()
 
     def _set_status(self, message: str) -> None:
         self.query_one("#workflow-editor-status", Label).update(message)
 
+    def _selection_hint(self) -> str:
+        if isinstance(self.focused, PropertyTextArea):
+            return "Enter: new line · Ctrl+Enter: apply · Ctrl+S: save · Tab: next field"
+        canvas = self.query_one(WorkflowCanvas)
+        if canvas.selected_connection_id is not None:
+            return "Enter: input properties · Right-click / Shift+F10: reconnect or disconnect"
+        if canvas.selected_node_id is not None:
+            return "Drag to move · Enter: properties · Right-click / Shift+F10: node actions"
+        return "Drag nodes · Drag ports to connect · Right-click / Shift+F10: actions"
+
     def _title_text(self) -> str:
-        path = (
-            self._edit_buffer.document_path.as_posix()
-            if self._edit_buffer.document_path is not None
-            else "Unsaved"
-        )
         dirty = " *" if self._edit_buffer.dirty else ""
-        return (
-            f"Workflow — {self._edit_buffer.document.name} — "
-            f"{path}{dirty}"
-        )
+        return f"{self._edit_buffer.document.name}{dirty}"

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum
-from typing import Literal, get_args, get_origin
-
-from textual import events, on
+from textual import on
 from textual.app import ComposeResult
-from textual.containers import Container, VerticalScroll
-from textual.widgets import Button, Input, Label, Select, Static
+from textual.containers import VerticalScroll
+from textual.widgets import Input, Label, Select, Static, TextArea
 
 from aigen.generation.animegen_i2v import (
     ANIMEGEN_PRECISIONS,
@@ -37,147 +34,32 @@ from aigen.workflow_graph import (
 )
 from aigen.generation.ltx23_settings import LTX23_MODEL_TYPES, LTX23_SOLVERS, LTX23_PHASES
 from aigen.generation.hunyuanvideo15 import HUNYUANVIDEO15_STEPS
-
-
-PROPERTY_LABEL_MIN_WIDTH = 8
-PROPERTY_EDITOR_MIN_WIDTH = 8
-PROPERTY_BROWSE_MIN_WIDTH = 8
-PROPERTY_BROWSE_HORIZONTAL_PADDING = 1
-PROPERTY_BROWSE_OUTER_MIN_WIDTH = (
-    PROPERTY_BROWSE_MIN_WIDTH
-    + 2 * PROPERTY_BROWSE_HORIZONTAL_PADDING
-)
-INSPECTOR_HORIZONTAL_GUTTER_WIDTH = 4
-INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH = (
-    PROPERTY_LABEL_MIN_WIDTH
-    + PROPERTY_EDITOR_MIN_WIDTH
-    + PROPERTY_BROWSE_OUTER_MIN_WIDTH
-)
-INSPECTOR_HORIZONTAL_MIN_WIDTH = (
-    INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH
-    + INSPECTOR_HORIZONTAL_GUTTER_WIDTH
+from aigen.workflow_property_widgets import (
+    PROPERTY_ROW_MIN_WIDTH,
+    PropertyInput,
+    PropertyRow,
+    PropertyTextArea,
 )
 
 
-class PropertyInput(Input):
-    def __init__(
-        self,
-        value: str,
-        *,
-        original_value: str,
-        node_id: str | None,
-        field_name: str,
-    ) -> None:
+class ConnectionOrderSelect(Select[int]):
+    def __init__(self, connection_id: str, position: int, count: int) -> None:
         super().__init__(
-            value,
-            compact=True,
-            classes="workflow-property-editor",
-        )
-        self.node_id = node_id
-        self.field_name = field_name
-        self.original_value = original_value
-
-
-class PropertySelect(Select[object]):
-    def __init__(
-        self,
-        options: tuple[tuple[str, object], ...],
-        value: object,
-        *,
-        node_id: str,
-        field_name: str,
-    ) -> None:
-        super().__init__(
-            options,
-            value=value,
+            [(f"Position {index + 1}", index) for index in range(count)],
+            value=position,
             allow_blank=False,
             compact=True,
-            classes="workflow-property-editor",
+            id="workflow-input-order",
         )
-        self.node_id = node_id
-        self.field_name = field_name
-        self.original_value = value
-
-
-class PropertyRow(Container):
-    def __init__(
-        self,
-        *,
-        node_id: str | None,
-        field_name: str,
-        label: str,
-        value: object,
-        annotation: object,
-        draft: str | None = None,
-        browse: bool = False,
-        options: tuple[tuple[str, object], ...] | None = None,
-    ) -> None:
-        super().__init__(classes="workflow-property-row")
-        self.node_id = node_id
-        self.field_name = field_name
-        self.label_text = label
-        self.value = value
-        self.annotation = annotation
-        self.draft = draft
-        self.browse = browse
-        self.options = options
-
-    def compose(self) -> ComposeResult:
-        yield Label(self.label_text, classes="workflow-property-label")
-        options = (
-            self.options
-            if self.options is not None
-            else _property_options(self.annotation)
-        )
-        with Container(classes="workflow-property-controls"):
-            if options is None:
-                original_value = "" if self.value is None else str(self.value)
-                yield PropertyInput(
-                    (
-                        original_value
-                        if self.draft is None
-                        else self.draft
-                    ),
-                    original_value=original_value,
-                    node_id=self.node_id,
-                    field_name=self.field_name,
-                )
-            else:
-                yield PropertySelect(
-                    options,
-                    self.value,
-                    node_id=self.node_id or "",
-                    field_name=self.field_name,
-                )
-            if self.browse:
-                yield Button(
-                    "Browse",
-                    name=self.field_name,
-                    compact=True,
-                    classes="workflow-property-browse",
-                )
-
-    def on_resize(self, event: events.Resize) -> None:
-        horizontal_minimum = (
-            PROPERTY_LABEL_MIN_WIDTH
-            + PROPERTY_EDITOR_MIN_WIDTH
-            + (
-                PROPERTY_BROWSE_OUTER_MIN_WIDTH
-                if self.browse
-                else 0
-            )
-        )
-        self.set_class(
-            event.size.width < horizontal_minimum,
-            "stacked",
-        )
+        self.connection_id = connection_id
+        self.position = position
 
 
 class WorkflowInspector(VerticalScroll):
     DEFAULT_CSS = """
     WorkflowInspector {
         width: 2fr;
-        min-width: %(inspector_min_width)d;
+        min-width: 0;
         height: 1fr;
         border: solid #5b496d;
         background: #1c1724;
@@ -197,68 +79,11 @@ class WorkflowInspector(VerticalScroll):
         margin-bottom: 1;
     }
 
-    WorkflowInspector .workflow-property-row {
-        layout: grid;
-        grid-size: 2 1;
-        grid-columns: 1fr 2fr;
-        grid-rows: 1;
-        width: 100%%;
-        height: 1;
-    }
-
-    WorkflowInspector .workflow-property-row.stacked {
-        grid-size: 1 2;
-        grid-columns: 1fr;
-        grid-rows: 1 1;
-        height: 2;
-    }
-
-    WorkflowInspector .workflow-property-label {
-        width: 100%%;
-        min-width: %(label_min_width)d;
-        height: 1;
-        content-align-vertical: middle;
-        text-overflow: ellipsis;
-    }
-
-    WorkflowInspector .workflow-property-controls {
-        layout: grid;
-        grid-size: 2 1;
-        grid-columns: 1fr auto;
-        grid-rows: 1;
-        width: 100%%;
-        min-width: 0;
-        height: 1;
-    }
-
-    WorkflowInspector .workflow-property-editor {
-        width: 100%%;
-        min-width: %(editor_min_width)d;
-        height: 1;
-        border: none;
-        padding: 0;
-    }
-
-    WorkflowInspector .workflow-property-browse {
-        width: auto;
-        min-width: %(browse_min_width)d;
-        height: 1;
-        min-height: 1;
-        border: none;
-        padding: 0 %(browse_padding)d;
-    }
-
     WorkflowInspector .workflow-inspector-empty {
         color: #9e8cad;
         height: auto;
     }
-    """ % {
-        "inspector_min_width": INSPECTOR_HORIZONTAL_MIN_WIDTH,
-        "label_min_width": PROPERTY_LABEL_MIN_WIDTH,
-        "editor_min_width": PROPERTY_EDITOR_MIN_WIDTH,
-        "browse_min_width": PROPERTY_BROWSE_MIN_WIDTH,
-        "browse_padding": PROPERTY_BROWSE_HORIZONTAL_PADDING,
-    }
+    """
 
     def __init__(
         self,
@@ -272,15 +97,11 @@ class WorkflowInspector(VerticalScroll):
         self.document = document
         self._node_id = selected_node_id
         self._connection_id = selected_connection_id
-        self._drafts: dict[
-            tuple[str | None, str],
-            WorkflowPropertyEdit,
-        ] = {}
 
     @property
     def horizontal_minimum_width(self) -> int:
         return (
-            INSPECTOR_HORIZONTAL_CONTENT_MIN_WIDTH
+            PROPERTY_ROW_MIN_WIDTH
             + self.styles.gutter.width
         )
 
@@ -292,7 +113,6 @@ class WorkflowInspector(VerticalScroll):
             label="Name",
             value=self.document.name,
             annotation=str,
-            draft=self._draft_value(None, "name"),
         )
         if self._node_id is None:
             if self._connection_id is not None:
@@ -309,10 +129,18 @@ class WorkflowInspector(VerticalScroll):
                 )
                 yield Static(
                     f"{source.title}.{connection.source.port}\n"
-                    f"→ {target.title}.{connection.target.port}\n"
-                    f"Order {connection.order}",
+                    f"→ {target.title}.{connection.target.port}",
+                    markup=False,
                     classes="workflow-inspector-empty",
                 )
+                siblings = self.document.incoming_connections()[target.id][connection.target.port]
+                if len(siblings) > 1:
+                    yield Label("Input order", classes="workflow-inspector-heading")
+                    yield ConnectionOrderSelect(connection.id, siblings.index(connection), len(siblings))
+                    yield Static("\n".join(
+                        f"{index + 1}. {self.document.node(sibling.source.node_id).title}.{sibling.source.port}"
+                        for index, sibling in enumerate(siblings)
+                    ), markup=False, classes="workflow-inspector-empty")
                 return
             yield Static(
                 "Select a node to edit its properties.",
@@ -321,60 +149,20 @@ class WorkflowInspector(VerticalScroll):
             return
 
         node = self.document.node(self._node_id)
-        yield Label(node.title, classes="workflow-inspector-heading")
+        yield Label(node.title, id="workflow-node-title", classes="workflow-inspector-heading")
         yield Label(
             node_definition(node.kind).label,
             classes="workflow-inspector-kind",
         )
-        if isinstance(node, ImageSelectionNode):
-            selected = node.config.selected
-            yield Static(
-                f"Saved image: {selected.artifact_identity[:16]}\nResults changes this choice; Run continues from the saved image."
-                if selected else "Run the connected collection, then choose an image in Results.",
-                markup=False,
-            )
-        if isinstance(node, LoraSourceNode):
-            yield Static("Import a trained LoRA for a matching image backend. Local training currently supports FLUX.1; Klein and Qwen LoRAs can be imported. Dataset preparation creates image/caption pairs.", markup=False)
-        if isinstance(node, Ltx23Node):
-            yield Static(f"Keyframes: positions 0–{node.config.frames - 1}. Canvas rounds up to multiples of 64px before fitting. No generated audio. Pad uses white.", markup=False)
-        elif isinstance(node, AnimeGenI2VNode):
-            yield Static("Start image and optional end image. Canvas follows the start image's aspect. No generated audio. Pad uses white.", markup=False)
-        elif isinstance(node, HunyuanI2VNode):
-            yield Static("One start image; native 480p aspect buckets; 24 FPS. Frames: 4n+1. No generated audio.", markup=False)
-        elif isinstance(node, PositionedKeyframeNode):
-            yield Static("Frame position starts at 0. Connect this keyframe to LTX.", markup=False)
-        elif isinstance(node, AudioSourceNode):
-            yield Static("Container stream index; leave blank for the first audio stream. Replacement audio starts at video time zero.", markup=False)
-        elif isinstance(node, AssembleVideoNode):
-            yield Static("Retain the recorded frame timeline. Preserve, remove, or replace audio; video determines the end time. Transparent frames use the chosen background.", markup=False)
-        if isinstance(node, CharacterEditNode):
-            yield Static("Raw candidates → visual audit → bounded retry → accepted image. VOSR runs after acceptance; leave upscale long side blank for raw output. Qwen supports depth/edge/keypoint controls. Image numbers follow references, native pose, then structural controls.", markup=False)
-        if isinstance(node, CharacterRefineNode):
-            yield Static("Qwen-2511 regional edit → raw audit → accepted image. Image 1 is the source; references follow in connection order. White mask pixels are editable; original pixels and alpha outside the mask are preserved. Strength selects round(steps × strength) denoising steps. Blank max side keeps native resolution.", markup=False)
-        if isinstance(node, SamSegmentNode):
-            yield Static("Select with SAM, then connect the mask and the same source to a regional edit. Coordinates refer to the displayed source. Positive/negative points use x,y;x,y. White is editable; grey mask edges retain feathering.", markup=False)
-        if isinstance(node, BindMaskNode):
-            yield Static("Bind a supplied mask image to its source. A selection imported from a region plan retains the original source and mask checksums.", markup=False)
-        if isinstance(node, (ImageEditNode, CharacterEditNode)):
-            capabilities = image_edit_backend_settings(node.config.backend)
-            count = f"1–{capabilities.max_references}" if capabilities.max_references is not None else "1+"
-            description = f"References: {count}, in connection order. Canvas alignment: {capabilities.dimension_alignment}px."
-            if capabilities.image_slot_labels:
-                description += "\n" + " → ".join(capabilities.image_slot_labels)
-            if capabilities.lora_architecture:
-                description += f"\nLoRA: {capabilities.lora_architecture}"
-            if capabilities.strength_description:
-                description += "\n" + capabilities.strength_description
-            yield Static(description, markup=False)
         yield PropertyRow(
             node_id=node.id,
             field_name="title",
             label="Title",
             value=node.title,
             annotation=str,
-            draft=self._draft_value(node.id, "title"),
         )
-        for field_name in _visible_config_fields(node):
+        visible_fields = _visible_config_fields(node)
+        for field_name in _config_fields(node):
             field = type(node.config).model_fields[field_name]
             yield PropertyRow(
                 node_id=node.id,
@@ -382,42 +170,53 @@ class WorkflowInspector(VerticalScroll):
                 label=_field_label(field_name),
                 value=getattr(node.config, field_name),
                 annotation=field.annotation,
-                draft=self._draft_value(node.id, field_name),
+                multiline=field_name in {"prompt", "negative_prompt"},
+                visible=field_name in visible_fields,
                 browse=field_name == "path",
                 options=_node_property_options(node, field_name),
             )
 
+        text = _node_description(node)
+        description = Static(text, id="workflow-node-description", markup=False)
+        description.display = bool(text)
+        yield description
+
     @on(Input.Changed)
-    def property_changed(self, event: Input.Changed) -> None:
-        editor = event.input
-        if not isinstance(editor, PropertyInput):
-            return
-        editor.remove_class("-invalid")
-        self._capture_input(editor)
+    @on(TextArea.Changed)
+    def property_changed(self, event: Input.Changed | TextArea.Changed) -> None:
+        editor = event.control
+        if isinstance(editor, (PropertyInput, PropertyTextArea)):
+            editor.remove_class("-invalid")
 
     def property_drafts(self) -> tuple[WorkflowPropertyEdit, ...]:
         drafts: list[WorkflowPropertyEdit] = []
-        for editor in self.query(PropertyInput):
-            edit = self._capture_input(editor)
-            if edit is not None:
-                drafts.append(edit)
+        for row in self.query(PropertyRow):
+            editor = row.editor
+            if not row.display or not isinstance(editor, (PropertyInput, PropertyTextArea)):
+                continue
+            value = editor.text if isinstance(editor, PropertyTextArea) else editor.value
+            if value != editor.original_value:
+                drafts.append(WorkflowPropertyEdit(
+                    node_id=row.node_id, field_name=row.field_name, raw_value=value,
+                ))
         return tuple(drafts)
 
-    def clear_drafts(self) -> None:
-        self._drafts.clear()
+    def accept_properties(self) -> None:
+        for row in self.query(PropertyRow):
+            editor = row.editor
+            if isinstance(editor, PropertyTextArea):
+                editor.original_value = editor.text
+                editor.history.checkpoint()
+            elif isinstance(editor, PropertyInput):
+                editor.original_value = editor.value
 
-    def focus_invalid_draft(
-        self,
-        edit: WorkflowPropertyEdit,
-    ) -> None:
-        editor = next(
-            editor
-            for editor in self.query(PropertyInput)
-            if editor.node_id == edit.node_id
-            and editor.field_name == edit.field_name
+    def focus_invalid_draft(self, edit: WorkflowPropertyEdit) -> None:
+        row = next(
+            row for row in self.query(PropertyRow)
+            if row.node_id == edit.node_id and row.field_name == edit.field_name
         )
-        editor.add_class("-invalid")
-        editor.focus()
+        row.editor.add_class("-invalid")
+        row.editor.focus()
 
     async def show(
         self,
@@ -425,36 +224,44 @@ class WorkflowInspector(VerticalScroll):
         selected_node_id: str | None,
         selected_connection_id: str | None,
     ) -> None:
-        previous_projection = self._projection()
+        previous_projection = (self.document.workflow_id, self._projection())
+        previous_binding = self._binding()
         self.document = document
         self._node_id = selected_node_id
         self._connection_id = selected_connection_id
-        if self._projection() != previous_projection:
+        if (document.workflow_id, self._projection()) == previous_projection:
+            return
+        if self._binding() != previous_binding or self._connection_id is not None:
             await self.recompose()
+            return
+        node = document.node(self._node_id) if self._node_id is not None else None
+        visible_fields = _visible_config_fields(node) if node is not None else ()
+        for row in self.query(PropertyRow):
+            if row.node_id is None:
+                row.show_value(document.name)
+            elif row.field_name == "title":
+                row.show_value(node.title)
+            else:
+                row.show_value(
+                    getattr(node.config, row.field_name),
+                    options=_node_property_options(node, row.field_name),
+                )
+                row.display = row.field_name in visible_fields
+        if node is not None:
+            self.query_one("#workflow-node-title", Label).update(node.title)
+            description = self.query_one("#workflow-node-description", Static)
+            text = _node_description(node)
+            description.update(text)
+            description.display = bool(text)
 
-    def _capture_input(
-        self,
-        editor: PropertyInput,
-    ) -> WorkflowPropertyEdit | None:
-        key = (editor.node_id, editor.field_name)
-        if editor.value == editor.original_value:
-            self._drafts.pop(key, None)
-            return None
-        edit = WorkflowPropertyEdit(
-            node_id=editor.node_id,
-            field_name=editor.field_name,
-            raw_value=editor.value,
+    def _binding(self) -> tuple[object, ...]:
+        node = self.document.node(self._node_id) if self._node_id is not None else None
+        return (
+            self.document.workflow_id,
+            self._node_id,
+            self._connection_id,
+            (node.kind, type(node.config)) if node is not None else None,
         )
-        self._drafts[key] = edit
-        return edit
-
-    def _draft_value(
-        self,
-        node_id: str | None,
-        field_name: str,
-    ) -> str | None:
-        draft = self._drafts.get((node_id, field_name))
-        return None if draft is None else str(draft.raw_value)
 
     def _projection(self) -> tuple[object, ...]:
         if self._node_id is not None:
@@ -480,6 +287,8 @@ class WorkflowInspector(VerticalScroll):
                 connection.order,
                 self.document.node(connection.source.node_id).title,
                 self.document.node(connection.target.node_id).title,
+                tuple((sibling.id, sibling.source, self.document.node(sibling.source.node_id).title)
+                      for sibling in self.document.incoming_connections()[connection.target.node_id][connection.target.port]),
             )
         return (self.document.name, None)
 
@@ -531,10 +340,14 @@ def _node_property_options(
     return tuple((value, value) for value in values)
 
 
-def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
+def _config_fields(node: WorkflowNode) -> tuple[str, ...]:
     if isinstance(node, (ImageSelectionNode, BindMaskNode)):
         return ()
-    fields = tuple(type(node.config).model_fields)
+    return tuple(type(node.config).model_fields)
+
+
+def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
+    fields = _config_fields(node)
     hidden: set[str] = set()
     if isinstance(node, CharacterEditNode) and node.config.backend == "flux2-klein":
         hidden.update(("structure_control", "max_sequence_length", "guidance_scale"))
@@ -554,20 +367,45 @@ def _visible_config_fields(node: WorkflowNode) -> tuple[str, ...]:
         )
     return tuple(field for field in fields if field not in hidden)
 
-
-def _property_options(
-    annotation: object,
-) -> tuple[tuple[str, object], ...] | None:
-    if annotation is bool:
-        return (("Off", False), ("On", True))
-    if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return tuple(
-            (str(member.value), member.value)
-            for member in annotation
+def _node_description(node: WorkflowNode) -> str:
+    paragraphs: list[str] = []
+    if isinstance(node, ImageSelectionNode):
+        selected = node.config.selected
+        paragraphs.append(
+            f"Saved image: {selected.artifact_identity[:16]}\nResults changes this choice; Run continues from the saved image."
+            if selected else "Run the connected collection, then choose an image in Results.",
         )
-    if get_origin(annotation) is Literal:
-        return tuple(
-            (str(value), value)
-            for value in get_args(annotation)
-        )
-    return None
+    if isinstance(node, LoraSourceNode):
+        paragraphs.append("Import a trained LoRA for a matching image backend. Local training currently supports FLUX.1; Klein and Qwen LoRAs can be imported. Dataset preparation creates image/caption pairs.")
+    if isinstance(node, Ltx23Node):
+        paragraphs.append(f"Keyframes: positions 0–{node.config.frames - 1}. Canvas rounds up to multiples of 64px before fitting. No generated audio. Pad uses white.")
+    elif isinstance(node, AnimeGenI2VNode):
+        paragraphs.append("Start image and optional end image. Canvas follows the start image's aspect. No generated audio. Pad uses white.")
+    elif isinstance(node, HunyuanI2VNode):
+        paragraphs.append("One start image; native 480p aspect buckets; 24 FPS. Frames: 4n+1. No generated audio.")
+    elif isinstance(node, PositionedKeyframeNode):
+        paragraphs.append("Frame position starts at 0. Connect this keyframe to LTX.")
+    elif isinstance(node, AudioSourceNode):
+        paragraphs.append("Container stream index; leave blank for the first audio stream. Replacement audio starts at video time zero.")
+    elif isinstance(node, AssembleVideoNode):
+        paragraphs.append("Retain the recorded frame timeline. Preserve, remove, or replace audio; video determines the end time. Transparent frames use the chosen background.")
+    if isinstance(node, CharacterEditNode):
+        paragraphs.append("Raw candidates → visual audit → bounded retry → accepted image. VOSR runs after acceptance; leave upscale long side blank for raw output. Qwen supports depth/edge/keypoint controls. Image numbers follow references, native pose, then structural controls.")
+    if isinstance(node, CharacterRefineNode):
+        paragraphs.append("Qwen-2511 regional edit → raw audit → accepted image. Image 1 is the source; references follow in connection order. White mask pixels are editable; original pixels and alpha outside the mask are preserved. Strength selects round(steps × strength) denoising steps. Blank max side keeps native resolution.")
+    if isinstance(node, SamSegmentNode):
+        paragraphs.append("Select with SAM, then connect the mask and the same source to a regional edit. Coordinates refer to the displayed source. Positive/negative points use x,y;x,y. White is editable; grey mask edges retain feathering.")
+    if isinstance(node, BindMaskNode):
+        paragraphs.append("Bind a supplied mask image to its source. A selection imported from a region plan retains the original source and mask checksums.")
+    if isinstance(node, (ImageEditNode, CharacterEditNode)):
+        capabilities = image_edit_backend_settings(node.config.backend)
+        count = f"1–{capabilities.max_references}" if capabilities.max_references is not None else "1+"
+        description = f"References: {count}, in connection order. Canvas alignment: {capabilities.dimension_alignment}px."
+        if capabilities.image_slot_labels:
+            description += "\n" + " → ".join(capabilities.image_slot_labels)
+        if capabilities.lora_architecture:
+            description += f"\nLoRA: {capabilities.lora_architecture}"
+        if capabilities.strength_description:
+            description += "\n" + capabilities.strength_description
+        paragraphs.append(description)
+    return "\n\n".join(paragraphs)

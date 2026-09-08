@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Select
@@ -14,6 +15,7 @@ from aigen.workflow_graph import (
     NodePortRef,
     PortDefinition,
     WorkflowGraph,
+    WorkflowConnection,
     node_definition,
 )
 
@@ -33,6 +35,7 @@ class _TargetEndpoint:
 class WorkflowConnectionDialog(
     ModalScreen[tuple[NodePortRef, NodePortRef] | None]
 ):
+    BINDINGS = [Binding("escape", "dismiss(None)", show=False)]
     DEFAULT_CSS = """
     WorkflowConnectionDialog {
         align: center middle;
@@ -83,6 +86,8 @@ class WorkflowConnectionDialog(
         self,
         document: WorkflowGraph,
         selected_node_id: str | None,
+        *,
+        connection: WorkflowConnection | None = None,
     ) -> None:
         super().__init__()
         self._node_titles = {
@@ -133,7 +138,7 @@ class WorkflowConnectionDialog(
                     definition=port,
                 )
                 self._sources[_endpoint_key(source.reference)] = source
-        preferred = next(
+        preferred = _endpoint_key(connection.source) if connection is not None else next(
             (
                 key
                 for key, source in self._sources.items()
@@ -141,6 +146,10 @@ class WorkflowConnectionDialog(
             ),
             None,
         )
+        if preferred is None and selected_node_id is not None:
+            preferred = next((key for key in self._sources if any(
+                target.node_id == selected_node_id for target in self._compatible_targets(key).values()
+            )), None)
         self._selected_source = preferred or next(
             iter(self._sources),
             None,
@@ -150,6 +159,11 @@ class WorkflowConnectionDialog(
             if self._selected_source is not None
             else {}
         )
+        self._selected_target = _endpoint_key(connection.target) if connection is not None else next(
+            (key for key, target in self._selected_targets.items() if target.node_id == selected_node_id),
+            next(iter(self._selected_targets), None),
+        )
+        self._reconnecting = connection is not None
 
     @property
     def can_connect(self) -> bool:
@@ -159,7 +173,7 @@ class WorkflowConnectionDialog(
         assert self._selected_source is not None
         targets = tuple(self._selected_targets.values())
         with Container(id="workflow-connect-dialog"):
-            yield Label("Connect nodes")
+            yield Label("Reconnect nodes" if self._reconnecting else "Connect nodes")
             with Horizontal(classes="workflow-connect-row"):
                 yield Label("From", classes="workflow-connect-label")
                 yield Select(
@@ -186,23 +200,24 @@ class WorkflowConnectionDialog(
                         )
                         for target in targets
                     ),
-                    value=_endpoint_key(targets[0]),
+                    value=self._selected_target,
                     allow_blank=False,
                     compact=True,
                     id="workflow-connect-target",
                     classes="workflow-connect-select",
                 )
             with Horizontal(id="workflow-connect-actions"):
-                yield Button("Cancel", id="workflow-connect-cancel")
+                yield Button("Cancel", id="workflow-connect-cancel", compact=True)
                 yield Button(
-                    "Connect",
+                    "Reconnect" if self._reconnecting else "Connect",
                     id="workflow-connect-confirm",
                     variant="primary",
+                    compact=True,
                 )
 
     @on(Select.Changed, "#workflow-connect-source")
     def source_changed(self, event: Select.Changed) -> None:
-        if not isinstance(event.value, str):
+        if not isinstance(event.value, str) or event.value == self._selected_source:
             return
         self._selected_source = event.value
         self._selected_targets = self._compatible_targets(event.value)
@@ -211,6 +226,7 @@ class WorkflowConnectionDialog(
             "#workflow-connect-target",
             Select,
         )
+        previous_target = target_select.value
         target_select.set_options(
             tuple(
                 (
@@ -220,7 +236,7 @@ class WorkflowConnectionDialog(
                 for target in targets
             )
         )
-        target_select.value = _endpoint_key(targets[0])
+        target_select.value = previous_target if previous_target in self._selected_targets else _endpoint_key(targets[0])
 
     @on(Button.Pressed)
     def button_pressed(self, event: Button.Pressed) -> None:

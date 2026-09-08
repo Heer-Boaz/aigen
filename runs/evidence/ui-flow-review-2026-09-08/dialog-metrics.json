@@ -1,0 +1,49 @@
+[
+  {
+    "screen": [
+      80,
+      24
+    ],
+    "dialog": [
+      4,
+      2,
+      72,
+      20
+    ],
+    "list": [
+      7,
+      8,
+      52,
+      10
+    ],
+    "file_browser_escape_dismissed": false
+  },
+  {
+    "screen": [
+      160,
+      50
+    ],
+    "dialog": [
+      8,
+      4,
+      144,
+      42
+    ],
+    "list": [
+      11,
+      10,
+      108,
+      32
+    ],
+    "file_browser_escape_dismissed": false
+  },
+  {
+    "sam_canvas": [
+      5,
+      4,
+      70,
+      16
+    ],
+    "sam_escape_dismissed": false
+  }
+]
